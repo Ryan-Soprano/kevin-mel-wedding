@@ -1,0 +1,14 @@
+# Java / Maven
+backend/target/
+
+# JavaScript / React (for the later frontend)
+frontend/node_modules/
+frontend/dist/
+
+# Editors and operating systems
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+
