@@ -27,6 +27,5 @@ public class ApiExceptionHandler {
             }
 
     public record ValidationErrorResponse(List<String> errors) {
-    }
-    
+    }   
 }

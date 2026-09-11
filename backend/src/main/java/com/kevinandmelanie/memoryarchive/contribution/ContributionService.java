@@ -2,7 +2,7 @@ package com.kevinandmelanie.memoryarchive.contribution;
 
 import org.springframework.stereotype.Service;
 
-@Service 
+@Service
 public class ContributionService {
 
     public ContributionRequest submit(ContributionRequest request) {
@@ -12,5 +12,4 @@ public class ContributionService {
 
         return new ContributionRequest(guestName, message);
     }
-    
 }
