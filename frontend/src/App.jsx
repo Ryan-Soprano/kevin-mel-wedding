@@ -1,5 +1,7 @@
 import { useState } from "react";
 
+import PhotoPicker from "./PhotoPicker";
+
 export default function App() {
   const [guestName, setGuestName] = useState("");
   const [message, setMessage] = useState("");
@@ -83,6 +85,7 @@ export default function App() {
           />
           <p>{message.length.toLocaleString()} / 5000 characters</p>
         </div>
+        <PhotoPicker />
         {error && (
           <p className="form-error" role="alert">
             {error}
