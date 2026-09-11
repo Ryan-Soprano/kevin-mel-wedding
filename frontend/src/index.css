@@ -1,0 +1,101 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  color: #292524;
+  background: #faf7f2;
+}
+
+main {
+  width: 100%;
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 32px 20px;
+}
+
+h1 {
+  margin: 0 0 12px;
+  font-size: clamp(2rem, 6vw, 2.75rem);
+  line-height: 1.15;
+}
+
+p {
+  margin: 0 0 12px;
+}
+
+form {
+  display: grid;
+  gap: 24px;
+  margin-top: 32px;
+}
+
+label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+input,
+textarea,
+button {
+  font: inherit;
+}
+
+input,
+textarea {
+  display: block;
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #78716c;
+  border-radius: 8px;
+  color: #292524;
+  background: #ffffff;
+}
+
+textarea {
+  resize: vertical;
+  min-height: 150px;
+}
+
+form > div > p {
+  margin: 8px 0 0;
+  font-size: 0.875rem;
+  color: #57534e;
+}
+
+button {
+  min-height: 48px;
+  padding: 12px 20px;
+  border: none;
+  border-radius: 8px;
+  color: #ffffff;
+  background: #405747;
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  background: #304236;
+}
+
+button:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
+input:focus-visible,
+textarea:focus-visible,
+button:focus-visible {
+  outline: 3px solid #405747;
+  outline-offset: 3px;
+}
+
+.form-error {
+  color: #b91c1c;
+  font-size: 1.25rem;
+  margin-top: -8px;
+}
