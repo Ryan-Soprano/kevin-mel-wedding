@@ -1,16 +1,16 @@
-# React + Vite
+# Archive frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+For prerequisites, install/run/check commands, the development proxy, and current API behavior, use the [root README](../README.md#local-development). Feature status and acceptance criteria live in the Notion [Memory Archive — Issues](https://app.notion.com/p/2d5a40baef85426a94bd059f7d0e2ce8) database.
 
-Currently, two official plugins are available:
+## Source map
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+| File | Responsibility |
+|---|---|
+| [src/main.jsx](src/main.jsx) | React entry point; imports the active stylesheet |
+| [src/App.jsx](src/App.jsx) | Guest text form, request state, and contribution API call |
+| [src/PhotoPicker.jsx](src/PhotoPicker.jsx) | Local photo selection and client validation; exact limits are defined here |
+| [src/index.css](src/index.css) | Active page/form styles |
+| [vite.config.js](vite.config.js) | React plugin and development API proxy |
+| [package.json](package.json) / [package-lock.json](package-lock.json) | Scripts, dependency ranges, and resolved versions |
 
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+`src/App.css` and starter artwork remain from the scaffold; they are not the active form styling. Confirm references before using or removing them. Update this map when files move; keep implementation work in Notion.
