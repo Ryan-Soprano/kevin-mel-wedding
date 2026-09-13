@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState, useEffect } from "react";
 
 const MAX_PHOTOS = 5;
 const MAX_PHOTO_SIZE_MB = 10;
@@ -25,9 +25,28 @@ const ALLOWED_FILE_TYPE_LABELS = new Intl.ListFormat("en", {
   ),
 );
 
+function PhotoPreview({ file }) {
+  const imageRef = useRef(null);
+
+  useEffect(() => {
+    const previewUrl = URL.createObjectURL(file);
+    const imageElement = imageRef.current;
+
+    imageElement.src = previewUrl;
+
+    return () => URL.revokeObjectURL(previewUrl);
+  }, [file]);
+
+  return <img ref={imageRef} className="photo-card__image" alt="" />;
+}
+
 export default function PhotoPicker() {
   // These file references are local state and are not part of App's text request.
+  const nextPhotoId = useRef(0);
   const [photos, setPhotos] = useState([]);
+  const [photoIdsSelectedForRemoval, setPhotoIdsSelectedForRemoval] = useState(
+    new Set(),
+  );
   const [photoError, setPhotoError] = useState("");
 
   function handlePhotoSelection(event) {
@@ -67,7 +86,36 @@ export default function PhotoPicker() {
       return;
     }
 
-    setPhotos((currentPhotos) => [...currentPhotos, ...selectedFiles]);
+    const newPhotos = selectedFiles.map((file) => ({
+      id: nextPhotoId.current++,
+      file,
+    }));
+    setPhotos((currentPhotos) => [...currentPhotos, ...newPhotos]);
+    setPhotoError("");
+  }
+
+  function handlePhotoRemovalSelection(photoId) {
+    setPhotoIdsSelectedForRemoval((currentIds) => {
+      const nextIds = new Set(currentIds);
+
+      if (nextIds.has(photoId)) {
+        nextIds.delete(photoId);
+      } else {
+        nextIds.add(photoId);
+      }
+
+      return nextIds;
+    });
+  }
+
+  function handleRemoveSelectedPhotos() {
+    setPhotos((currentPhotos) =>
+      currentPhotos.filter(
+        (photo) => !photoIdsSelectedForRemoval.has(photo.id),
+      ),
+    );
+
+    setPhotoIdsSelectedForRemoval(new Set());
     setPhotoError("");
   }
 
@@ -99,11 +147,55 @@ export default function PhotoPicker() {
         {photoError}
       </p>
 
-      <output>
-        {photos.length} of {MAX_PHOTOS} photos selected.{" "}
-        {photos.length > 0 &&
-          "Selected photos: " + photos.map((photo) => photo.name).join(", ")}
+      <output aria-live="polite">
+        {photos.length} of {MAX_PHOTOS} photos selected.
       </output>
+
+      {photos.length > 0 && (
+        <fieldset className="photo-selection">
+          <legend>Select photos to remove</legend>
+
+          <ul className="photo-grid">
+            {photos.map((photo) => {
+              const isSelectedForRemoval = photoIdsSelectedForRemoval.has(
+                photo.id,
+              );
+
+              return (
+                <li
+                  key={photo.id}
+                  className={
+                    isSelectedForRemoval
+                      ? "photo-card photo-card--selected"
+                      : "photo-card"
+                  }
+                >
+                  <label className="photo-card__label">
+                    <input
+                      className="photo-card__checkbox"
+                      type="checkbox"
+                      checked={isSelectedForRemoval}
+                      onChange={() => handlePhotoRemovalSelection(photo.id)}
+                      aria-label={`Select ${photo.file.name} for removal`}
+                    />
+
+                    <PhotoPreview file={photo.file} />
+                  </label>
+                </li>
+              );
+            })}
+          </ul>
+
+          <button
+            className="photo-remove-button"
+            type="button"
+            disabled={photoIdsSelectedForRemoval.size === 0}
+            onClick={handleRemoveSelectedPhotos}
+          >
+            Remove selected photos
+          </button>
+        </fieldset>
+      )}
     </section>
   );
 }

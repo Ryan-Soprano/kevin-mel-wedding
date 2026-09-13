@@ -42,16 +42,16 @@ Install frontend dependencies from the lockfile:
 npm --prefix frontend ci
 ```
 
-Start Spring in one terminal:
+Start Spring in one terminal - cd to backend:
 
 ```sh
-mvn -f backend/pom.xml spring-boot:run
+mvn spring-boot:run
 ```
 
-Start Vite in another:
+Start Vite in another - cd to frontend:
 
 ```sh
-npm --prefix frontend run dev
+npm run dev
 ```
 
 Open the Local URL Vite prints, normally [localhost:5173](http://localhost:5173/). The [Vite configuration](frontend/vite.config.js) forwards `/api` requests to Spring at [localhost:8080](http://localhost:8080). This proxy is for development; production routing is not configured. Stop each process with Ctrl+C.
