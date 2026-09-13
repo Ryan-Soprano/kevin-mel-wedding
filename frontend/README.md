@@ -8,7 +8,7 @@ For prerequisites, install/run/check commands, the development proxy, and curren
 |---|---|
 | [src/main.jsx](src/main.jsx) | React entry point; imports the active stylesheet |
 | [src/App.jsx](src/App.jsx) | Guest text form, request state, and contribution API call |
-| [src/PhotoPicker.jsx](src/PhotoPicker.jsx) | Local photo selection and client validation; exact limits are defined here |
+| [src/PhotoPicker.jsx](src/PhotoPicker.jsx) | Local multi-photo selection, validation, responsive previews, grouped removal, and object-URL cleanup; exact limits are defined here |
 | [src/index.css](src/index.css) | Active page/form styles |
 | [vite.config.js](vite.config.js) | React plugin and development API proxy |
 | [package.json](package.json) / [package-lock.json](package-lock.json) | Scripts, dependency ranges, and resolved versions |
