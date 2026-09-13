@@ -12,20 +12,20 @@ This is a learning project. Explain and agree on infrastructure, dependencies, a
 
 ## Local development
 
-The prototype validates and echoes text requests; **it does not save messages or photos**. Use test content only. Check the matching Notion issue for current progress and expected completion evidence.
+The prototype validates and echoes text requests and provides local selectable photo previews; **it does not save messages or photos**. Use test content only. Check the matching Notion issue for current progress and expected completion evidence.
 
 ### Prerequisites
 
-- **Java 25**, matching `java.version` in [backend/pom.xml](backend/pom.xml), with `JAVA_HOME` pointing to the JDK directory and Java on `PATH`. Java 25 is the accepted baseline; the POM edit still needs to be committed and reviewed through the normal workflow.
-- Maven on `PATH`; no Maven wrapper is checked in yet.
-- **Node.js 24 LTS** and npm for the shared frontend runtime. [frontend/package-lock.json](frontend/package-lock.json) remains authoritative for resolved packages.
+- **Java 25**, matching `java.version` in [backend/pom.xml](backend/pom.xml), with `JAVA_HOME` pointing to the JDK directory and Java on `PATH`.
+- **Maven 3.9.16 through the checked-in wrapper.** A fresh checkout can run `./mvnw` from `backend/` without separately installing the project's Maven version.
+- **Node.js 24.21.0 LTS** and npm for the shared frontend runtime, matching the root [.nvmrc](.nvmrc) and the engine declared in [frontend/package.json](frontend/package.json). [frontend/package-lock.json](frontend/package-lock.json) remains authoritative for resolved packages.
 - Docker with Compose for the optional local database; it is not required for the current echo flow.
 
 Check the terminal toolchain:
 
 ```sh
 java -version
-mvn -version
+./backend/mvnw --version
 node --version
 npm --version
 ```
@@ -34,7 +34,7 @@ If Maven reports an invalid `JAVA_HOME`, point it at the installed JDK directory
 
 ### Run the application
 
-Run commands from the repository root in Git Bash or PowerShell. In PowerShell, use `npm.cmd` if execution policy prevents `npm.ps1` from running.
+Run the documented commands in Git Bash. Paths and examples below use Bash syntax.
 
 Install frontend dependencies from the lockfile:
 
@@ -45,7 +45,7 @@ npm --prefix frontend ci
 Start Spring in one terminal - cd to backend:
 
 ```sh
-mvn spring-boot:run
+./mvnw spring-boot:run
 ```
 
 Start Vite in another - cd to frontend:
@@ -68,11 +68,13 @@ These examples describe the prototype. Notion issue API-01 tracks the future dur
 
 Name is optional with a 100-character limit; message is required, nonblank, and limited to 5,000 characters. Backend validation occurs before service trimming. Exact constraints and normalization live in [ContributionRequest.java](backend/src/main/java/com/kevinandmelanie/memoryarchive/contribution/ContributionRequest.java) and [ContributionService.java](backend/src/main/java/com/kevinandmelanie/memoryarchive/contribution/ContributionService.java).
 
-With the backend running, inspect responses in PowerShell:
+With the backend running, inspect responses from Git Bash:
 
-```powershell
-Invoke-RestMethod -Uri 'http://localhost:8080/api/health'
-Invoke-RestMethod -Uri 'http://localhost:8080/api/contributions' -Method Post -ContentType 'application/json' -Body '{"guestName":"Test Guest","message":"Local test message"}'
+```sh
+curl --fail http://localhost:8080/api/health
+curl --fail --request POST http://localhost:8080/api/contributions \
+  --header 'Content-Type: application/json' \
+  --data '{"guestName":"Test Guest","message":"Local test message"}'
 ```
 
 The form currently logs successful responses in the browser console and has no saved confirmation. Photo files are not included in the text request.
@@ -82,12 +84,12 @@ The form currently logs successful responses in the browser console and has no s
 ```sh
 npm --prefix frontend run lint
 npm --prefix frontend run build
-mvn -f backend/pom.xml test
+./backend/mvnw test
 ```
 
 These run ESLint, build the frontend into `frontend/dist/`, and run backend tests. There is no frontend `test` script or CI workflow yet. The only checked-in automated backend test is [HealthControllerTest.java](backend/src/test/java/com/kevinandmelanie/memoryarchive/health/HealthControllerTest.java).
 
-**September 13 review:** commands were checked against source and configuration. Node `v25.8.0` and npm `11.11.0` were available in that session, though Node 24 LTS is now the accepted team baseline. Maven's version check failed with an invalid `JAVA_HOME`; Java and Docker were not discoverable on the review session's `PATH`, and `frontend/node_modules/` was absent. Build, lint, API runtime, and database checks were not rerun. An existing local September 11 health-test report records one pass; it is historical evidence rather than a fresh result for this checkout.
+**September 13 verification:** Ryan confirmed Java `25.0.3`, Maven `3.9.15`, Node `25.2.1`, npm `11.6.2`, and NVM for Windows `1.2.2` on his machine. The application has started locally, and the frontend lint/build checks passed during MED-02 verification. The repository now pins Maven `3.9.16` through the wrapper and Node `24.21.0` LTS through `.nvmrc`. Ryan switched to Node `24.21.0`; `npm ci`, frontend lint, and the production build completed successfully. The wrapper also ran the backend test suite successfully: one test passed with no failures or errors. Ryan explicitly waived the two-collaborator fresh-checkout criterion on September 13, completing FND-01.
 
 ### Optional local PostgreSQL
 
@@ -132,7 +134,7 @@ Work in small, explained increments. Claim work in Notion and use `feature/<desc
 | Introduction and setup, run, and check instructions | This README |
 | Scope, accepted architecture, module boundaries, and collaboration conventions | [Project plan](<Preview plan.md>) |
 | MVPs, decisions, backlog, status, ownership, dependencies, acceptance criteria, blockers, and evidence | [Notion issue database](https://app.notion.com/p/2d5a40baef85426a94bd059f7d0e2ce8) |
-| Dependency versions and executable build/test configuration | [POM](backend/pom.xml), [frontend manifest](frontend/package.json), [lockfile](frontend/package-lock.json), and future runtime pins |
+| Dependency versions and executable build/test configuration | [POM](backend/pom.xml), [Maven wrapper properties](backend/.mvn/wrapper/maven-wrapper.properties), [frontend manifest](frontend/package.json), [lockfile](frontend/package-lock.json), and [.nvmrc](.nvmrc) |
 | Detailed API contracts, architecture rationale, and operations | Dedicated repository documents created by their Notion issues and linked from the relevant issue |
 
 Update information in its authoritative location and link to it elsewhere. When a topic moves into a dedicated document, replace its old explanation with a short summary and link instead of maintaining two copies.
