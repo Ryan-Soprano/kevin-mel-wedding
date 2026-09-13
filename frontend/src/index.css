@@ -99,3 +99,70 @@ button:focus-visible {
   font-size: 1.25rem;
   margin-top: -8px;
 }
+
+.photo-selection {
+  margin: 12px 0 0;
+  padding: 16px;
+  border: 1px solid #a8a29e;
+  border-radius: 12px;
+}
+
+.photo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 12px;
+  margin: 12px 0 16px;
+  padding: 0;
+  list-style: none;
+}
+
+.photo-card {
+  overflow: hidden;
+  border: 3px solid transparent;
+  border-radius: 10px;
+  background: #ffffff;
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.photo-card--selected {
+  border-color: #405747;
+  box-shadow: 0 0 0 2px rgb(64 87 71 / 20%);
+}
+
+.photo-card__label {
+  position: relative;
+  display: block;
+  margin: 0;
+  cursor: pointer;
+}
+
+.photo-card__image {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+}
+
+.photo-card__checkbox {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 1;
+  display: block;
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  padding: 0;
+  accent-color: #405747;
+  cursor: pointer;
+}
+
+.photo-remove-button {
+  width: 100%;
+}
+
+.photo-remove-button:disabled {
+  cursor: not-allowed;
+}
