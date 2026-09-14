@@ -1,3 +1,5 @@
+@import "./tokens.css";
+
 * {
   box-sizing: border-box;
 }
@@ -7,8 +9,8 @@ body {
   font-family: system-ui, sans-serif;
   font-size: 16px;
   line-height: 1.5;
-  color: #292524;
-  background: #faf7f2;
+  color: var(--color-text);
+  background: var(--color-background);
 }
 
 main {
@@ -51,10 +53,10 @@ textarea {
   display: block;
   width: 100%;
   padding: 12px;
-  border: 1px solid #78716c;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
-  color: #292524;
-  background: #ffffff;
+  color: var(--color-text);
+  background: var(--color-surface);
 }
 
 textarea {
@@ -65,7 +67,7 @@ textarea {
 form > div > p {
   margin: 8px 0 0;
   font-size: 0.875rem;
-  color: #57534e;
+  color: var(--color-muted);
 }
 
 button {
@@ -73,13 +75,13 @@ button {
   padding: 12px 20px;
   border: none;
   border-radius: 8px;
-  color: #ffffff;
-  background: #405747;
+  color: var(--color-surface);
+  background: var(--color-primary);
   cursor: pointer;
 }
 
 button:hover:not(:disabled) {
-  background: #304236;
+  background: var(--color-primary-hover);
 }
 
 button:disabled {
@@ -90,12 +92,12 @@ button:disabled {
 input:focus-visible,
 textarea:focus-visible,
 button:focus-visible {
-  outline: 3px solid #405747;
+  outline: 3px solid var(--color-primary);
   outline-offset: 3px;
 }
 
 .form-error {
-  color: #b91c1c;
+  color: var(--color-error);
   font-size: 1.25rem;
   margin-top: -8px;
 }
@@ -103,7 +105,7 @@ button:focus-visible {
 .photo-selection {
   margin: 12px 0 0;
   padding: 16px;
-  border: 1px solid #a8a29e;
+  border: 1px solid var(--color-border-subtle);
   border-radius: 12px;
 }
 
@@ -120,14 +122,14 @@ button:focus-visible {
   overflow: hidden;
   border: 3px solid transparent;
   border-radius: 10px;
-  background: #ffffff;
+  background: var(--color-surface);
   transition:
     border-color 150ms ease,
     box-shadow 150ms ease;
 }
 
 .photo-card--selected {
-  border-color: #405747;
+  border-color: var(--color-primary);
   box-shadow: 0 0 0 2px rgb(64 87 71 / 20%);
 }
 
@@ -155,7 +157,7 @@ button:focus-visible {
   height: 15px;
   margin: 0;
   padding: 0;
-  accent-color: #405747;
+  accent-color: var(--color-primary);
   cursor: pointer;
 }
 

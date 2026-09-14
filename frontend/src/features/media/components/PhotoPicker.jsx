@@ -1,44 +1,14 @@
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState } from "react";
 
-const MAX_PHOTOS = 5;
-const MAX_PHOTO_SIZE_MB = 10;
-// MIME types identify formats to both the file picker and our validation.
-const ALLOWED_FILE_TYPES = new Set([
-  "image/jpeg",
-  "image/png",
-  "image/gif",
-  "image/webp",
-]);
-
-// File.size is measured in bytes; one MB is 1,000 × 1,000 bytes.
-const MAX_PHOTO_BYTES = MAX_PHOTO_SIZE_MB * 1_000_000;
-
-// Derive picker options and readable labels from the same allowed types.
-// Intl.ListFormat adds commas and "or" without hard-coding a format list.
-const ACCEPTED_FILE_TYPES = Array.from(ALLOWED_FILE_TYPES).join(",");
-const ALLOWED_FILE_TYPE_LABELS = new Intl.ListFormat("en", {
-  style: "long",
-  type: "disjunction",
-}).format(
-  Array.from(ALLOWED_FILE_TYPES, (type) =>
-    type.replace("image/", "").toUpperCase(),
-  ),
-);
-
-function PhotoPreview({ file }) {
-  const imageRef = useRef(null);
-
-  useEffect(() => {
-    const previewUrl = URL.createObjectURL(file);
-    const imageElement = imageRef.current;
-
-    imageElement.src = previewUrl;
-
-    return () => URL.revokeObjectURL(previewUrl);
-  }, [file]);
-
-  return <img ref={imageRef} className="photo-card__image" alt="" />;
-}
+import {
+  ACCEPTED_FILE_TYPES,
+  ALLOWED_FILE_TYPE_LABELS,
+  ALLOWED_FILE_TYPES,
+  MAX_PHOTO_BYTES,
+  MAX_PHOTO_SIZE_MB,
+  MAX_PHOTOS,
+} from "../mediaConstraints.js";
+import PhotoPreview from "./PhotoPreview.jsx";
 
 export default function PhotoPicker() {
   // These file references are local state and are not part of App's text request.

@@ -6,11 +6,16 @@ For prerequisites, install/run/check commands, the development proxy, and curren
 
 | File | Responsibility |
 |---|---|
-| [src/main.jsx](src/main.jsx) | React entry point; imports the active stylesheet |
-| [src/App.jsx](src/App.jsx) | Guest text form, request state, and contribution API call |
-| [src/PhotoPicker.jsx](src/PhotoPicker.jsx) | Local multi-photo selection, validation, responsive previews, grouped removal, and object-URL cleanup; exact limits are defined here |
-| [src/index.css](src/index.css) | Active page/form styles |
+| [src/main.jsx](src/main.jsx) | React entry point; imports the global stylesheet and application shell |
+| [src/app/App.jsx](src/app/App.jsx) | Top-level application shell |
+| [src/features/contribution/](src/features/contribution/) | Guest form, submission state, and contribution API access |
+| [src/features/media/](src/features/media/) | Photo selection, constraints, previews, and removal behavior |
+| [src/features/archive/](src/features/archive/) | Reserved for the private archive and review experience |
+| [src/features/auth/](src/features/auth/) | Reserved for couple authentication |
+| [src/shared/](src/shared/) | Reusable API and UI code shared by multiple features |
+| [src/styles/](src/styles/) | Global styles and design tokens |
+| [e2e/](e2e/) | Reserved for future browser-level tests |
 | [vite.config.js](vite.config.js) | React plugin and development API proxy |
 | [package.json](package.json) / [package-lock.json](package-lock.json) | Scripts, dependency ranges, and resolved versions |
 
-`src/App.css` and starter artwork remain from the scaffold; they are not the active form styling. Confirm references before using or removing them. Update this map when files move; keep implementation work in Notion.
+Keep component tests beside the implementation they exercise. Update this map when boundaries change; keep implementation work in Notion.

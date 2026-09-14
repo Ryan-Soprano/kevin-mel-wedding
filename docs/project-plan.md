@@ -4,7 +4,7 @@ Last updated: 2026-09-13 · Collaborators: Ryan and Kade · Wedding: **October 2
 
 This file describes product scope, accepted architecture, module boundaries, and collaboration conventions. The active Jira-style work queue is the Notion [Memory Archive — Issues](https://app.notion.com/p/2d5a40baef85426a94bd059f7d0e2ce8) database. Its parent [project home](https://app.notion.com/p/3dad9739c6bc81ff89cbd713cddf08d1?pvs=204) explains the workflow.
 
-For the project introduction and local setup, run, and test instructions, use [README.md](README.md). Keep architecture here, task progress in Notion, and executable dependency versions in the project manifests. Link between them instead of copying changing details.
+For the project introduction and local setup, run, and test instructions, use the [root README](../README.md). Keep architecture here, task progress in Notion, and executable dependency versions in the project manifests. Link between them instead of copying changing details.
 
 ## Current baseline and product scope
 
@@ -64,7 +64,7 @@ The accepted baseline separates the intended architecture from what is already i
 | Backend | **Java 25**, Spring Boot 4.1.1, Spring MVC, Maven 3.9.16 wrapper | Health and validating/normalizing contribution endpoints exist. The Java target and Maven wrapper are pinned; durable persistence remains pending. |
 | Architecture | Modular monolith. Vite runs separately in development; one Spring application serves the built frontend and `/api` in production. | Production static-asset/API routing is not configured. |
 | API | REST/JSON under `/api`, with stable error bodies and durable receipt semantics | Health and text echo endpoints exist. Persistence, idempotency, media, review, and session contracts remain tracked work. |
-| Database | PostgreSQL with Spring `JdbcClient` and versioned Flyway SQL migrations | PostgreSQL 17 is declared in Compose but Spring is not connected. Driver, JdbcClient, and Flyway dependencies have not been added. |
+| Database | PostgreSQL with Spring `JdbcClient` and versioned Flyway SQL migrations | PostgreSQL 17 is declared in Compose. JDBC, PostgreSQL, Flyway, and datasource configuration are present; the first schema migration and persistence implementation are pending. |
 | Domain model | Contribution envelope groups individually reviewable Memory records and MediaAsset metadata | Saved items start `PENDING` and `COUPLE_ONLY`. KEEP stays private; ARCHIVED is recoverable; DELETE follows a reversible retention policy. Schema work is pending. |
 | Media | Private Cloudflare R2 object storage for original photos and audio; metadata in PostgreSQL | Local previews are complete. The provisional limits are five 10 MB JPEG/PNG/WebP photos and one two-minute/25 MB audio item; HEIC/HEIF and final audio formats remain evidence-gated. |
 | Authentication | Spring Security with server-side sessions and strict role separation | Not implemented. Kevin and Melanie alone receive moderation/publication authority at reveal; Ryan retains infrastructure operations; Kade remains development-only. |
@@ -101,20 +101,20 @@ Open the [Notion issue database](https://app.notion.com/p/2d5a40baef85426a94bd05
 
 ## Module boundaries and collaboration
 
-Use existing locations for current work. Future locations are directions for the relevant Notion issue, not directories to scaffold preemptively. Backend package paths are relative to `backend/src/main/java/com/kevinandmelanie/memoryarchive/`.
+Feature directories are scaffolded so the intended boundaries remain visible as the project grows. Add implementation files only for the relevant Notion issue. Backend package paths are relative to `backend/src/main/java/com/kevinandmelanie/memoryarchive/`.
 
 | Module | Responsibility / proposed location | Primary handoff |
 |---|---|---|
-| Guest experience | Current: `frontend/src/App.jsx` and `PhotoPicker.jsx`; add feature subfolders only when useful | API examples, validation limits, upload-state contract |
-| Private archive UI | Login, inbox, review, later albums; future `frontend/src/features/archive/` | Kevin/Melanie-only moderation and publication, auth/session behavior, paginated inbox, media access |
-| Shared UI | Current active styles: `frontend/src/index.css`; shared components are future work | Coordinate shared component changes before parallel edits |
+| Guest experience | `frontend/src/features/contribution/` and `frontend/src/features/media/` | API examples, validation limits, upload-state contract |
+| Private archive UI | Login, inbox, review, and later albums under `frontend/src/features/archive/` | Kevin/Melanie-only moderation and publication, auth/session behavior, paginated inbox, media access |
+| Shared UI | Global tokens and styles under `frontend/src/styles/`; reusable code under `frontend/src/shared/` | Coordinate shared component changes before parallel edits |
 | Submission API | Current `contribution/` controller, request, and service; validation advice in `web/` | Contract, idempotency, and persistence model |
-| Media | Future `media/` for upload authorization, storage, finalization, and cleanup | Upload intent/finalize API and failure behavior |
-| Identity | Future `security/` for accounts, sessions, and authorization | Login state, CSRF handling, and separation of infrastructure and couple permissions |
-| Review | Future `review/` for inbox queries and lifecycle changes | Review actions never imply public visibility |
-| Data | Schema, migrations, and queries under `backend/src/main/resources/db/` and focused packages | One coordinated migration sequence |
-| Platform | Current root `compose.yaml`; future `ops/` runbooks when their issues require them | Render/R2 environments, deployment, backup, and restore procedures owned by Ryan |
-| Contracts/docs | README for setup; this plan for architecture; Notion for issues; dedicated `docs/` contracts or ADRs when needed | One authoritative location for each topic |
+| Media | `media/` for upload authorization, storage, finalization, and cleanup | Upload intent/finalize API and failure behavior |
+| Identity | `security/` for accounts, sessions, and authorization | Login state, CSRF handling, and separation of infrastructure and couple permissions |
+| Review | `review/` for inbox queries and lifecycle changes | Review actions never imply public visibility |
+| Data | Schema migrations under `backend/src/main/resources/db/migration/` and queries in focused feature packages | One coordinated migration sequence |
+| Platform | Root `compose.yaml`; operational documentation under `docs/runbooks/` | Render/R2 environments, deployment, backup, and restore procedures owned by Ryan |
+| Contracts/docs | README for setup; this plan for architecture; Notion for issues; `docs/api/`, `docs/decisions/`, and `docs/runbooks/` for durable repository documentation | One authoritative location for each topic |
 
 A sensible next sequence is to verify the pinned toolchain, complete FND-02 automated checks, define the durable API contract, and implement the minimal PostgreSQL model before durable text or media submission. Run the audio feasibility spike early on Ryan's iPhone and an identified Android device.
 

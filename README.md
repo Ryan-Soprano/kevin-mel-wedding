@@ -5,7 +5,7 @@ A private home for preserving the couple's memories, beginning with contribution
 ## Start here
 
 - **Choose or claim work:** use the Notion [Memory Archive — Issues](https://app.notion.com/p/2d5a40baef85426a94bd059f7d0e2ce8) database for MVPs, status, ownership, dependencies, acceptance criteria, blockers, pull-request links, and evidence.
-- **Understand the project:** open the [Notion project home](https://app.notion.com/p/3dad9739c6bc81ff89cbd713cddf08d1?pvs=204) and read [Preview plan.md](<Preview plan.md>) for scope, accepted architecture, module boundaries, and collaboration conventions.
+- **Understand the project:** open the [Notion project home](https://app.notion.com/p/3dad9739c6bc81ff89cbd713cddf08d1?pvs=204) and read the [project plan](docs/project-plan.md) for scope, accepted architecture, module boundaries, and collaboration conventions.
 - **Run the code:** use the local-development instructions below.
 
 This is a learning project. Explain and agree on infrastructure, dependencies, and CI/CD before Ryan performs each hands-on setup step. Do not automatically create provider accounts, connect services, provision infrastructure, add dependencies, configure CI/CD, or deploy application changes without Ryan's explicit request.
@@ -19,7 +19,7 @@ The prototype validates and echoes text requests and provides local selectable p
 - **Java 25**, matching `java.version` in [backend/pom.xml](backend/pom.xml), with `JAVA_HOME` pointing to the JDK directory and Java on `PATH`.
 - **Maven 3.9.16 through the checked-in wrapper.** A fresh checkout can run `./mvnw` from `backend/` without separately installing the project's Maven version.
 - **Node.js 24.21.0 LTS** and npm for the shared frontend runtime, matching the root [.nvmrc](.nvmrc) and the engine declared in [frontend/package.json](frontend/package.json). [frontend/package-lock.json](frontend/package-lock.json) remains authoritative for resolved packages.
-- Docker with Compose for the optional local database; it is not required for the current echo flow.
+- Docker with Compose for the local PostgreSQL database used by Spring.
 
 Check the terminal toolchain:
 
@@ -40,6 +40,12 @@ Install frontend dependencies from the lockfile:
 
 ```sh
 npm --prefix frontend ci
+```
+
+Start PostgreSQL from the repository root:
+
+```sh
+docker compose up -d postgres
 ```
 
 Start Spring in one terminal - cd to backend:
@@ -91,9 +97,9 @@ These run ESLint, build the frontend into `frontend/dist/`, and run backend test
 
 **September 13 verification:** Ryan confirmed Java `25.0.3`, Maven `3.9.15`, Node `25.2.1`, npm `11.6.2`, and NVM for Windows `1.2.2` on his machine. The application has started locally, and the frontend lint/build checks passed during MED-02 verification. The repository now pins Maven `3.9.16` through the wrapper and Node `24.21.0` LTS through `.nvmrc`. Ryan switched to Node `24.21.0`; `npm ci`, frontend lint, and the production build completed successfully. The wrapper also ran the backend test suite successfully: one test passed with no failures or errors. Ryan explicitly waived the two-collaborator fresh-checkout criterion on September 13, completing FND-01.
 
-### Optional local PostgreSQL
+### Local PostgreSQL
 
-[compose.yaml](compose.yaml) defines the database service, local credentials, published port, named data volume, and health check. Spring is **not connected**: [application.properties](backend/src/main/resources/application.properties) only sets the app name, and the POM has no database driver, JdbcClient, or migration dependency.
+[compose.yaml](compose.yaml) defines the database service, local credentials, published port, named data volume, and health check. Spring includes JDBC, PostgreSQL, and Flyway dependencies and reads its datasource settings from [application.properties](backend/src/main/resources/application.properties). The first schema migration and durable contribution persistence are still pending.
 
 When Docker is available, start and inspect the database:
 
@@ -105,7 +111,7 @@ docker compose port postgres 5432
 
 The saved binding is `127.0.0.1:5433` to container port `5432`. A previous README proposed `5434` after a conflict; that change is not in the saved configuration. Verify the actual binding before writing a JDBC URL. Change Compose and eventual application connection settings together if a different port is needed.
 
-Compose's `POSTGRES_DB`, `POSTGRES_USER`, and `POSTGRES_PASSWORD` values are local-development defaults only. Application datasource variables have not been introduced. Git shares source and configuration, not database contents.
+Compose's `POSTGRES_DB`, `POSTGRES_USER`, and `POSTGRES_PASSWORD` values are local-development defaults only. The application accepts `MEMORY_ARCHIVE_DB_URL`, `MEMORY_ARCHIVE_DB_USERNAME`, and `MEMORY_ARCHIVE_DB_PASSWORD` overrides. Git shares source and configuration, not database contents.
 
 Stop the containers while keeping the named data volume:
 
@@ -121,8 +127,9 @@ docker compose down
 | [frontend/](frontend/) | React/Vite app; see its [source map](frontend/README.md) |
 | [backend/src/main/java/com/kevinandmelanie/memoryarchive/](backend/src/main/java/com/kevinandmelanie/memoryarchive/) | Spring app and current contribution, health, and web packages |
 | [backend/src/test/](backend/src/test/) | Backend tests |
+| [docs/](docs/) | Architecture, API contracts, decision records, and operational runbooks |
 | [compose.yaml](compose.yaml) | Local database configuration |
-| [Preview plan.md](<Preview plan.md>) | Product scope, accepted architecture, and collaboration conventions |
+| [docs/project-plan.md](docs/project-plan.md) | Product scope, accepted architecture, and collaboration conventions |
 | [Feature tracker.md](<Feature tracker.md>) | Migration pointer to Notion; do not maintain task status here |
 
 Work in small, explained increments. Claim work in Notion and use `feature/<description>` for new feature branches. The current branch does not assign tasks. Commit or push only when explicitly requested.
@@ -132,9 +139,9 @@ Work in small, explained increments. Claim work in Notion and use `feature/<desc
 | Information | Authoritative location |
 |---|---|
 | Introduction and setup, run, and check instructions | This README |
-| Scope, accepted architecture, module boundaries, and collaboration conventions | [Project plan](<Preview plan.md>) |
+| Scope, accepted architecture, module boundaries, and collaboration conventions | [Project plan](docs/project-plan.md) |
 | MVPs, decisions, backlog, status, ownership, dependencies, acceptance criteria, blockers, and evidence | [Notion issue database](https://app.notion.com/p/2d5a40baef85426a94bd059f7d0e2ce8) |
 | Dependency versions and executable build/test configuration | [POM](backend/pom.xml), [Maven wrapper properties](backend/.mvn/wrapper/maven-wrapper.properties), [frontend manifest](frontend/package.json), [lockfile](frontend/package-lock.json), and [.nvmrc](.nvmrc) |
-| Detailed API contracts, architecture rationale, and operations | Dedicated repository documents created by their Notion issues and linked from the relevant issue |
+| Detailed API contracts, architecture rationale, and operations | The matching folder under [docs/](docs/) and the relevant Notion issue |
 
 Update information in its authoritative location and link to it elsewhere. When a topic moves into a dedicated document, replace its old explanation with a short summary and link instead of maintaining two copies.
