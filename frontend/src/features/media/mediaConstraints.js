@@ -5,7 +5,6 @@ export const MAX_PHOTO_SIZE_MB = 10;
 export const ALLOWED_FILE_TYPES = new Set([
   "image/jpeg",
   "image/png",
-  "image/gif",
   "image/webp",
 ]);
 
