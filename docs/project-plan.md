@@ -10,7 +10,7 @@ For the project introduction and local setup, run, and test instructions, use th
 
 Reviewed the active repository on September 13 at `F:\Projects\Kevin-Mel-Wedding-Site\kevin-mel-wedding`. The shared remote is [Ryan-Soprano/kevin-mel-wedding](https://github.com/Ryan-Soprano/kevin-mel-wedding).
 
-The current implementation remains a prototype: it validates and echoes written contributions and provides local photo selection with responsive selectable thumbnails and grouped removal. It does not persist submissions, upload media, authenticate the couple, or provide production operations. Notion records task status and evidence; documentation changes do not mark application work complete.
+The current application remains a prototype: the public endpoint validates and echoes written contributions, while the browser provides local photo selection with responsive selectable thumbnails and grouped removal. DAT-01 added the PostgreSQL schema, Flyway migration, atomic text-contribution repository, and isolated database integration tests, but the endpoint is not wired to persistence yet. The application still does not upload media, authenticate the couple, or provide production operations. Notion records task status and evidence; documentation changes do not mark application work complete.
 
 The agreed product scope is:
 
@@ -64,11 +64,11 @@ The accepted baseline separates the intended architecture from what is already i
 | Backend | **Java 25**, Spring Boot 4.1.1, Spring MVC, Maven 3.9.16 wrapper | Health and validating/normalizing contribution endpoints exist. The Java target and Maven wrapper are pinned; durable persistence remains pending. |
 | Architecture | Modular monolith. Vite runs separately in development; one Spring application serves the built frontend and `/api` in production. | Production static-asset/API routing is not configured. |
 | API | REST/JSON under `/api`, with stable error bodies and durable receipt semantics | Health and text echo endpoints exist. Persistence, idempotency, media, review, and session contracts remain tracked work. |
-| Database | PostgreSQL with Spring `JdbcClient` and versioned Flyway SQL migrations | PostgreSQL 17 is declared in Compose. JDBC, PostgreSQL, Flyway, and datasource configuration are present; the first schema migration and persistence implementation are pending. |
-| Domain model | Contribution envelope groups individually reviewable Memory records and MediaAsset metadata | Saved items start `PENDING` and `COUPLE_ONLY`. KEEP stays private; ARCHIVED is recoverable; DELETE follows a reversible retention policy. Schema work is pending. |
+| Database | PostgreSQL with Spring `JdbcClient` and versioned Flyway SQL migrations | PostgreSQL 17 runs through Compose. DAT-01 added the V1 contribution, memory, and media-asset schema plus an atomic text-contribution repository; public endpoint wiring remains pending. |
+| Domain model | Contribution envelope groups individually reviewable Memory records and MediaAsset metadata | The V1 schema enforces `PENDING` and `COUPLE_ONLY` defaults, relationships, lifecycle values, integrity metadata, and retry uniqueness. KEEP stays private; ARCHIVED is recoverable; DELETE follows a reversible retention policy. |
 | Media | Private Cloudflare R2 object storage for original photos and audio; metadata in PostgreSQL | Local previews are complete. The provisional limits are five 10 MB JPEG/PNG/WebP photos and one two-minute/25 MB audio item; HEIC/HEIF and final audio formats remain evidence-gated. |
 | Authentication | Spring Security with server-side sessions and strict role separation | Not implemented. Kevin and Melanie alone receive moderation/publication authority at reveal; Ryan retains infrastructure operations; Kade remains development-only. |
-| Testing | Spring MVC/JUnit backend tests, ESLint/build checks, focused frontend and real-device coverage | A health test and ESLint are configured. Contribution/media automation and browser rehearsal remain tracked work. |
+| Testing | Spring MVC/JUnit backend tests, ESLint/build checks, focused frontend and real-device coverage | Health and PostgreSQL/Testcontainers integration tests are configured. Contribution endpoint, media, browser, accessibility, and real-device coverage remain tracked work. |
 | Delivery | GitHub feature branches and pull requests into `main`; new features use `feature/<description>` | No CI, staging, production host, domain, or deployment workflow exists. |
 | Operations | Render application/PostgreSQL in Ohio, private Cloudflare R2, Cloudflare Registrar/DNS, and Ryan-owned operations | Budget, capacity, backup retention, and recovery targets are decided. Provisioning, runbooks, monitoring, and restore proof remain implementation tasks. |
 
@@ -116,7 +116,7 @@ Feature directories are scaffolded so the intended boundaries remain visible as 
 | Platform | Root `compose.yaml`; operational documentation under `docs/runbooks/` | Render/R2 environments, deployment, backup, and restore procedures owned by Ryan |
 | Contracts/docs | README for setup; this plan for architecture; Notion for issues; `docs/api/`, `docs/decisions/`, and `docs/runbooks/` for durable repository documentation | One authoritative location for each topic |
 
-A sensible next sequence is to verify the pinned toolchain, complete FND-02 automated checks, define the durable API contract, and implement the minimal PostgreSQL model before durable text or media submission. Run the audio feasibility spike early on Ryan's iPhone and an identified Android device.
+A sensible next sequence is to finish FND-02 automated checks, complete the FND-03 experience specification, define the durable API contract, and wire durable text submission before media uploads. Run the audio feasibility spike early on Ryan's iPhone and an identified Android device.
 
 **Shared-file etiquette:** discuss changes to build files, lockfiles, shared styles/components, API contracts, migrations, and deployment configuration before editing them simultaneously. New feature branches use `feature/<description>`, for example `feature/photo-previews` or `feature/persist-messages`. Preserve existing branches. Keep a pull request focused on one Notion issue or a small explicitly linked set, and add its URL to the issue.
 
@@ -131,3 +131,4 @@ A sensible next sequence is to verify the pinned toolchain, complete FND-02 auto
 | 2026-09-13 | Migrated 50 tasks and eight decisions to Notion | Notion now owns status, assignment, dependencies, acceptance criteria, dates, blockers, pull requests, and evidence. The local feature-tracker file is only a migration pointer. |
 | 2026-09-13 | Accepted the technical baseline and recorded unresolved provider choices as learning issues | Keeps architecture clear while preserving Ryan's hands-on path from local setup through production CI/CD. |
 | 2026-09-13 | Recorded provider, budget, recovery, schedule, authority, media-limit, and audio-fallback decisions; pinned Maven and Node | Reconciled the plan with the current tracker and clarified permanent ownership and application authority. |
+| 2026-09-27 | Recorded the completed DAT-01 persistence baseline and began FND-03 experience flows | Kept architecture documentation aligned with the merged PostgreSQL work and separated target wireframes from wedding-ready capabilities. |
