@@ -4,6 +4,7 @@ import { defineConfig, loadEnv } from "vite";
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, import.meta.dirname, "BACKEND_");
   const backendUrl = env.BACKEND_URL || "http://localhost:8080";
+  const deliberatelyBroken = ;
 
   return {
     plugins: [react()],
