@@ -90,34 +90,57 @@ The form currently logs successful responses in the browser console and has no s
 ```sh
 npm --prefix frontend run lint
 npm --prefix frontend run build
-./backend/mvnw test
+./backend/mvnw -f backend/pom.xml test
 ```
 
-These run ESLint, build the frontend into `frontend/dist/`, and run backend tests. There is no frontend `test` script or CI workflow yet. The only checked-in automated backend test is [HealthControllerTest.java](backend/src/test/java/com/kevinandmelanie/memoryarchive/health/HealthControllerTest.java).
+These run ESLint, build the frontend into `frontend/dist/`, and run backend tests. There is no frontend `test` script or CI workflow yet. Backend database integration tests use Testcontainers to start a disposable PostgreSQL 17 database, apply the Flyway migrations, exercise persistence behavior, and discard the test database afterward. Docker Desktop must be running for those tests.
 
 **September 13 verification:** Ryan confirmed Java `25.0.3`, Maven `3.9.15`, Node `25.2.1`, npm `11.6.2`, and NVM for Windows `1.2.2` on his machine. The application has started locally, and the frontend lint/build checks passed during MED-02 verification. The repository now pins Maven `3.9.16` through the wrapper and Node `24.21.0` LTS through `.nvmrc`. Ryan switched to Node `24.21.0`; `npm ci`, frontend lint, and the production build completed successfully. The wrapper also ran the backend test suite successfully: one test passed with no failures or errors. Ryan explicitly waived the two-collaborator fresh-checkout criterion on September 13, completing FND-01.
 
 ### Local PostgreSQL
 
-[compose.yaml](compose.yaml) defines the database service, local credentials, published port, named data volume, and health check. Spring includes JDBC, PostgreSQL, and Flyway dependencies and reads its datasource settings from [application.properties](backend/src/main/resources/application.properties). The first schema migration and durable contribution persistence are still pending.
+[compose.yaml](compose.yaml) defines the local PostgreSQL service, credentials, published port, named data volume, and health check. Spring reads its datasource settings from [application.properties](backend/src/main/resources/application.properties). Flyway applies the versioned migrations in [backend/src/main/resources/db/migration/](backend/src/main/resources/db/migration/) when the application starts.
 
-When Docker is available, start and inspect the database:
+Start and inspect PostgreSQL from the repository root:
 
 ```sh
 docker compose up -d postgres
-docker compose ps
+docker compose ps postgres
 docker compose port postgres 5432
+docker compose exec postgres pg_isready \
+  -U memory_archive \
+  -d memory_archive
 ```
 
-The saved binding is `127.0.0.1:5433` to container port `5432`. A previous README proposed `5434` after a conflict; that change is not in the saved configuration. Verify the actual binding before writing a JDBC URL. Change Compose and eventual application connection settings together if a different port is needed.
+The default JDBC connection is `jdbc:postgresql://127.0.0.1:5433/memory_archive`. The application accepts `MEMORY_ARCHIVE_DB_URL`, `MEMORY_ARCHIVE_DB_USERNAME`, and `MEMORY_ARCHIVE_DB_PASSWORD` environment-variable overrides. The saved Compose credentials are for local development only.
 
-Compose's `POSTGRES_DB`, `POSTGRES_USER`, and `POSTGRES_PASSWORD` values are local-development defaults only. The application accepts `MEMORY_ARCHIVE_DB_URL`, `MEMORY_ARCHIVE_DB_USERNAME`, and `MEMORY_ARCHIVE_DB_PASSWORD` overrides. Git shares source and configuration, not database contents.
+Flyway records every successfully applied migration in `flyway_schema_history`. Inspect that history with:
 
-Stop the containers while keeping the named data volume:
+```sh
+docker compose exec postgres psql \
+  -U memory_archive \
+  -d memory_archive \
+  -c 'SELECT installed_rank, version, description, success FROM flyway_schema_history ORDER BY installed_rank;'
+```
+
+After a migration has been applied, treat its SQL file as immutable. Make later schema changes in a new migration such as `V2__describe_the_change.sql`. This lets collaborators receive the same schema changes through Git without sharing one physical database.
+
+Stop PostgreSQL while preserving its named data volume:
 
 ```sh
 docker compose down
 ```
+
+To deliberately delete all local database data and recreate an empty database, run:
+
+```sh
+docker compose down --volumes
+docker compose up -d postgres
+```
+
+The `--volumes` command permanently deletes this project's local PostgreSQL data. The next Spring startup rebuilds the schema by applying the committed Flyway migrations.
+
+The repository can atomically save a contribution and its text memory, but the public contribution endpoint still has prototype echo behavior. API-01 will define the durable request and idempotency contract before that repository is wired into the controller.
 
 ## Repository navigation
 
