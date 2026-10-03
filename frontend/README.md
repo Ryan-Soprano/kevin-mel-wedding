@@ -13,9 +13,19 @@ For prerequisites, install/run/check commands, the development proxy, and curren
 | [src/features/archive/](src/features/archive/) | Reserved for the private archive and review experience |
 | [src/features/auth/](src/features/auth/) | Reserved for couple authentication |
 | [src/shared/](src/shared/) | Reusable API and UI code shared by multiple features |
+| [src/shared/api/archiveApi.js](src/shared/api/archiveApi.js) | Durable v1 adapter/decoders; not yet wired to the prototype form |
+| [src/shared/api/mockArchiveApi.js](src/shared/api/mockArchiveApi.js) | Isolated synthetic server behind the same transport/adapter |
+| [src/shared/api/v1/fixtures.js](src/shared/api/v1/fixtures.js) | Executable versioned request/response examples |
+| [src/dev/](src/dev/) / [contract-preview.html](contract-preview.html) | Development-only synthetic UI preview; excluded from the normal build |
 | [src/styles/](src/styles/) | Global styles and design tokens |
 | [e2e/](e2e/) | Reserved for future browser-level tests |
 | [vite.config.js](vite.config.js) | React plugin and development API proxy |
 | [package.json](package.json) / [package-lock.json](package-lock.json) | Scripts, dependency ranges, and resolved versions |
 
 Keep component tests beside the implementation they exercise. Update this map when boundaries change; keep implementation work in Notion.
+
+The [v1 contract](../docs/api/v1/README.md) owns API semantics and implementation gaps.
+Run `npm test` here for transport, decoder, and mock contract checks; no backend or
+Docker is required. They do not replace server integration/browser/device tests.
+Start Vite and visit `/contract-preview.html` for synthetic scenarios. The wedding
+form still validates/echoes, not saves.

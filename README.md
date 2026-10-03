@@ -64,7 +64,7 @@ Open the Local URL Vite prints, normally [localhost:5173](http://localhost:5173/
 
 ### Current API behavior
 
-These examples describe the prototype. Notion issue API-01 tracks the future durable contract; a successful echo is not a saved memory.
+These examples describe the prototype. The [v1 API contract](docs/api/v1/README.md) and tested real/mock adapters define the durable interface for subsequent backend work; a successful echo is not a saved memory. The current form deliberately keeps its prototype adapter until MSG-01 implements durable text.
 
 | Request | Current response |
 |---|---|
@@ -89,11 +89,14 @@ The form currently logs successful responses in the browser console and has no s
 
 ```sh
 npm --prefix frontend run lint
+npm --prefix frontend test
 npm --prefix frontend run build
 ./backend/mvnw -f backend/pom.xml test
 ```
 
-These run ESLint, build the frontend into `frontend/dist/`, and run backend tests. There is no frontend `test` script yet. [The CI workflow](.github/workflows/ci.yml) runs parallel backend and frontend jobs for every pull request and every push to `main`: the backend job uses Java 25 and the Maven wrapper, while the frontend job uses the Node version in `.nvmrc`, installs from `package-lock.json`, runs ESLint, and builds the production bundle. Backend database integration tests use Testcontainers to start a disposable PostgreSQL 17 database, apply the Flyway migrations, exercise persistence behavior, and discard the test database afterward. Docker Desktop must be running for those tests locally; GitHub-hosted runners provide the Docker environment used by CI.
+These run ESLint, frontend API-contract tests (Node's built-in runner, no new dependency), the production build into `frontend/dist/`, and backend tests. [CI](.github/workflows/ci.yml) runs parallel backend/frontend jobs for every PR and push to `main`: Java 25/Maven backend tests and Node from `.nvmrc` with lockfile install, lint, build, and frontend tests. Backend database tests use Testcontainers to start disposable PostgreSQL 17, apply Flyway migrations, exercise persistence, and discard the test database. Docker Desktop must run locally; GitHub-hosted runners provide CI's Docker environment.
+
+For synthetic failure/retry demonstrations, start Vite and open [the contract preview](http://localhost:5173/contract-preview.html) using Vite's actual port. It needs no backend. The clearly labeled mock is isolated from the wedding form and excluded from the normal production build. Refreshing clears its state; nothing entered there is saved.
 
 **September 13 verification:** Ryan confirmed Java `25.0.3`, Maven `3.9.15`, Node `25.2.1`, npm `11.6.2`, and NVM for Windows `1.2.2` on his machine. The application has started locally, and the frontend lint/build checks passed during MED-02 verification. The repository now pins Maven `3.9.16` through the wrapper and Node `24.21.0` LTS through `.nvmrc`. Ryan switched to Node `24.21.0`; `npm ci`, frontend lint, and the production build completed successfully. The wrapper also ran the backend test suite successfully: one test passed with no failures or errors. Ryan explicitly waived the two-collaborator fresh-checkout criterion on September 13, completing FND-01.
 
@@ -142,7 +145,7 @@ docker compose up -d postgres
 
 The `--volumes` command permanently deletes this project's local PostgreSQL data. The next Spring startup rebuilds the schema by applying the committed Flyway migrations.
 
-The repository can atomically save a contribution and its text memory, but the public contribution endpoint still has prototype echo behavior. API-01 will define the durable request and idempotency contract before that repository is wired into the controller.
+The repository can atomically save a contribution and its text memory, but the public endpoint still echoes. The [v1 contract](docs/api/v1/README.md) defines durable receipts and idempotency; MSG-01 must wire the repository into the controller and implement safe retries before the form can report saved.
 
 ## Repository navigation
 
