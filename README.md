@@ -93,9 +93,11 @@ npm --prefix frontend run build
 ./backend/mvnw -f backend/pom.xml test
 ```
 
-These run ESLint, build the frontend into `frontend/dist/`, and run backend tests. There is no frontend `test` script or CI workflow yet. Backend database integration tests use Testcontainers to start a disposable PostgreSQL 17 database, apply the Flyway migrations, exercise persistence behavior, and discard the test database afterward. Docker Desktop must be running for those tests.
+These run ESLint, build the frontend into `frontend/dist/`, and run backend tests. There is no frontend `test` script yet. [The CI workflow](.github/workflows/ci.yml) runs parallel backend and frontend jobs for every pull request and every push to `main`: the backend job uses Java 25 and the Maven wrapper, while the frontend job uses the Node version in `.nvmrc`, installs from `package-lock.json`, runs ESLint, and builds the production bundle. Backend database integration tests use Testcontainers to start a disposable PostgreSQL 17 database, apply the Flyway migrations, exercise persistence behavior, and discard the test database afterward. Docker Desktop must be running for those tests locally; GitHub-hosted runners provide the Docker environment used by CI.
 
 **September 13 verification:** Ryan confirmed Java `25.0.3`, Maven `3.9.15`, Node `25.2.1`, npm `11.6.2`, and NVM for Windows `1.2.2` on his machine. The application has started locally, and the frontend lint/build checks passed during MED-02 verification. The repository now pins Maven `3.9.16` through the wrapper and Node `24.21.0` LTS through `.nvmrc`. Ryan switched to Node `24.21.0`; `npm ci`, frontend lint, and the production build completed successfully. The wrapper also ran the backend test suite successfully: one test passed with no failures or errors. Ryan explicitly waived the two-collaborator fresh-checkout criterion on September 13, completing FND-01.
+
+**September 27 CI verification:** PR #5 passed the backend and frontend jobs. A separate disposable pull request introduced an intentional frontend syntax error; the backend job stayed green, ESLint failed with exit code 1, and the frontend build was correctly prevented from running. The disposable pull request was closed without merging.
 
 ### Local PostgreSQL
 

@@ -1,6 +1,6 @@
 # Kevin & Melanie's Living Memory Archive — project plan
 
-Last updated: 2026-09-13 · Collaborators: Ryan and Kade · Wedding: **October 24, 2026**
+Last updated: 2026-09-27 · Collaborators: Ryan and Kade · Wedding: **October 24, 2026**
 
 This file describes product scope, accepted architecture, module boundaries, and collaboration conventions. The active Jira-style work queue is the Notion [Memory Archive — Issues](https://app.notion.com/p/2d5a40baef85426a94bd059f7d0e2ce8) database. Its parent [project home](https://app.notion.com/p/3dad9739c6bc81ff89cbd713cddf08d1?pvs=204) explains the workflow.
 
@@ -69,7 +69,7 @@ The accepted baseline separates the intended architecture from what is already i
 | Media | Private Cloudflare R2 object storage for original photos and audio; metadata in PostgreSQL | Local previews are complete. The provisional limits are five 10 MB JPEG/PNG/WebP photos and one two-minute/25 MB audio item; HEIC/HEIF and final audio formats remain evidence-gated. |
 | Authentication | Spring Security with server-side sessions and strict role separation | Not implemented. Kevin and Melanie alone receive moderation/publication authority at reveal; Ryan retains infrastructure operations; Kade remains development-only. |
 | Testing | Spring MVC/JUnit backend tests, ESLint/build checks, focused frontend and real-device coverage | Health and PostgreSQL/Testcontainers integration tests are configured. Contribution endpoint, media, browser, accessibility, and real-device coverage remain tracked work. |
-| Delivery | GitHub feature branches and pull requests into `main`; new features use `feature/<description>` | No CI, staging, production host, domain, or deployment workflow exists. |
+| Delivery | GitHub feature branches and pull requests into `main`; new features use `feature/<description>` | GitHub Actions runs parallel backend tests and frontend install/lint/build checks for pull requests and pushes to `main`. Staging, production hosting, the domain, and deployment automation remain pending. |
 | Operations | Render application/PostgreSQL in Ohio, private Cloudflare R2, Cloudflare Registrar/DNS, and Ryan-owned operations | Budget, capacity, backup retention, and recovery targets are decided. Provisioning, runbooks, monitoring, and restore proof remain implementation tasks. |
 
 No microservices, Kubernetes, Redis, event bus, or second backend is justified by the current requirements. Revisit only for a documented need.
@@ -116,7 +116,7 @@ Feature directories are scaffolded so the intended boundaries remain visible as 
 | Platform | Root `compose.yaml`; operational documentation under `docs/runbooks/` | Render/R2 environments, deployment, backup, and restore procedures owned by Ryan |
 | Contracts/docs | README for setup; this plan for architecture; Notion for issues; `docs/api/`, `docs/decisions/`, and `docs/runbooks/` for durable repository documentation | One authoritative location for each topic |
 
-A sensible next sequence is to finish FND-02 automated checks, complete the FND-03 experience specification, define the durable API contract, and wire durable text submission before media uploads. Run the audio feasibility spike early on Ryan's iPhone and an identified Android device.
+With FND-02 automated checks and the FND-03 experience specification complete, the next sequence is to define the durable API contract and wire durable text submission before media uploads. Run the audio feasibility spike early on Ryan's iPhone and an identified Android device; keep media and audio contract details explicitly provisional until the remaining device and format evidence is recorded.
 
 **Shared-file etiquette:** discuss changes to build files, lockfiles, shared styles/components, API contracts, migrations, and deployment configuration before editing them simultaneously. New feature branches use `feature/<description>`, for example `feature/photo-previews` or `feature/persist-messages`. Preserve existing branches. Keep a pull request focused on one Notion issue or a small explicitly linked set, and add its URL to the issue.
 
@@ -132,3 +132,4 @@ A sensible next sequence is to finish FND-02 automated checks, complete the FND-
 | 2026-09-13 | Accepted the technical baseline and recorded unresolved provider choices as learning issues | Keeps architecture clear while preserving Ryan's hands-on path from local setup through production CI/CD. |
 | 2026-09-13 | Recorded provider, budget, recovery, schedule, authority, media-limit, and audio-fallback decisions; pinned Maven and Node | Reconciled the plan with the current tracker and clarified permanent ownership and application authority. |
 | 2026-09-27 | Recorded the completed DAT-01 persistence baseline and began FND-03 experience flows | Kept architecture documentation aligned with the merged PostgreSQL work and separated target wireframes from wedding-ready capabilities. |
+| 2026-09-27 | Added the FND-02 walking-skeleton CI workflow and verified its failure gate | Pull requests and pushes to `main` now run parallel backend and frontend checks; a disposable pull request proved that an intentional syntax error blocks the frontend job. |
