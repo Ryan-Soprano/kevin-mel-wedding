@@ -1,84 +1,83 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import PhotoPicker from "../../media/components/PhotoPicker.jsx";
-import {
-  ContributionValidationError,
-  createContribution,
-} from "../api/contributionApi.js";
+import { ApiError } from "../../../shared/api/apiClient.js";
+import { createTextSubmission } from "../api/textSubmission.js";
 
 export default function ContributionForm() {
+  const submission = useRef(null);
+  if (submission.current === null) submission.current = createTextSubmission();
   const [guestName, setGuestName] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [pending, setPending] = useState(false);
+  const [receipt, setReceipt] = useState(null);
+  const [retryAfter, setRetryAfter] = useState(0);
+
+  useEffect(() => {
+    if (!retryAfter) return;
+    const timer = setTimeout(() => setRetryAfter(0), retryAfter * 1000);
+    return () => clearTimeout(timer);
+  }, [retryAfter]);
 
   async function handleSubmit(event) {
     event.preventDefault();
-    // Handle form submission logic here
-    const contribution = {
-      guestName: guestName.trim(),
-      message: message.trim(),
-    };
-
-    if (!contribution.message) {
-      setError("Please write a message before submitting.");
-      return;
-    }
     setError("");
     setIsSubmitting(true);
-
     try {
-      const receivedContribution = await createContribution(contribution);
-      console.log("Backend returned:", receivedContribution);
-    } catch (error) {
-      console.error("Error sending contribution:", error);
-      setError(
-        error instanceof ContributionValidationError
-          ? error.message
-          : "Could not send your message. Please try again.",
-      );
+      const saved = await submission.current.submit({ guestName, message });
+      setReceipt(saved);
+    } catch (failure) {
+      setRetryAfter(submission.current.retryAfterSeconds);
+      setError(failure instanceof ApiError
+        ? failure.unknownOutcome
+          ? "We could not confirm your message. Keep this page open and retry to check the same submission."
+          : failure.message
+        : "Could not send your message. Keep this page open and try again.");
     } finally {
+      setPending(submission.current.pending);
       setIsSubmitting(false);
     }
   }
 
+  function startAnother(event) {
+    event.preventDefault();
+    submission.current.startAnother();
+    setGuestName("");
+    setMessage("");
+    setError("");
+    setReceipt(null);
+    setPending(false);
+  }
+
+  const locked = isSubmitting || pending || receipt !== null;
   return (
-    <form onSubmit={handleSubmit} noValidate>
+    <form onSubmit={handleSubmit} noValidate aria-busy={isSubmitting}>
       <div>
         <label htmlFor="guestName">Your name (optional)</label>
-        <input
-          id="guestName"
-          name="guestName"
-          type="text"
-          autoComplete="name"
-          maxLength={100}
-          value={guestName}
-          onChange={(event) => setGuestName(event.target.value)}
-        />
+        <input id="guestName" name="guestName" type="text" autoComplete="name"
+          maxLength={100} value={guestName} disabled={locked}
+          onChange={(event) => setGuestName(event.target.value)} />
       </div>
-
       <div>
         <label htmlFor="message">Leave a message</label>
-        <textarea
-          id="message"
-          name="message"
-          rows="5"
-          maxLength={5000}
-          required
-          value={message}
-          onChange={(event) => setMessage(event.target.value)}
-        />
-        <p>{message.length.toLocaleString()} / 5000 characters</p>
+        <textarea id="message" name="message" rows="5" maxLength={5000} required
+          value={message} disabled={locked} aria-describedby="message-count"
+          onChange={(event) => setMessage(event.target.value)} />
+        <p id="message-count">{message.length.toLocaleString()} / 5000 characters</p>
       </div>
-      <PhotoPicker />
-      {error && (
-        <p className="form-error" role="alert">
-          {error}
-        </p>
+      {receipt && <p role="status">Your message is saved privately for Kevin and Melanie. Thank you!</p>}
+      {error && <p className="form-error" role="alert">{error}</p>}
+      {receipt ? (
+        <button type="button" onClick={startAnother}>Write another message</button>
+      ) : (
+        <button type="submit" disabled={isSubmitting || retryAfter > 0}>
+          {isSubmitting ? "Submitting..." : retryAfter > 0 ? "Please wait..." : pending ? "Retry this message" : "Submit message"}
+        </button>
       )}
-      <button type="submit" disabled={isSubmitting}>
-        {isSubmitting ? "Submitting..." : "Submit message"}
-      </button>
+      <p>Photo selections below are previews only. They are not sent with your message.</p>
+      <PhotoPicker />
     </form>
   );
 }

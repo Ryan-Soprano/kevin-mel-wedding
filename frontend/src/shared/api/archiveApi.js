@@ -17,8 +17,8 @@ function id(value) {
 }
 
 function key(value) {
-  if (!KEY.test(value)) throw new TypeError("Use a random UUID v4 as the idempotency key.");
-  return value;
+  if (typeof value !== "string" || !KEY.test(value)) throw new TypeError("Use a random UUID v4 as the idempotency key.");
+  return value.toLowerCase();
 }
 
 function csrf(value) {
@@ -28,12 +28,24 @@ function csrf(value) {
   return { "X-CSRF-Token": value };
 }
 
+function storableText(value) {
+  for (let i = 0; i < value.length; i++) {
+    const c = value.charCodeAt(i);
+    if (c === 0 || (c >= 0xdc00 && c <= 0xdfff)) return false;
+    if (c >= 0xd800 && c <= 0xdbff) {
+      const next = value.charCodeAt(++i);
+      if (!(next >= 0xdc00 && next <= 0xdfff)) return false;
+    }
+  }
+  return true;
+}
+
 export function normalizeTextContribution({ guestName = null, message } = {}) {
   const errors = [];
-  if (guestName !== null && (typeof guestName !== "string" || guestName.length > 100)) {
+  if (guestName !== null && (typeof guestName !== "string" || guestName.length > 100 || !storableText(guestName))) {
     errors.push({ field: "guestName", code: "SIZE", message: "Your name must be 100 characters or fewer." });
   }
-  if (typeof message !== "string" || !message.trim() || message.length > 5000) {
+  if (typeof message !== "string" || !message.trim() || message.length > 5000 || !storableText(message)) {
     errors.push({ field: "message", code: "INVALID_TEXT", message: "Write a message between 1 and 5,000 characters." });
   }
   if (errors.length) throw new ApiError(errors[0].message, {
@@ -188,7 +200,7 @@ function decodeGrant(value) {
   return value;
 }
 
-/** Durable v1 adapter. The prototype form keeps its existing echo adapter until MSG-01. */
+/** Durable v1 adapter. Used by the wedding text form; media/auth/archive routes remain future server work. */
 export function createArchiveApi({
   client = createApiClient(), uploadFetch = globalThis.fetch,
 } = {}) {

@@ -173,3 +173,10 @@ test("photo boundary matches the existing picker and optional text trims Unicode
     guestName: null, message: "hello",
   });
 });
+
+test("text rejects NUL and unpaired UTF-16 surrogates before transport", () => {
+  for (const text of [String.fromCharCode(0), String.fromCharCode(0xd800), String.fromCharCode(0xdc00)]) {
+    assert.throws(() => normalizeTextContribution({ message: text }), { code: "VALIDATION_FAILED" });
+    assert.throws(() => normalizeTextContribution({ guestName: text, message: "ok" }), { code: "VALIDATION_FAILED" });
+  }
+});

@@ -1,96 +1,104 @@
 package com.kevinandmelanie.memoryarchive.contribution;
 
+import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.UUID;
 
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
+
+import com.kevinandmelanie.memoryarchive.web.ApiException;
 
 @Repository
 public class ContributionRepository {
-
     private final JdbcClient jdbcClient;
+
+    // JSONB provides deterministic object-key ordering and unambiguous field boundaries.
+    // Keep this encoding aligned with V2's legacy-text backfill.
+    private static final String FINGERPRINT = """
+            encode(sha256(convert_to(jsonb_build_object(
+                'eventKey', CAST(:eventKey AS text), 'memoryType', 'TEXT',
+                'guestName', CAST(:guestName AS text), 'message', CAST(:message AS text)
+            )::text, 'UTF8')), 'hex')
+            """;
+    private static final String RECEIPT_QUERY = """
+            SELECT c.id AS contribution_id, c.event_key, c.created_at,
+                   m.id AS memory_id, m.review_status, m.visibility
+            FROM contribution c JOIN memory m ON m.contribution_id = c.id
+            WHERE c.id = :contributionId AND c.idempotency_key = :idempotencyKey
+              AND m.memory_type = 'TEXT'
+              AND (SELECT count(*) FROM memory sibling WHERE sibling.contribution_id = c.id) = 1
+            """;
 
     public ContributionRepository(JdbcClient jdbcClient) {
         this.jdbcClient = jdbcClient;
     }
 
     /**
-     * Stores a contribution envelope and its linked text memory in one transaction.
-     *
-     * <p>The database supplies the review status and visibility. Any constraint failure,
-     * including a duplicate idempotency key, rolls back both inserts.</p>
-     *
-     * @param eventKey the event that owns the contribution
-     * @param guestName the optional contributor name
-     * @param message the text memory to store
-     * @param idempotencyKey the caller-supplied key used to reject duplicate submissions
-     * @return the durable identifiers and server-controlled lifecycle values
+     * Atomically commits one text submission or replays its original identity.
+     * ON CONFLICT waits for a concurrent winner. The separate READ COMMITTED query
+     * then sees its committed row. The proxy commits before returning to the service.
      */
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public SavedTextContribution saveTextContribution(
-            String eventKey,
-            String guestName,
-            String message,
-            String idempotencyKey) {
-
-        UUID contributionId = jdbcClient.sql("""
-                INSERT INTO contribution (
-                    event_key,
-                    guest_name,
-                    idempotency_key
-                )
-                VALUES (
-                    :eventKey,
-                    :guestName,
-                    :idempotencyKey
-                )
-                RETURNING id
+            String eventKey, String guestName, String message, String idempotencyKey) {
+        var inserted = jdbcClient.sql("""
+                INSERT INTO contribution (event_key, guest_name, idempotency_key, request_fingerprint)
+                VALUES (:eventKey, :guestName, :idempotencyKey,
+                """ + FINGERPRINT + """
+                ) ON CONFLICT (idempotency_key) DO NOTHING RETURNING id
                 """)
-                .param("eventKey", eventKey)
-                .param("guestName", guestName)
-                .param("idempotencyKey", idempotencyKey)
-                .query(UUID.class)
-                .single();
-
-        SavedMemory memory = jdbcClient.sql("""
-                INSERT INTO memory (
-                    contribution_id,
-                    memory_type,
-                    text_content
-                )
-                VALUES (
-                    :contributionId,
-                    'TEXT',
-                    :message
-                )
-                RETURNING id, review_status, visibility
-                """)
-                .param("contributionId", contributionId)
-                .param("message", message)
-                .query((resultSet, rowNumber) -> new SavedMemory(
-                        resultSet.getObject("id", UUID.class),
-                        resultSet.getString("review_status"),
-                        resultSet.getString("visibility")))
-                .single();
-
-        return new SavedTextContribution(
-                contributionId,
-                memory.id(),
-                memory.reviewStatus(),
-                memory.visibility());
+                .param("eventKey", eventKey).param("guestName", guestName)
+                .param("message", message).param("idempotencyKey", idempotencyKey)
+                .query(UUID.class).optional();
+        UUID contributionId;
+        if (inserted.isPresent()) {
+            contributionId = inserted.get();
+            jdbcClient.sql("""
+                    INSERT INTO memory (contribution_id, memory_type, text_content)
+                    VALUES (:contributionId, 'TEXT', :message)
+                    """)
+                    .param("contributionId", contributionId).param("message", message).update();
+        } else {
+            var existing = jdbcClient.sql("SELECT id, request_fingerprint = " + FINGERPRINT + """
+                     AS equivalent FROM contribution WHERE idempotency_key = :idempotencyKey
+                    """)
+                    .param("eventKey", eventKey).param("guestName", guestName)
+                    .param("message", message).param("idempotencyKey", idempotencyKey)
+                    .query((rs, row) -> new Existing(rs.getObject("id", UUID.class), rs.getBoolean("equivalent")))
+                    .optional().orElseThrow(ApiException::conflict);
+            // Unbackfillable legacy keys stay reserved, never silently recycled.
+            if (!existing.equivalent()) throw ApiException.conflict();
+            contributionId = existing.id();
+        }
+        return load(contributionId, idempotencyKey, inserted.isPresent());
     }
 
-    public record SavedTextContribution(
-            UUID contributionId,
-            UUID memoryId,
-            String reviewStatus,
-            String visibility) {
+    @Transactional(readOnly = true)
+    public ContributionReceipt getReceipt(UUID contributionId, String idempotencyKey) {
+        return load(contributionId, idempotencyKey, false).receipt();
     }
 
-    private record SavedMemory(
-            UUID id,
-            String reviewStatus,
-            String visibility) {
+    private SavedTextContribution load(UUID contributionId, String key, boolean created) {
+        return jdbcClient.sql(RECEIPT_QUERY).param("contributionId", contributionId)
+                .param("idempotencyKey", key)
+                .query((rs, row) -> new SavedTextContribution(
+                        rs.getObject("contribution_id", UUID.class), rs.getObject("memory_id", UUID.class),
+                        rs.getString("review_status"), rs.getString("visibility"), rs.getString("event_key"),
+                        rs.getObject("created_at", OffsetDateTime.class).toInstant(), created))
+                .optional().orElseThrow(ApiException::notFound);
     }
+
+    public record SavedTextContribution(UUID contributionId, UUID memoryId, String reviewStatus,
+            String visibility, String eventKey, Instant createdAt, boolean created) {
+        public ContributionReceipt receipt() {
+            return new ContributionReceipt(contributionId, eventKey, createdAt, "COMPLETE",
+                    List.of(new ContributionReceipt.MemoryReceipt(memoryId, null, "TEXT", null, reviewStatus, visibility)));
+        }
+    }
+
+    private record Existing(UUID id, boolean equivalent) {}
 }
