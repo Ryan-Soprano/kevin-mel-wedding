@@ -42,9 +42,9 @@ The proposed gallery should preserve full image framing, use a simple vertical s
 
 Do not stage the raw `melkev/` extraction or the ZIP with a blanket `git add`. Stage only explicitly reviewed web assets after the selection is agreed. The supplied photos and PDF remain the sources of truth, not the review thumbnails.
 
-## Proposed Render Static Site configuration
+## Render Static Site deployment
 
-Create the free static site only after the files have been pushed and merged into the selected remote branch. Render reads GitHub, not the local checkout. The current draft settings are:
+The focused site change was merged to `main` in [PR #9](https://github.com/Ryan-Soprano/kevin-mel-wedding/pull/9) on October 4, 2026. Render reads GitHub, not the local checkout. The deployed settings are:
 
 | Field | Value |
 |---|---|
@@ -55,9 +55,9 @@ Create the free static site only after the files have been pushed and merged int
 | Publish Directory | `.` (relative to `coming-soon`, not the repository root) |
 | Environment variable | `SKIP_INSTALL_DEPS=true` |
 
-The build command checks the required static files and produces no compiled output. Do not add application credentials, a database, a paid instance, or dependencies for this page. Render's static-site hosting and managed TLS are free within the workspace's included allowances; check the current plan and custom-domain allowance before creating a service. See [Render Static Sites](https://render.com/docs/static-sites).
+The build command checks the required static files and produces no compiled output. Do not add application credentials, a database, a paid instance, or dependencies for this page. See [Render Static Sites](https://render.com/docs/static-sites).
 
-First verify the generated Render URL displays this page, including the photo, all styles, and the favicon. Only then add the custom domain and configure DNS.
+The initial deployment of commit `5f7b100ca51e9296d9b513930bcb24b1871d84e2` succeeded on October 4. The live provider URL is [https://kevinandmel-coming-soon.onrender.com/](https://kevinandmel-coming-soon.onrender.com/), service ID `srv-db19f3vavr4c73asu350`. Browser verification confirmed the intended page title, loaded photo, applied grid styling, and no scripts. Render added `kevinandmel.com` and `www.kevinandmel.com` as custom domains, but both await DNS verification and certificate issuance. Do not describe the custom domain as live until HTTPS works there.
 
 ## DNS and HTTPS handoff
 
@@ -72,3 +72,4 @@ Verify `https://kevinandmel.com` and `https://www.kevinandmel.com`, their canoni
 This static site cannot run Spring Boot. Once the separate full application is ready, verify it on its provider URL first. Coordinate moving the custom domain to that service, update the relevant DNS records, and verify HTTPS, guest flows, and rollback behavior before retiring the temporary site. Keep the domain and its renewal unchanged.
 
 Track provisioning and release evidence in Notion OPS-01. Creating these files alone does not complete OPS-01 or demonstrate wedding-day traffic capacity.
+
