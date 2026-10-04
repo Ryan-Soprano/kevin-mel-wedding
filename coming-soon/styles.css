@@ -233,7 +233,7 @@ h1 em { color: var(--green); font-weight: 400; }
   transform: rotate(-13deg);
 }
 
-.art-stamp span { color: #d7e8cf; font-family: Georgia, "Times New Roman", serif; font-size: 29px; font-style: italic; letter-spacing: 0; line-height: 1; }
+.art-stamp span { color: #d7e8cf; font-family: Georgia, "Times New Roman", serif; font-size: 20px; font-style: italic; letter-spacing: 0; line-height: 1; }
 
 .site-footer {
   display: flex;
@@ -274,7 +274,7 @@ h1 em { color: var(--green); font-weight: 400; }
   .caption-names { font-size: 33px; }
   .caption-detail { font-size: 9px; }
   .art-stamp { width: 78px; height: 78px; right: 3px; font-size: 9px; }
-  .art-stamp span { font-size: 26px; }
+  .art-stamp span { font-size: 18px; }
   .orbit { inset: -3px 2px; }
   .orbit-two { inset: 12px -8px; }
   .site-footer { align-items: center; font-size: 10px; }
