@@ -206,6 +206,10 @@ logout, and review require X-CSRF-Token from current session. Missing/invalid to
 Login rotates session ID/token; logout invalidates both. GET session after logout/
 token expiry. Tokens are unpredictable, at least 16 characters, without header controls.
 
+The isolated preview uses deterministic synthetic tokens, not production secrets.
+Every successful mock login/logout issues a fresh token; tokens from earlier sessions
+remain invalid, including across repeated sign-in/sign-out cycles.
+
 Production uses HTTPS and Secure, HttpOnly, SameSite=Lax cookies, same-origin
 requests, CSRF enforcement, and Origin checks on mutations. Frontend never reads
 session IDs or stores bearer tokens. Inbox/detail/review/playback require COUPLE

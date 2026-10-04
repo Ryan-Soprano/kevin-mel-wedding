@@ -160,7 +160,7 @@ function decodeMemory(value) {
     || typeof value.media.originalFilename !== "string" || !value.media.originalFilename.trim()
     || typeof value.media.detectedContentType !== "string"
     || !/^[0-9a-f]{64}$/.test(value.media.checksumSha256)
-    || !UPLOADS.includes(value.media.uploadState)
+    || value.media.uploadState !== "UPLOADED"
     || (value.memoryType === "AUDIO"
       ? !Number.isFinite(value.media.durationSeconds) || value.media.durationSeconds <= 0
       : value.media.durationSeconds !== null))) throw contractMismatch();

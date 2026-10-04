@@ -1,6 +1,6 @@
 # Kevin & Melanie's Living Memory Archive — project plan
 
-Last updated: 2026-10-03 · Collaborators: Ryan and Kade · Wedding: **October 24, 2026**
+Last updated: 2026-10-04 · Collaborators: Ryan and Kade · Wedding: **October 24, 2026**
 
 This file describes product scope, accepted architecture, module boundaries, and collaboration conventions. The active Jira-style work queue is the Notion [Memory Archive — Issues](https://app.notion.com/p/2d5a40baef85426a94bd059f7d0e2ce8) database. Its parent [project home](https://app.notion.com/p/3dad9739c6bc81ff89cbd713cddf08d1?pvs=204) explains the workflow.
 
@@ -134,3 +134,4 @@ With FND-02 automated checks and the FND-03 experience specification complete, t
 | 2026-09-27 | Recorded the completed DAT-01 persistence baseline and began FND-03 experience flows | Kept architecture documentation aligned with the merged PostgreSQL work and separated target wireframes from wedding-ready capabilities. |
 | 2026-09-27 | Added the FND-02 walking-skeleton CI workflow and verified its failure gate | Pull requests and pushes to `main` now run parallel backend and frontend checks; a disposable pull request proved that an intentional syntax error blocks the frontend job. |
 | 2026-10-03 | Defined API v1 with matching real/mock adapters, synthetic preview, and frontend contract tests | Supports separate implementation without treating prototype echoes, transferred bytes, or mock results as durable production storage. |
+| 2026-10-04 | Hardened archive-response decoding and mock session rotation after API-01 review | Unfinished media stays in receipts rather than the private inbox; repeated mock sign-in/sign-out cannot revive stale CSRF tokens. Regression tests cover both boundaries. |

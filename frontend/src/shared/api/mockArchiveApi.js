@@ -40,10 +40,16 @@ export function createMockArchiveApi({ scenario = "success", delayMs = 0 } = {})
   const grants = new Map();
   const memories = clone(INBOX_PAGE.items);
   let session = clone(ANONYMOUS_SESSION);
+  let sessionVersion = 0;
   let next = 1;
   let lostResponse = false;
   let failedTransfer = false;
   const nextId = () => "00000000-0000-4000-8000-" + String(next++).padStart(12, "0");
+
+  function rotateSession(fixture) {
+    // Deterministic preview tokens model rotation, not production token security.
+    session = { ...clone(fixture), csrfToken: "synthetic-csrf-session-" + ++sessionVersion };
+  }
 
   function refreshReceipt(entry) {
     const count = entry.receipt.memories.filter((memory) =>
@@ -77,11 +83,11 @@ export function createMockArchiveApi({ scenario = "success", delayMs = 0 } = {})
         if (scenario === "unauthenticated" || !body?.username || !body?.password) {
           return failure("INVALID_CREDENTIALS", "The sign-in details were not accepted.", 401);
         }
-        session = clone(COUPLE_SESSION);
+        rotateSession(COUPLE_SESSION);
         return reply(session);
       }
       if (method === "DELETE") {
-        session = clone(ANONYMOUS_SESSION);
+        rotateSession(ANONYMOUS_SESSION);
         return reply(null, 204);
       }
     }

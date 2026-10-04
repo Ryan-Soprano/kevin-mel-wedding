@@ -151,6 +151,47 @@ test("session rotation, authorization, logout, and CSRF are enforced by the mock
   await assert.rejects(api.listMemories(), { code: "AUTH_REQUIRED" });
 });
 
+test("every successful login and logout rotates tokens without reviving stale sessions", async () => {
+  const api = createMockArchiveApi();
+  const credentials = { username: "synthetic", password: "synthetic" };
+  const seenTokens = new Set();
+  let anonymous = await api.getSession();
+  seenTokens.add(anonymous.csrfToken);
+
+  for (let cycle = 0; cycle < 3; cycle++) {
+    const session = await api.login(credentials, { csrfToken: anonymous.csrfToken });
+    assert.equal(seenTokens.has(session.csrfToken), false);
+    for (const csrfToken of seenTokens) {
+      await assert.rejects(api.logout({ csrfToken }), { code: "CSRF_INVALID", status: 403 });
+      await assert.rejects(api.reviewMemory(IDS.text, { reviewStatus: "KEEP", revision: 1 }, { csrfToken }), {
+        code: "CSRF_INVALID", status: 403,
+      });
+    }
+    seenTokens.add(session.csrfToken);
+    await api.logout({ csrfToken: session.csrfToken });
+    anonymous = await api.getSession();
+    assert.equal(anonymous.authenticated, false);
+    assert.equal(seenTokens.has(anonymous.csrfToken), false);
+    for (const csrfToken of seenTokens) {
+      await assert.rejects(api.login(credentials, { csrfToken }), { code: "CSRF_INVALID", status: 403 });
+    }
+    seenTokens.add(anonymous.csrfToken);
+  }
+});
+
+test("repeated login rotates tokens; rejected credentials leave the current session unchanged", async () => {
+  const api = createMockArchiveApi();
+  const first = await signIn(api);
+  const second = await signIn(api);
+  assert.notEqual(second.csrfToken, first.csrfToken);
+  await assert.rejects(api.logout({ csrfToken: first.csrfToken }), { code: "CSRF_INVALID" });
+  api.setScenario("unauthenticated");
+  await assert.rejects(signIn(api), { code: "INVALID_CREDENTIALS" });
+  assert.deepEqual(await api.getSession(), second);
+  api.setScenario("success");
+  await api.logout({ csrfToken: second.csrfToken });
+});
+
 test("invalid login and empty inbox have deterministic fixtures", async () => {
   const api = createMockArchiveApi({ scenario: "unauthenticated" });
   await assert.rejects(signIn(api), { code: "INVALID_CREDENTIALS", status: 401 });

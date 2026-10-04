@@ -113,6 +113,25 @@ test("memory and session decoders reject missing concurrency/privacy fields", as
   });
 });
 
+for (const uploadState of ["PENDING", "FAILED"]) {
+  test("unfinished " + uploadState + " media cannot appear in archive details or inbox", async () => {
+    const memory = copy(MEDIA_DETAIL);
+    memory.media.uploadState = uploadState;
+    await assert.rejects(returning(memory).getMemory(IDS.photo), {
+      code: "CONTRACT_MISMATCH", unknownOutcome: false,
+    });
+    await assert.rejects(returning({ items: [memory], nextCursor: null }).listMemories(), {
+      code: "CONTRACT_MISMATCH", unknownOutcome: false,
+    });
+  });
+}
+
+test("uploaded media is accepted in archive details and inbox", async () => {
+  assert.deepEqual(await returning(MEDIA_DETAIL).getMemory(IDS.photo), MEDIA_DETAIL);
+  const page = { items: [MEDIA_DETAIL], nextCursor: null };
+  assert.deepEqual(await returning(page).listMemories(), page);
+});
+
 test("upload URLs must be HTTPS and cannot forward cookies or authorization headers", async () => {
   let observed;
   const api = createArchiveApi({ uploadFetch: async (_url, options) => {
