@@ -57,7 +57,9 @@ The focused site change was merged to `main` in [PR #9](https://github.com/Ryan-
 
 The build command checks the required static files and produces no compiled output. Do not add application credentials, a database, a paid instance, or dependencies for this page. See [Render Static Sites](https://render.com/docs/static-sites).
 
-The initial deployment of commit `5f7b100ca51e9296d9b513930bcb24b1871d84e2` succeeded on October 4. The live provider URL is [https://kevinandmel-coming-soon.onrender.com/](https://kevinandmel-coming-soon.onrender.com/), service ID `srv-db19f3vavr4c73asu350`. Browser verification confirmed the intended page title, loaded photo, applied grid styling, and no scripts. Render added and verified `kevinandmel.com` and `www.kevinandmel.com` as custom domains and issued certificates for both. A browser load at the custom domain is still the final release check; do not describe it as live until that succeeds.
+The initial deployment of commit `5f7b100ca51e9296d9b513930bcb24b1871d84e2` succeeded on October 4. The live provider URL is [https://kevinandmel-coming-soon.onrender.com/](https://kevinandmel-coming-soon.onrender.com/), service ID `srv-db19f3vavr4c73asu350`. PR #10 then deployed the maroon-and-green version at commit `f5228661ab37830d869f21d0c147796faa6086a2`. Render added and verified `kevinandmel.com` and `www.kevinandmel.com` as custom domains and issued certificates for both.
+
+The shareable address is [https://kevinandmel.com/](https://kevinandmel.com/). On October 4, an HTTPS browser load showed the intended title, new colors, and loaded photo with no horizontal overflow. Direct HTTPS checks returned 200 for the root page, stylesheet, favicon, and photo; `https://www.kevinandmel.com/` redirected to the root page. The served JPEG's SHA-256 matched the local approved asset. No script or backend endpoint is required by this page.
 
 ## DNS and HTTPS handoff
 
@@ -65,10 +67,11 @@ Namecheap is the registrar and, as checked on October 4, also the current author
 
 Follow [Render's custom-domain instructions](https://render.com/docs/custom-domains) and its [Namecheap-specific guide](https://render.com/docs/configure-namecheap-dns) while Namecheap remains authoritative. If DNS hosting is later moved to Cloudflare, migrate all needed records before changing nameservers; do not apply both providers' directions to competing configurations.
 
-Verify `https://kevinandmel.com` and `https://www.kevinandmel.com`, their canonical redirect behavior, and an issued HTTPS certificate before recording deployment as complete. Registration alone is not proof of working DNS or HTTPS.
+The HTTPS, `www` redirect, and asset checks above completed this release verification. Registration alone would not have been proof of working DNS or HTTPS; recheck these behaviors after any future DNS or provider change.
 
 ## Replace with the full application
 
 This static site cannot run Spring Boot. Once the separate full application is ready, verify it on its provider URL first. Coordinate moving the custom domain to that service, update the relevant DNS records, and verify HTTPS, guest flows, and rollback behavior before retiring the temporary site. Keep the domain and its renewal unchanged.
 
 Track provisioning and release evidence in Notion OPS-01. Creating these files alone does not complete OPS-01 or demonstrate wedding-day traffic capacity.
+
