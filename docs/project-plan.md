@@ -1,6 +1,6 @@
 # Kevin & Melanie's Living Memory Archive — project plan
 
-Last updated: 2026-09-27 · Collaborators: Ryan and Kade · Wedding: **October 24, 2026**
+Last updated: 2026-10-04 · Collaborators: Ryan and Kade · Wedding: **October 24, 2026**
 
 This file describes product scope, accepted architecture, module boundaries, and collaboration conventions. The active Jira-style work queue is the Notion [Memory Archive — Issues](https://app.notion.com/p/2d5a40baef85426a94bd059f7d0e2ce8) database. Its parent [project home](https://app.notion.com/p/3dad9739c6bc81ff89cbd713cddf08d1?pvs=204) explains the workflow.
 
@@ -63,13 +63,13 @@ The accepted baseline separates the intended architecture from what is already i
 | Frontend | React 19, JavaScript, Vite; **Node 24.21.0 LTS** team runtime | The root `.nvmrc` and frontend engine declaration pin Node 24. Local photo previews and grouped removal are complete; durable submission remains pending. |
 | Backend | **Java 25**, Spring Boot 4.1.1, Spring MVC, Maven 3.9.16 wrapper | Health and validating/normalizing contribution endpoints exist. The Java target and Maven wrapper are pinned; durable persistence remains pending. |
 | Architecture | Modular monolith. Vite runs separately in development; one Spring application serves the built frontend and `/api` in production. | Production static-asset/API routing is not configured. |
-| API | REST/JSON under `/api`, with stable error bodies and durable receipt semantics | Health and text echo endpoints exist. Persistence, idempotency, media, review, and session contracts remain tracked work. |
+| API | REST/JSON under `/api`, with stable error bodies and durable receipt semantics | Health/text echo endpoints exist. [v1 contract](api/v1/README.md), real/mock adapters, and frontend contract tests define the durable handoff; server implementation remains pending. |
 | Database | PostgreSQL with Spring `JdbcClient` and versioned Flyway SQL migrations | PostgreSQL 17 runs through Compose. DAT-01 added the V1 contribution, memory, and media-asset schema plus an atomic text-contribution repository; public endpoint wiring remains pending. |
 | Domain model | Contribution envelope groups individually reviewable Memory records and MediaAsset metadata | The V1 schema enforces `PENDING` and `COUPLE_ONLY` defaults, relationships, lifecycle values, integrity metadata, and retry uniqueness. KEEP stays private; ARCHIVED is recoverable; DELETE follows a reversible retention policy. |
 | Media | Private Cloudflare R2 object storage for original photos and audio; metadata in PostgreSQL | Local previews are complete. The provisional limits are five 10 MB JPEG/PNG/WebP photos and one two-minute/25 MB audio item; HEIC/HEIF and final audio formats remain evidence-gated. |
 | Authentication | Spring Security with server-side sessions and strict role separation | Not implemented. Kevin and Melanie alone receive moderation/publication authority at reveal; Ryan retains infrastructure operations; Kade remains development-only. |
-| Testing | Spring MVC/JUnit backend tests, ESLint/build checks, focused frontend and real-device coverage | Health and PostgreSQL/Testcontainers integration tests are configured. Contribution endpoint, media, browser, accessibility, and real-device coverage remain tracked work. |
-| Delivery | GitHub feature branches and pull requests into `main`; new features use `feature/<description>` | GitHub Actions runs parallel backend tests and frontend install/lint/build checks for pull requests and pushes to `main`. Staging, production hosting, the domain, and deployment automation remain pending. |
+| Testing | Spring MVC/JUnit backend tests, ESLint/build checks, focused frontend and real-device coverage | Health, PostgreSQL/Testcontainers, and Node frontend API-contract tests are configured. Durable HTTP/storage, browser, accessibility, and real-device coverage remain tracked work. |
+| Delivery | GitHub feature branches and pull requests into `main`; new features use `feature/<description>` | GitHub Actions runs parallel backend tests and frontend install/lint/build/test checks for pull requests and pushes to `main`. Staging, production hosting, the domain, and deployment automation remain pending. |
 | Operations | Render application/PostgreSQL in Ohio, private Cloudflare R2, Cloudflare Registrar/DNS, and Ryan-owned operations | Budget, capacity, backup retention, and recovery targets are decided. Provisioning, runbooks, monitoring, and restore proof remain implementation tasks. |
 
 No microservices, Kubernetes, Redis, event bus, or second backend is justified by the current requirements. Revisit only for a documented need.
@@ -116,7 +116,7 @@ Feature directories are scaffolded so the intended boundaries remain visible as 
 | Platform | Root `compose.yaml`; operational documentation under `docs/runbooks/` | Render/R2 environments, deployment, backup, and restore procedures owned by Ryan |
 | Contracts/docs | README for setup; this plan for architecture; Notion for issues; `docs/api/`, `docs/decisions/`, and `docs/runbooks/` for durable repository documentation | One authoritative location for each topic |
 
-With FND-02 automated checks and the FND-03 experience specification complete, the next sequence is to define the durable API contract and wire durable text submission before media uploads. Run the audio feasibility spike early on Ryan's iPhone and an identified Android device; keep media and audio contract details explicitly provisional until the remaining device and format evidence is recorded.
+With FND-02 automated checks and the FND-03 experience specification complete, the [v1 API contract](api/v1/README.md) and matching adapters provide the handoff for MSG-01 durable text submission, before media uploads. Run the audio feasibility spike early on Ryan's iPhone and an identified Android device; media/audio formats and final limits remain explicitly provisional until device evidence is recorded.
 
 **Shared-file etiquette:** discuss changes to build files, lockfiles, shared styles/components, API contracts, migrations, and deployment configuration before editing them simultaneously. New feature branches use `feature/<description>`, for example `feature/photo-previews` or `feature/persist-messages`. Preserve existing branches. Keep a pull request focused on one Notion issue or a small explicitly linked set, and add its URL to the issue.
 
@@ -133,3 +133,5 @@ With FND-02 automated checks and the FND-03 experience specification complete, t
 | 2026-09-13 | Recorded provider, budget, recovery, schedule, authority, media-limit, and audio-fallback decisions; pinned Maven and Node | Reconciled the plan with the current tracker and clarified permanent ownership and application authority. |
 | 2026-09-27 | Recorded the completed DAT-01 persistence baseline and began FND-03 experience flows | Kept architecture documentation aligned with the merged PostgreSQL work and separated target wireframes from wedding-ready capabilities. |
 | 2026-09-27 | Added the FND-02 walking-skeleton CI workflow and verified its failure gate | Pull requests and pushes to `main` now run parallel backend and frontend checks; a disposable pull request proved that an intentional syntax error blocks the frontend job. |
+| 2026-10-03 | Defined API v1 with matching real/mock adapters, synthetic preview, and frontend contract tests | Supports separate implementation without treating prototype echoes, transferred bytes, or mock results as durable production storage. |
+| 2026-10-04 | Hardened archive-response decoding and mock session rotation after API-01 review | Unfinished media stays in receipts rather than the private inbox; repeated mock sign-in/sign-out cannot revive stale CSRF tokens. Regression tests cover both boundaries. |
