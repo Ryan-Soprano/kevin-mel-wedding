@@ -1,11 +1,12 @@
 :root {
   color-scheme: light;
-  --paper: #fff6ee;
-  --ink: #442137;
-  --muted: #6e4b59;
-  --accent: #b44354;
-  --line: #ecd1cc;
-  --gold: #a76942;
+  --paper: #fbf7ee;
+  --ink: #55283b;
+  --muted: #68565b;
+  --accent: #84354b;
+  --green: #315e4c;
+  --line: #e6d9cd;
+  --gold: #a47d47;
   font-family: "Segoe UI", Helvetica, Arial, sans-serif;
   color: var(--ink);
   background: var(--paper);
@@ -20,9 +21,9 @@ body {
   /* Clip only the ornamental orbits, which extend beyond the page edges. */
   overflow-x: clip;
   background:
-    radial-gradient(ellipse at 88% 30%, #ffcfad99, transparent 54%),
-    radial-gradient(ellipse at 8% 82%, #f5c6d799, transparent 55%),
-    linear-gradient(135deg, #fff8f1, #fff0ed 62%, #fae9ef);
+    radial-gradient(ellipse at 88% 30%, #d9e8d4ad, transparent 54%),
+    radial-gradient(ellipse at 8% 82%, #ecd0d2a6, transparent 55%),
+    linear-gradient(135deg, #fffaf3, #f9f3ea 62%, #f5f0e9);
 }
 
 .page-shell {
@@ -59,14 +60,14 @@ body {
   place-content: center;
   align-items: center;
   gap: 1px;
-  border: 1px solid #bd8490;
-  background: #fffaf566;
+  border: 1px solid #7f9c84;
+  background: #fffdf066;
   border-radius: 50%;
   font-size: 21px;
   font-style: italic;
 }
 
-.wordmark-seal span { font-size: 12px; }
+.wordmark-seal span { color: var(--green); font-size: 12px; }
 
 .header-note,
 .site-footer {
@@ -74,6 +75,8 @@ body {
   font-size: 12px;
   letter-spacing: .5px;
 }
+
+.header-note { color: var(--green); }
 
 .hero {
   flex: 1;
@@ -94,10 +97,10 @@ body {
   gap: 9px;
   margin: 0 0 30px;
   padding: 10px 14px;
-  border: 1px solid #e7b0b4;
+  border: 1px solid #dcb9bf;
   border-radius: 30px;
-  background: #f9dcdfb3;
-  color: #782b43;
+  background: #f8e8e8b3;
+  color: var(--accent);
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 1.4px;
@@ -108,8 +111,8 @@ body {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--accent);
-  box-shadow: 0 0 0 4px #b4435412;
+  background: var(--green);
+  box-shadow: 0 0 0 4px #315e4c18;
 }
 
 h1 {
@@ -121,7 +124,7 @@ h1 {
   letter-spacing: -3px;
 }
 
-h1 em { color: var(--accent); font-weight: 400; }
+h1 em { color: var(--green); font-weight: 400; }
 
 .intro {
   max-width: 390px;
@@ -149,7 +152,7 @@ h1 em { color: var(--accent); font-weight: 400; }
   font-style: italic;
 }
 
-.date-rule { width: 32px; height: 1px; background: #b16d7b; flex-shrink: 0; }
+.date-rule { width: 32px; height: 1px; background: var(--green); flex-shrink: 0; }
 
 .hero-art {
   position: relative;
@@ -164,8 +167,8 @@ h1 em { color: var(--accent); font-weight: 400; }
   position: relative;
   margin: 0;
   background: #fffbf6;
-  border: 1px solid #ead1c5;
-  box-shadow: 0 28px 56px -28px #78364a55, 0 2px 6px #78364a0d;
+  border: 1px solid #e3d5c6;
+  box-shadow: 0 28px 56px -28px #55283b55, 0 2px 6px #55283b0d;
   padding: 10px 18px 33px;
   transform: rotate(3deg);
 }
@@ -188,19 +191,20 @@ h1 em { color: var(--accent); font-weight: 400; }
 }
 
 .caption-names { font-family: Georgia, "Times New Roman", serif; font-size: 38px; letter-spacing: -1.4px; }
-.caption-names i { color: var(--accent); font-size: 31px; }
+.caption-names i { color: var(--gold); font-size: 31px; }
+.caption-names span:last-child { color: var(--green); }
 .caption-detail { color: var(--muted); font-size: 10px; letter-spacing: .4px; }
 
 .orbit {
   position: absolute;
   z-index: -1;
   inset: -12px -8px;
-  border: 1px solid #cc9e86;
+  border: 1px solid #bd9da7;
   border-radius: 50%;
   transform: rotate(-24deg);
 }
 
-.orbit-two { inset: 7px -27px; transform: rotate(25deg); border-color: #dfadbc; }
+.orbit-two { inset: 7px -27px; transform: rotate(25deg); border-color: #9db9a7; }
 
 .small-star { position: absolute; color: var(--gold); font-size: 25px; z-index: 2; }
 .star-one { top: 8px; right: 2px; }
@@ -229,7 +233,7 @@ h1 em { color: var(--accent); font-weight: 400; }
   transform: rotate(-13deg);
 }
 
-.art-stamp span { font-family: Georgia, "Times New Roman", serif; font-size: 29px; font-style: italic; letter-spacing: 0; line-height: 1; }
+.art-stamp span { color: #d7e8cf; font-family: Georgia, "Times New Roman", serif; font-size: 29px; font-style: italic; letter-spacing: 0; line-height: 1; }
 
 .site-footer {
   display: flex;
@@ -240,7 +244,7 @@ h1 em { color: var(--accent); font-weight: 400; }
   font-size: 11px;
 }
 
-.footer-message span { color: var(--accent); margin-left: 5px; font-size: 15px; }
+.footer-message span { color: var(--green); margin-left: 5px; font-size: 15px; }
 
 @media (min-width: 1500px) {
   .hero { padding-block: 90px; }
