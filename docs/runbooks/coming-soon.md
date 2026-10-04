@@ -10,7 +10,7 @@ The page uses system fonts and the Grand Central selfie Ryan selected as photo #
 
 There are no external images, fonts, scripts, cookies, analytics, forms, API calls, or backend/database dependencies. Its text does not reveal the private archive or promise working collection features. All visible content works without JavaScript.
 
-Ryan requested a more celebratory palette after reviewing the photo. The current design uses peach/blush background glows, deep-plum typography and stamp, berry accents, and muted-gold ornamentation. The photo remains unchanged. The palette is for this temporary page, not an approved replacement for the full application's design system.
+Ryan requested a more celebratory palette after reviewing the photo, then shared that Kevin's favorite color is maroon and Mel's is green. The current design pairs deep-maroon typography and stamp with forest-green highlights, a warm-ivory background, soft rose/sage glows, and muted-gold ornamentation. Their names on the photo card carry the two colors. The photo remains unchanged. This palette is for the temporary page, not an approved replacement for the full application's design system.
 
 The HTML includes `noindex, nofollow`, and `robots.txt` asks crawlers not to crawl the page. These are indexing preferences, not access controls: a published page remains public.
 
@@ -57,13 +57,13 @@ The focused site change was merged to `main` in [PR #9](https://github.com/Ryan-
 
 The build command checks the required static files and produces no compiled output. Do not add application credentials, a database, a paid instance, or dependencies for this page. See [Render Static Sites](https://render.com/docs/static-sites).
 
-The initial deployment of commit `5f7b100ca51e9296d9b513930bcb24b1871d84e2` succeeded on October 4. The live provider URL is [https://kevinandmel-coming-soon.onrender.com/](https://kevinandmel-coming-soon.onrender.com/), service ID `srv-db19f3vavr4c73asu350`. Browser verification confirmed the intended page title, loaded photo, applied grid styling, and no scripts. Render added `kevinandmel.com` and `www.kevinandmel.com` as custom domains, but both await DNS verification and certificate issuance. Do not describe the custom domain as live until HTTPS works there.
+The initial deployment of commit `5f7b100ca51e9296d9b513930bcb24b1871d84e2` succeeded on October 4. The live provider URL is [https://kevinandmel-coming-soon.onrender.com/](https://kevinandmel-coming-soon.onrender.com/), service ID `srv-db19f3vavr4c73asu350`. Browser verification confirmed the intended page title, loaded photo, applied grid styling, and no scripts. Render added and verified `kevinandmel.com` and `www.kevinandmel.com` as custom domains and issued certificates for both. A browser load at the custom domain is still the final release check; do not describe it as live until that succeeds.
 
 ## DNS and HTTPS handoff
 
-Namecheap is the registrar. Cloudflare remains the planned authoritative DNS provider; registrar and DNS provider are separate roles. Inspect the actual current nameservers and existing records before deciding where to edit DNS. Do not delete unrelated mail, verification, or other records.
+Namecheap is the registrar and, as checked on October 4, also the current authoritative DNS provider (`dns1.registrar-servers.com` and `dns2.registrar-servers.com`). Cloudflare had been planned but was not enabled. The existing website records were Namecheap parking: `www` CNAME to `parkingpage.namecheap.com` and `@` URL redirect to `http://www.kevinandmel.com/`. They were changed in Namecheap Advanced DNS to `www` CNAME `kevinandmel-coming-soon.onrender.com` and `@` A `216.24.57.1`, both with 30-minute TTL. Namecheap's email-forwarding setting and its SPF TXT record were left unchanged. Authoritative DNS confirmed the new A and CNAME; public resolver caches and certificate issuance may lag. Do not delete unrelated mail, verification, or other records.
 
-Follow [Render's custom-domain instructions](https://render.com/docs/custom-domains), then the instructions for the chosen DNS provider. If Ryan chooses to keep Namecheap DNS temporarily, record that change and use [the Namecheap-specific guide](https://render.com/docs/configure-namecheap-dns). Do not apply both providers' directions to competing nameserver configurations.
+Follow [Render's custom-domain instructions](https://render.com/docs/custom-domains) and its [Namecheap-specific guide](https://render.com/docs/configure-namecheap-dns) while Namecheap remains authoritative. If DNS hosting is later moved to Cloudflare, migrate all needed records before changing nameservers; do not apply both providers' directions to competing configurations.
 
 Verify `https://kevinandmel.com` and `https://www.kevinandmel.com`, their canonical redirect behavior, and an issued HTTPS certificate before recording deployment as complete. Registration alone is not proof of working DNS or HTTPS.
 
@@ -72,4 +72,3 @@ Verify `https://kevinandmel.com` and `https://www.kevinandmel.com`, their canoni
 This static site cannot run Spring Boot. Once the separate full application is ready, verify it on its provider URL first. Coordinate moving the custom domain to that service, update the relevant DNS records, and verify HTTPS, guest flows, and rollback behavior before retiring the temporary site. Keep the domain and its renewal unchanged.
 
 Track provisioning and release evidence in Notion OPS-01. Creating these files alone does not complete OPS-01 or demonstrate wedding-day traffic capacity.
-
