@@ -8,12 +8,12 @@ For prerequisites, install/run/check commands, the development proxy, and curren
 |---|---|
 | [src/main.jsx](src/main.jsx) | React entry point; imports the global stylesheet and application shell |
 | [src/app/App.jsx](src/app/App.jsx) | Top-level application shell |
-| [src/features/contribution/](src/features/contribution/) | Guest form, submission state, and contribution API access |
+| [src/features/contribution/](src/features/contribution/) | Guest text form and retained draft/key coordinator in api/textSubmission.js |
 | [src/features/media/](src/features/media/) | Photo selection, constraints, previews, and removal behavior |
 | [src/features/archive/](src/features/archive/) | Reserved for the private archive and review experience |
 | [src/features/auth/](src/features/auth/) | Reserved for couple authentication |
 | [src/shared/](src/shared/) | Reusable API and UI code shared by multiple features |
-| [src/shared/api/archiveApi.js](src/shared/api/archiveApi.js) | Durable v1 adapter/decoders; not yet wired to the prototype form |
+| [src/shared/api/archiveApi.js](src/shared/api/archiveApi.js) | Durable v1 adapter/decoders used by the wedding text form |
 | [src/shared/api/mockArchiveApi.js](src/shared/api/mockArchiveApi.js) | Isolated synthetic server behind the same transport/adapter |
 | [src/shared/api/v1/fixtures.js](src/shared/api/v1/fixtures.js) | Executable versioned request/response examples |
 | [src/dev/](src/dev/) / [contract-preview.html](contract-preview.html) | Development-only synthetic UI preview; excluded from the normal build |
@@ -28,4 +28,4 @@ The [v1 contract](../docs/api/v1/README.md) owns API semantics and implementatio
 Run `npm test` here for transport, decoder, and mock contract checks; no backend or
 Docker is required. They do not replace server integration/browser/device tests.
 Start Vite and visit `/contract-preview.html` for synthetic scenarios. The wedding
-form still validates/echoes, not saves.
+form saves text through the real v1 adapter. Uncertain requests retain their draft/key for manual retry; state lasts only while this page remains open. Photo choices remain local previews. Richer confirmation/accessibility coverage stays with MSG-02.

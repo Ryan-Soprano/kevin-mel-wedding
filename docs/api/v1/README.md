@@ -7,24 +7,16 @@ adapters, and tests together.
 
 ## Implementation boundary
 
-Spring still validates and **echoes** text; it does not save it. The current form
-keeps its prototype adapter. The new [real adapter](../../../frontend/src/shared/api/archiveApi.js)
-targets this contract and rejects a prototype echo as a durable receipt.
-The [mock](../../../frontend/src/shared/api/mockArchiveApi.js) simulates an isolated
-in-memory server through the real transport/decoders.
+MSG-01 implements durable text POST and key-bound text receipt GET, and the wedding form uses the [real adapter](../../../frontend/src/shared/api/archiveApi.js). New text returns 201 only after commit; equivalent retries return 200 with original identity and current states. The [mock](../../../frontend/src/shared/api/mockArchiveApi.js) remains an isolated synthetic server behind the real transport/decoders.
 
-API-01 implements no server routes, authentication, schema changes, or deployment.
-MSG-01 must implement durable text and switch the form's adapter together.
-Media, authentication, inbox, and operations issues own the other server work.
-Mock success is not server-conformance or production-readiness evidence.
+Media intents/uploads, authentication, private inbox/review, and production operations remain server work owned by their respective issues. Their routes below are contracts, not implemented capabilities. Mock success is not production-readiness evidence. See [text verification](text-verification.md).
 
 ## Shared conventions
 
 - Same-origin REST/JSON under `/api`. Send `Accept: application/json`,
   `X-Api-Contract: 1`, and `Content-Type: application/json` for bodies.
 - The v1 server must honor version 1 without silently falling back to echo.
-  Unsupported versions return 400 UNSUPPORTED_CONTRACT. Coordinate the form/
-  endpoint upgrade; the prototype's error array is not a v1 response.
+  Missing or unsupported versions return 400 UNSUPPORTED_CONTRACT on text creation/receipt. There is no echo fallback.
 - Response caching is `Cache-Control: no-store`. JSON is camelCase, IDs are UUIDs,
   and timestamps are UTC ISO-8601 strings ending in Z.
 - Required fields must have the documented type; nullable response fields are
@@ -34,7 +26,8 @@ Mock success is not server-conformance or production-readiness evidence.
   Validate raw length before trimming outer whitespace. Normalize using
   JavaScript String.trim()'s whitespace set, including NBSP; the backend must
   mirror it rather than assume Java trim() is identical. Blank optional name/
-  caption becomes null; preserve internal whitespace.
+  caption becomes null; preserve internal whitespace. Text/name values must be
+  valid Unicode scalar sequences without U+0000, which PostgreSQL text cannot store.
 - Server assigns eventKey `kevin-mel-wedding`; guests cannot choose events,
   review state, visibility, IDs, or storage keys.
 - New memories are PENDING and COUPLE_ONLY. KEEP and ARCHIVED remain private.
@@ -64,7 +57,8 @@ Mock success is not server-conformance or production-readiness evidence.
 Idempotency-Key is required for creation, receipt, upload-grant, and finalize
 requests. Generate a cryptographically random UUID v4 once per logical submission.
 Retain it with the normalized draft/client item IDs across retries. A timeout is
-not a reason to create another key.
+not a reason to create another key. Text routes validate UUID-v4 keys and
+canonicalize their letter case. Missing/malformed keys return 400 VALIDATION_FAILED.
 
 TEXT_REQUEST keeps the prototype request's shape, without memoryType:
 
@@ -111,6 +105,10 @@ signed URLs, and guest content from logs/analytics; never put them in request UR
 Network failures/cancellations/5xx can occur **after** commit. Preserve draft/key;
 replay POST to recover unknown IDs, or GET receipt if its ID is known. Do not show
 saved or clear drafts just because fetch resolved. No automatic retries.
+
+The wedding text form retains one normalized draft/key in memory, coalesces repeated taps, and requires a deliberate retry after an uncertain response. It locks text edits until that submission is confirmed, then offers a deliberate new-message action. Known validation rejection permits correction; conflicts never rotate keys automatically. Keep the page open until confirmed: browser refresh/tab closure is not a supported draft-recovery mechanism in this slice.
+
+Text POST rejects cross-origin Origin values and Sec-Fetch-Site: cross-site with 403 ORIGIN_INVALID. Origin-less nonbrowser clients may submit with valid JSON/version/key headers. Reverse-proxy origin configuration and full production abuse controls remain deployment/security work; this check grants no private archive access.
 
 ## Media authorization, transfer, and finalize
 
@@ -281,7 +279,7 @@ use items[0].byteSize etc. Render text, never HTML.
 |---|---|
 | 400 VALIDATION_FAILED / INVALID_CURSOR | Show fields or reload; retain draft |
 | 401 AUTH_REQUIRED / INVALID_CREDENTIALS | Preserve nonsensitive state; sign in |
-| 403 CSRF_INVALID / ARCHIVE_UNAVAILABLE | Refresh session or explain access |
+| 403 CSRF_INVALID / ARCHIVE_UNAVAILABLE / ORIGIN_INVALID | Refresh session or explain access |
 | 404 NOT_FOUND | Show unavailable without existence leak |
 | 409 IDEMPOTENCY_CONFLICT / UPLOAD_INCOMPLETE | Do not auto-replace key; reconcile |
 | 410 UPLOAD_GRANT_EXPIRED | Renew incomplete item's grant |
@@ -310,6 +308,9 @@ Scenarios include success, validation, anonymous/forbidden, delay, rate limiting
 service/network failures, lost committed response, partial uploads, expired grants,
 invalid media, unavailable playback, and empty inbox.
 
-Implementing tasks must add HTTP/PostgreSQL/storage integration tests. Applied V1
-SQL lacks request fingerprints, client item IDs, captions, duration, review
-revisions, delete deadlines. Add new migrations in those tasks; never edit applied V1.
+MSG-01 adds real HTTP/PostgreSQL integration tests and V2 creation fingerprints.
+The fingerprint is SHA-256 over a PostgreSQL JSONB object containing eventKey,
+memoryType TEXT, normalized guestName and message; it is immutable during replay.
+V2 backfills only unambiguous single-text V1 envelopes and preserves their data;
+other legacy keys stay reserved. Client item IDs, captions, duration, review
+revisions and delete deadlines still need later migrations. Never edit applied V1.

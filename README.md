@@ -12,7 +12,7 @@ This is a learning project. Explain and agree on infrastructure, dependencies, a
 
 ## Local development
 
-The prototype validates and echoes text requests and provides local selectable photo previews; **it does not save messages or photos**. Use test content only. Check the matching Notion issue for current progress and expected completion evidence.
+The application saves named or anonymous text messages privately in PostgreSQL and returns committed receipts with safe same-key retries. Photo selection remains a local preview; **photos are not uploaded or saved**. Use synthetic content during local development. Production collection still requires the security, operations, and release work tracked in Notion.
 
 ### Prerequisites
 
@@ -64,26 +64,35 @@ Open the Local URL Vite prints, normally [localhost:5173](http://localhost:5173/
 
 ### Current API behavior
 
-These examples describe the prototype. The [v1 API contract](docs/api/v1/README.md) and tested real/mock adapters define the durable interface for subsequent backend work; a successful echo is not a saved memory. The current form deliberately keeps its prototype adapter until MSG-01 implements durable text.
+The [v1 API contract](docs/api/v1/README.md) is authoritative. The development proxy preserves the browser Host header for same-origin submission checks. The wedding form uses the durable real adapter; synthetic preview scenarios use an isolated mock.
 
 | Request | Current response |
 |---|---|
-| `GET /api/health` | HTTP 200 with `{"status":"ok"}`; does not check DB or storage |
-| `POST /api/contributions` with JSON `guestName` and `message` | HTTP 200 with trimmed input; omitted/null name becomes an empty string |
-| Contribution violating request-field validation | HTTP 400 with `{"errors":["validation message"]}` |
+| GET /api/health | HTTP 200 with status ok; not a database readiness check |
+| POST /api/contributions | HTTP 201 after commit, HTTP 200 for an equivalent same-key replay; IDs/states only |
+| GET /api/contributions/{contributionId}/receipt | HTTP 200 with current states when both ID and retry key match; otherwise safe 404 |
+| Invalid text or retry key | HTTP 400 VALIDATION_FAILED with safe field errors where applicable |
+| Missing/unsupported contract version | HTTP 400 UNSUPPORTED_CONTRACT |
+| Same key with changed normalized content | HTTP 409 IDEMPOTENCY_CONFLICT |
+| Database/commit failure | HTTP 503 SERVICE_UNAVAILABLE; never a false saved acknowledgment |
 
-Name is optional with a 100-character limit; message is required, nonblank, and limited to 5,000 characters. Backend validation occurs before service trimming. Exact constraints and normalization live in [ContributionRequest.java](backend/src/main/java/com/kevinandmelanie/memoryarchive/contribution/ContributionRequest.java) and [ContributionService.java](backend/src/main/java/com/kevinandmelanie/memoryarchive/contribution/ContributionService.java).
+Send X-Api-Contract: 1 and a random UUID-v4 Idempotency-Key. The server canonicalizes UUID case. Names are optional (blank becomes null), at most 100 raw UTF-16 units; messages are required/nonblank, at most 5,000 raw units. Outer whitespace follows JavaScript String.trim(), including NBSP; internal whitespace is retained. NUL and unpaired surrogates are rejected. Unknown fields and wrong types are rejected. State/event/IDs belong to the server.
 
-With the backend running, inspect responses from Git Bash:
+With the backend running, inspect synthetic responses from Git Bash. Generate the key once and retain it for retries of this exact message:
 
-```sh
+~~~sh
+submission_key=$(node -e 'process.stdout.write(crypto.randomUUID())')
 curl --fail http://localhost:8080/api/health
-curl --fail --request POST http://localhost:8080/api/contributions \
+curl --fail-with-body --request POST http://localhost:8080/api/contributions \
   --header 'Content-Type: application/json' \
+  --header 'X-Api-Contract: 1' \
+  --header "Idempotency-Key: $submission_key" \
   --data '{"guestName":"Test Guest","message":"Local test message"}'
-```
+~~~
 
-The form currently logs successful responses in the browser console and has no saved confirmation. Photo files are not included in the text request.
+Use the same POST/body/key after a lost response; do not generate another key. If the returned contributionId is known, GET its receipt with the same two headers. Receipts contain no guest content or private retrieval links, and responses use Cache-Control: no-store.
+
+The form confirms saved only after a valid complete receipt. It retains the original draft/key for deliberate retry, locks text editing while the outcome is uncertain, honors Retry-After, and requires **Write another message** before creating a new logical submission. Retry state is in memory: keep the page open until confirmed; refresh/tab closure does not preserve it. Guest payloads and errors are not logged to the browser console. Photo selections are not included in text requests.
 
 ### Checks
 
@@ -128,7 +137,7 @@ docker compose exec postgres psql \
   -c 'SELECT installed_rank, version, description, success FROM flyway_schema_history ORDER BY installed_rank;'
 ```
 
-After a migration has been applied, treat its SQL file as immutable. Make later schema changes in a new migration such as `V2__describe_the_change.sql`. This lets collaborators receive the same schema changes through Git without sharing one physical database.
+After a migration has been applied, treat its SQL file as immutable. Make later schema changes in a new migration with the next unused version. This lets collaborators receive the same schema changes through Git without sharing one physical database.
 
 Stop PostgreSQL while preserving its named data volume:
 
@@ -145,7 +154,7 @@ docker compose up -d postgres
 
 The `--volumes` command permanently deletes this project's local PostgreSQL data. The next Spring startup rebuilds the schema by applying the committed Flyway migrations.
 
-The repository can atomically save a contribution and its text memory, but the public endpoint still echoes. The [v1 contract](docs/api/v1/README.md) defines durable receipts and idempotency; MSG-01 must wire the repository into the controller and implement safe retries before the form can report saved.
+V2 adds an immutable SHA-256 creation fingerprint without rewriting V1. It backfills normalized single-text V1 envelopes without changing their stored content or IDs; other legacy keys remain reserved. PostgreSQL unique-key arbitration and one transaction prevent duplicate memories and orphan envelopes. Tests cover fresh schema, populated V1 upgrade, migration rerun, real HTTP concurrency, insert/commit rollback, database outage, and application restart against the same test database. See [MSG-01 verification](docs/api/v1/text-verification.md) for the evidence and remaining boundaries.
 
 ## Repository navigation
 
@@ -156,6 +165,7 @@ The repository can atomically save a contribution and its text memory, but the p
 | [backend/src/main/java/com/kevinandmelanie/memoryarchive/](backend/src/main/java/com/kevinandmelanie/memoryarchive/) | Spring app and current contribution, health, and web packages |
 | [backend/src/test/](backend/src/test/) | Backend tests |
 | [docs/](docs/) | Architecture, API contracts, decision records, and operational runbooks |
+| [coming-soon/](coming-soon/) | Standalone temporary landing page; see the [local preview and deployment handoff](docs/runbooks/coming-soon.md). Not deployed. |
 | [compose.yaml](compose.yaml) | Local database configuration |
 | [docs/project-plan.md](docs/project-plan.md) | Product scope, accepted architecture, and collaboration conventions |
 | [Feature tracker.md](<Feature tracker.md>) | Migration pointer to Notion; do not maintain task status here |

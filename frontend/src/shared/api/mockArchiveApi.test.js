@@ -233,3 +233,11 @@ test("playback failure does not remove the stored memory", async () => {
   await assert.rejects(api.getPlayback(memoryId), { code: "MEDIA_UNAVAILABLE", status: 503 });
   assert.equal((await api.getMemory(memoryId)).media.uploadState, "UPLOADED");
 });
+
+test("UUID case is canonical across text creation and receipt retries", async () => {
+  const api = createMockArchiveApi();
+  const key = "abcdefab-cdef-4abc-8abc-abcdefabcdef";
+  const original = await api.createTextContribution(TEXT_REQUEST, { idempotencyKey: key.toUpperCase() });
+  assert.deepEqual(await api.createTextContribution(TEXT_REQUEST, { idempotencyKey: key }), original);
+  assert.deepEqual(await api.getReceipt(original.contributionId, { idempotencyKey: key.toUpperCase() }), original);
+});

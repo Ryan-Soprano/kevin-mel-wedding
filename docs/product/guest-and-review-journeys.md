@@ -25,7 +25,7 @@ This table prevents a target wireframe from being mistaken for a released capabi
 
 | Contribution type | Current repository capability | Wedding-ready today? |
 |---|---|---|
-| Written note | The UI and API validate text. DAT-01 added tested persistence, but the public endpoint is not wired to it yet. | No |
+| Written note | The wedding form and v1 API save private text with committed receipts and same-key manual retries. Full experience/accessibility and production operations remain pending. | No |
 | Photos | The browser can select, validate, preview, and remove local JPEG, PNG, and WebP files. Upload and durable storage are not implemented. | No |
 | Audio | Browser recording and file-upload fallback are planned but not implemented. | No |
 | Couple inbox | Data lifecycle states exist, but authentication, list/detail screens, and actions are not implemented. | No |

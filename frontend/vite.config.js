@@ -9,7 +9,7 @@ export default defineConfig(({ mode }) => {
     plugins: [react()],
     server: {
       proxy: {
-        "/api": backendUrl,
+        "/api": { target: backendUrl, changeOrigin: false },
       },
     },
   };
