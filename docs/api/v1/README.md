@@ -9,14 +9,14 @@ adapters, and tests together.
 
 MSG-01 implements durable text POST and key-bound text receipt GET, and the wedding form uses the [real adapter](../../../frontend/src/shared/api/archiveApi.js). New text returns 201 only after commit; equivalent retries return 200 with original identity and current states. The [mock](../../../frontend/src/shared/api/mockArchiveApi.js) remains an isolated synthetic server behind the real transport/decoders.
 
-Media intents/uploads, authentication, private inbox/review, and production operations remain server work owned by their respective issues. Their routes below are contracts, not implemented capabilities. Mock success is not production-readiness evidence. See [text verification](text-verification.md).
+MED-01 implements PHOTO intents (one to five), capability-bound grants/finalization, and generic receipt GET, plus a minimal single-photo wedding form. Storage is opt-in and requires a private R2 bucket configured by Ryan; real R2 and phone acceptance remain pending. Audio, authentication, private inbox/review/playback, and production operations remain future server work. Mock success is not production-readiness evidence. See [text verification](text-verification.md), [photo verification](photo-verification.md), and the [R2 runbook](../../runbooks/private-photo-storage.md).
 
 ## Shared conventions
 
 - Same-origin REST/JSON under `/api`. Send `Accept: application/json`,
   `X-Api-Contract: 1`, and `Content-Type: application/json` for bodies.
 - The v1 server must honor version 1 without silently falling back to echo.
-  Missing or unsupported versions return 400 UNSUPPORTED_CONTRACT on text creation/receipt. There is no echo fallback.
+  Missing or unsupported versions return 400 UNSUPPORTED_CONTRACT on creation/receipt/grant/finalize. There is no echo fallback.
 - Response caching is `Cache-Control: no-store`. JSON is camelCase, IDs are UUIDs,
   and timestamps are UTC ISO-8601 strings ending in Z.
 - Required fields must have the documented type; nullable response fields are
@@ -26,7 +26,7 @@ Media intents/uploads, authentication, private inbox/review, and production oper
   Validate raw length before trimming outer whitespace. Normalize using
   JavaScript String.trim()'s whitespace set, including NBSP; the backend must
   mirror it rather than assume Java trim() is identical. Blank optional name/
-  caption becomes null; preserve internal whitespace. Text/name values must be
+  caption becomes null; preserve internal whitespace. Text/name/caption/filename values must be
   valid Unicode scalar sequences without U+0000, which PostgreSQL text cannot store.
 - Server assigns eventKey `kevin-mel-wedding`; guests cannot choose events,
   review state, visibility, IDs, or storage keys.
@@ -57,7 +57,7 @@ Media intents/uploads, authentication, private inbox/review, and production oper
 Idempotency-Key is required for creation, receipt, upload-grant, and finalize
 requests. Generate a cryptographically random UUID v4 once per logical submission.
 Retain it with the normalized draft/client item IDs across retries. A timeout is
-not a reason to create another key. Text routes validate UUID-v4 keys and
+not a reason to create another key. Submission routes validate UUID-v4 keys and
 canonicalize their letter case. Missing/malformed keys return 400 VALIDATION_FAILED.
 
 TEXT_REQUEST keeps the prototype request's shape, without memoryType:
@@ -108,7 +108,7 @@ saved or clear drafts just because fetch resolved. No automatic retries.
 
 The wedding text form retains one normalized draft/key in memory, coalesces repeated taps, and requires a deliberate retry after an uncertain response. It locks text edits until that submission is confirmed, then offers a deliberate new-message action. Known validation rejection permits correction; conflicts never rotate keys automatically. Keep the page open until confirmed: browser refresh/tab closure is not a supported draft-recovery mechanism in this slice.
 
-Text POST rejects cross-origin Origin values and Sec-Fetch-Site: cross-site with 403 ORIGIN_INVALID. Origin-less nonbrowser clients may submit with valid JSON/version/key headers. Reverse-proxy origin configuration and full production abuse controls remain deployment/security work; this check grants no private archive access.
+Submission POST/grant/finalize reject cross-origin Origin values and Sec-Fetch-Site: cross-site with 403 ORIGIN_INVALID. Origin-less nonbrowser clients may submit with valid JSON/version/key headers. Reverse-proxy origin configuration and full production abuse controls remain deployment/security work; this check grants no private archive access.
 
 ## Media authorization, transfer, and finalize
 
@@ -132,12 +132,12 @@ Example photo item:
 | Field / limit | Rule |
 |---|---|
 | clientItemId | Required UUID unique within batch; retain across retries |
-| originalFilename | Required nonblank basename, at most 255; no path/control separators; never a storage path |
+| originalFilename | Required nonblank basename, at most 255 raw UTF-16 units; no slash/backslash or ASCII controls (0–31, 127); never a storage path |
 | declaredContentType | Required MIME declaration; client claim, not verified detection |
 | byteSize | Required positive safe integer; original byte count |
 | checksumSha256 | Required 64 lowercase hex characters; SHA-256 of original bytes |
 | caption | Optional/null, raw length at most 500; blank becomes null |
-| Photos | At most five JPEG/PNG/WebP; **10,000,000 bytes each**, matching picker |
+| Photos | At most five JPEG/PNG/WebP; **10,000,000 bytes each**, matching picker; actual decode limited to 50 million pixels and 20,000 per dimension |
 | Audio | One; provisional **25,000,000 bytes**, over zero and at most 120 seconds |
 | durationSeconds | Required finite AUDIO number; omitted for PHOTO request; verified by server |
 
@@ -164,10 +164,16 @@ size/type/checksum as supported by storage. Expose only Content-Type and optiona
 x-amz-checksum-sha256 upload headers. PUT bytes over HTTPS with cookies omitted
 and redirects rejected. Never forward app cookies, retry/CSRF/authorization headers.
 
+MED-01 grant POST has no request body. R2 signs Content-Type, method PUT, and a unique temporary `staging/<grant UUID>` key; size/checksum are enforced during finalize rather than by an R2 checksum header. Presigned PUTs can be reused until expiry, so finalization publishes only the verified candidate bytes to a separate server-only `originals/<asset UUID>` key. Later browser staging overwrites cannot replace the saved original. Neither filename nor guest text enters object keys. No public GET/playback link appears in a guest receipt. Storage is disabled by default; disabled/unavailable IO returns safe 503 MEDIA_UNAVAILABLE, and database/commit failure remains 503 SERVICE_UNAVAILABLE.
+
 Then POST finalize with `{"grantId":"…"}`. Server verifies object existence,
 actual size, detected format, checksum, and audio duration before committing
 UPLOADED. Repeated successful finalize returns current receipt. Failed verification
 returns 422 INVALID_MEDIA and marks that item FAILED.
+
+PHOTO finalization verifies the declared exact byte count and SHA-256, detected MIME and bounded image decoding. Original bytes and metadata are preserved; sampled decoding is only a verification step. Grant association/capability is checked before returning a repeated completion. An unfinished expired grant cannot finalize (410); a correctly associated completed item's finalize replays its current receipt even after grant expiry. A known verification rejection commits FAILED before 422 is emitted. Storage/DB failure never acknowledges success; a private original written before DB commit failure can be recovered by the same-item retry.
+
+The single-photo form retains its original file, normalized name/caption, item ID, hash, key and latest grant in memory. Repeated taps coalesce, retry reconciles the receipt and retained grant before retransfer, and only COMPLETE confirms saved. Uncertain outcomes lock editing and retain identity. An explicit replacement after known INVALID_MEDIA abandons the unfinished intent for documented cleanup; refresh/tab closure is not recovery. The batch backend preserves order and current sibling states; MED-02 owns batch UI polish.
 
 | State | Meaning |
 |---|---|
@@ -312,5 +318,4 @@ MSG-01 adds real HTTP/PostgreSQL integration tests and V2 creation fingerprints.
 The fingerprint is SHA-256 over a PostgreSQL JSONB object containing eventKey,
 memoryType TEXT, normalized guestName and message; it is immutable during replay.
 V2 backfills only unambiguous single-text V1 envelopes and preserves their data;
-other legacy keys stay reserved. Client item IDs, captions, duration, review
-revisions and delete deadlines still need later migrations. Never edit applied V1.
+other legacy keys stay reserved. V3 adds PHOTO client item IDs, captions/order, expected integrity claims and five-minute upload grants without rewriting V1/V2. PHOTO fingerprints use SHA-256 over length-prefixed normalized fields and ordered item metadata, including client IDs, filename, MIME, size, original hash and caption. Changed fields/order conflict; Unicode outer whitespace and UUID case normalize before fingerprinting. Legacy non-text keys remain reserved. Audio duration, review revisions and delete deadlines still need later migrations. Never edit applied migrations.

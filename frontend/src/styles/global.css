@@ -175,6 +175,21 @@ button:focus-visible {
   border-radius: 12px;
 }
 
+.photo-original-preview {
+  width: 100%;
+  max-width: 320px;
+  overflow-wrap: anywhere;
+}
+
+.photo-submission {
+  margin-top: 40px;
+  min-width: 0;
+}
+
+.photo-submission input[type="file"] {
+  min-width: 0;
+}
+
 .photo-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));

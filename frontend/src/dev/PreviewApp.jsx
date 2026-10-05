@@ -2,6 +2,8 @@ import { useState } from "react";
 import { createMockArchiveApi } from "../shared/api/mockArchiveApi.js";
 import { PHOTO_REQUEST, SCENARIOS } from "../shared/api/v1/fixtures.js";
 import "./contractPreview.css";
+import SinglePhotoForm from "../features/media/components/SinglePhotoForm.jsx";
+import { createPhotoSubmission } from "../features/media/api/photoSubmission.js";
 
 export default function ContractPreview() {
   const [api] = useState(() => createMockArchiveApi({ delayMs: 300 }));
@@ -112,6 +114,9 @@ export default function ContractPreview() {
 
       <h2>Last response</h2>
       <pre role="status" aria-live="polite" aria-busy={busy}>{busy ? "Waiting for the mock response…" : output}</pre>
+      <h2>MED-01 single-photo form demonstration</h2>
+      <p>Synthetic storage only. Choose a test photo to check progress, focus, and deliberate retry.</p>
+      <SinglePhotoForm createSubmission={() => createPhotoSubmission({ api })} />
     </main>
   );
 }

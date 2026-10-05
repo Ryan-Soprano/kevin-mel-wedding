@@ -9,11 +9,11 @@ For prerequisites, install/run/check commands, the development proxy, and curren
 | [src/main.jsx](src/main.jsx) | React entry point; imports the global stylesheet and application shell |
 | [src/app/App.jsx](src/app/App.jsx) | Top-level application shell |
 | [src/features/contribution/](src/features/contribution/) | Guest text form and retained draft/key coordinator in api/textSubmission.js |
-| [src/features/media/](src/features/media/) | Photo selection, constraints, previews, and removal behavior |
+| [src/features/media/](src/features/media/) | Single-photo durable form/coordinator, constraints/previews, and retained batch-selection prototype for MED-02 |
 | [src/features/archive/](src/features/archive/) | Reserved for the private archive and review experience |
 | [src/features/auth/](src/features/auth/) | Reserved for couple authentication |
 | [src/shared/](src/shared/) | Reusable API and UI code shared by multiple features |
-| [src/shared/api/archiveApi.js](src/shared/api/archiveApi.js) | Durable v1 adapter/decoders used by the wedding text form |
+| [src/shared/api/archiveApi.js](src/shared/api/archiveApi.js) | Durable v1 adapter/decoders used by the wedding text and photo forms |
 | [src/shared/api/mockArchiveApi.js](src/shared/api/mockArchiveApi.js) | Isolated synthetic server behind the same transport/adapter |
 | [src/shared/api/v1/fixtures.js](src/shared/api/v1/fixtures.js) | Executable versioned request/response examples |
 | [src/dev/](src/dev/) / [contract-preview.html](contract-preview.html) | Development-only synthetic UI preview; excluded from the normal build |
@@ -28,4 +28,4 @@ The [v1 contract](../docs/api/v1/README.md) owns API semantics and implementatio
 Run `npm test` here for transport, decoder, and mock contract checks; no backend or
 Docker is required. They do not replace server integration/browser/device tests.
 Start Vite and visit `/contract-preview.html` for synthetic scenarios. The wedding
-form saves text through the real v1 adapter. Its compose/review/result flow uses field-level errors, focusable review/result headings, an announced sending state, and a locked same-key retry when the outcome is uncertain. Retry state lasts only while this page remains open. Photo choices remain local previews. See [MSG-02 verification](../docs/product/msg02-verification.md) for browser evidence and the remaining real-device checks.
+form saves text through the real v1 adapter. Its compose/review/result flow uses field-level errors, focusable review/result headings, an announced sending state, and a locked same-key retry when the outcome is uncertain. The independent single-photo form uses that adapter for intent, grant, direct transfer, and verified finalization. It keeps the original file/hash/IDs/key through deliberate retries and confirms saved only on COMPLETE. Retry state lasts only while this page remains open. Photo storage is opt-in and not yet verified against a real bucket/phone. See [MSG-02 verification](../docs/product/msg02-verification.md), [MED-01 verification](../docs/api/v1/photo-verification.md), and the [R2 setup runbook](../docs/runbooks/private-photo-storage.md). The dev contract preview includes the actual single-photo form backed by synthetic storage; it does not prove R2 readiness.

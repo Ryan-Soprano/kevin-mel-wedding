@@ -12,17 +12,18 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.util.UriComponentsBuilder;
-
-import com.kevinandmelanie.memoryarchive.web.ApiException;
+import com.kevinandmelanie.memoryarchive.web.RequestOrigin;
+import com.kevinandmelanie.memoryarchive.media.MediaService;
 
 @RestController
 @RequestMapping("/api/contributions")
 public class ContributionController {
     private final ContributionService service;
+    private final MediaService media;
 
-    public ContributionController(ContributionService service) {
+    public ContributionController(ContributionService service, MediaService media) {
         this.service = service;
+        this.media = media;
     }
 
     @PostMapping(consumes = "application/json", produces = "application/json")
@@ -32,12 +33,10 @@ public class ContributionController {
             @RequestHeader(value = "Idempotency-Key", required = false) String key,
             HttpServletRequest request) {
         String validatedKey = ContributionService.validateHeaders(version, key);
-        String origin = request.getHeader("Origin");
-        String expectedOrigin = UriComponentsBuilder.fromUriString(request.getRequestURL().toString())
-                .replacePath(null).replaceQuery(null).build().toUriString();
-        if ((origin != null && !origin.equals(expectedOrigin))
-                || "cross-site".equals(request.getHeader("Sec-Fetch-Site"))) {
-            throw new ApiException(403, "ORIGIN_INVALID", "Please submit from this website.");
+        RequestOrigin.requireSameOrigin(request);
+        if (body.containsKey("memoryType")) {
+            var saved = media.create(body, validatedKey);
+            return ResponseEntity.status(saved.created() ? 201 : 200).body(saved.receipt());
         }
         var saved = service.submit(body, validatedKey);
         return ResponseEntity.status(saved.created() ? 201 : 200).body(saved.receipt());

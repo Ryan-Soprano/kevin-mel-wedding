@@ -23,12 +23,12 @@ public class ApiExceptionHandler {
     @ExceptionHandler({DataAccessException.class, TransactionException.class})
     public ResponseEntity<ErrorResponse> handleDatabase(Exception exception, HttpServletRequest request) {
         // Diagnostics can contain SQL parameters/guest content; never serialize or log them.
-        return response(503, "SERVICE_UNAVAILABLE", "The message could not be confirmed. Please try again later.", List.of(), request);
+        return response(503, "SERVICE_UNAVAILABLE", "The submission could not be confirmed. Please try again later.", List.of(), request);
     }
 
     @ExceptionHandler({HttpMessageNotReadableException.class, HttpMediaTypeNotSupportedException.class})
     public ResponseEntity<ErrorResponse> handleBody(Exception exception, HttpServletRequest request) {
-        return response(400, "VALIDATION_FAILED", "Send a JSON object with a name and message.", List.of(), request);
+        return response(400, "VALIDATION_FAILED", "Send a supported JSON submission.", List.of(), request);
     }
 
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)

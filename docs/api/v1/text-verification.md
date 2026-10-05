@@ -29,7 +29,7 @@ text slice; they do not certify production release, load capacity, or media stor
   uncertain outcomes, coalesces repeat taps, and retries only on an explicit action.
   A saved message must be deliberately reset before creating another submission.
   Retry-After blocks early retry. Retry state is in memory; refresh/tab closure
-  recovery is not implemented. Photos remain previews, separate from saved text.
+  recovery is not implemented. Photos remain separate from saved text; their later MED-01 implementation and acceptance boundaries are recorded in [photo verification](photo-verification.md).
 - Browser Origin/Fetch-Metadata checks protect text POST. Vite preserves the
   original Host header so same-origin development requests pass the server check.
   Production forwarding/origin configuration and abuse controls remain OPS/SEC work.

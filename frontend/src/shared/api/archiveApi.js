@@ -58,7 +58,7 @@ export function normalizeTextContribution({ guestName = null, message } = {}) {
 export function normalizeMediaContribution({ guestName = null, memoryType, items } = {}) {
   const errors = [];
   const add = (field, message) => errors.push({ field, code: "INVALID_MEDIA", message });
-  if (guestName !== null && (typeof guestName !== "string" || guestName.length > 100)) {
+  if (guestName !== null && (typeof guestName !== "string" || guestName.length > 100 || !storableText(guestName))) {
     add("guestName", "Your name must be 100 characters or fewer.");
   }
   if (!["PHOTO", "AUDIO"].includes(memoryType) || !Array.isArray(items)
@@ -68,10 +68,13 @@ export function normalizeMediaContribution({ guestName = null, memoryType, items
   const seen = new Set();
   const normalized = Array.isArray(items) ? items.map((item, index) => {
     const field = "items[" + index + "]";
-    if (!isId(item?.clientItemId) || seen.has(item.clientItemId)) add(field + ".clientItemId", "Each item needs a unique UUID.");
-    seen.add(item?.clientItemId);
+    const clientItemId = typeof item?.clientItemId === "string" ? item.clientItemId.toLowerCase() : item?.clientItemId;
+    if (!isId(clientItemId) || seen.has(clientItemId)) add(field + ".clientItemId", "Each item needs a unique UUID.");
+    seen.add(clientItemId);
     if (typeof item?.originalFilename !== "string" || !item.originalFilename.trim()
-      || item.originalFilename.length > 255 || /[\\/\r\n\0]/.test(item.originalFilename)) {
+      || item.originalFilename.length > 255 || !storableText(item.originalFilename)
+      || /[\\/]/.test(item.originalFilename)
+      || [...item.originalFilename].some((char) => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)) {
       add(field + ".originalFilename", "Use a filename, not a file path, of 1–255 characters.");
     }
     const photo = memoryType === "PHOTO";
@@ -88,7 +91,7 @@ export function normalizeMediaContribution({ guestName = null, memoryType, items
       add(field + ".checksumSha256", "Supply a lowercase SHA-256 checksum of the original file.");
     }
     const caption = item?.caption ?? null;
-    if (caption !== null && (typeof caption !== "string" || caption.length > 500)) {
+    if (caption !== null && (typeof caption !== "string" || caption.length > 500 || !storableText(caption))) {
       add(field + ".caption", "Captions must be 500 characters or fewer.");
     }
     if (!photo && (!Number.isFinite(item?.durationSeconds)
@@ -96,7 +99,7 @@ export function normalizeMediaContribution({ guestName = null, memoryType, items
       add(field + ".durationSeconds", "Audio must be between zero and 120 seconds.");
     }
     return {
-      clientItemId: item?.clientItemId, originalFilename: item?.originalFilename,
+      clientItemId, originalFilename: item?.originalFilename,
       declaredContentType: item?.declaredContentType, byteSize: item?.byteSize,
       checksumSha256: item?.checksumSha256,
       caption: typeof caption === "string" ? caption.trim() || null : null,
@@ -200,7 +203,7 @@ function decodeGrant(value) {
   return value;
 }
 
-/** Durable v1 adapter. Used by the wedding text form; media/auth/archive routes remain future server work. */
+/** Durable v1 adapter for text and photos; audio/auth/archive routes remain future server work. */
 export function createArchiveApi({
   client = createApiClient(), uploadFetch = globalThis.fetch,
 } = {}) {

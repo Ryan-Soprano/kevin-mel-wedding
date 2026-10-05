@@ -26,7 +26,7 @@ This table prevents a target wireframe from being mistaken for a released capabi
 | Contribution type | Current repository capability | Wedding-ready today? |
 |---|---|---|
 | Written note | The wedding form offers compose, review, edit, private saved confirmation, and same-key manual retry after an uncertain response. Browser keyboard/semantic and narrow-width checks passed; actual screen-reader/device and production operations checks remain. | No |
-| Photos | The browser can select, validate, preview, and remove local JPEG, PNG, and WebP files. Upload and durable storage are not implemented. | No |
+| Photos | MED-01 adds a minimal single-photo form, opt-in private R2 grants, verified original finalization, and retained retry identity. Local integration/browser checks pass; real R2/phone acceptance and MED-02 batch UI remain. See [verification](../api/v1/photo-verification.md). | No |
 | Audio | Browser recording and file-upload fallback are planned but not implemented. | No |
 | Couple inbox | Data lifecycle states exist, but authentication, list/detail screens, and actions are not implemented. | No |
 

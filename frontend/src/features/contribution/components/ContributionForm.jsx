@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 
-import PhotoPicker from "../../media/components/PhotoPicker.jsx";
 import { ApiError } from "../../../shared/api/apiClient.js";
 import { normalizeTextContribution } from "../../../shared/api/archiveApi.js";
 import { createTextSubmission } from "../api/textSubmission.js";
@@ -186,7 +185,6 @@ export default function ContributionForm() {
         </section>
       )}
 
-      {step !== "done" && <PhotoPicker />}
     </div>
   );
 }
