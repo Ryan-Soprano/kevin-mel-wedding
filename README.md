@@ -64,7 +64,7 @@ Open the Local URL Vite prints, normally [localhost:5173](http://localhost:5173/
 
 ### Prepare the full application for staging
 
-Ryan confirmed retaining Render for Spring/PostgreSQL and Cloudflare R2. From the repository root, `bash scripts/build-app.sh` builds the production frontend into an executable Spring JAR; backend tests are a separate check. The `staging` profile requires its own DB settings, exact HTTPS origin and temporary operator admission credentials, and admits one photo finalization at a time. The [staging deployment runbook](docs/runbooks/staging-deployment.md) owns the local packaged smoke command, proposed Docker images, capacity/budget checkpoint, private test environments, manual secret entry, deployment and phone/restart proof. Forty backend tests, 73 frontend tests, lint/build and actual-JAR access/routing checks pass locally; no container image pull/build, new provider resource or full-app deployment has occurred. Plan choice and memory sufficiency remain unapproved/unverified. The existing coming-soon domain stays on its static service.
+Ryan retained Render for Spring/PostgreSQL and Cloudflare R2. `bash scripts/build-app.sh` packages the frontend into the executable Spring JAR. The Docker image and Linux JPEG/PNG/WebP codecs are locally verified. `node scripts/smoke-container.mjs` checks staging access, packaged assets, committed private text, concurrency, discarded-response recovery and restart against its own disposable PostgreSQL 17 database, then removes its resources. R2 is disabled during that smoke. The [staging runbook](docs/runbooks/staging-deployment.md) owns exact commands, private settings, capacity/budget approval, provider setup and phone/redeployment proof. Forty backend and 73 frontend tests are the current baseline; frontend lint/build/audit pass after patching one existing ESLint transitive dependency. Full-limit memory and hosted/device acceptance remain pending. The coming-soon domain stays on its static service.
 
 ### Current API behavior
 
@@ -178,7 +178,7 @@ V3 adds media client IDs, captions/order, expected integrity claims, and expirin
 | [backend/src/main/java/com/kevinandmelanie/memoryarchive/](backend/src/main/java/com/kevinandmelanie/memoryarchive/) | Spring app and contribution, media/storage, health, and web packages |
 | [backend/src/test/](backend/src/test/) | Backend tests |
 | [docs/](docs/) | Architecture, API contracts, decision records, and operational runbooks |
-| [Dockerfile](Dockerfile), [scripts/build-app.sh](scripts/build-app.sh), [scripts/smoke-packaged-app.mjs](scripts/smoke-packaged-app.mjs) | Prepared combined app package and local staging smoke checks; follow the [staging runbook](docs/runbooks/staging-deployment.md) before provider setup |
+| [Dockerfile](Dockerfile), [scripts/build-app.sh](scripts/build-app.sh), [scripts/smoke-packaged-app.mjs](scripts/smoke-packaged-app.mjs), [scripts/smoke-container.mjs](scripts/smoke-container.mjs) | Verified combined image and local JAR/container smoke checks; follow the [staging runbook](docs/runbooks/staging-deployment.md) before provider setup |
 | [coming-soon/](coming-soon/) | Standalone temporary landing page, deployed on Render with domain HTTPS on October 4; see the [deployment record](docs/runbooks/coming-soon.md). This service does not host the React/Spring photo app. |
 | [compose.yaml](compose.yaml) | Local database configuration |
 | [docs/project-plan.md](docs/project-plan.md) | Product scope, accepted architecture, and collaboration conventions |

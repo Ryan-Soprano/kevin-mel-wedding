@@ -1,6 +1,6 @@
 # Full-application HTTPS staging — OPS-01
 
-Prepared October 5, 2026 for [OPS-01 — Staging deployment and configuration](https://app.notion.com/p/3dad9739c6bc8162b3fcd36e61269c33). The combined application JAR, temporary staging access gate and local checks pass. Provider setup, image pull/build, hosted deployment and physical-phone acceptance have not occurred. This document is the setup handoff; local package proof is separate from deployment evidence.
+Prepared and locally verified October 5, 2026 for [OPS-01 — Staging deployment and configuration](https://app.notion.com/p/3dad9739c6bc8162b3fcd36e61269c33). Ryan authorized Docker verification and PR #15 completion/merge. The actual image, Linux codecs and isolated container access/retry/restart checks pass. Paid provider setup, hosted deployment, full-limit memory and physical-phone acceptance remain pending.
 
 The October 5 Render inspection found only `kevinandmel-coming-soon`, a deployed static site. Keep that service, its `kevinandmel.com` / `www` domains and current DNS intact. Test the full application on a separate provider HTTPS address first. The [coming-soon deployment record](coming-soon.md) owns the existing public site's configuration.
 
@@ -15,16 +15,18 @@ These are candidate monthly costs checked October 5; confirm the dashboard quota
 | Starter, 512 MB | $7 | $6 + $0.30 | $13.30/month | Not validated for the full photo contract; do not choose it solely to fit the budget |
 | Standard, 2 GB | $25 | $6 + $0.30 | $31.30/month | Safer measurement candidate, still unproven; exceeds D-07's $25 warning and requires Ryan's budget approval |
 
+The totals conservatively budget $0.30 for 1 GB of DB storage. Render's pricing page advertises an included first GB while its [flexible-plan documentation](https://render.com/docs/postgresql-legacy-instance-types) describes separately billed storage; confirm the final quote. If included, the bases become $13 and $31. [Compute/storage are prorated by the second](https://render.com/docs/faq); usage/taxes are additional.
+
 The contract still permits 10,000,000 bytes, 50 million pixels and dimensions up to 20,000 per photo. Compressed file size does not bound decoder/JVM memory. Staging admits one finalization at a time before storage read, decode, publish and database commit; a concurrent request gets safe `503 MEDIA_UNAVAILABLE` and can retry the same item without becoming `FAILED`. Local development retains the default unlimited admission setting. This limits overlapping work, not the memory cost of one extreme image.
 
-Before calling a plan sufficient, measure actual process/container memory on the selected runtime using synthetic JPEG, PNG and WebP near the permitted dimensions/pixel/byte boundaries, plus deliberate overlapping finalization, restart and recovery. Record peak memory, failures and safe same-item retry. A proposed **2 GB runtime only** setting is `JAVA_TOOL_OPTIONS=-Xms64m -Xmx1g -XX:+ExitOnOutOfMemoryError`; it has not been measured or approved. Leave headroom for native decoding, metaspace and threads. Do not enable heap dumps containing guest data. Any change to contract limits needs a separate reviewed API/product change.
+Before calling a plan sufficient, measure actual process/container memory on the selected runtime using synthetic JPEG, PNG and WebP near the permitted dimensions/pixel/byte boundaries, plus deliberate overlapping finalization, restart and recovery. Record peak memory, failures and safe same-item retry. A proposed **2 GB runtime only** setting is `JAVA_TOOL_OPTIONS=-Xms64m -Xmx1g -XX:+ExitOnOutOfMemoryError`; it was used in the local smoke, but is not validated or approved for hosted full-limit photo processing. Leave headroom for native decoding, metaspace and threads. Do not enable heap dumps containing guest data. Any change to contract limits needs a separate reviewed API/product change.
 
 ## What the package contains
 
 - Root `Dockerfile` builds the locked Vite production assets, copies them into Spring's classpath, packages the executable JAR and runs it as an unprivileged user. One application serves `/` and `/api` on the same origin; Vite is not the hosted server.
 - `scripts/build-app.sh` produces the same combined JAR using the installed Java/Node toolchain. It cleans `backend/target` before copying assets, then packages without running backend tests. Retain local synthetic acceptance inputs under ignored `logs/med01-acceptance/`, outside the clean target.
 - `scripts/smoke-packaged-app.mjs` starts the actual packaged JAR on an ephemeral loopback port with synthetic staging admission and forwarding, disables storage, checks routing/access/API validation and stops its own child process. It requires the operator's local test database variables. It performs no contribution or R2 writes and does not replace the normal local servers.
-- Proposed image tags are `node:24.21.0-bookworm-slim`, `eclipse-temurin:25.0.4.1_1-jdk-noble` and `eclipse-temurin:25.0.4.1_1-jre-noble`. They are new build/runtime artifacts awaiting Ryan's approval and an actual image build. No Maven/npm dependency is added by this package.
+- Verified image tags are `node:24.21.0-bookworm-slim`, `eclipse-temurin:25.0.4.1_1-jdk-noble` and `eclipse-temurin:25.0.4.1_1-jre-noble`. `.gitattributes` keeps shell entrypoints LF; the builder normalizes stale Windows CRLF. No library was added; existing ESLint transitive `brace-expansion` was patched from 5.0.9 to 5.0.12, with zero frontend audit findings.
 - `.dockerignore` permits the application source trees and excludes local environment files, generated output, logs, dependency directories and private source-photo material. Supply runtime secrets through service environment settings, never image layers or build arguments.
 - `application-staging.properties` binds `0.0.0.0:${PORT:10000}`, processes forwarded headers only in the staging profile, requires its database settings and sets `archive.media.max-concurrent-finalizations=1`.
 
@@ -37,7 +39,7 @@ npm --prefix frontend test
 bash scripts/build-app.sh
 ```
 
-The helper uses existing frontend dependencies. `bash scripts/build-app.sh --install` installs the existing lockfile when a clean build needs it. Tests are a separate gate: a successful packaging command alone is not a passing test run. Do not run `docker build` or pull the proposed images until Ryan approves them.
+The helper uses existing frontend dependencies. `bash scripts/build-app.sh --install` installs the existing lockfile when a clean build needs it. Tests are a separate gate: a successful packaging command alone is not a passing test run. Ryan authorized these image pulls/builds and local verification on October 5; paid provisioning/deployment still requires approval. On Windows, stop Vite before `npm ci` in its working directory, because its loaded native binaries may be locked.
 
 After building, repeat the packaged smoke check with `java` on `PATH`, Node 24 and the existing local test database. Enter its password silently in a subshell; the current terminal's other settings remain available afterward:
 
@@ -54,6 +56,29 @@ After building, repeat the packaged smoke check with `java` on `PATH`, Node 24 a
 
 Use the database/user for the intended local test instance if they differ. Start its existing PostgreSQL first. The smoke helper applies normal startup migration checks; use a compatible retained test database, not a production connection. Its synthetic forwarded headers prove local filter behavior, not Render's real forwarding.
 
+## Local Docker verification
+
+With local Docker and the existing `postgres:17` image cached, build the reviewed image and run the smoke:
+
+```bash
+docker build --tag kevin-mel-wedding:pr15-verify .
+node scripts/smoke-container.mjs kevin-mel-wedding:pr15-verify
+```
+
+If Docker is not on PATH, use its existing executable. On Ryan's Windows installation, in Git Bash:
+
+```bash
+export DOCKER_BIN='C:/Users/Ryan/AppData/Local/Programs/DockerDesktop/resources/bin/docker.exe'
+"$DOCKER_BIN" build --tag kevin-mel-wedding:pr15-verify .
+node scripts/smoke-container.mjs kevin-mel-wedding:pr15-verify
+```
+
+The helper rejects remote Docker endpoints and never pulls/builds images. It creates a uniquely named, labeled bridge network, disposable PostgreSQL 17 with tmpfs data/no host port, and a nonroot read-only 2 GB app with writable `/tmp`. Only an ephemeral `127.0.0.1` app port is published. Credentials are synthetic/private, R2 is disabled, and cleanup is limited by ownership labels to its own resources. The existing development DB/volume is not accessed.
+
+Observed October 5: public health; access/HTTPS-host enforcement; HTML/CSS/JS; source/secret/preview/unknown-route exclusions; origin validation; committed private TEXT receipts; named/anonymous normalization; conflict/replay; eight concurrent requests; discarded committed response recovery; and app restart all pass. Exactly three contributions/memories, one named and two anonymous, retain PENDING/COUPLE_ONLY defaults, with no media. All temporary resources were removed. Existing 5173/8080 services still respond.
+
+A separate probe against freshly extracted image classes/libraries passes nine Linux-JRE checks: JPEG, transparent PNG and WebP acceptance; safe rejection of wrong MIME/hash/size, corruption, dimensions and pixel count. Local image ID: `sha256:9f2f927c70fccc84f1366d8274b393cfb57dd3282d7511fd72cf59855200b93e`. These tiny fixtures/boundary rejections and the smoke's 1 GB heap do not establish successful full-limit decoding or sufficient Render capacity.
+
 ## Temporary staging access
 
 Activating the `staging` Spring profile requires an operator-selected username, a password of **24–256 characters**, and the exact approved HTTPS origin. The username must be nonblank, at most 64 characters, with no colon or control characters; the password must be nonblank and contain no control characters. The origin has the form `https://service-name.onrender.com`, without a trailing slash, path, query, fragment, credentials or explicit port. Missing or malformed settings stop startup.
@@ -64,7 +89,7 @@ Render terminates HTTPS and forwards requests to the internal HTTP port. This pr
 
 ## Approval and manual setup
 
-Before any provider action, Ryan approves the application/database plans and recurring cost, proposed image pull/build, separate test resources, temporary tester access and the concrete deployment target. Creating files, building the local JAR or committing a PR does not grant approval to provision or deploy. The application stage and budget decision remain open until that approval.
+Before provider provisioning/deployment, Ryan approves the application/database plans, recurring cost, separate hosted test resources, temporary tester access and concrete target. Local Docker verification and PR #15 merge were authorized on October 5. Creating files, building the local JAR or committing a PR does not grant approval to provision or deploy. The application stage and budget decision remain open until that approval.
 
 After approval, Ryan performs or explicitly directs these steps:
 
@@ -120,4 +145,4 @@ October 5 local verification: **40 backend tests** pass with zero failures/error
 
 The actual JAR smoke check passes: unauthenticated health 200; admitted HTML/CSS/JS assets 200; missing admission 401; unapproved forwarded host and HTTP 403; preview, environment/source, missing-asset and unknown API paths 404 without HTML fallback; same-origin empty-text request 400 `VALIDATION_FAILED`; cross-origin mutation 403 `ORIGIN_INVALID`. The smoke helper's syntax and missing-Java cleanup behavior also pass. Storage was disabled and no submission/R2 writes occurred. The original local backend on 8080 and Vite on 5173 remain running; the smoke child used another port and stopped after its check. These checks do not establish hosted forwarding, real mobile browser admission, Docker runtime capacity or provider durability.
 
-Still required: approval of the quoted capacity/budget and images; actual container build/runtime and extreme-image memory checks; approved provider provisioning/manual deployment; private DB and test R2 settings; exact staging CORS origin; real phones, authenticated original comparison, and restart/redeployment evidence. No image pull/build, paid provisioning, provider change or deployment is recorded by this runbook's preparation.
+Still required: hosted capacity/budget approval; full-limit/overlapping photo memory measurements; provider provisioning/deployment; hosted DB and R2 settings; exact staging CORS and staging-only lifecycle; phones, authenticated original comparison and hosted restart/redeployment. Local image build/runtime/codec checks pass. No paid resources, provider changes, hosted deployment or domain changes occurred.

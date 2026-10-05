@@ -1,4 +1,4 @@
-# Proposed staging image. Building or deploying it requires Ryan's provider approval.
+# Combined React/Spring image; staging requires explicit runtime settings.
 FROM node:24.21.0-bookworm-slim AS frontend-build
 WORKDIR /build/frontend
 COPY frontend/package.json frontend/package-lock.json ./
@@ -9,7 +9,9 @@ RUN npm run build
 FROM eclipse-temurin:25.0.4.1_1-jdk-noble AS backend-build
 WORKDIR /build
 COPY backend/ ./backend/
-RUN chmod +x backend/mvnw \
+# Also tolerate older Windows checkouts whose wrapper still has CRLF.
+RUN sed -i 's/\r$//' backend/mvnw \
+    && chmod +x backend/mvnw \
     && ./backend/mvnw -f backend/pom.xml --batch-mode clean
 COPY --from=frontend-build /build/frontend/dist/ ./backend/target/classes/static/
 RUN ./backend/mvnw -f backend/pom.xml --batch-mode -DskipTests package
