@@ -12,7 +12,7 @@ This is a learning project. Explain and agree on infrastructure, dependencies, a
 
 ## Local development
 
-The application saves named or anonymous text messages privately in PostgreSQL and returns committed receipts with safe same-key retries. MED-01 adds a single-photo form and an opt-in private R2 upload/finalize path. Photo storage is disabled until Ryan configures a private bucket; real R2 and phone acceptance remain pending. Follow the [photo storage setup runbook](docs/runbooks/private-photo-storage.md) and [verification record](docs/api/v1/photo-verification.md). Use synthetic content during local development. Production collection still requires the security, operations, and release work tracked in Notion.
+The application saves named or anonymous text messages privately in PostgreSQL and returns committed receipts with safe same-key retries. MED-01 adds a single-photo form and an opt-in private R2 upload/finalize path. Photo storage defaults disabled. Ryan's configured test bucket has passed desktop PNG operator comparison/restart/replay and scripted real-R2 JPEG/WebP upload, response recovery and grant restriction/expiry checks; physical-phone, additional operator comparison and bucket-settings acceptance are pending. Follow the [photo storage setup runbook](docs/runbooks/private-photo-storage.md) and [verification record](docs/api/v1/photo-verification.md). Use synthetic content during local development. Production collection still requires the security, operations, and release work tracked in Notion.
 
 ### Prerequisites
 
@@ -60,7 +60,11 @@ Start Vite in another - cd to frontend:
 npm run dev
 ```
 
-Open the Local URL Vite prints, normally [localhost:5173](http://localhost:5173/). The [Vite configuration](frontend/vite.config.js) forwards `/api` requests to Spring at [localhost:8080](http://localhost:8080). This proxy is for development; production routing is not configured. Stop each process with Ctrl+C.
+Open the Local URL Vite prints, normally [localhost:5173](http://localhost:5173/). The [Vite configuration](frontend/vite.config.js) forwards `/api` requests to Spring at [localhost:8080](http://localhost:8080). This proxy is for development. The combined application package serves built frontend assets and `/api` through Spring on one origin; local packaging/access checks pass, and hosted staging still awaits approval and setup. Stop each local process with Ctrl+C.
+
+### Prepare the full application for staging
+
+Ryan retained Render for Spring/PostgreSQL and Cloudflare R2. `bash scripts/build-app.sh` packages the frontend into the executable Spring JAR. The Docker image and Linux JPEG/PNG/WebP codecs are locally verified. `node scripts/smoke-container.mjs` checks staging access, packaged assets, committed private text, concurrency, discarded-response recovery and restart against its own disposable PostgreSQL 17 database, then removes its resources. R2 is disabled during that smoke. The [staging runbook](docs/runbooks/staging-deployment.md) owns exact commands, private settings, capacity/budget approval, provider setup and phone/redeployment proof. Forty backend and 73 frontend tests are the current baseline; frontend lint/build/audit pass after patching one existing ESLint transitive dependency. Full-limit memory and hosted/device acceptance remain pending. The coming-soon domain stays on its static service.
 
 ### Current API behavior
 
@@ -174,7 +178,8 @@ V3 adds media client IDs, captions/order, expected integrity claims, and expirin
 | [backend/src/main/java/com/kevinandmelanie/memoryarchive/](backend/src/main/java/com/kevinandmelanie/memoryarchive/) | Spring app and contribution, media/storage, health, and web packages |
 | [backend/src/test/](backend/src/test/) | Backend tests |
 | [docs/](docs/) | Architecture, API contracts, decision records, and operational runbooks |
-| [coming-soon/](coming-soon/) | Standalone temporary landing page; see the [local preview and deployment handoff](docs/runbooks/coming-soon.md). Not deployed. |
+| [Dockerfile](Dockerfile), [scripts/build-app.sh](scripts/build-app.sh), [scripts/smoke-packaged-app.mjs](scripts/smoke-packaged-app.mjs), [scripts/smoke-container.mjs](scripts/smoke-container.mjs) | Verified combined image and local JAR/container smoke checks; follow the [staging runbook](docs/runbooks/staging-deployment.md) before provider setup |
+| [coming-soon/](coming-soon/) | Standalone temporary landing page, deployed on Render with domain HTTPS on October 4; see the [deployment record](docs/runbooks/coming-soon.md). This service does not host the React/Spring photo app. |
 | [compose.yaml](compose.yaml) | Local database configuration |
 | [docs/project-plan.md](docs/project-plan.md) | Product scope, accepted architecture, and collaboration conventions |
 | [Feature tracker.md](<Feature tracker.md>) | Migration pointer to Notion; do not maintain task status here |
