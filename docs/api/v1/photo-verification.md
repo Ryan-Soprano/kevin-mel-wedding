@@ -50,14 +50,20 @@ Operator originals for the staging-replacement checks:
 | JPEG | `originals/87683907-e60a-4f87-a2b0-97eca3b02268` | 631 | `b862f9aee77a1755382c85adf973b4e042f4da5b95ddccf65700ed8a44901037` |
 | WebP | `originals/63991363-083a-4ad4-96ad-9e6d1a3e3d4b` | 42 | `c90cff659645a312a28804965f3dbc34061338f7234ff5d6ddb2c57e9eadec15` |
 
-Local synthetic inputs are under ignored `backend/target/med01-acceptance/` as `med01-synthetic-jpeg.jpg` and `med01-synthetic-webp.webp`. These generated files/helpers contain no capabilities and are not committed artifacts. No bucket configuration, service, dependency, provisioning or deployment change was made by these checks.
+Local synthetic inputs are under ignored `logs/med01-acceptance/` as `med01-synthetic-jpeg.jpg` and `med01-synthetic-webp.webp`. They were regenerated with their recorded hashes unchanged, outside the Maven clean target so packaging cannot erase the remaining operator comparison inputs. These generated files contain no capabilities and are not committed artifacts. No bucket configuration, service, dependency, provisioning or deployment change was made by these checks.
+
+## Full-app staging preparation — 2026-10-05
+
+Ryan confirmed retaining Render/Spring/PostgreSQL + Cloudflare R2. The [OPS-01 staging runbook](../../runbooks/staging-deployment.md) prepares a separate HTTPS provider address, test database/bucket, temporary operator admission, manual secrets/deployment and phone/restart checks. Forty backend tests and 73 frontend tests pass with lint/build and combined production JAR packaging. The actual-JAR smoke check verifies minimal public health, admitted HTML/assets, gate/HTTPS/origin rejection, excluded preview/source routes and same-origin API validation with storage disabled and no submission/R2 writes. One staging finalization admission slot bounds overlapping read/decode/publish/commit work; busy requests receive safe 503 and retain same-item retry. Contract photo limits are unchanged.
+
+Local package checks do not prove a Docker image/runtime, hosted forwarding, memory sufficiency or a physical-phone upload. The proposed images and application/database plan need approval; the 512 MB plan is unvalidated for the full contract, and the safer 2 GB measurement candidate exceeds the accepted budget warning. No image pull/build, provisioning, full-app deployment or domain change occurred. Existing local backend/Vite services remain running. The one-day `staging/` deletion rule and remaining bucket settings/operator comparisons are still pending.
 
 ## Remaining acceptance
 
-- Complete the [private R2 runbook](../../runbooks/private-photo-storage.md) with Ryan: verify token scope, staging-only lifecycle and private bucket settings; approve the HTTPS phone test environment and its exact-origin CORS. Local-origin CORS and unapproved-origin rejection are verified above.
+- Complete the [private R2 runbook](../../runbooks/private-photo-storage.md) with Ryan: verify token scope, staging-only lifecycle and private bucket settings; approve/setup the [full-app HTTPS staging environment](../../runbooks/staging-deployment.md) and its exact-origin CORS. Local-origin CORS and unapproved-origin rejection are verified above.
 - Actual iPhone Safari and Android Chrome selection/upload/retry; HEIC rejection; VoiceOver/TalkBack announcement and focus checks.
 - Retrieve/compare the two JPEG/WebP originals above after staging replacement; repeat input/download/DB size/hash comparisons for physical-device tests. Desktop PNG retrieval/restart/replay/conflict and scripted provider recovery/grant checks are complete.
 - Confirm current private bucket settings, scoped token and staging-only lifecycle. Real provider expiry/action/key/type restrictions and unapproved-origin CORS rejection are verified; the unsigned PNG original GET was rejected.
-- Public-release abuse controls, production routing, backups/restore, monitoring, and infrastructure readiness remain separate SEC/OPS/QA/REL tasks. Batch UI and selective item retry belong to MED-02; audio verification and couple-only archive/playback remain later work.
+- Public-release abuse controls, hosted deployment/routing, backups/restore, monitoring, and infrastructure readiness remain separate SEC/OPS/QA/REL tasks. Combined package routing is locally verified only. Batch UI and selective item retry belong to MED-02; audio verification and couple-only archive/playback remain later work.
 
 MED-01 must not be marked Done on the strength of local, mock or one desktop upload alone. Ryan performed the test-bucket setup and PR #14 is merged; no deployment or additional infrastructure change was performed for this verification.

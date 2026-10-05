@@ -60,7 +60,11 @@ Start Vite in another - cd to frontend:
 npm run dev
 ```
 
-Open the Local URL Vite prints, normally [localhost:5173](http://localhost:5173/). The [Vite configuration](frontend/vite.config.js) forwards `/api` requests to Spring at [localhost:8080](http://localhost:8080). This proxy is for development; production routing is not configured. Stop each process with Ctrl+C.
+Open the Local URL Vite prints, normally [localhost:5173](http://localhost:5173/). The [Vite configuration](frontend/vite.config.js) forwards `/api` requests to Spring at [localhost:8080](http://localhost:8080). This proxy is for development. The combined application package serves built frontend assets and `/api` through Spring on one origin; local packaging/access checks pass, and hosted staging still awaits approval and setup. Stop each local process with Ctrl+C.
+
+### Prepare the full application for staging
+
+Ryan confirmed retaining Render for Spring/PostgreSQL and Cloudflare R2. From the repository root, `bash scripts/build-app.sh` builds the production frontend into an executable Spring JAR; backend tests are a separate check. The `staging` profile requires its own DB settings, exact HTTPS origin and temporary operator admission credentials, and admits one photo finalization at a time. The [staging deployment runbook](docs/runbooks/staging-deployment.md) owns the local packaged smoke command, proposed Docker images, capacity/budget checkpoint, private test environments, manual secret entry, deployment and phone/restart proof. Forty backend tests, 73 frontend tests, lint/build and actual-JAR access/routing checks pass locally; no container image pull/build, new provider resource or full-app deployment has occurred. Plan choice and memory sufficiency remain unapproved/unverified. The existing coming-soon domain stays on its static service.
 
 ### Current API behavior
 
@@ -174,6 +178,7 @@ V3 adds media client IDs, captions/order, expected integrity claims, and expirin
 | [backend/src/main/java/com/kevinandmelanie/memoryarchive/](backend/src/main/java/com/kevinandmelanie/memoryarchive/) | Spring app and contribution, media/storage, health, and web packages |
 | [backend/src/test/](backend/src/test/) | Backend tests |
 | [docs/](docs/) | Architecture, API contracts, decision records, and operational runbooks |
+| [Dockerfile](Dockerfile), [scripts/build-app.sh](scripts/build-app.sh), [scripts/smoke-packaged-app.mjs](scripts/smoke-packaged-app.mjs) | Prepared combined app package and local staging smoke checks; follow the [staging runbook](docs/runbooks/staging-deployment.md) before provider setup |
 | [coming-soon/](coming-soon/) | Standalone temporary landing page, deployed on Render with domain HTTPS on October 4; see the [deployment record](docs/runbooks/coming-soon.md). This service does not host the React/Spring photo app. |
 | [compose.yaml](compose.yaml) | Local database configuration |
 | [docs/project-plan.md](docs/project-plan.md) | Product scope, accepted architecture, and collaboration conventions |

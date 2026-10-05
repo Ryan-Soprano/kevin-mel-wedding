@@ -71,7 +71,7 @@ The HTTPS, `www` redirect, and asset checks above completed this release verific
 
 ## Replace with the full application
 
-This static site cannot run Spring Boot. Once the separate full application is ready, verify it on its provider URL first. Coordinate moving the custom domain to that service, update the relevant DNS records, and verify HTTPS, guest flows, and rollback behavior before retiring the temporary site. Keep the domain and its renewal unchanged.
+This static site cannot run Spring Boot. Follow the separate [full-app staging procedure](staging-deployment.md) to verify the combined Spring/frontend package on its own approved provider URL first. That package and temporary staging admission pass local checks; provider setup, capacity approval and hosted phone acceptance are pending. Keep this static service, its custom domains and current DNS intact during staging. Moving the custom domain to the full app requires a later explicitly approved release step: update the relevant DNS records and verify HTTPS, guest flows and rollback before retiring the temporary site. Keep the domain and its renewal unchanged.
 
-Track provisioning and release evidence in Notion OPS-01. Creating these files alone does not complete OPS-01 or demonstrate wedding-day traffic capacity.
+Track provisioning and release evidence in [Notion OPS-01](https://app.notion.com/p/3dad9739c6bc8162b3fcd36e61269c33). Creating files or passing a local package check does not complete OPS-01 or demonstrate wedding-day traffic capacity.
 

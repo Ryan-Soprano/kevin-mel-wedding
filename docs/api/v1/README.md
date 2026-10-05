@@ -11,6 +11,8 @@ MSG-01 implements durable text POST and key-bound text receipt GET, and the wedd
 
 MED-01 implements PHOTO intents (one to five), capability-bound grants/finalization, and generic receipt GET, plus a minimal single-photo wedding form. Storage is opt-in and requires a private R2 bucket configured by Ryan. Desktop PNG operator comparison/restart/replay and scripted real-R2 JPEG/WebP upload, recovery and grant checks are verified; physical-phone, additional operator comparison and bucket-settings acceptance are pending. Audio, authentication, private inbox/review/playback, and production operations remain future server work. Mock success is not production-readiness evidence. See [text verification](text-verification.md), [photo verification](photo-verification.md), and the [R2 runbook](../../runbooks/private-photo-storage.md).
 
+The [staging package](../../runbooks/staging-deployment.md) serves production frontend assets and `/api` through one Spring process. Its staging-only operator access gate is separate from the future couple session API. Staging limits overlapping photo finalization to one: a busy request returns `503 MEDIA_UNAVAILABLE` before reading storage or changing item state; deliberate retry retains the same intent, item and capability key. File, dimension and batch limits are unchanged. Local package checks pass; hosted deployment and physical-phone acceptance remain pending.
+
 ## Shared conventions
 
 - Same-origin REST/JSON under `/api`. Send `Accept: application/json`,

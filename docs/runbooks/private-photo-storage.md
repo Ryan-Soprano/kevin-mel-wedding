@@ -28,7 +28,7 @@ R2 presigned URLs can be reused until expiry. A browser grant never targets the 
 ]
 ```
 
-5. Under Settings → **Object Lifecycle Rules**, add a deletion rule named `expire-temporary-photo-uploads`, prefix **`staging/`**, after **one day**. Preserve other existing rules. Do not apply this rule to `originals/` or to an empty prefix. Deletion is asynchronous; it is not a grant revocation mechanism. See [Object lifecycles](https://developers.cloudflare.com/r2/buckets/object-lifecycles/).
+5. Under Settings → **Object Lifecycle Rules**, add a separate deletion rule named `expire-temporary-photo-uploads`, prefix **`staging/`**, after **one day**. Preserve the existing default seven-day incomplete-multipart abort rule and all other unrelated rules; aborting an incomplete multipart upload does not delete completed staging objects. The staging deletion rule is not yet configured/verified. Do not apply it to `originals/` or to an empty prefix. Deletion is asynchronous; it is not a grant revocation mechanism. See [Object lifecycles](https://developers.cloudflare.com/r2/buckets/object-lifecycles/).
 
 ## Backend configuration
 
@@ -55,7 +55,7 @@ The backend uses AWS SDK v2 region `auto`, path-style requests, fixed-length PUT
 
 ## Real R2 and phone acceptance — partially verified
 
-Use a trustworthy HTTPS test environment approved by Ryan. The October 5 Render dashboard check found only the deployed `kevinandmel-coming-soon` static service, which does not run the React/Spring photo app; no full-app HTTPS staging URL is verified. OPS-01 must prepare the full app, same-origin API routing, backend/test DB and exact-origin R2 CORS before phone acceptance. Plain HTTP on a LAN is insufficient for the [Web Crypto checksum](https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/digest) on a phone. Do not bypass certificate warnings. Keep the physical device test separate from the synthetic contract preview.
+Use a trustworthy HTTPS test environment approved by Ryan. The October 5 Render dashboard check found only the deployed `kevinandmel-coming-soon` static service, which does not run the React/Spring photo app; no full-app HTTPS staging URL is verified. The [OPS-01 staging runbook](staging-deployment.md) now supplies locally verified combined packaging, a temporary operator gate and the manual setup/approval handoff; it still requires approved capacity, actual provider setup, backend/test DB and exact-origin R2 CORS before phone acceptance. Plain HTTP on a LAN is insufficient for the [Web Crypto checksum](https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/digest) on a phone. Do not bypass certificate warnings. Keep the physical device test separate from the synthetic contract preview.
 
 1. Retain a known JPEG, PNG, and WebP input with its original size and SHA-256. On iPhone Safari, choose a supported file, enter a synthetic name/caption, and submit through the actual wedding form. Repeat on Android Chrome when a tester is assigned. HEIC selection must explain the supported formats.
 2. Observe `PENDING` intent, staging PUT, finalize, then a private saved confirmation. Verify that only a complete receipt triggers success. Record OS/browser, format, date, and outcome without guest data or signed links.

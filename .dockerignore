@@ -1,0 +1,21 @@
+# The application build needs only these two source trees and its Dockerfile.
+**
+!Dockerfile
+!.dockerignore
+!backend/
+!backend/**
+!frontend/
+!frontend/**
+
+# Never send machine-local secrets or generated files to the image builder.
+**/.env
+**/.env.*
+**/*.local
+**/*.log
+**/.aws/
+**/.git/
+**/node_modules/
+**/target/
+**/dist/
+**/dist-ssr/
+**/.vite/
