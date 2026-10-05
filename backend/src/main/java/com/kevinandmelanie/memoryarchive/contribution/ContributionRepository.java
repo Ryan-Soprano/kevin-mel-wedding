@@ -79,7 +79,27 @@ public class ContributionRepository {
 
     @Transactional(readOnly = true)
     public ContributionReceipt getReceipt(UUID contributionId, String idempotencyKey) {
-        return load(contributionId, idempotencyKey, false).receipt();
+        var envelope = jdbcClient.sql("""
+                SELECT event_key, created_at FROM contribution
+                WHERE id = :id AND idempotency_key = :key
+                """).param("id", contributionId).param("key", idempotencyKey)
+                .query((rs, row) -> new Envelope(rs.getString("event_key"),
+                        rs.getObject("created_at", OffsetDateTime.class).toInstant()))
+                .optional().orElseThrow(ApiException::notFound);
+        var memories = jdbcClient.sql("""
+                SELECT m.id, m.client_item_id, m.memory_type, m.review_status, m.visibility, a.upload_state
+                FROM memory m LEFT JOIN media_asset a ON a.memory_id = m.id
+                WHERE m.contribution_id = :id
+                ORDER BY m.item_position NULLS FIRST, m.created_at, m.id
+                """).param("id", contributionId)
+                .query((rs, row) -> new ContributionReceipt.MemoryReceipt(
+                        rs.getObject("id", UUID.class), rs.getObject("client_item_id", UUID.class),
+                        rs.getString("memory_type"), rs.getString("upload_state"),
+                        rs.getString("review_status"), rs.getString("visibility"))).list();
+        if (memories.isEmpty()) throw ApiException.notFound();
+        long complete = memories.stream().filter(m -> m.memoryType().equals("TEXT") || "UPLOADED".equals(m.uploadState())).count();
+        String completion = complete == memories.size() ? "COMPLETE" : complete == 0 ? "PENDING" : "PARTIAL";
+        return new ContributionReceipt(contributionId, envelope.eventKey(), envelope.createdAt(), completion, memories);
     }
 
     private SavedTextContribution load(UUID contributionId, String key, boolean created) {
@@ -101,4 +121,5 @@ public class ContributionRepository {
     }
 
     private record Existing(UUID id, boolean equivalent) {}
+    private record Envelope(String eventKey, Instant createdAt) {}
 }

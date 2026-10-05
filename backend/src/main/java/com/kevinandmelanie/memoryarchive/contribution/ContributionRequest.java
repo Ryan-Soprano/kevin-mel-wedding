@@ -41,7 +41,7 @@ public record ContributionRequest(String guestName, String message) {
         return value.substring(start, end);
     }
 
-    private static boolean storable(String value) {
+    public static boolean storable(String value) {
         for (int i = 0; i < value.length(); i++) {
             char c = value.charAt(i);
             if (c == 0 || Character.isLowSurrogate(c)) return false;

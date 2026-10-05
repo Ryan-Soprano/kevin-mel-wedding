@@ -12,7 +12,7 @@ This is a learning project. Explain and agree on infrastructure, dependencies, a
 
 ## Local development
 
-The application saves named or anonymous text messages privately in PostgreSQL and returns committed receipts with safe same-key retries. Photo selection remains a local preview; **photos are not uploaded or saved**. Use synthetic content during local development. Production collection still requires the security, operations, and release work tracked in Notion.
+The application saves named or anonymous text messages privately in PostgreSQL and returns committed receipts with safe same-key retries. MED-01 adds a single-photo form and an opt-in private R2 upload/finalize path. Photo storage is disabled until Ryan configures a private bucket; real R2 and phone acceptance remain pending. Follow the [photo storage setup runbook](docs/runbooks/private-photo-storage.md) and [verification record](docs/api/v1/photo-verification.md). Use synthetic content during local development. Production collection still requires the security, operations, and release work tracked in Notion.
 
 ### Prerequisites
 
@@ -71,6 +71,11 @@ The [v1 API contract](docs/api/v1/README.md) is authoritative. The development p
 | GET /api/health | HTTP 200 with status ok; not a database readiness check |
 | POST /api/contributions | HTTP 201 after commit, HTTP 200 for an equivalent same-key replay; IDs/states only |
 | GET /api/contributions/{contributionId}/receipt | HTTP 200 with current states when both ID and retry key match; otherwise safe 404 |
+| POST /api/contributions with PHOTO items | HTTP 201 committed intent / 200 equivalent replay; initially PENDING |
+| POST /api/contributions/{id}/memories/{memoryId}/upload-grants | HTTP 201 with a five-minute HTTPS PUT permission for a temporary object |
+| POST /api/contributions/{id}/memories/{memoryId}/finalize | HTTP 200 receipt after verified original + DB commit; COMPLETE only when all items are saved |
+| Disabled/unavailable photo storage | HTTP 503 MEDIA_UNAVAILABLE; text remains independent |
+| Invalid uploaded photo | HTTP 422 INVALID_MEDIA and a committed FAILED item; retry remains bound to the original intent |
 | Invalid text or retry key | HTTP 400 VALIDATION_FAILED with safe field errors where applicable |
 | Missing/unsupported contract version | HTTP 400 UNSUPPORTED_CONTRACT |
 | Same key with changed normalized content | HTTP 409 IDEMPOTENCY_CONFLICT |
@@ -93,6 +98,8 @@ curl --fail-with-body --request POST http://localhost:8080/api/contributions \
 Use the same POST/body/key after a lost response; do not generate another key. If the returned contributionId is known, GET its receipt with the same two headers. Receipts contain no guest content or private retrieval links, and responses use Cache-Control: no-store.
 
 The form now lets guests write, review, edit, send, and finish a note. It shows field errors beside the affected input and confirms saved only after a valid complete receipt. It retains the original draft/key for deliberate retry, locks editing while the outcome is uncertain, honors Retry-After, and requires **Write another note** before creating a new logical submission. Retry state is in memory: keep the page open until confirmed; refresh/tab closure does not preserve it. Guest payloads and errors are not logged to the browser console. Photo selections are not included in text requests. See the [MSG-02 verification notes](docs/product/msg02-verification.md) for browser checks and device coverage still needed.
+
+The independent **Share a photo** form preserves one original JPEG/PNG/WebP file, optional name/caption, SHA-256, item ID, and retry key until confirmed. A successful PUT alone never produces saved confirmation. Manual retry checks the receipt and retained grant before sending bytes again. Metadata stays locked while the result is uncertain. **Share another photo** explicitly starts a new intent; a known invalid-photo rejection also permits explicit replacement. Keep the page open until confirmed. The backend accepts one to five PHOTO items, but batch UI polish and selective retries belong to MED-02. HEIC/audio are not enabled by this feature.
 
 ### Checks
 
@@ -156,13 +163,15 @@ The `--volumes` command permanently deletes this project's local PostgreSQL data
 
 V2 adds an immutable SHA-256 creation fingerprint without rewriting V1. It backfills normalized single-text V1 envelopes without changing their stored content or IDs; other legacy keys remain reserved. PostgreSQL unique-key arbitration and one transaction prevent duplicate memories and orphan envelopes. Tests cover fresh schema, populated V1 upgrade, migration rerun, real HTTP concurrency, insert/commit rollback, database outage, and application restart against the same test database. See [MSG-01 verification](docs/api/v1/text-verification.md) for the evidence and remaining boundaries.
 
+V3 adds media client IDs, captions/order, expected integrity claims, and expiring upload grants. Browser PUTs target temporary staging keys; the server verifies and publishes exact bytes to a separate private original before committing UPLOADED. Applied V1/V2 remain unchanged. AWS SDK Java v2 and TwelveMonkeys WebP were explicitly approved for MED-01. See [photo verification](docs/api/v1/photo-verification.md) and the [R2 setup/cleanup runbook](docs/runbooks/private-photo-storage.md) before enabling storage.
+
 ## Repository navigation
 
 | Location | Responsibility |
 |---|---|
 | [Memory Archive — Issues](https://app.notion.com/p/2d5a40baef85426a94bd059f7d0e2ce8) | MVPs, decisions, status, ownership, dependencies, acceptance criteria, and evidence |
 | [frontend/](frontend/) | React/Vite app; see its [source map](frontend/README.md) |
-| [backend/src/main/java/com/kevinandmelanie/memoryarchive/](backend/src/main/java/com/kevinandmelanie/memoryarchive/) | Spring app and current contribution, health, and web packages |
+| [backend/src/main/java/com/kevinandmelanie/memoryarchive/](backend/src/main/java/com/kevinandmelanie/memoryarchive/) | Spring app and contribution, media/storage, health, and web packages |
 | [backend/src/test/](backend/src/test/) | Backend tests |
 | [docs/](docs/) | Architecture, API contracts, decision records, and operational runbooks |
 | [coming-soon/](coming-soon/) | Standalone temporary landing page; see the [local preview and deployment handoff](docs/runbooks/coming-soon.md). Not deployed. |

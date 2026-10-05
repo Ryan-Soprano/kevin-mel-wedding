@@ -77,6 +77,16 @@ class ContributionHttpTest {
         }
     }
 
+    @Test void disabledPhotoStorageCreatesNoIntentAndDoesNotDisableText() throws Exception {
+        String key = UUID.randomUUID().toString();
+        var photo = post(key, "{\"memoryType\":\"PHOTO\",\"items\":[{\"clientItemId\":\"" + UUID.randomUUID()
+                + "\",\"originalFilename\":\"fixture.png\",\"declaredContentType\":\"image/png\",\"byteSize\":1,\"checksumSha256\":\"" + "0".repeat(64) + "\"}]}");
+        assertThat(photo.statusCode()).isEqualTo(503);
+        assertThat(value(photo, "$.error.code")).isEqualTo("MEDIA_UNAVAILABLE");
+        assertThat(jdbc.sql("SELECT count(*) FROM contribution WHERE idempotency_key=:key").param("key", key).query(Long.class).single()).isZero();
+        assertThat(post(key, "{\"message\":\"text still works\"}").statusCode()).isEqualTo(201);
+    }
+
     @Test void equivalentReplayLostResponseConflictAndCurrentStates() throws Exception {
         String key = UUID.randomUUID().toString();
         var original = post(key, "{\"message\":\"hello\"}"); // Treat response as lost; replay unchanged intent.
