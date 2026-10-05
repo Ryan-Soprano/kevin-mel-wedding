@@ -92,7 +92,7 @@ curl --fail-with-body --request POST http://localhost:8080/api/contributions \
 
 Use the same POST/body/key after a lost response; do not generate another key. If the returned contributionId is known, GET its receipt with the same two headers. Receipts contain no guest content or private retrieval links, and responses use Cache-Control: no-store.
 
-The form confirms saved only after a valid complete receipt. It retains the original draft/key for deliberate retry, locks text editing while the outcome is uncertain, honors Retry-After, and requires **Write another message** before creating a new logical submission. Retry state is in memory: keep the page open until confirmed; refresh/tab closure does not preserve it. Guest payloads and errors are not logged to the browser console. Photo selections are not included in text requests.
+The form now lets guests write, review, edit, send, and finish a note. It shows field errors beside the affected input and confirms saved only after a valid complete receipt. It retains the original draft/key for deliberate retry, locks editing while the outcome is uncertain, honors Retry-After, and requires **Write another note** before creating a new logical submission. Retry state is in memory: keep the page open until confirmed; refresh/tab closure does not preserve it. Guest payloads and errors are not logged to the browser console. Photo selections are not included in text requests. See the [MSG-02 verification notes](docs/product/msg02-verification.md) for browser checks and device coverage still needed.
 
 ### Checks
 
