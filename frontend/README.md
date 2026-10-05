@@ -28,4 +28,4 @@ The [v1 contract](../docs/api/v1/README.md) owns API semantics and implementatio
 Run `npm test` here for transport, decoder, and mock contract checks; no backend or
 Docker is required. They do not replace server integration/browser/device tests.
 Start Vite and visit `/contract-preview.html` for synthetic scenarios. The wedding
-form saves text through the real v1 adapter. Uncertain requests retain their draft/key for manual retry; state lasts only while this page remains open. Photo choices remain local previews. Richer confirmation/accessibility coverage stays with MSG-02.
+form saves text through the real v1 adapter. Its compose/review/result flow uses field-level errors, focusable review/result headings, an announced sending state, and a locked same-key retry when the outcome is uncertain. Retry state lasts only while this page remains open. Photo choices remain local previews. See [MSG-02 verification](../docs/product/msg02-verification.md) for browser evidence and the remaining real-device checks.

@@ -25,7 +25,7 @@ This table prevents a target wireframe from being mistaken for a released capabi
 
 | Contribution type | Current repository capability | Wedding-ready today? |
 |---|---|---|
-| Written note | The wedding form and v1 API save private text with committed receipts and same-key manual retries. Full experience/accessibility and production operations remain pending. | No |
+| Written note | The wedding form offers compose, review, edit, private saved confirmation, and same-key manual retry after an uncertain response. Browser keyboard/semantic and narrow-width checks passed; actual screen-reader/device and production operations checks remain. | No |
 | Photos | The browser can select, validate, preview, and remove local JPEG, PNG, and WebP files. Upload and durable storage are not implemented. | No |
 | Audio | Browser recording and file-upload fallback are planned but not implemented. | No |
 | Couple inbox | Data lifecycle states exist, but authentication, list/detail screens, and actions are not implemented. | No |
@@ -206,7 +206,7 @@ Failure copy:
 
 > We couldn’t confirm that your memory was saved. Your work is still here. Please try again.
 
-Actions: **Try again** and **Edit**. Never tell the guest to recreate the contribution until receipt lookup has resolved the original attempt.
+When the outcome is uncertain, offer **Try again** with the same key and keep the preview locked; editing could turn a committed note into a changed-payload conflict. A known validation rejection returns to the editable fields with a field-level explanation. Never tell the guest to recreate the contribution until the original attempt is resolved.
 
 ## Couple review journey
 
