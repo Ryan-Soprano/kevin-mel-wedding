@@ -74,6 +74,10 @@ The [v1 API contract](docs/api/v1/README.md) is authoritative. The development p
 | POST /api/contributions with PHOTO items | HTTP 201 committed intent / 200 equivalent replay; initially PENDING |
 | POST /api/contributions/{id}/memories/{memoryId}/upload-grants | HTTP 201 with a five-minute HTTPS PUT permission for a temporary object |
 | POST /api/contributions/{id}/memories/{memoryId}/finalize | HTTP 200 receipt after verified original + DB commit; COMPLETE only when all items are saved |
+| GET /api/session | HTTP 200 with anonymous/couple session state and a CSRF token |
+| POST /api/session | HTTP 200 for an enabled, revealed COUPLE login; rotates session ID and CSRF token |
+| DELETE /api/session | HTTP 204 after session invalidation and cookie clearing; requires current CSRF token |
+| GET /api/memories/{memoryId}/playback | HTTP 200 with an HTTPS GET link for an eligible verified PHOTO original; requires a current revealed COUPLE session |
 | Disabled/unavailable photo storage | HTTP 503 MEDIA_UNAVAILABLE; text remains independent |
 | Invalid uploaded photo | HTTP 422 INVALID_MEDIA and a committed FAILED item; retry remains bound to the original intent |
 | Invalid text or retry key | HTTP 400 VALIDATION_FAILED with safe field errors where applicable |
@@ -100,6 +104,16 @@ Use the same POST/body/key after a lost response; do not generate another key. I
 The form now lets guests write, review, edit, send, and finish a note. It shows field errors beside the affected input and confirms saved only after a valid complete receipt. It retains the original draft/key for deliberate retry, locks editing while the outcome is uncertain, honors Retry-After, and requires **Write another note** before creating a new logical submission. Retry state is in memory: keep the page open until confirmed; refresh/tab closure does not preserve it. Guest payloads and errors are not logged to the browser console. Photo selections are not included in text requests. See the [MSG-02 verification notes](docs/product/msg02-verification.md) for browser checks and device coverage still needed.
 
 The independent **Share a photo** form preserves one original JPEG/PNG/WebP file, optional name/caption, SHA-256, item ID, and retry key until confirmed. A successful PUT alone never produces saved confirmation. Manual retry checks the receipt and retained grant before sending bytes again. Metadata stays locked while the result is uncertain. **Share another photo** explicitly starts a new intent; a known invalid-photo rejection also permits explicit replacement. Keep the page open until confirmed. The backend accepts one to five PHOTO items, but batch UI polish and selective retries belong to MED-02. HEIC/audio are not enabled by this feature.
+
+### Private account access
+
+AUTH-01 implements the server session API, PostgreSQL accounts with bcrypt password hashes, CSRF/session rotation, login throttling, and account-version checks that revoke sessions after recovery or disablement. Reveal is closed by default (`MEMORY_ARCHIVE_REVEALED=false`), and the default environment is `local`. Only enabled `COUPLE` accounts can sign in when reveal is open; production permits separate `kevin` and `melanie` identities. Operator/developer accounts receive no couple access, and developer accounts are restricted to local/staging.
+
+Use the console-only [account provisioning and recovery runbook](docs/runbooks/account-access.md) for synthetic local accounts and later reveal onboarding. Passwords are read through hidden terminal prompts; there are no public signup/recovery endpoints. Production requires its Secure-cookie profile, an explicit HTTPS public origin, and a private login-throttle secret. See [AUTH-01 verification](docs/api/v1/auth-verification.md) for evidence and remaining limits. The login screen, private inbox/list/detail/review, publication, audio playback, and real production account provisioning remain later tasks; no real couple credentials have been created or sent.
+
+AUTH-02 adds `GET /api/memories/{memoryId}/playback` for eligible verified PHOTO originals. Every issuance requires a current enabled couple account and an open reveal gate. The server checks the private original's size and MIME through authenticated HEAD, then signs GET for that single object over the R2 S3 HTTPS endpoint for at most 300 seconds. The response reports the signature's actual expiry. Unfinished/failed uploads, TEXT/AUDIO, missing or wrong-event memories, and DELETE items return safe 404; an eligible original that is missing or unavailable at storage returns 503 MEDIA_UNAVAILABLE. Future archive routes retain authorization guards, but their successful list/detail/review actions are not implemented by this task. See [AUTH-02 verification](docs/api/v1/authorization-verification.md).
+
+A signed playback URL is a reusable bearer permission: anyone who obtains it can download that object until its own expiry. Logout, account recovery/disablement, and closing reveal prevent new issuance; they do not revoke an existing URL or an in-progress download. `no-store` does not erase downloaded bytes. R2 originals and staging remain private, with public custom domains and `r2.dev` disabled. The later playback UI must omit application credentials, use `no-referrer`, and never persist or log signed URLs. Real R2 GET/HEAD, expiry, CORS, tampering and private-access checks remain in the [home acceptance checklist](docs/runbooks/private-photo-storage.md#authenticated-photo-playback--auth-02-home-acceptance).
 
 ### Checks
 
@@ -165,13 +179,15 @@ V2 adds an immutable SHA-256 creation fingerprint without rewriting V1. It backf
 
 V3 adds media client IDs, captions/order, expected integrity claims, and expiring upload grants. Browser PUTs target temporary staging keys; the server verifies and publishes exact bytes to a separate private original before committing UPLOADED. Applied V1/V2 remain unchanged. AWS SDK Java v2 and TwelveMonkeys WebP were explicitly approved for MED-01. See [photo verification](docs/api/v1/photo-verification.md) and the [R2 setup/cleanup runbook](docs/runbooks/private-photo-storage.md) before enabling storage.
 
+V4 adds disabled-by-default private accounts and credential versions; V5 adds durable login-throttle counters. AUTH-01 uses the approved Spring Security runtime and test starters, with versions governed by the POM. Account creation, recovery, and enable/disable operations stay in the [console runbook](docs/runbooks/account-access.md); earlier migrations remain unchanged.
+
 ## Repository navigation
 
 | Location | Responsibility |
 |---|---|
 | [Memory Archive — Issues](https://app.notion.com/p/2d5a40baef85426a94bd059f7d0e2ce8) | MVPs, decisions, status, ownership, dependencies, acceptance criteria, and evidence |
 | [frontend/](frontend/) | React/Vite app; see its [source map](frontend/README.md) |
-| [backend/src/main/java/com/kevinandmelanie/memoryarchive/](backend/src/main/java/com/kevinandmelanie/memoryarchive/) | Spring app and contribution, media/storage, health, and web packages |
+| [backend/src/main/java/com/kevinmel/archive/](backend/src/main/java/com/kevinmel/archive/) | Spring app and contribution, media/storage, health, and web packages |
 | [backend/src/test/](backend/src/test/) | Backend tests |
 | [docs/](docs/) | Architecture, API contracts, decision records, and operational runbooks |
 | [coming-soon/](coming-soon/) | Standalone temporary landing page; see the [local preview and deployment handoff](docs/runbooks/coming-soon.md). Not deployed. |

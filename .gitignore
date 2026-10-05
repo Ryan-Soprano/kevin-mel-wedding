@@ -22,6 +22,7 @@ lerna-debug.log*
 .env
 .env.*
 !.env.example
+/Cloudflare R2 Bucket.txt
 
 # Editors and operating systems
 .idea/

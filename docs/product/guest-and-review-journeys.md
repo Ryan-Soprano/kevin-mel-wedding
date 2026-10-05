@@ -1,7 +1,7 @@
 # Guest contribution and couple review journeys
 
 Status: Ready for FND-03 review  
-Last updated: 2026-09-27  
+Last updated: 2026-10-05\
 Owners: Ryan (product confirmation) and Codex (documentation maintenance)
 
 ## Purpose
@@ -28,7 +28,7 @@ This table prevents a target wireframe from being mistaken for a released capabi
 | Written note | The wedding form offers compose, review, edit, private saved confirmation, and same-key manual retry after an uncertain response. Browser keyboard/semantic and narrow-width checks passed; actual screen-reader/device and production operations checks remain. | No |
 | Photos | MED-01 adds a minimal single-photo form, opt-in private R2 grants, verified original finalization, and retained retry identity. Local integration/browser checks pass; real R2/phone acceptance and MED-02 batch UI remain. See [verification](../api/v1/photo-verification.md). | No |
 | Audio | Browser recording and file-upload fallback are planned but not implemented. | No |
-| Couple inbox | Data lifecycle states exist, but authentication, list/detail screens, and actions are not implemented. | No |
+| Couple inbox | AUTH-01 implements server sessions and reveal/role gates; AUTH-02 adds authorized short-lived GET access to verified PHOTO originals. Login/playback UI, inbox/list/detail/review screens and APIs, audio playback, and real reveal onboarding remain pending. | No |
 
 The choose-type screen is therefore a target-state design. Before wedding QR material is printed, unsupported choices must be hidden rather than labeled “coming soon.”
 
@@ -210,7 +210,9 @@ When the outcome is uncertain, offer **Try again** with the same key and keep th
 
 ## Couple review journey
 
-The couple experience is private and unavailable until authentication and reveal controls are complete.
+AUTH-01 implements backend session authentication and reveal/role gates, with reveal closed by default. AUTH-02 adds backend issuance of a single-object HTTPS GET for an eligible verified PHOTO original after a fresh couple/reveal check and authenticated storage HEAD verification. Links last at most 300 seconds, with their actual signature expiry returned. The following screens remain target designs: login/playback UI, inbox/list/detail/review screens and their archive APIs, audio playback, and real reveal onboarding. See [AUTH-01 verification](../api/v1/auth-verification.md), [AUTH-02 verification](../api/v1/authorization-verification.md), and the [account-access runbook](../runbooks/account-access.md). No real couple accounts or credentials have been provisioned.
+
+The later photo viewer must omit application credentials, use `no-referrer`, and keep signed URLs out of persistence and logs. A link can be reused by anyone who obtains it until its own expiry. Sign-out, account reset/disablement, and closing reveal prevent new links without revoking issued links or an in-progress download; `no-store` does not erase received bytes. DELETE items cannot receive playback until the future INB-02 restore flow restores them. Future inbox/review guards are implemented access boundaries, not evidence that these screens or their successful actions already exist.
 
 ### Flow map
 
