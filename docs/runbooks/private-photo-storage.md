@@ -1,6 +1,6 @@
 # Private photo storage — MED-01
 
-Prepared 2026-10-05. Ryan reported that no private R2 test bucket exists yet. These are operator setup instructions, **not evidence of provisioning or deployment**. Use synthetic photos first. Production collection still needs the security, operations, and release tasks in Notion.
+Prepared 2026-10-05. Ryan has configured a test bucket and completed desktop PNG operator comparison/restart/replay and scripted real-R2 JPEG/WebP upload, recovery and grant checks; the [verification record](../api/v1/photo-verification.md) contains the evidence and limits. The setup steps below remain the reusable operator procedure; staging lifecycle/bucket settings, JPEG/WebP operator reread and physical-device checks are not yet verified. Use synthetic photos first. Production collection still needs the security, operations, and release tasks in Notion.
 
 ## What the application does
 
@@ -53,9 +53,9 @@ Start the existing local PostgreSQL first, as described in the root README. Do n
 
 The backend uses AWS SDK v2 region `auto`, path-style requests, fixed-length PUTs, and checksums only when required by S3. It verifies SHA-256 itself instead of relying on optional R2 checksum headers. [Cloudflare's Java example](https://developers.cloudflare.com/r2/examples/aws/aws-sdk-java/) documents disabling chunked encoding for R2.
 
-## Real R2 and phone acceptance — still outstanding
+## Real R2 and phone acceptance — partially verified
 
-Use a trustworthy HTTPS test environment approved by Ryan. Plain HTTP on a LAN is insufficient for the Web Crypto checksum on a phone. OPS-01 owns the deployment/HTTPS path; do not bypass certificate warnings. Keep the physical device test separate from the synthetic contract preview.
+Use a trustworthy HTTPS test environment approved by Ryan. The October 5 Render dashboard check found only the deployed `kevinandmel-coming-soon` static service, which does not run the React/Spring photo app; no full-app HTTPS staging URL is verified. OPS-01 must prepare the full app, same-origin API routing, backend/test DB and exact-origin R2 CORS before phone acceptance. Plain HTTP on a LAN is insufficient for the [Web Crypto checksum](https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/digest) on a phone. Do not bypass certificate warnings. Keep the physical device test separate from the synthetic contract preview.
 
 1. Retain a known JPEG, PNG, and WebP input with its original size and SHA-256. On iPhone Safari, choose a supported file, enter a synthetic name/caption, and submit through the actual wedding form. Repeat on Android Chrome when a tester is assigned. HEIC selection must explain the supported formats.
 2. Observe `PENDING` intent, staging PUT, finalize, then a private saved confirmation. Verify that only a complete receipt triggers success. Record OS/browser, format, date, and outcome without guest data or signed links.
@@ -71,7 +71,7 @@ WHERE m.id='YOUR_SYNTHETIC_MEMORY_UUID';
 ```
 
 4. Download the `originals/…` object through Cloudflare's authenticated dashboard, or an already approved authenticated S3 client. Compare it with the input using Git Bash `sha256sum input.png downloaded.png` and `cmp -- input.png downloaded.png`. Verify size/hash match database metadata. Authorized operator retrieval is infrastructure access; a couple inbox/playback endpoint is not implemented yet.
-5. Restart Spring with the same database and bucket. The same key/body must replay the same IDs and `COMPLETE`; the downloaded original must remain byte-identical.
+5. Restart Spring with the same database and bucket: leave Vite and the photo page open, stop Spring with Ctrl+C in its Git Bash terminal, then run `./backend/mvnw -f backend/pom.xml spring-boot:run` in that same shell so its exported credentials remain available. Repeat the scoped SQL query and download/hash comparison for the same original. This proves existing identity/state and retrieval survive an application restart. Separately, a retained same-key/body API request must replay the same IDs and `COMPLETE`; the saved form has no retry action, and refreshing/reselecting a photo creates a new intent rather than proving replay.
 6. Interrupt the response after PUT and after successful finalize. Keep the page open; deliberately retry. It must reconcile the same intent/grant, not create another memory. Wait more than five minutes with an unfinished intent, then retry to renew only the grant. Repeated taps must coalesce.
 7. Confirm unsigned S3 GET of the known original is denied and both public bucket mechanisms remain disabled. Confirm the upload grant cannot GET/delete an object, change the key or Content-Type, or target `originals/`. A disallowed browser origin must fail CORS. Never record the signed URL in evidence.
 8. Record evidence on MED-01 and in `docs/api/v1/photo-verification.md`. Keep MED-01 unfinished until real R2, retrieval comparison, phone, restart, and privacy evidence is present. Synthetic tests do not prove these checks.

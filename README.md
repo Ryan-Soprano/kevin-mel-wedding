@@ -12,7 +12,7 @@ This is a learning project. Explain and agree on infrastructure, dependencies, a
 
 ## Local development
 
-The application saves named or anonymous text messages privately in PostgreSQL and returns committed receipts with safe same-key retries. MED-01 adds a single-photo form and an opt-in private R2 upload/finalize path. Photo storage is disabled until Ryan configures a private bucket; real R2 and phone acceptance remain pending. Follow the [photo storage setup runbook](docs/runbooks/private-photo-storage.md) and [verification record](docs/api/v1/photo-verification.md). Use synthetic content during local development. Production collection still requires the security, operations, and release work tracked in Notion.
+The application saves named or anonymous text messages privately in PostgreSQL and returns committed receipts with safe same-key retries. MED-01 adds a single-photo form and an opt-in private R2 upload/finalize path. Photo storage defaults disabled. Ryan's configured test bucket has passed desktop PNG operator comparison/restart/replay and scripted real-R2 JPEG/WebP upload, response recovery and grant restriction/expiry checks; physical-phone, additional operator comparison and bucket-settings acceptance are pending. Follow the [photo storage setup runbook](docs/runbooks/private-photo-storage.md) and [verification record](docs/api/v1/photo-verification.md). Use synthetic content during local development. Production collection still requires the security, operations, and release work tracked in Notion.
 
 ### Prerequisites
 
@@ -174,7 +174,7 @@ V3 adds media client IDs, captions/order, expected integrity claims, and expirin
 | [backend/src/main/java/com/kevinandmelanie/memoryarchive/](backend/src/main/java/com/kevinandmelanie/memoryarchive/) | Spring app and contribution, media/storage, health, and web packages |
 | [backend/src/test/](backend/src/test/) | Backend tests |
 | [docs/](docs/) | Architecture, API contracts, decision records, and operational runbooks |
-| [coming-soon/](coming-soon/) | Standalone temporary landing page; see the [local preview and deployment handoff](docs/runbooks/coming-soon.md). Not deployed. |
+| [coming-soon/](coming-soon/) | Standalone temporary landing page, deployed on Render with domain HTTPS on October 4; see the [deployment record](docs/runbooks/coming-soon.md). This service does not host the React/Spring photo app. |
 | [compose.yaml](compose.yaml) | Local database configuration |
 | [docs/project-plan.md](docs/project-plan.md) | Product scope, accepted architecture, and collaboration conventions |
 | [Feature tracker.md](<Feature tracker.md>) | Migration pointer to Notion; do not maintain task status here |
