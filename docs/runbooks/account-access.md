@@ -34,34 +34,39 @@ Application and utility processes read their own configuration at startup. Setti
 
 ## Build and launch locally
 
-Use Java 25 in a native interactive terminal. On Windows, use PowerShell in Windows Terminal. IDE output panes, redirected input/output, background jobs, and terminals where `System.console()` is unavailable are rejected. Passwords are accepted only by `System.console().readPassword()` and are never echoed. The utility accepts no password flag, password environment variable, piped password, or password file.
+Use Java 25 in an interactive Git Bash shell hosted by Windows Terminal or a Windows console window. The default Git Bash mintty window may not provide Java's system console. Configure the Windows Terminal profile to launch Git's `bin/bash.exe --login -i` directly; opening `git-bash.exe` can launch mintty again. IDE output panes, redirected input/output, background jobs, and terminals where `System.console()` is unavailable are rejected. Passwords are accepted only by `System.console().readPassword()` and are never echoed. The utility accepts no password flag, password environment variable, piped password, or password file. Do not bypass this console requirement; if the utility reports no interactive system console, use a supported console before retrying. Successful `--help` output alone does not establish hidden-input support.
 
-From `backend/`, prepare the already-approved runtime dependencies and compiled classes:
+With `JAVA_HOME` already pointing to the installed Java 25 JDK, run these Bash commands from this project's `backend/` directory. They use the committed Maven wrapper and existing approved runtime dependencies:
 
-```powershell
-.\mvnw.cmd -DskipTests compile dependency:build-classpath '-Dmdep.outputFile=target/account-admin-classpath.txt'
-$accountClasspath = 'target/classes;' + (Get-Content -Raw -LiteralPath '.\target\account-admin-classpath.txt').Trim()
-java -cp $accountClasspath com.kevinmel.archive.security.AccountAdministration --help
+```bash
+export JAVA_HOME="$(cygpath -u "$JAVA_HOME")"
+export PATH="$JAVA_HOME/bin:$PATH"
+./mvnw --batch-mode -DskipTests compile dependency:build-classpath \
+  -Dmdep.outputFile=target/account-admin-classpath.txt
+archive_dependency_classpath="$(tr -d '\r\n' < target/account-admin-classpath.txt)"
+archive_account_classpath="$(cygpath -w "$PWD/target/classes");$archive_dependency_classpath"
+MSYS2_ARG_CONV_EXCL='*' java -cp "$archive_account_classpath" \
+  com.kevinmel.archive.security.AccountAdministration --help
 ```
 
-If this machine's wrapper cannot inspect a hidden `.m2` directory, run the same preparation command with an existing Maven **3.9.16** installation (`mvn`) instead. No dependency or wrapper change is needed for the account utility.
+The classpath file is under ignored `target/`. These assignments read it without displaying it and retain the semicolon separator required by native Windows Java. `MSYS2_ARG_CONV_EXCL` prevents Git Bash from rewriting that classpath argument. Keep the compiled classes and classpath from the same build; no dependency or wrapper change is needed for the utility.
 
-On macOS/Linux, use the Maven shell wrapper and `:` between `target/classes` and the dependency classpath. Run Java directly in the interactive terminal so hidden password input is available. Do not invoke this utility through `spring-boot:run`.
+On macOS/Linux, use the Maven shell wrapper, omit Windows-only `cygpath`/MSYS settings, and use `:` between `target/classes` and the dependency classpath. Run Java directly in the interactive terminal so hidden password input is available. Do not invoke this utility through `spring-boot:run`.
 
 For an isolated synthetic local exercise, verify that the connection is the local Compose database, then configure this terminal:
 
-```powershell
-$env:MEMORY_ARCHIVE_ENVIRONMENT = 'local'
-$env:MEMORY_ARCHIVE_REVEALED = 'true'
+```bash
+export MEMORY_ARCHIVE_ENVIRONMENT=local
+export MEMORY_ARCHIVE_REVEALED=true
 ```
 
 The following examples describe synthetic accounts only. Each command stops for an exact confirmation; create/reset additionally ask for the new password twice:
 
-```powershell
-java -cp $accountClasspath com.kevinmel.archive.security.AccountAdministration --expect-environment local create synthetic-kevin 'Synthetic Kevin' COUPLE
-java -cp $accountClasspath com.kevinmel.archive.security.AccountAdministration --expect-environment local enable synthetic-kevin
-java -cp $accountClasspath com.kevinmel.archive.security.AccountAdministration --expect-environment local reset-password synthetic-kevin
-java -cp $accountClasspath com.kevinmel.archive.security.AccountAdministration --expect-environment local disable synthetic-kevin
+```bash
+MSYS2_ARG_CONV_EXCL='*' java -cp "$archive_account_classpath" com.kevinmel.archive.security.AccountAdministration --expect-environment local create synthetic-kevin 'Synthetic Kevin' COUPLE
+MSYS2_ARG_CONV_EXCL='*' java -cp "$archive_account_classpath" com.kevinmel.archive.security.AccountAdministration --expect-environment local enable synthetic-kevin
+MSYS2_ARG_CONV_EXCL='*' java -cp "$archive_account_classpath" com.kevinmel.archive.security.AccountAdministration --expect-environment local reset-password synthetic-kevin
+MSYS2_ARG_CONV_EXCL='*' java -cp "$archive_account_classpath" com.kevinmel.archive.security.AccountAdministration --expect-environment local disable synthetic-kevin
 ```
 
 For example, creation requires typing `create synthetic-kevin in local`. A mismatch or cancelled prompt makes no account change. Use a unique password/passphrase of at least 15 Unicode characters and no more than 72 UTF-8 bytes, matching the existing delegating bcrypt encoder's limit. Password arrays and temporary UTF-8 bytes are cleared after use; hashes remain only in database storage and transient encoder/database memory. Application/JDBC logging is suppressed in the utility, and database exceptions never print their details or stack traces.
@@ -91,11 +96,11 @@ Ryan performs recovery only after verifying the requesting account owner's ident
 
 Successful logout invalidates the session and clears the cookie. A browser's old session/CSRF token must not become valid after logout, password reset, disable, or re-enable. The session API contract remains in [API v1](../api/v1/README.md); inbox implementation is tracked separately.
 
-The login throttle permits five credential attempts per normalized username and thirty per direct peer address within fifteen minutes, counting attempts regardless of authentication success. Its database counters survive application restart/session rotation. Old buckets are cleaned up after one day. Respect a throttled response's `Retry-After`; do not keep retrying a password or clear counters during routine recovery. The direct peer address comes from the connection, rather than trusting a caller-supplied forwarding header.
+The login throttle permits five credential attempts per normalized username and thirty per direct peer address within fifteen minutes, counting attempts regardless of authentication success. Its database counters survive application restart/session rotation. Old buckets are cleaned up after one day. Respect a throttled response's `Retry-After`; do not keep retrying a password or clear counters during routine recovery. A registered `ServletRequestListener` captures the connection peer before Spring's forwarding filters run; login hashing uses that request attribute, never a rewritten `getRemoteAddr()` or caller-supplied forwarding header. Missing capture fails closed with safe 503 before any throttle reservation. The transient attribute is removed when the request finishes; only its keyed digest enters PostgreSQL. Clients behind a proxy can share the peer bucket, so changing this conservative boundary requires reviewed deployment policy.
 
 ## Verification
 
-Run the backend checks, including `SessionHttpTest`, plus disposable/in-memory operator verification against a synthetic PostgreSQL fixture. The focused session regression file protects authentication boundaries absent from the earlier suite; operator checks below need no additional test files. See [AUTH-01 verification evidence](../api/v1/auth-verification.md). Do not run mutation checks against real accounts or a production database.
+Run the backend checks, including `SessionHttpTest` and `RequestPeerCaptureTest`, plus disposable/in-memory operator verification against a synthetic PostgreSQL fixture. The focused session regression file protects authentication boundaries absent from the earlier suite; operator checks below need no additional test files. See [AUTH-01 verification evidence](../api/v1/auth-verification.md). Do not run mutation checks against real accounts or a production database.
 
 - Compile the backend and run the existing test suite. Confirm utility `--help` works and a noninteractive mutation exits `2` before database access.
 - With `AccountAdministrationStore` and a disposable migrated database, create a synthetic couple account with reveal enabled. Verify it is disabled, the stored hash matches through the application's `PasswordEncoder`, and an attempt to create the same username makes no change.

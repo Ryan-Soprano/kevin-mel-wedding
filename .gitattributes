@@ -1,0 +1,3 @@
+# Linux entrypoints must remain executable from Windows Docker build contexts.
+backend/mvnw text eol=lf
+*.sh text eol=lf

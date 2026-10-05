@@ -1,6 +1,6 @@
 # AUTH-02 authorization and private media verification
 
-Locally verified on 2026-10-05 after Ryan authorized AUTH-02, building on AUTH-01 on `feature/secure-sessions`. Ryan subsequently authorized commit/push; these local checks were completed beforehand. No deployment, new dependency, real account, invitation, provider configuration or real R2 request occurred. Real R2 setup and Docker verification remain deferred until Ryan returns home.
+Locally verified on 2026-10-05 after Ryan authorized AUTH-02, building on AUTH-01 on `feature/secure-sessions`. Ryan subsequently authorized commit/push; these local checks were completed beforehand. No deployment, new dependency, real account, invitation, provider configuration or real R2 request occurred. Historical work-computer results are below; home reconciliation and PostgreSQL 17 evidence are recorded separately.
 
 ## Implemented behavior
 
@@ -46,7 +46,7 @@ Frontend behavior was not changed; its existing adapter was exercised against th
 
 ## Remaining acceptance
 
-Keep AUTH-02 in Review until the full existing Docker/Testcontainers PostgreSQL 17 suite and real R2/browser acceptance pass. Docker is unavailable on the work computer; native PostgreSQL 18 checks supplement that suite. The [private storage runbook](../../runbooks/private-photo-storage.md#authenticated-photo-playback--auth-02-home-acceptance) contains the home checklist for authenticated HEAD, signed GET, byte/hash comparison, exact-origin CORS, tampered/wrong-object/method refusal, expiry and unsigned public-access denial. Production HTTPS/proxy verification remains with the authorized deployment process.
+Keep AUTH-02 in Review until the full existing Docker/Testcontainers PostgreSQL 17 suite and real R2/browser acceptance pass. The home PostgreSQL 17 full suite now passes as recorded below; native PostgreSQL 18 checks remain supplemental. Real R2/browser and approved hosted acceptance are still open. The [private storage runbook](../../runbooks/private-photo-storage.md#authenticated-photo-playback--auth-02-home-acceptance) contains the home checklist for authenticated HEAD, signed GET, byte/hash comparison, exact-origin CORS, tampered/wrong-object/method refusal, expiry and unsigned public-access denial. Production HTTPS/proxy verification remains with the authorized deployment process.
 
 Repeat the focused repository checks with Java 25 and Maven 3.9.16:
 
@@ -55,3 +55,11 @@ mvn -Dtest=SessionHttpTest,HealthControllerTest,PhotoValidationTest,R2ObjectStor
 ```
 
 With Docker available, run the normal full Maven test suite. Real R2 checks must use synthetic content and record only nonsensitive outcomes; never paste signed URLs, credentials or hashes into Git, Notion, logs or screenshots.
+
+## Home reconciliation — 2026-10-05
+
+The integrated branch includes current main `d48a8c8` and preserves its staging gate/finalization admission. **98 backend tests pass** with actual disposable PostgreSQL 17, including the complete 40-session/security suite and 10 SDK/storage tests. Added committed SQL regression coverage verifies eligible review states, deleted/wrong-event/missing items, unfinished upload, expected size/hash/MIME mismatches and wrong object keys. The frontend passes lint, **73 tests**, build and zero-vulnerability audit.
+
+The default-deny security boundary now precedes resource resolution: anonymous requests admitted through the staging gate to unknown API/source/secret paths return safe `401 AUTH_REQUIRED`, with no-store JSON and no HTML fallback. Both packaged/container smoke helpers follow this boundary. Secure staging cookies and separate operator admission/couple sessions are documented. Real R2 authenticated HEAD/GET, byte comparison, CORS, tampering/expiry and unsigned-access denial still need credentials and actual provider/browser proof; no synthetic/mock result closes those criteria.
+
+The actual integrated Docker image smoke passes the real SQL/bcrypt session path, anonymous private-route denial, authorized missing-item 404, logout/version/disable revocation, independent staging admission and persisted throttling across app restart. No R2 IO occurs in that smoke.

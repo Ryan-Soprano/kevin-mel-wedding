@@ -39,12 +39,16 @@ import com.kevinmel.archive.media.PlaybackController;
 import com.kevinmel.archive.media.PlaybackRepository;
 import com.kevinmel.archive.media.PlaybackService;
 import com.kevinmel.archive.web.ApiException;
+import jakarta.servlet.ServletRequestEvent;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.boot.webmvc.test.autoconfigure.MockMvcBuilderCustomizer;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.http.MediaType;
@@ -72,7 +76,8 @@ import tools.jackson.databind.ObjectMapper;
         "archive.environment=local", "archive.revealed=true"})
 @Import({SecurityConfiguration.class, ArchiveAuthenticationConfiguration.class,
         ArchiveUserDetailsService.class, SessionService.class, ArchiveAccessPolicy.class,
-        LoginThrottle.class, SecurityErrorWriter.class, ArchiveAuthorization.class, PlaybackService.class})
+        LoginThrottle.class, SecurityErrorWriter.class, ArchiveAuthorization.class, PlaybackService.class,
+        SessionHttpTest.ServletLifecycle.class})
 class SessionHttpTest {
     private static final UUID ACCOUNT_ID = UUID.fromString("a175650a-1459-498e-b87c-2b3ced947e62");
     private static final String USERNAME = "synthetic-couple";
@@ -95,6 +100,19 @@ class SessionHttpTest {
     @MockitoBean ObjectStorage storage;
     @MockitoBean Clock clock;
     private ArchiveAccount couple;
+
+    @TestConfiguration(proxyBeanMethods = false)
+    static class ServletLifecycle {
+        @Bean
+        MockMvcBuilderCustomizer captureConnectionPeer() {
+            var listener = new RequestPeerCapture();
+            // MockMvc bypasses container listeners; reproduce initialization before request filters.
+            return builder -> builder.defaultRequest(get("/").with(request -> {
+                listener.requestInitialized(new ServletRequestEvent(request.getServletContext(), request));
+                return request;
+            }));
+        }
+    }
 
     @BeforeEach
     void fixtures() {

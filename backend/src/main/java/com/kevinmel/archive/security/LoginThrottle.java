@@ -30,8 +30,9 @@ public class LoginThrottle {
     }
 
     public void reserve(String username, HttpServletRequest request, HttpServletResponse response) {
-        // Forwarded client headers are untrusted. The direct peer cap is deliberately conservative.
-        if (!repository.reserve(List.of(digest("username:" + username), digest("address:" + request.getRemoteAddr())))) {
+        // Capture before forwarding filters; request.getRemoteAddr() may already reflect caller headers.
+        String connectionPeer = RequestPeerCapture.requirePeer(request);
+        if (!repository.reserve(List.of(digest("username:" + username), digest("address:" + connectionPeer)))) {
             response.setHeader("Retry-After", "900");
             throw new ApiException(429, "RATE_LIMITED", "Please wait before trying to sign in again.");
         }
