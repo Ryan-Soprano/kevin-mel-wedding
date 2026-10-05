@@ -6,7 +6,7 @@ import java.util.List;
 public class ApiException extends RuntimeException {
     private final int status;
     private final String code;
-    private final List<FieldError> fieldErrors;
+    private final transient List<FieldError> fieldErrors;
 
     public ApiException(int status, String code, String message) {
         this(status, code, message, List.of());
