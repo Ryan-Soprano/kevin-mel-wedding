@@ -1,6 +1,6 @@
 # AUD-01 local audio feasibility check
 
-Prepared October 5, 2026 for AUD-01 and [D-03 / D-04](../decisions/contribution-and-audio-limits.md). The disposable probe is ready for approved HTTPS staging at **`/staging/audio`**. It is separate from the wedding guest UI, sends no audio or evidence to an API, and does not implement production AUD-02/AUD-03 recording, storage or server validation. Actual iPhone Safari and physical Android Chrome acceptance remain pending. Ryan chose emulator checks now while retaining the physical Android requirement.
+Prepared October 5, 2026 for AUD-01 and [D-03 / D-04](../decisions/contribution-and-audio-limits.md). The disposable probe is ready for approved HTTPS staging at **`/staging/audio`**. It is separate from the wedding guest UI, sends no audio or evidence to an API, and does not implement production AUD-02/AUD-03 recording, storage or server validation. Actual iPhone Safari and physical Android Chrome acceptance remain pending. Ryan chose emulator checks now while retaining the physical Android requirement. Actual Android tablet hardware can provide supplemental evidence recorded under its own environment label; it does not satisfy physical Android phone acceptance.
 
 ## What is prepared and locally checked
 
