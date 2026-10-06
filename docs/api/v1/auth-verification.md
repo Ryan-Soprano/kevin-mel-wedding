@@ -66,5 +66,6 @@ export JAVA_HOME="$(cygpath -u "$JAVA_HOME")"
 export PATH="$JAVA_HOME/bin:$PATH"
 export MAVEN_OPTS="-Xms32m -Xmx256m -XX:ActiveProcessorCount=2 -XX:+UseSerialGC"
 archive_mockito_agent="$(cygpath -m "$HOME/.m2/repository/org/mockito/mockito-core/5.23.0/mockito-core-5.23.0.jar")"
-./backend/mvnw -f backend/pom.xml --batch-mode -DreuseForks=false \n  "-DargLine=-Xms32m -Xmx384m -XX:ActiveProcessorCount=2 -XX:+UseSerialGC -javaagent:$archive_mockito_agent" test
+./backend/mvnw -f backend/pom.xml --batch-mode -DreuseForks=false \
+  "-DargLine=-Xms32m -Xmx384m -XX:ActiveProcessorCount=2 -XX:+UseSerialGC -javaagent:$archive_mockito_agent" test
 ```
