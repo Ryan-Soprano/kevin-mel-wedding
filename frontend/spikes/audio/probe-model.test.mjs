@@ -1,10 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { LocalAudioProbe, ProbeError, validateLocalAudio, MAX_BYTES, containerFromBytes } from './probe-model.js';
+import { LocalAudioProbe, ProbeError, validateLocalAudio, measureDecodedSignal, MAX_BYTES, containerFromBytes } from './probe-model.js';
 
 function fixture(options = {}) {
-  const track = { stops: 0, listeners: new Map(), stop() { this.stops++; },
+  const track = { kind: 'audio', enabled: true, muted: false, readyState: 'live',
+    stops: 0, listeners: new Map(), stop() { this.stops++; },
     addEventListener(name, listener) { this.listeners.set(name, listener); },
     removeEventListener(name) { this.listeners.delete(name); } };
   const stream = { getTracks: () => [track] }; let requests = 0; let validations = 0; let created = 0;
@@ -25,6 +26,8 @@ function fixture(options = {}) {
     counts: () => ({ requests, validations, created, revoked }) };
 }
 const settle = () => new Promise(resolve => setImmediate(resolve));
+const decodedAudio = (channels, duration = 1) => ({ duration, numberOfChannels: channels.length,
+  sampleRate: 48000, getChannelData: channel => Float32Array.from(channels[channel]) });
 
 test('default timers invoke browser globals without the probe as their receiver', async t => {
   t.mock.method(globalThis, 'setTimeout', function () { assert.ok(this === undefined || this === globalThis); return 42; });
@@ -97,6 +100,37 @@ test('queued callbacks from a discarded recorder cannot interrupt the next attem
   f.probe.stop(); await settle(); assert.equal(f.probe.phase, 'ready');
 });
 
+test('muted live tracks remain recording and final evidence precedes owned track shutdown', async () => {
+  const f = fixture();
+  f.track.label = 'Private microphone label'; f.track.id = 'private-device-id';
+  f.track.stop = function () { this.stops++; this.readyState = 'ended'; };
+  await f.probe.start();
+  f.track.muted = true; f.track.listeners.get('mute')();
+  assert.equal(f.probe.phase, 'recording'); assert.equal(f.track.stops, 0);
+  assert.deepEqual(f.probe.events.find(event => event.event === 'track-muted').trackStates,
+    [{ kind: 'audio', enabled: true, muted: true, readyState: 'live' }]);
+  f.track.muted = false; f.track.listeners.get('unmute')();
+  f.track.muted = true; f.track.listeners.get('mute')();
+  f.probe.stop(); await settle();
+  assert.equal(f.track.readyState, 'ended'); assert.equal(f.track.listeners.size, 0);
+  assert.deepEqual(f.probe.clip.evidence.initialTrackStates,
+    [{ kind: 'audio', enabled: true, muted: false, readyState: 'live' }]);
+  assert.deepEqual(f.probe.clip.evidence.finalTrackStates,
+    [{ kind: 'audio', enabled: true, muted: true, readyState: 'live' }]);
+  assert.ok(f.probe.events.some(event => event.event === 'track-unmuted'));
+  assert.doesNotMatch(JSON.stringify(f.probe.snapshot()), /Private microphone|private-device-id|deviceId|settings|label/);
+});
+
+test('stale mute and unmute callbacks cannot add events to a new recording attempt', async () => {
+  const f = fixture(); await f.probe.start();
+  const muted = f.track.listeners.get('mute'); const unmuted = f.track.listeners.get('unmute');
+  f.probe.discard(); assert.equal(f.track.listeners.size, 0);
+  await f.probe.start(); const eventsBefore = f.probe.events.length;
+  muted(); unmuted();
+  assert.equal(f.probe.events.length, eventsBefore); assert.equal(f.probe.phase, 'recording');
+  f.probe.discard();
+});
+
 test('spontaneous recorder stop reports measured capture time instead of zero', async () => {
   const f = fixture(); await f.probe.start(); f.setTime(3500);
   f.probe.recorder.stop(); await settle();
@@ -126,7 +160,7 @@ test('strict byte/decoded-duration limits and byte-derived containers ignore a M
   const bytes = new TextEncoder().encode('RIFF0000WAVEsynthetic');
   let closed = 0;
   class Context {
-    async decodeAudioData() { return { duration: 120, numberOfChannels: 1, sampleRate: 48000 }; }
+    async decodeAudioData() { return decodedAudio([[0.125, -0.125]], 120); }
     async close() { closed++; }
   }
   const accepted = await validateLocalAudio(new Blob([bytes], { type: 'audio/webm' }), Context);
@@ -137,4 +171,70 @@ test('strict byte/decoded-duration limits and byte-derived containers ignore a M
   await assert.rejects(validateLocalAudio(new Blob([bytes]), TooLong), error => error instanceof ProbeError && error.code === 'DURATION_LIMIT');
   assert.equal(closed, 2);
   assert.equal(containerFromBytes(new Uint8Array([1, 2, 3])), 'Unidentified container');
+});
+
+test('decoded digital silence has exact zero measurements and finite JSON-safe dBFS floor', () => {
+  const signal = measureDecodedSignal(decodedAudio([[0, -0, 0], [0, 0, 0]]));
+  assert.equal(signal.peakAmplitude, 0); assert.equal(signal.rmsAmplitude, 0);
+  assert.equal(signal.allZeroSamples, true); assert.equal(signal.lowSignal, true);
+  assert.equal(signal.peakDbfs, -160); assert.equal(signal.rmsDbfs, -160);
+  assert.equal(signal.dbfsFloor, -160); assert.equal(signal.measuredChannels, 2);
+  assert.equal(signal.measuredSamples, 6);
+  assert.match(signal.interpretation, /heuristic/);
+  assert.ok(Object.values(signal).every(value => typeof value !== 'number' || Number.isFinite(value)));
+});
+
+test('voice-level synthetic PCM measures peak and RMS across every channel', () => {
+  const signal = measureDecodedSignal(decodedAudio([[0.5, -0.5], [0.25, -0.25]]));
+  assert.equal(signal.peakAmplitude, 0.5);
+  assert.ok(Math.abs(signal.rmsAmplitude - Math.sqrt(0.15625)) < 1e-12);
+  assert.ok(Math.abs(signal.peakDbfs - 20 * Math.log10(0.5)) < 1e-12);
+  assert.ok(Math.abs(signal.rmsDbfs - 20 * Math.log10(Math.sqrt(0.15625))) < 1e-12);
+  assert.equal(signal.allZeroSamples, false); assert.equal(signal.lowSignal, false);
+  assert.equal(signal.lowSignalThresholdDbfs, -60);
+  assert.doesNotMatch(JSON.stringify(signal), /channelData|samples":|Float32Array/);
+});
+
+test('one silent channel does not hide an active channel, while low nonzero PCM stays distinct', () => {
+  const stereo = measureDecodedSignal(decodedAudio([[0, 0], [0.25, -0.25]]));
+  assert.equal(stereo.allZeroSamples, false); assert.equal(stereo.lowSignal, false);
+  assert.equal(stereo.peakAmplitude, 0.25);
+  assert.ok(Math.abs(stereo.rmsAmplitude - Math.sqrt(0.03125)) < 1e-12);
+  const quiet = measureDecodedSignal(decodedAudio([[0.0001, -0.0001]]));
+  assert.equal(quiet.allZeroSamples, false); assert.equal(quiet.lowSignal, true);
+  assert.ok(quiet.rmsDbfs < quiet.lowSignalThresholdDbfs);
+});
+
+test('non-finite samples in any decoded channel are rejected', () => {
+  for (const sample of [NaN, Infinity, -Infinity]) {
+    assert.throws(() => measureDecodedSignal(decodedAudio([[0, 0], [0.25, sample]])),
+      error => error instanceof ProbeError && error.code === 'DECODE_FAILED');
+  }
+});
+
+test('silent valid clips remain replayable with an offline decoder lacking close', async () => {
+  class OfflineDecoder {
+    async decodeAudioData() { return decodedAudio([[0, 0], [0, 0]]); }
+  }
+  const accepted = await validateLocalAudio(new Blob(['synthetic']), OfflineDecoder);
+  assert.equal(accepted.localDecode, 'pass'); assert.equal(accepted.signal.allZeroSamples, true);
+  assert.equal(accepted.signal.lowSignal, true);
+});
+
+test('decoder cleanup failures do not replace a signal result or non-finite validation failure', async () => {
+  const blob = new Blob(['synthetic']);
+  class ThrowingCleanup {
+    async decodeAudioData() { return decodedAudio([[0.25, -0.25]]); }
+    close() { throw new Error('private cleanup detail'); }
+  }
+  assert.equal((await validateLocalAudio(blob, ThrowingCleanup)).signal.lowSignal, false);
+  class RejectedCleanup extends ThrowingCleanup {
+    close() { return Promise.reject(new Error('private cleanup detail')); }
+  }
+  assert.equal((await validateLocalAudio(blob, RejectedCleanup)).signal.lowSignal, false);
+  class InvalidDecoded extends ThrowingCleanup {
+    async decodeAudioData() { return decodedAudio([[NaN]]); }
+  }
+  await assert.rejects(validateLocalAudio(blob, InvalidDecoded),
+    error => error instanceof ProbeError && error.code === 'DECODE_FAILED');
 });

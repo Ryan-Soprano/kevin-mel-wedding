@@ -31,6 +31,44 @@ export class ProbeError extends Error {
   constructor(code) { super(code); this.code = code; }
 }
 
+export function measureDecodedSignal(decoded) {
+  if (!Number.isInteger(decoded.numberOfChannels) || decoded.numberOfChannels <= 0
+      || typeof decoded.getChannelData !== 'function') throw new ProbeError('DECODE_FAILED');
+  let peakAmplitude = 0; let squareSum = 0; let sampleCount = 0;
+  for (let channel = 0; channel < decoded.numberOfChannels; channel++) {
+    const samples = decoded.getChannelData(channel);
+    if (!samples?.length) throw new ProbeError('DECODE_FAILED');
+    for (let index = 0; index < samples.length; index++) {
+      const sample = samples[index];
+      if (!Number.isFinite(sample)) throw new ProbeError('DECODE_FAILED');
+      peakAmplitude = Math.max(peakAmplitude, Math.abs(sample));
+      squareSum += sample * sample;
+    }
+    sampleCount += samples.length;
+  }
+  const rmsAmplitude = Math.sqrt(squareSum / sampleCount);
+  if (!Number.isFinite(rmsAmplitude)) throw new ProbeError('DECODE_FAILED');
+  // Silence has mathematically -Infinity dBFS; this explicit floor keeps JSON numeric.
+  const dbfsFloor = -160;
+  const dbfs = amplitude => amplitude === 0 ? dbfsFloor : Math.max(dbfsFloor, 20 * Math.log10(amplitude));
+  const lowSignalThresholdDbfs = -60;
+  return { peakAmplitude, rmsAmplitude, peakDbfs: dbfs(peakAmplitude), rmsDbfs: dbfs(rmsAmplitude),
+    allZeroSamples: peakAmplitude === 0,
+    lowSignal: rmsAmplitude <= 10 ** (lowSignalThresholdDbfs / 20),
+    lowSignalThresholdDbfs, dbfsFloor,
+    measuredChannels: decoded.numberOfChannels, measuredSamples: sampleCount,
+    interpretation: 'Low signal is an RMS heuristic, not an audibility or microphone diagnosis; dBFS is relative to amplitude 1.' };
+}
+
+function trackStates(stream) {
+  return (stream?.getTracks() || []).map(track => ({
+    kind: ['audio', 'video'].includes(track.kind) ? track.kind : 'not reported',
+    enabled: typeof track.enabled === 'boolean' ? track.enabled : 'not reported',
+    muted: typeof track.muted === 'boolean' ? track.muted : 'not reported',
+    readyState: ['live', 'ended'].includes(track.readyState) ? track.readyState : 'not reported',
+  }));
+}
+
 export async function validateLocalAudio(blob, AudioContextType) {
   if (!blob.size) throw new ProbeError('EMPTY');
   if (blob.size > MAX_BYTES) throw new ProbeError('BYTE_LIMIT');
@@ -44,15 +82,19 @@ export async function validateLocalAudio(blob, AudioContextType) {
     const decoded = await context.decodeAudioData(encoded);
     if (!Number.isFinite(decoded.duration) || decoded.duration <= 0) throw new ProbeError('DECODE_FAILED');
     if (decoded.duration > MAX_SECONDS) throw new ProbeError('DURATION_LIMIT');
+    const signal = measureDecodedSignal(decoded);
     return { byteSize: blob.size, blobReportedMime: blob.type || 'not reported',
       containerFromBytes: containerFromBytes(header), localDecode: 'pass',
-      checksumSha256,
+      checksumSha256, signal,
       decodedDurationSeconds: Number(decoded.duration.toFixed(6)), channels: decoded.numberOfChannels,
       sampleRateHz: decoded.sampleRate, formatPolicy: 'Not approved; requires mobile and server verification' };
   } catch (error) {
     if (error instanceof ProbeError) throw error;
     throw new ProbeError('DECODE_FAILED');
-  } finally { await context.close().catch(() => {}); }
+  } finally {
+    try { if (typeof context.close === 'function') await context.close(); }
+    catch { /* Cleanup failure must not replace a decode result or validation error. */ }
+  }
 }
 
 export class LocalAudioProbe {
@@ -63,9 +105,11 @@ export class LocalAudioProbe {
     this.supported = recordingSupport(Recorder, requestStream, secure);
     this.phase = this.supported ? 'idle' : 'unsupported'; this.events = []; this.generation = 0;
     this.clip = null; this.recorder = null; this.stream = null; this.timer = null; this.chunks = [];
+    this.initialTrackStates = []; this.finalTrackStates = []; this.hasFinalTrackStates = false;
   }
   snapshot() { return { phase: this.phase, supported: this.supported, clip: this.clip,
-    errorCode: this.errorCode, events: [...this.events], elapsedSeconds: this.elapsedSeconds || 0 }; }
+    errorCode: this.errorCode, events: [...this.events], elapsedSeconds: this.elapsedSeconds || 0,
+    initialTrackStates: this.initialTrackStates, finalTrackStates: this.finalTrackStates }; }
   change(phase, code) {
     this.phase = phase; this.errorCode = code;
     this.events.push({ event: phase, ...(code ? { code } : {}) });
@@ -73,10 +117,19 @@ export class LocalAudioProbe {
   }
   releaseTracks() {
     this.cancel(this.timer); this.timer = null;
+    this.captureFinalTrackStates();
     for (const track of this.stream?.getTracks() || []) {
-      track.removeEventListener('ended', this.trackEnded); track.stop();
+      track.removeEventListener('ended', this.trackEnded);
+      track.removeEventListener('mute', this.trackMuted);
+      track.removeEventListener('unmute', this.trackUnmuted);
+      track.stop();
     }
     this.stream = null;
+  }
+  captureFinalTrackStates() {
+    if (this.stream && !this.hasFinalTrackStates) {
+      this.finalTrackStates = trackStates(this.stream); this.hasFinalTrackStates = true;
+    }
   }
   clearClip() { if (this.clip) this.revokeUrl(this.clip.url); this.clip = null; }
   discard() {
@@ -87,12 +140,15 @@ export class LocalAudioProbe {
   }
   async start() {
     if (!this.supported || ['requesting', 'recording', 'checking', 'stopping'].includes(this.phase)) return;
-    this.discard(); const generation = this.generation; this.change('requesting');
+    this.discard(); const generation = this.generation;
+    this.initialTrackStates = []; this.finalTrackStates = []; this.hasFinalTrackStates = false;
+    this.change('requesting');
     try {
       // This is the only microphone request; the UI calls it from an explicit button click.
       const stream = await this.requestStream({ audio: true, video: false });
       if (generation !== this.generation) { stream.getTracks().forEach(track => track.stop()); return; }
       this.stream = stream;
+      this.initialTrackStates = trackStates(stream);
       let recorder; let requestedMime = 'browser default';
       for (const type of MIME_CANDIDATES) {
         if (!this.Recorder.isTypeSupported?.(type)) continue;
@@ -103,7 +159,18 @@ export class LocalAudioProbe {
       this.recorder = recorder; this.requestedMime = requestedMime;
       this.recorderMime = recorder.mimeType || 'not reported'; this.chunks = []; this.bytes = 0;
       this.trackEnded = () => { if (generation === this.generation) this.interrupt('TRACK_ENDED'); };
-      stream.getTracks().forEach(track => track.addEventListener('ended', this.trackEnded));
+      const observeTrackEvent = event => {
+        if (generation !== this.generation || !this.stream) return;
+        this.events.push({ event, trackStates: trackStates(this.stream) });
+        this.onChange(this.snapshot());
+      };
+      this.trackMuted = () => observeTrackEvent('track-muted');
+      this.trackUnmuted = () => observeTrackEvent('track-unmuted');
+      stream.getTracks().forEach(track => {
+        track.addEventListener('ended', this.trackEnded);
+        track.addEventListener('mute', this.trackMuted);
+        track.addEventListener('unmute', this.trackUnmuted);
+      });
       recorder.ondataavailable = ({ data }) => {
         if (generation !== this.generation || !data.size) return;
         this.bytes += data.size;
@@ -133,6 +200,7 @@ export class LocalAudioProbe {
   }
   stop() {
     if (this.phase !== 'recording') return;
+    this.captureFinalTrackStates();
     this.elapsedSeconds = (this.now() - this.startedAt) / 1000;
     this.cancel(this.timer); this.timer = null; this.change('stopping');
     if (this.recorder?.state !== 'inactive') this.recorder.stop();
@@ -153,7 +221,8 @@ export class LocalAudioProbe {
       if (generation !== this.generation) return;
       this.clip = { url: this.createUrl(blob), evidence: { source, ...evidence,
         ...(source === 'recording' ? { requestedRecorderMime: this.requestedMime,
-          recorderReportedMime: this.recorderMime, captureWallSeconds: Number(this.elapsedSeconds.toFixed(3)) } : {}) } };
+          recorderReportedMime: this.recorderMime, captureWallSeconds: Number(this.elapsedSeconds.toFixed(3)),
+          initialTrackStates: this.initialTrackStates, finalTrackStates: this.finalTrackStates } : {}) } };
       this.change('ready');
     } catch (error) {
       if (generation !== this.generation) return;
