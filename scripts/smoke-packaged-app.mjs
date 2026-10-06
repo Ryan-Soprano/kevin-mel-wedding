@@ -21,6 +21,8 @@ const origin = "https://packaged-smoke.invalid";
 const username = "synthetic-operator";
 const password = "synthetic-local-smoke-password-0123456789";
 const environment = { ...process.env, SPRING_PROFILES_ACTIVE: "staging",
+  MEMORY_ARCHIVE_ENVIRONMENT: "staging", MEMORY_ARCHIVE_PUBLIC_ORIGIN: origin,
+  MEMORY_ARCHIVE_REVEALED: "false",
   MEMORY_ARCHIVE_STORAGE_ENABLED: "false", MEMORY_ARCHIVE_STAGING_USERNAME: username,
   MEMORY_ARCHIVE_STAGING_PASSWORD: password, MEMORY_ARCHIVE_STAGING_ORIGIN: origin };
 for (const name of Object.keys(environment)) if (name.startsWith("MEMORY_ARCHIVE_R2_")) delete environment[name];
@@ -76,7 +78,9 @@ try {
   for (const path of assets) assert.equal((await request(path)).status, 200);
   for (const path of ["/contract-preview.html", "/.env", "/backend/pom.xml", "/src/main.jsx", "/missing.js", "/api/missing-route"]) {
     const response = await request(path);
-    assert.equal(response.status, 404, "Excluded or unknown paths must stay unavailable.");
+    assert.equal(response.status, 401, "Excluded or unknown paths must be denied before resource resolution.");
+    assert.equal((await response.json()).error.code, "AUTH_REQUIRED");
+    assert.equal(response.headers.get("cache-control"), "no-store");
     assert.doesNotMatch(response.headers.get("content-type") || "", /^text\/html/, "Unknown API/assets cannot fall back to the app.");
   }
   const mutation = { method: "POST", headers: { "Content-Type": "application/json", "X-Api-Contract": "1",

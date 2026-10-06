@@ -3,13 +3,13 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { request as httpRequest } from "node:http";
 
 // This script never builds or pulls images, uses an existing database, or enables R2.
-// Usage: node scripts/smoke-container.mjs [kevin-mel-wedding:pr15-verify]
+// Usage: node scripts/smoke-container.mjs [kevin-mel-wedding:verify]
 // DOCKER_BIN may name docker.exe directly on Windows. No host shell is invoked.
 class SmokeFailure extends Error {}
 const check = (condition, message) => { if (!condition) throw new SmokeFailure(message); };
 const arguments_ = process.argv.slice(2);
 check(arguments_.length <= 1, "Supply at most one existing application image name.");
-const image = arguments_[0] || "kevin-mel-wedding:pr15-verify";
+const image = arguments_[0] || "kevin-mel-wedding:verify";
 check(image.length > 0 && !image.startsWith("-"), "Supply an existing application image name.");
 const dockerBin = process.env.DOCKER_BIN || "docker";
 const runId = randomUUID();
@@ -26,6 +26,8 @@ const databasePassword = randomBytes(32).toString("hex");
 const environment = { ...process.env, POSTGRES_DB: "container_smoke", POSTGRES_USER: "synthetic_smoke",
   POSTGRES_PASSWORD: databasePassword, PGPASSWORD: databasePassword, PGDATA: "/var/lib/postgresql/data",
   SPRING_PROFILES_ACTIVE: "staging", PORT: "10000", MEMORY_ARCHIVE_STORAGE_ENABLED: "false",
+  MEMORY_ARCHIVE_ENVIRONMENT: "staging", MEMORY_ARCHIVE_PUBLIC_ORIGIN: origin,
+  MEMORY_ARCHIVE_REVEALED: "true", MEMORY_ARCHIVE_LOGIN_THROTTLE_SECRET: randomBytes(32).toString("hex"),
   MEMORY_ARCHIVE_DB_URL: "jdbc:postgresql://" + database + ":5432/container_smoke",
   MEMORY_ARCHIVE_DB_USERNAME: "synthetic_smoke", MEMORY_ARCHIVE_DB_PASSWORD: databasePassword,
   MEMORY_ARCHIVE_STAGING_USERNAME: username, MEMORY_ARCHIVE_STAGING_PASSWORD: password,
@@ -127,6 +129,45 @@ async function setAddress() {
 }
 const apiHeaders = (key) => ({ "Content-Type": "application/json", "X-Api-Contract": "1", "Idempotency-Key": key, Origin: origin });
 const submit = (key, payload) => request("/api/contributions", { method: "POST", headers: apiHeaders(key), body: JSON.stringify(payload) });
+async function sql(statement) {
+  return (await docker(["container", "exec", "-e", "PGPASSWORD", database, "psql", "-v", "ON_ERROR_STOP=1",
+    "-h", "127.0.0.1", "-U", "synthetic_smoke", "-d", "container_smoke", "-A", "-t", "-c", statement],
+    "Synthetic authentication database fixture operation")).output;
+}
+const sessionCookie = (response) => {
+  const cookies = response.headers.getSetCookie();
+  const cookie = cookies.find((value) => value.startsWith("MEMORY_ARCHIVE_SESSION="));
+  if (cookie) {
+    check(/;\s*Secure(?:;|$)/i.test(cookie) && /;\s*HttpOnly(?:;|$)/i.test(cookie)
+      && /;\s*SameSite=Lax(?:;|$)/i.test(cookie), "Staging session cookies require Secure, HttpOnly and SameSite=Lax.");
+    return cookie.split(";")[0];
+  }
+};
+async function currentSession(cookie) {
+  const response = await request("/api/session", { headers: { "X-Api-Contract": "1", ...(cookie ? { Cookie: cookie } : {}) } });
+  check(response.status === 200 && response.headers.get("cache-control") === "no-store", "Session discovery must be successful and private.");
+  const body = await json(response);
+  check(typeof body.csrfToken === "string" && body.csrfToken.length > 0, "Session discovery must supply a CSRF token.");
+  return { cookie: sessionCookie(response) || cookie, body };
+}
+async function coupleLogin() {
+  const anonymous = await currentSession();
+  check(anonymous.body.authenticated === false && anonymous.body.user === null, "Staging admission must not grant couple authority.");
+  const response = await request("/api/session", { method: "POST", headers: { "Content-Type": "application/json",
+    "X-Api-Contract": "1", "X-CSRF-Token": anonymous.body.csrfToken, Cookie: anonymous.cookie, Origin: origin },
+    body: JSON.stringify({ username: "synthetic-couple", password: "synthetic-auth-container-passphrase" }) });
+  check(response.status === 200, "The disposable enabled couple must sign in through the real account repository.");
+  const cookie = sessionCookie(response);
+  const body = await json(response);
+  check(cookie && cookie !== anonymous.cookie && body.csrfToken !== anonymous.body.csrfToken,
+    "Authentication must rotate both the session identifier and CSRF token.");
+  check(body.authenticated === true && body.user.displayName === "Synthetic Couple"
+    && JSON.stringify(body.user.roles) === '["COUPLE"]'
+    && JSON.stringify(Object.keys(body.user).sort()) === '["displayName","roles"]', "Session responses must expose only safe couple identity.");
+  return { cookie, body };
+}
+const privateRequest = (cookie, id) => request("/api/memories/" + id + "/playback",
+  { headers: { "X-Api-Contract": "1", ...(cookie ? { Cookie: cookie } : {}) } });
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function verifyReceipt(receipt) {
   check(JSON.stringify(Object.keys(receipt).sort()) === JSON.stringify(["contributionId", "createdAt", "eventKey", "completion", "memories"].sort()),
@@ -215,6 +256,7 @@ try {
   check(databaseReady, "The disposable database did not become ready within one minute.");
   attemptedContainers.push(application);
   const applicationEnv = ["SPRING_PROFILES_ACTIVE", "PORT", "MEMORY_ARCHIVE_STORAGE_ENABLED", "MEMORY_ARCHIVE_DB_URL",
+    "MEMORY_ARCHIVE_ENVIRONMENT", "MEMORY_ARCHIVE_PUBLIC_ORIGIN", "MEMORY_ARCHIVE_REVEALED", "MEMORY_ARCHIVE_LOGIN_THROTTLE_SECRET",
     "MEMORY_ARCHIVE_DB_USERNAME", "MEMORY_ARCHIVE_DB_PASSWORD", "MEMORY_ARCHIVE_STAGING_USERNAME",
     "MEMORY_ARCHIVE_STAGING_PASSWORD", "MEMORY_ARCHIVE_STAGING_ORIGIN", "JAVA_TOOL_OPTIONS"];
   await docker(["container", "create", "--pull=never", "--name", application, "--label", label, "--network", network,
@@ -251,8 +293,7 @@ try {
   }
   for (const path of ["/contract-preview.html", "/.env", "/backend/pom.xml", "/src/main.jsx", "/missing.js", "/api/missing-route"]) {
     const response = await request(path);
-    check(response.status === 404, "Excluded sources, secrets and unknown paths must remain unavailable.");
-    await json(response); // Spring's default 404 JSON is not an ApiException envelope.
+    await expectError(response, 401, "AUTH_REQUIRED"); // The AUTH default-deny boundary runs before resource resolution.
     check(response.headers.get("cache-control") === "no-store", "Unknown staging paths must be marked no-store.");
   }
   const invalidKey = randomUUID();
@@ -297,10 +338,47 @@ try {
   const recoveredReceipt = verifyReceipt(await json(recovered));
   await readReceipt(recoveredReceipt, lostKey);
 
+  console.log("Container smoke: checking real SQL/bcrypt sessions, staging separation, CSRF, logout and account revocation.");
+  // Fixed low-cost hash is solely for this known synthetic passphrase in this disposable database.
+  await sql("INSERT INTO archive_account (username, display_name, password_hash, role, enabled) VALUES " +
+    "('synthetic-couple', 'Synthetic Couple', '{bcrypt}$2a$04$wzmk5ETbKnNeNERXKff2ZuhBkdnCKIlCI8Mml0tFgEkMdWcZgQ3g6', 'COUPLE', true);");
+  const missingMemory = randomUUID();
+  await expectError(await privateRequest(null, missingMemory), 401, "AUTH_REQUIRED");
+  const initialSession = await currentSession();
+  await expectError(await request("/api/session", { method: "POST", headers: { "Content-Type": "application/json",
+    "X-Api-Contract": "1", Cookie: initialSession.cookie, Origin: origin },
+    body: JSON.stringify({ username: "synthetic-couple", password: "synthetic-auth-container-passphrase" }) }), 403, "CSRF_INVALID");
+  let couple = await coupleLogin();
+  await expectError(await privateRequest(couple.cookie, missingMemory), 404, "NOT_FOUND");
+  await expectError(await request("/api/session", { admitted: false, headers: { "X-Api-Contract": "1", Cookie: couple.cookie } }),
+    401, "STAGING_AUTH_REQUIRED");
+  await expectError(await request("/api/session", { method: "DELETE", headers: { "X-Api-Contract": "1", Cookie: couple.cookie, Origin: origin } }),
+    403, "CSRF_INVALID");
+  const logout = await request("/api/session", { method: "DELETE", headers: { "X-Api-Contract": "1",
+    Cookie: couple.cookie, "X-CSRF-Token": couple.body.csrfToken, Origin: origin } });
+  check(logout.status === 204, "A same-origin CSRF-protected logout must invalidate the session.");
+  await expectError(await privateRequest(couple.cookie, missingMemory), 401, "AUTH_REQUIRED");
+  couple = await coupleLogin();
+  await sql("UPDATE archive_account SET credentials_version = credentials_version + 1 WHERE username = 'synthetic-couple';");
+  await expectError(await privateRequest(couple.cookie, missingMemory), 401, "AUTH_REQUIRED");
+  couple = await coupleLogin();
+  await sql("UPDATE archive_account SET enabled = false, credentials_version = credentials_version + 1 WHERE username = 'synthetic-couple';");
+  await expectError(await privateRequest(couple.cookie, missingMemory), 401, "AUTH_REQUIRED");
+  await sql("UPDATE archive_account SET enabled = true, credentials_version = credentials_version + 1 WHERE username = 'synthetic-couple';");
+  couple = await coupleLogin();
+
   console.log("Container smoke: restarting only the temporary app and checking retained receipts and database rows.");
   await docker(["container", "restart", "--time", "5", application], "Temporary application restart");
   await setAddress();
   await waitForApp();
+  check((await currentSession(couple.cookie)).body.authenticated === false, "Process restart must discard old in-memory authentication.");
+  await expectError(await privateRequest(couple.cookie, missingMemory), 401, "AUTH_REQUIRED");
+  couple = await coupleLogin();
+  const rateLimited = await request("/api/session", { method: "POST", headers: { "Content-Type": "application/json",
+    "X-Api-Contract": "1", Cookie: couple.cookie, "X-CSRF-Token": couple.body.csrfToken, Origin: origin },
+    body: JSON.stringify({ username: "synthetic-couple", password: "synthetic-auth-container-passphrase" }) });
+  await expectError(rateLimited, 429, "RATE_LIMITED");
+  check(rateLimited.headers.get("retry-after") === "900", "The persistent login cap must supply Retry-After.");
   for (const [key, payload, receipt] of [[namedKey, namedPayload, namedReceipt], [concurrentKey, concurrentPayload, concurrentReceipt], [lostKey, lostPayload, recoveredReceipt]]) {
     await readReceipt(receipt, key);
     const replay = await submit(key, payload);
@@ -331,5 +409,5 @@ if (!cleanupComplete) {
   console.error("Container smoke failed: " + failure + " Its temporary resources were removed.");
   process.exitCode = 1;
 } else {
-  console.log("Container smoke passed: isolated 2GB nonroot app, staging access/assets/API, three committed private text receipts, concurrent retries, discarded-response recovery and app restart. All temporary resources removed. No R2 or existing database access.");
+  console.log("Container smoke passed: isolated 2GB nonroot app, staging access/assets/API, three committed private text receipts, concurrent retries, discarded-response recovery, SQL/bcrypt couple login, Secure cookies, CSRF/session rotation, logout/version/disable revocation, restart and persistent login cap. All temporary resources removed. No R2 or existing database access.");
 }

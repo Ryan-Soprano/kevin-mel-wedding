@@ -203,7 +203,7 @@ function decodeGrant(value) {
   return value;
 }
 
-/** Durable v1 adapter for text and photos; audio/auth/archive routes remain future server work. */
+/** Durable v1 adapter for text, photos, sessions and photo playback; audio and inbox/review routes remain future server work. */
 export function createArchiveApi({
   client = createApiClient(), uploadFetch = globalThis.fetch,
 } = {}) {

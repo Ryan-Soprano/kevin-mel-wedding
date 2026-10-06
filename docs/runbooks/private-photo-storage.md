@@ -1,4 +1,4 @@
-# Private photo storage — MED-01
+# Private photo storage — MED-01 and AUTH-02
 
 Prepared 2026-10-05. Ryan has configured a test bucket and completed desktop PNG operator comparison/restart/replay and scripted real-R2 JPEG/WebP upload, recovery and grant checks; the [verification record](../api/v1/photo-verification.md) contains the evidence and limits. The setup steps below remain the reusable operator procedure; staging lifecycle/bucket settings, JPEG/WebP operator reread and physical-device checks are not yet verified. Use synthetic photos first. Production collection still needs the security, operations, and release tasks in Notion.
 
@@ -10,18 +10,22 @@ The server signs a PUT for a unique `staging/<grant UUID>` key, its declared Con
 
 R2 presigned URLs can be reused until expiry. A browser grant never targets the saved original, so later staging replacements cannot change it. Size and SHA-256 are verified by the server; the signed URL itself does not enforce a byte-size ceiling. See [Cloudflare presigned URLs](https://developers.cloudflare.com/r2/api/s3/presigned-urls/). Shared-network rate limits and abuse controls remain SEC work before public collection.
 
+AUTH-02 adds `GET /api/memories/{memoryId}/playback` for an eligible verified PHOTO original. Each request rechecks the couple account and reveal gate, verifies the original's size/MIME through authenticated storage HEAD, and signs a single-object HTTPS GET over the S3 API for at most 300 seconds. The returned expiry is the signature's actual expiry. Unfinished/failed uploads, TEXT/AUDIO, missing or wrong-event memories and DELETE items return safe 404. Eligible originals missing or unavailable at storage return 503 MEDIA_UNAVAILABLE. Inbox/list/detail/review, audio and the playback UI remain later work; DELETE playback stays blocked until the future INB-02 restore flow restores an item. See [authorization verification](../api/v1/authorization-verification.md).
+
+A playback URL is a reusable bearer permission for anyone who obtains it until its own expiry. Logout, recovery, disablement or closing reveal prevent new issuance, but do not revoke existing URLs or an in-progress download. `no-store` does not erase downloaded bytes. Keep originals and staging private with `r2.dev` and public custom domains disabled. The later playback UI must omit app credentials, use `no-referrer` and never persist/log signed URLs.
+
 ## Ryan's setup steps
 
 1. In Cloudflare, choose the intended account and open **R2 object storage**. Create a separate synthetic test bucket with Standard storage and the ordinary global S3 endpoint. The application currently accepts `https://<32-character-account-id>.r2.cloudflarestorage.com`; jurisdiction-specific endpoints need a separately reviewed configuration change. See [Create buckets](https://developers.cloudflare.com/r2/buckets/create-buckets/).
 2. In the bucket's Settings, keep its **Public Development URL disabled** and attach **no public custom domain**. Never use a public bucket to resolve a CORS error. Check private access again before collecting any guest photo. See [Public buckets](https://developers.cloudflare.com/r2/buckets/public-buckets/).
 3. Create an R2 API token with **Object Read & Write**, scoped only to this test bucket. Store its Access Key ID and Secret Access Key in your password manager, then supply them only to the backend environment. An application object token does not need bucket-management privileges. See [R2 authentication](https://developers.cloudflare.com/r2/api/tokens/).
-4. Add the following bucket CORS policy for local Vite. Replace/add origins only for environments you deliberately approve. A phone testing URL needs its own exact HTTPS origin. CORS permits the browser PUT; it does not make objects public. See [R2 CORS](https://developers.cloudflare.com/r2/buckets/cors/).
+4. Add the following bucket CORS policy for local Vite. Replace/add origins only for environments you deliberately approve. A phone testing URL needs its own exact HTTPS origin. CORS permits browser PUT/GET and controlled HEAD checks; it does not make objects public or extend a signature's operation. Server-side authenticated HEAD does not depend on browser CORS, and a signed GET cannot be reused as a signed HEAD. See [R2 CORS](https://developers.cloudflare.com/r2/buckets/cors/).
 
 ```json
 [
   {
     "AllowedOrigins": ["http://localhost:5173", "http://127.0.0.1:5173"],
-    "AllowedMethods": ["PUT"],
+    "AllowedMethods": ["PUT", "GET", "HEAD"],
     "AllowedHeaders": ["Content-Type"],
     "MaxAgeSeconds": 300
   }
@@ -32,7 +36,9 @@ R2 presigned URLs can be reused until expiry. A browser grant never targets the 
 
 ## Backend configuration
 
-Keep the default `MEMORY_ARCHIVE_STORAGE_ENABLED=false` until the bucket/token/CORS are ready. Disabled storage returns safe `503 MEDIA_UNAVAILABLE` for photo creation/grants; text still works. `/api/health` is not storage readiness. Enabling storage validates configuration at startup; connectivity and permissions are tested by actual IO.
+Keep the default `MEMORY_ARCHIVE_STORAGE_ENABLED=false` until the bucket/token/CORS are ready. Disabled storage returns safe `503 MEDIA_UNAVAILABLE` for photo creation/grants and otherwise eligible photo playback; text still works. `/api/health` is not storage readiness. Enabling storage validates configuration at startup; connectivity and permissions are tested by actual IO.
+
+For reusable local setup, run `bash scripts/configure-local-r2.sh` from the repository root. It prompts for the endpoint and private test bucket, reads both keys silently, and saves Bash-escaped exports to ignored `.env.r2.local` without overwriting an existing file. Run `source .env.r2.local` in each backend terminal before starting Spring. Exporting variables alone stores them only in that terminal and its child processes; Spring does not save them. Keep the file local and never copy its contents into evidence.
 
 In **Git Bash**, set only nonsensitive configuration literally. Read credentials silently so they do not enter shell history:
 
@@ -70,11 +76,26 @@ JOIN media_asset a ON a.memory_id=m.id
 WHERE m.id='YOUR_SYNTHETIC_MEMORY_UUID';
 ```
 
-4. Download the `originals/…` object through Cloudflare's authenticated dashboard, or an already approved authenticated S3 client. Compare it with the input using Git Bash `sha256sum input.png downloaded.png` and `cmp -- input.png downloaded.png`. Verify size/hash match database metadata. Authorized operator retrieval is infrastructure access; a couple inbox/playback endpoint is not implemented yet.
+4. Download the `originals/…` object through Cloudflare's authenticated dashboard, or an already approved authenticated S3 client. Compare it with the input using Git Bash `sha256sum input.png downloaded.png` and `cmp -- input.png downloaded.png`. Verify size/hash match database metadata. Authorized operator retrieval is infrastructure access. AUTH-02 separately implements couple-authorized photo playback issuance; its real R2 acceptance is below, and the inbox/viewer UI remains pending.
 5. Restart Spring with the same database and bucket: leave Vite and the photo page open, stop Spring with Ctrl+C in its Git Bash terminal, then run `./backend/mvnw -f backend/pom.xml spring-boot:run` in that same shell so its exported credentials remain available. Repeat the scoped SQL query and download/hash comparison for the same original. This proves existing identity/state and retrieval survive an application restart. Separately, a retained same-key/body API request must replay the same IDs and `COMPLETE`; the saved form has no retry action, and refreshing/reselecting a photo creates a new intent rather than proving replay.
 6. Interrupt the response after PUT and after successful finalize. Keep the page open; deliberately retry. It must reconcile the same intent/grant, not create another memory. Wait more than five minutes with an unfinished intent, then retry to renew only the grant. Repeated taps must coalesce.
 7. Confirm unsigned S3 GET of the known original is denied and both public bucket mechanisms remain disabled. Confirm the upload grant cannot GET/delete an object, change the key or Content-Type, or target `originals/`. A disallowed browser origin must fail CORS. Never record the signed URL in evidence.
 8. Record evidence on MED-01 and in `docs/api/v1/photo-verification.md`. Keep MED-01 unfinished until real R2, retrieval comparison, phone, restart, and privacy evidence is present. Synthetic tests do not prove these checks.
+
+## Authenticated photo playback — AUTH-02 home acceptance
+
+Run these checks after Ryan finishes the private synthetic bucket setup at home. Use a disposable enabled synthetic COUPLE account in local/staging with reveal explicitly open; do not provision real couple accounts or send invitations. Keep downloaded synthetic files separate from the repository and do not paste signed URLs, cookies, CSRF tokens or credentials into chat, Notion, screenshots, shell history or saved evidence. Local fixtures are not proof of these provider checks.
+
+October 5 home progress: Ryan saved the ignored local credentials file. The integrated Docker image now passes actual R2 JPEG/PNG/WebP finalization, authenticated HEAD, byte-identical signed GET, signature scope and actual five-minute expiry, unsigned-access denial and session revocation checks with a disposable database. Owned fixtures/resources were removed. See the [dated authorization evidence](../api/v1/authorization-verification.md#real-r2-verification--2026-10-05). The current local bucket policy is PUT-only: add GET/HEAD using the exact policy above, then repeat the controlled browser read. Hosted/device acceptance and token/public-domain/staging-lifecycle confirmation remain separate checks.
+
+1. Verify both bucket public mechanisms remain disabled: no `r2.dev` URL and no public custom domain. Confirm unsigned S3 GET and HEAD of the known original and staging object are denied. The app must use the configured S3 HTTPS endpoint rather than either public mechanism.
+2. Finalize a known synthetic JPEG, PNG and WebP using the existing upload path. Use the approved authenticated S3 client to confirm HEAD reports the same byte count and MIME as the database. Confirm the application token has only the intended bucket's read/write permissions. The token stays in the backend environment.
+3. Through the real session adapter, sign in to the synthetic couple account and request `GET /api/memories/{memoryId}/playback` with `X-Api-Contract: 1`. Check that its response is `no-store`, that the URL signs GET for this single original, and that `expiresAt` equals the signature's real expiry within 300 seconds. Requesting unfinished/failed, TEXT/AUDIO, wrong-event/missing or DELETE items must return 404 without issuing a URL. For a disposable eligible row whose original is missing, verify safe 503 MEDIA_UNAVAILABLE; restore the fixture before further checks.
+4. In a controlled browser check from an approved exact app origin, fetch the signed object with application credentials omitted, `no-referrer`, and no session/CSRF/retry/authorization headers. Verify real GET succeeds under the bucket CORS policy and its downloaded bytes/hash match the original. A disallowed origin must fail CORS. If separately testing browser HEAD, use an authenticated/independently signed HEAD for the synthetic object; the GET URL does not authorize that operation. The private playback UI is not implemented yet, so record this as provider/browser acceptance.
+5. In memory only, change the signed path to another synthetic original or staging object, alter a signature parameter, and attempt a different method. Each must fail; the unchanged GET URL must still access only its intended original. Neither the upload PUT grant nor the playback GET link should authorize the other's operation, deletion or another object.
+6. Reuse the unchanged GET link before its own expiry, then wait past the returned `expiresAt` and verify a new GET is denied. Obtain a new link through the authenticated app endpoint to confirm renewal requires current account/reveal access. Do not save expired URLs as evidence.
+7. Using separate disposable sessions/fixtures, verify logout, password recovery, disabling the account and closing reveal prevent new issuance. A previously issued link may still GET until its own expiry; an in-progress download is not revoked. This is the documented bearer boundary, not a failed session revocation. Clearing app state or `no-store` cannot erase already downloaded bytes.
+8. Record only nonsensitive outcomes, browser/OS, date, bounded expiry and synthetic fixture labels on AUTH-02 and in `docs/api/v1/authorization-verification.md`. Keep real R2 acceptance pending until these checks pass. Run the full Docker/PostgreSQL 17 backend suite separately; R2 acceptance does not replace it.
 
 ## Cleanup, recovery, and retention
 

@@ -72,6 +72,8 @@ This is local Docker evidence with synthetic inputs and a disposable database. I
 
 ## Remaining acceptance
 
+AUTH-02's October 5 home check now exercises the integrated image against real R2 with a disposable PostgreSQL 17 database: new tiny synthetic JPEG/PNG/WebP intents finalize, authenticated original HEAD matches metadata, and signed original GET preserves exact bytes. Signature scope/expiry and unsigned GET/HEAD denial pass; all owned objects/resources were removed. See [authorization evidence](authorization-verification.md#real-r2-verification--2026-10-05). These new fixtures do not claim operator reread of the earlier six retained intents. The actual browser playback probe found that the current PUT-only CORS policy needs GET/HEAD added; phone/hosted, token scope, public settings and lifecycle acceptance remain open.
+
 - Complete the [private R2 runbook](../../runbooks/private-photo-storage.md) with Ryan: verify token scope, staging-only lifecycle and private bucket settings; approve/setup the [full-app HTTPS staging environment](../../runbooks/staging-deployment.md) and its exact-origin CORS. Local-origin CORS and unapproved-origin rejection are verified above.
 - Actual iPhone Safari and Android Chrome selection/upload/retry; HEIC rejection; VoiceOver/TalkBack announcement and focus checks.
 - Retrieve/compare the two JPEG/WebP originals above after staging replacement; repeat input/download/DB size/hash comparisons for physical-device tests. Desktop PNG retrieval/restart/replay/conflict and scripted provider recovery/grant checks are complete.

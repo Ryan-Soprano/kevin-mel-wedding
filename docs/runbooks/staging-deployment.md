@@ -61,16 +61,16 @@ Use the database/user for the intended local test instance if they differ. Start
 With local Docker and the existing `postgres:17` image cached, build the reviewed image and run the smoke:
 
 ```bash
-docker build --tag kevin-mel-wedding:pr15-verify .
-node scripts/smoke-container.mjs kevin-mel-wedding:pr15-verify
+docker build --tag kevin-mel-wedding:verify .
+node scripts/smoke-container.mjs kevin-mel-wedding:verify
 ```
 
 If Docker is not on PATH, use its existing executable. On Ryan's Windows installation, in Git Bash:
 
 ```bash
 export DOCKER_BIN='C:/Users/Ryan/AppData/Local/Programs/DockerDesktop/resources/bin/docker.exe'
-"$DOCKER_BIN" build --tag kevin-mel-wedding:pr15-verify .
-node scripts/smoke-container.mjs kevin-mel-wedding:pr15-verify
+"$DOCKER_BIN" build --tag kevin-mel-wedding:verify .
+node scripts/smoke-container.mjs kevin-mel-wedding:verify
 ```
 
 The helper rejects remote Docker endpoints and never pulls/builds images. It creates a uniquely named, labeled bridge network, disposable PostgreSQL 17 with tmpfs data/no host port, and a nonroot read-only 2 GB app with writable `/tmp`. Only an ephemeral `127.0.0.1` app port is published. Credentials are synthetic/private, R2 is disabled, and cleanup is limited by ownership labels to its own resources. The existing development DB/volume is not accessed.
@@ -85,7 +85,7 @@ Activating the `staging` Spring profile requires an operator-selected username, 
 
 All application routes, including built assets and guest mutations, require this temporary HTTP Basic gate except **exactly `GET /api/health`**. Requests through an unexpected forwarded origin or non-HTTPS path get safe 403; missing/wrong admission credentials get safe 401. Gate responses use fixed JSON, `Cache-Control: no-store` and no credential logging. Direct R2 transfer remains a separate short-lived signed PUT and receives no application authorization header.
 
-Render terminates HTTPS and forwards requests to the internal HTTP port. This profile trusts that approved proxy's forwarding; do not place it behind an arbitrary proxy or expose its internal port directly. Verify Render forwarding and the externally observed gate after deployment. The gate is for Ryan and explicitly approved synthetic testers. It does not implement couple accounts, review authority, production abuse controls or the surprise reveal. Keep staging credentials in Ryan's password manager, distribute them only to approved testers, and rotate them after testing. Avoid screenshots or copied request commands containing credentials.
+Render terminates HTTPS and forwards requests to the internal HTTP port. This profile trusts that approved proxy's forwarding; do not place it behind an arbitrary proxy or expose its internal port directly. Verify Render forwarding and the externally observed gate after deployment. The gate is for Ryan and explicitly approved synthetic testers. AUTH-01 couple sessions are a second, independent boundary: passing the staging gate gives no couple authority. The staging profile emits Secure session cookies. Reveal remains closed until a deliberate synthetic verification exercise; production abuse controls and reveal onboarding remain release work. Login throttling captures the connection peer before forwarded-header processing, so clients behind the approved proxy may share its peer limit. Keep staging credentials in Ryan's password manager, distribute them only to approved testers, and rotate them after testing. Avoid screenshots or copied request commands containing credentials.
 
 ## Approval and manual setup
 
@@ -97,11 +97,15 @@ After approval, Ryan performs or explicitly directs these steps:
 2. Create a separate **Docker web service**, proposed name `kevinandmel-staging`, in the same Ohio region/account. Repository root is the build context; Dockerfile path is `./Dockerfile`. Select the approved application plan, one instance, no service autoscaling and **automatic deployment disabled**. Use only the explicitly reviewed branch/commit. Docker supplies the build and start commands; do not run Vite or the coming-soon helper here. See [Docker on Render](https://render.com/docs/docker).
 3. Record its assigned provider HTTPS URL. Enter all settings below manually in the service environment before a successful deployment, then set `MEMORY_ARCHIVE_STAGING_ORIGIN` to that exact origin. If an initial creation attempt starts before the origin/secrets are supplied, the staging profile must fail closed; configure it and perform a deliberate manual deployment. Never remove the gate to make startup pass. See [Render environment variables and secrets](https://render.com/docs/configure-environment-variables).
 4. Set the health-check path to `/api/health`. Confirm the selected commit and perform the approved **manual deployment**. Keep automatic deployment disabled while acceptance, memory sizing and migration/rollback safety are being proved. Do not create deployment hooks or attach the public wedding domain during this stage.
-5. Confirm the gate and same-origin UI/API checks below. Then add this exact HTTPS origin to the private **test** R2 bucket CORS allowlist, preserving the approved local origins. Keep `PUT`, `Content-Type` and the existing narrow policy. Use [private photo storage setup](private-photo-storage.md) for bucket privacy, token scope and lifecycle; a wildcard or public bucket is not a fix for CORS.
+5. Confirm the gate and same-origin UI/API checks below. Then add this exact HTTPS origin to the private **test** R2 bucket CORS allowlist, preserving the approved local origins. Use only `PUT`, `GET`, `HEAD`, `Content-Type` and the approved exact origins; AUTH-02 playback needs browser GET. Use [private photo storage setup](private-photo-storage.md) for bucket privacy, token scope and lifecycle; a wildcard or public bucket is not a fix for CORS.
 
 | Server environment variable | Required value / entry method |
 |---|---|
 | `SPRING_PROFILES_ACTIVE` | `staging` (also the image default; retain it explicitly in the service settings) |
+| `MEMORY_ARCHIVE_ENVIRONMENT` | `staging`; never label this test database as production |
+| `MEMORY_ARCHIVE_PUBLIC_ORIGIN` | Same exact HTTPS origin as `MEMORY_ARCHIVE_STAGING_ORIGIN` |
+| `MEMORY_ARCHIVE_REVEALED` | `false`; temporarily open only for approved disposable synthetic COUPLE verification |
+| `MEMORY_ARCHIVE_LOGIN_THROTTLE_SECRET` | Stable random secret of at least 32 bytes, entered privately |
 | `PORT` | Render's assigned port, normally `10000`; the profile binds on all interfaces |
 | `MEMORY_ARCHIVE_DB_URL` | `jdbc:postgresql://INTERNAL_HOST:5432/TEST_DATABASE?sslmode=require`; construct from individual private connection fields, with no embedded username/password |
 | `MEMORY_ARCHIVE_DB_USERNAME` | Separate test-database user, entered privately |
@@ -116,7 +120,7 @@ After approval, Ryan performs or explicitly directs these steps:
 | `MEMORY_ARCHIVE_R2_SECRET_ACCESS_KEY` | Corresponding secret, entered privately |
 | `JAVA_TOOL_OPTIONS` | Only the separately approved and measured heap/exit configuration for the selected plan |
 
-The staging DB settings are mandatory; there is no localhost fallback in that profile. A Render `postgresql://user:password@…` connection string is not a JDBC URL and must not be pasted into `MEMORY_ARCHIVE_DB_URL`. Render's internal TLS supports `sslmode=require`; do not claim certificate verification from that setting. Put no secret in `VITE_*`, Git, Notion, screenshots, commands with literal passwords, build arguments or copied logs. `.env` is not automatically loaded. Flyway applies the existing V1/V2/V3 migrations to this separate test database at startup; never rewrite applied migrations or run a database reset against retained evidence.
+The staging DB settings are mandatory; there is no localhost fallback in that profile. A Render `postgresql://user:password@…` connection string is not a JDBC URL and must not be pasted into `MEMORY_ARCHIVE_DB_URL`. Render's internal TLS supports `sslmode=require`; do not claim certificate verification from that setting. Put no secret in `VITE_*`, Git, Notion, screenshots, commands with literal passwords, build arguments or copied logs. `.env` is not automatically loaded. Flyway applies the reviewed V1–V5 migrations to this separate test database at startup; never rewrite applied migrations or run a database reset against retained evidence.
 
 ## Hosted verification and phone acceptance
 
@@ -146,3 +150,9 @@ October 5 local verification: **40 backend tests** pass with zero failures/error
 The actual JAR smoke check passes: unauthenticated health 200; admitted HTML/CSS/JS assets 200; missing admission 401; unapproved forwarded host and HTTP 403; preview, environment/source, missing-asset and unknown API paths 404 without HTML fallback; same-origin empty-text request 400 `VALIDATION_FAILED`; cross-origin mutation 403 `ORIGIN_INVALID`. The smoke helper's syntax and missing-Java cleanup behavior also pass. Storage was disabled and no submission/R2 writes occurred. The original local backend on 8080 and Vite on 5173 remain running; the smoke child used another port and stopped after its check. These checks do not establish hosted forwarding, real mobile browser admission, Docker runtime capacity or provider durability.
 
 Still required: hosted capacity/budget approval; full-limit/overlapping photo memory measurements; provider provisioning/deployment; hosted DB and R2 settings; exact staging CORS and staging-only lifecycle; phones, authenticated original comparison and hosted restart/redeployment. Local image build/runtime/codec checks pass. No paid resources, provider changes, hosted deployment or domain changes occurred.
+
+## Integrated authentication image — 2026-10-05
+
+The AUTH branch passes **98 backend tests** against disposable PostgreSQL 17 and **73 frontend tests**, lint/build and zero-vulnerability audit. Its actual image `kevin-mel-wedding:auth-home-verify` (`sha256:4ae3d9faac1ef36495be7139c2b9f95dcb8b887767e220554c64f345f977d9d1`) passes the expanded isolated smoke: existing guest receipt/retry/restart checks, separate staging admission, real SQL/bcrypt couple login, Secure/HttpOnly/SameSite cookies, session-ID/CSRF rotation, logout, credential-version and disable revocation, loss of in-memory authentication on restart, and persisted five-attempt login cap. All owned temporary resources were removed. R2 remained disabled.
+
+Historical PR #15 404 checks above preceded AUTH default-deny routing; current helpers expect safe anonymous `401 AUTH_REQUIRED` for unknown/excluded paths. Hosted HTTPS/proxy/cookie behavior, real R2 reads, full-limit capacity and physical devices remain unverified.

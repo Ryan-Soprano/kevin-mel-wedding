@@ -1,6 +1,6 @@
 # Memory Archive API — contract v1
 
-This API-01 handoff defines the interface for subsequent backend implementation.
+This API-01 contract defines implemented v1 endpoints and interfaces for later server work.
 The [executable fixtures](../../../frontend/src/shared/api/v1/fixtures.js) contain
 complete synthetic request/response examples. Change the contract, fixtures,
 adapters, and tests together.
@@ -9,16 +9,20 @@ adapters, and tests together.
 
 MSG-01 implements durable text POST and key-bound text receipt GET, and the wedding form uses the [real adapter](../../../frontend/src/shared/api/archiveApi.js). New text returns 201 only after commit; equivalent retries return 200 with original identity and current states. The [mock](../../../frontend/src/shared/api/mockArchiveApi.js) remains an isolated synthetic server behind the real transport/decoders.
 
-MED-01 implements PHOTO intents (one to five), capability-bound grants/finalization, and generic receipt GET, plus a minimal single-photo wedding form. Storage is opt-in and requires a private R2 bucket configured by Ryan. Desktop PNG operator comparison/restart/replay and scripted real-R2 JPEG/WebP upload, recovery and grant checks are verified; physical-phone, additional operator comparison and bucket-settings acceptance are pending. Audio, authentication, private inbox/review/playback, and production operations remain future server work. Mock success is not production-readiness evidence. See [text verification](text-verification.md), [photo verification](photo-verification.md), and the [R2 runbook](../../runbooks/private-photo-storage.md).
+MED-01 implements PHOTO intents (one to five), capability-bound grants/finalization, and generic receipt GET, plus a minimal single-photo wedding form. Storage is opt-in and requires a private R2 bucket configured by Ryan. Desktop PNG operator comparison/restart/replay and scripted real-R2 JPEG/WebP upload, recovery and grant checks are verified; physical-phone, additional operator comparison and bucket-settings acceptance are pending. See [text verification](text-verification.md), [photo verification](photo-verification.md), and the [R2 runbook](../../runbooks/private-photo-storage.md).
 
-The [staging package](../../runbooks/staging-deployment.md) serves production frontend assets and `/api` through one Spring process. Its staging-only operator access gate is separate from the future couple session API. Staging limits overlapping photo finalization to one: a busy request returns `503 MEDIA_UNAVAILABLE` before reading storage or changing item state; deliberate retry retains the same intent, item and capability key. File, dimension and batch limits are unchanged. Local package checks pass; hosted deployment and physical-phone acceptance remain pending.
+AUTH-01 implements GET/POST/DELETE `/api/session` with Spring Security server-side sessions, PostgreSQL accounts, bcrypt password hashes, CSRF/session rotation, durable login throttling, credential-version revocation, and reveal/role gates. Provisioning and recovery use a separate console utility. See [AUTH-01 verification](auth-verification.md) and the [account-access runbook](../../runbooks/account-access.md).
+
+AUTH-02 implements `GET /api/memories/{memoryId}/playback` for eligible verified PHOTO originals. The server rechecks current account/reveal access, verifies the private original's size/MIME through authenticated HEAD, then signs a single-object S3 HTTPS GET for at most 300 seconds. See [AUTH-02 verification](authorization-verification.md). Login/playback UI, audio, private inbox/list/detail/review, publication, real production account provisioning, and production operations remain later work. Future archive routes have authorization guards; they have no successful inbox/detail/review controllers yet. Mock success is not production-readiness evidence.
+
+The [staging package](../../runbooks/staging-deployment.md) serves production frontend assets and `/api` through one Spring process. Its staging-only operator access gate is separate from the couple session API. Staging limits overlapping photo finalization to one: a busy request returns `503 MEDIA_UNAVAILABLE` before reading storage or changing item state; deliberate retry retains the same intent, item and capability key. File, dimension and batch limits are unchanged. Local package checks pass; hosted deployment and physical-phone acceptance remain pending.
 
 ## Shared conventions
 
 - Same-origin REST/JSON under `/api`. Send `Accept: application/json`,
   `X-Api-Contract: 1`, and `Content-Type: application/json` for bodies.
 - The v1 server must honor version 1 without silently falling back to echo.
-  Missing or unsupported versions return 400 UNSUPPORTED_CONTRACT on creation/receipt/grant/finalize. There is no echo fallback.
+  Missing or unsupported versions return 400 UNSUPPORTED_CONTRACT on creation/receipt/grant/finalize/session/playback. There is no echo fallback.
 - Response caching is `Cache-Control: no-store`. JSON is camelCase, IDs are UUIDs,
   and timestamps are UTC ISO-8601 strings ending in Z.
 - Required fields must have the documented type; nullable response fields are
@@ -39,6 +43,8 @@ The [staging package](../../runbooks/staging-deployment.md) serves production fr
 
 ## Endpoint index
 
+The session routes are implemented by AUTH-01, and verified PHOTO playback issuance is implemented by AUTH-02. Inbox/list/detail/review rows below describe later contracts. Their authorization guards do not implement successful actions.
+
 | Method and route | Success | Responsibility |
 |---|---|---|
 | GET `/api/health` | 200 | Existing `{"status":"ok"}`; not DB/storage readiness |
@@ -52,7 +58,7 @@ The [staging package](../../runbooks/staging-deployment.md) serves production fr
 | GET `/api/memories` | 200 | Couple-only paginated review inbox |
 | GET `/api/memories/{memoryId}` | 200 | Couple-only detail, revision, and ETag |
 | PATCH `/api/memories/{memoryId}/review` | 200 | Conditional private lifecycle change |
-| GET `/api/memories/{memoryId}/playback` | 200 | Short-lived original-media access |
+| GET `/api/memories/{memoryId}/playback` | 200 | Implemented: current couple/reveal authorization and short-lived GET for an eligible PHOTO original |
 
 ## Text creation and retry identity
 
@@ -196,6 +202,8 @@ The mock simulates verification; it never inspects real bytes or proves codec su
 
 ## Session and CSRF
 
+AUTH-01 implements this session contract on the server; the private login screen remains a later UI task.
+
 ANONYMOUS_SESSION / COUPLE_SESSION examples:
 
 ```json
@@ -211,6 +219,14 @@ logout, and review require X-CSRF-Token from current session. Missing/invalid to
 403 CSRF_INVALID. Invalid login: 401 INVALID_CREDENTIALS with no enumeration detail.
 Login rotates session ID/token; logout invalidates both. GET session after logout/
 token expiry. Tokens are unpredictable, at least 16 characters, without header controls.
+
+The session cookie is `MEMORY_ARCHIVE_SESSION`, `HttpOnly`, `SameSite=Lax`, and limited to cookie-based tracking with a 30-minute idle timeout. The production profile adds `Secure`. Production startup requires the production environment/profile to agree, an explicit HTTPS `archive.public-origin`, and an operator-supplied login-throttle secret of at least 32 UTF-8 bytes. Same-origin checks apply to login/logout, and the guest contribution routes retain their independent JSON/origin/retry-capability protections.
+
+Login accepts exactly string `username` and `password` fields. Unknown/disabled accounts and wrong passwords return the same 401 INVALID_CREDENTIALS; valid credentials without couple authority or an open reveal gate return 403 ARCHIVE_UNAVAILABLE. Only enabled COUPLE identities can establish an authenticated session, and production restricts them to `kevin` and `melanie`. Operator/developer roles grant no couple access. The reveal default is closed; local/staging synthetic couple login requires explicit reveal configuration.
+
+Credential attempts, whether successful or unsuccessful, are capped at five per normalized username and thirty per direct peer address in fifteen minutes. PostgreSQL stores keyed digests and counters, which survive process restart and session rotation; old buckets are cleaned up after one day. A rejected reservation returns 429 RATE_LIMITED with `Retry-After: 900`. Malformed login bodies/credentials are rejected before credential verification. Caller-supplied forwarding headers do not determine the peer identity.
+
+Account recovery and every enable/disable command increment the stored credential version. An existing session with a stale version, a disabled/missing account, or changed identity/role is invalidated before private access. Signup, password reset, account enablement, and role changes have no public endpoints; use the [console-only runbook](../../runbooks/account-access.md). Application sessions are held by the server process and require a new login after process restart.
 
 The isolated preview uses deterministic synthetic tokens, not production secrets.
 Every successful mock login/logout issues a fresh token; tokens from earlier sessions
@@ -254,10 +270,11 @@ extend it. Before expiry, PATCH PENDING/KEEP/ARCHIVED restores and clears delete
 After expiry, unavailable items return 404. Cleanup/backup retention owns physical
 deletion. No sibling cascade or memory HTTP DELETE route. KEEP is not publication.
 
-PLAYBACK is `{"url":"https://…","expiresAt":"…Z"}`, private signed access for at most
-five minutes. Never log/store it; refresh on expiry. TEXT: 404; unavailable original:
-503 MEDIA_UNAVAILABLE. Detail/review remain available; playback failure does not
-mean the stored memory disappeared.
+PLAYBACK is `{"url":"https://…","expiresAt":"…Z"}`. AUTH-02 implements issuance for the current event's verified PHOTO items with `COUPLE_ONLY` visibility and `UPLOADED` assets. Each request revalidates the session's enabled COUPLE account and requires an open reveal gate. Guest retry capabilities, UUID knowledge, and operator/developer identities grant no playback authority. The server checks the associated private `originals/…` object's size and detected MIME through authenticated HEAD before signing GET for that single object. The S3 API HTTPS URL expires within 300 seconds; `expiresAt` reports the actual signature expiry, rather than a separately guessed time. Public custom domains and `r2.dev` stay disabled for originals and staging.
+
+Unfinished/failed items, TEXT/AUDIO, missing or wrong-event memories, and DELETE items return safe 404. DELETE is deliberately excluded until the future INB-02 restoration flow restores the item. Eligible original missing, metadata mismatch, or unavailable storage returns 503 MEDIA_UNAVAILABLE. Database failure remains 503 SERVICE_UNAVAILABLE. A playback failure does not mean the stored memory disappeared; successful inbox/detail/review endpoints remain later implementation work.
+
+The signed URL is a reusable bearer permission: anyone possessing it can GET the object until its own expiry. Logout, reset, disablement, and closing reveal block new issuance; they do not revoke an already-issued link or an in-progress download. `Cache-Control: no-store` does not erase downloaded bytes. Never persist/log the URL, and refresh issuance only after expiry through the authenticated app route. The later playback UI must omit application credentials when fetching the object, use `no-referrer`, and never forward session/CSRF/retry headers. A GET signature does not grant PUT, DELETE or HEAD. Real provider HEAD/GET, expiry, CORS, tampering and unsigned/public denial remain in the [home acceptance checklist](../../runbooks/private-photo-storage.md#authenticated-photo-playback--auth-02-home-acceptance).
 
 ## Structured errors and recovery
 
@@ -321,3 +338,7 @@ The fingerprint is SHA-256 over a PostgreSQL JSONB object containing eventKey,
 memoryType TEXT, normalized guestName and message; it is immutable during replay.
 V2 backfills only unambiguous single-text V1 envelopes and preserves their data;
 other legacy keys stay reserved. V3 adds PHOTO client item IDs, captions/order, expected integrity claims and five-minute upload grants without rewriting V1/V2. PHOTO fingerprints use SHA-256 over length-prefixed normalized fields and ordered item metadata, including client IDs, filename, MIME, size, original hash and caption. Changed fields/order conflict; Unicode outer whitespace and UUID case normalize before fingerprinting. Legacy non-text keys remain reserved. Audio duration, review revisions and delete deadlines still need later migrations. Never edit applied migrations.
+
+AUTH-01 adds V4 private accounts and V5 login-throttle counters without changing V1–V3. Runtime/session, recovery, and role-gate evidence belongs in [AUTH-01 verification](auth-verification.md); operation instructions belong in the [account-access runbook](../../runbooks/account-access.md). The approved Spring Security runtime/test starters are recorded in the backend POM.
+
+AUTH-02 uses the existing dependencies and schema for guarded PHOTO playback issuance. It does not implement inbox/list/detail/review, audio, or new UI. Authorization/storage evidence and remaining Docker/R2 acceptance belong in [AUTH-02 verification](authorization-verification.md).
