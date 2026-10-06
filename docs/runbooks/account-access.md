@@ -75,6 +75,39 @@ Exit code `0` means a command committed successfully (or help was shown); `2` me
 
 When the synthetic exercise ends, close this isolated terminal. Return local/staging web application reveal settings to their intended state. Do not copy synthetic credentials into production.
 
+## Packaged console on approved staging
+
+The deployed Docker runtime contains `/app/app.jar`, not the local Maven `backend/target` tree. Use its Spring Boot `PropertiesLauncher` to run the same console utility directly from that packaged JAR; no extraction, Maven, `psql`, new dependency or public database connection is needed. The utility still requires a real interactive terminal and performs no web startup or migration. First let the approved application deployment apply its normal migrations to the separate staging database.
+
+Connect through the approved paid Render service's dashboard shell or SSH in an interactive terminal. Render's [Docker SSH requirements](https://render.com/docs/ssh#docker-specific-configuration) require a nonroot user with shell access and a private `.ssh` directory. This image supplies `archive` with UID/GID `10001`, home `/home/archive`, shell `/bin/bash`, and `/home/archive/.ssh` owned by that user with mode `0700`; it runs no SSH server. Actual hosted shell access and Java console behavior must still be confirmed after deployment. Do not redirect input/output or run the command as a background job.
+
+Verify the approved service/test-database target privately using its reviewed configuration. The shell must use `MEMORY_ARCHIVE_ENVIRONMENT=staging` and the service's existing private JDBC/database settings. Never print those settings or change the database allowlist to reach them. Temporarily open reveal only for the approved synthetic exercise in both the application configuration and this operator shell; the already-running application does not read changes made only in the shell. Do not create real couple accounts in this staging procedure.
+
+In that interactive shell, define this invocation. Its small operator-JVM heap is scoped to each console command and does not change the running application's measured heap:
+
+```bash
+archive_account_admin() {
+  JAVA_TOOL_OPTIONS='-Xms16m -Xmx128m -XX:ActiveProcessorCount=1 -XX:+UseSerialGC' \
+    java -Dloader.main=com.kevinmel.archive.security.AccountAdministration \
+      -cp /app/app.jar org.springframework.boot.loader.launch.PropertiesLauncher "$@"
+}
+archive_account_admin --help
+archive_account_admin --expect-environment staging create synthetic-kevin 'Synthetic Kevin' COUPLE
+archive_account_admin --expect-environment staging enable synthetic-kevin
+archive_account_admin --expect-environment staging reset-password synthetic-kevin
+archive_account_admin --expect-environment staging disable synthetic-kevin
+```
+
+Each mutation still requires its exact confirmation; create/reset still ask for a password twice through hidden console input. Help alone does not prove console availability. If a mutation reports that no interactive system console is available, stop and use a supported interactive shell; do not replace hidden input with environment variables, password flags, files, pipes or SQL account inserts. Use distinct disposable usernames when separate acceptance phases would otherwise exceed the five-attempt login cap.
+
+Use the real same-origin session adapter in a controlled HTTPS browser check for synthetic login, cookie/CSRF rotation, logout, reset/disable revocation and renewed login. Staging HTTP Basic admission is independent and grants no couple session. The couple login screen and real reveal-day onboarding remain separate tasks. When finished, disable the synthetic accounts, return application and operator reveal settings to their intended closed state, close the private console and remove the helper function with `unset -f archive_account_admin`. Preserve only nonsensitive dated outcomes.
+
+### Local packaged-console verification — 2026-10-05
+
+The rebuilt actual runtime image passes a scoped exercise with a separate labelled bridge network and tmpfs PostgreSQL 17 database, no published host ports and R2 disabled. It runs as UID/GID `10001`; the named user, home, `/bin/bash` and user-owned `.ssh` mode `0700` are present. The packaged `PropertiesLauncher` invocation loads the utility and its nested dependencies from `/app/app.jar` alone. Noninteractive create exits `2` before mutation, leaving the account count zero.
+
+With an actual Docker TTY, create accepted exact confirmation and two hidden password entries without echo; the resulting synthetic COUPLE account was disabled with credential version `0` and a bcrypt hash. Separate confirmed enable, hidden-input reset and disable commands retained its identity/role and produced enabled/version `1`, enabled/version `2` and disabled/version `3`. An incorrect expected environment was refused without mutation. Metadata checks recorded only safe fields and a boolean for the bcrypt format; no password/hash was printed. The small operator-JVM heap above worked alongside the running application. All owned containers/tmpfs data/network were removed. This proves the local packaged console path, not actual Render SSH access, hosted browser authentication or real-account onboarding.
+
 ## Reveal-day provisioning
 
 Real-account provisioning is a separate hands-on operator action after the reveal has been agreed and explicitly authorized. No real accounts have been provisioned by this implementation.

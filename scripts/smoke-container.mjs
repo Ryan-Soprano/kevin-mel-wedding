@@ -291,7 +291,22 @@ try {
     check(asset.status === 200 && !/^text\/html/.test(asset.headers.get("content-type") || ""), "An admitted asset request must return the packaged asset.");
     await asset.arrayBuffer();
   }
-  for (const path of ["/contract-preview.html", "/.env", "/backend/pom.xml", "/src/main.jsx", "/missing.js", "/api/missing-route"]) {
+  for (const [path, type] of [["/staging/audio", "text/html"], ["/staging/audio/", "text/html"],
+    ["/staging/audio/recorder.js", "text/javascript"], ["/staging/audio/probe-model.js", "text/javascript"],
+    ["/staging/audio/style.css", "text/css"]]) {
+    await expectError(await request(path, { admitted: false }), 401, "STAGING_AUTH_REQUIRED");
+    const audio = await request(path);
+    check(audio.status === 200 && (audio.headers.get("content-type") || "").startsWith(type),
+      "Admitted staging audio routes must serve their actual packaged resource.");
+    check(audio.headers.get("cache-control") === "no-store" &&
+      (audio.headers.get("content-security-policy") || "").includes("connect-src 'none'"),
+      "The local audio probe must be private and prohibit network connections.");
+    const content = await audio.text();
+    check(content.length > 0 && (!type.startsWith("text/html") || content.includes("Try an audio memory")),
+      "The runtime must serve the real audio probe instead of a fixture or HTML fallback.");
+  }
+  for (const path of ["/contract-preview.html", "/.env", "/backend/pom.xml", "/src/main.jsx", "/missing.js", "/api/missing-route",
+    "/staging-audio/index.html", "/spikes/audio/index.html", "/staging/audio/missing.js", "/staging/audio/probe-model.test.mjs"]) {
     const response = await request(path);
     await expectError(response, 401, "AUTH_REQUIRED"); // The AUTH default-deny boundary runs before resource resolution.
     check(response.headers.get("cache-control") === "no-store", "Unknown staging paths must be marked no-store.");

@@ -7,7 +7,7 @@ Last checked: 2026-10-05.
 
 The wedding form has visible **Write a note**, **Ready to send?**, and saved-result steps. A guest can edit before sending, inspect the normalized name and note, and finish or begin a separate note after a valid durable receipt. Blank text and server field errors return focus to the affected input and preserve the draft. The review and result headings receive focus on step changes. Progress is announced through a polite status; errors use alerts and are linked to invalid inputs.
 
-An uncertain response keeps the original draft and idempotency key. The review step shows the same note, removes Edit, and offers a deliberate **Try again** action. A receipt is the only path to a saved message. This state survives only while the page stays open; no private draft/key is written to browser storage. Photo controls remain a clearly separate local preview and do not enter the text request.
+An uncertain response keeps the original draft and idempotency key. The review step shows the same note, removes Edit, and offers a deliberate **Try again** action. A receipt is the only path to a saved message. A 30-second deadline now bounds both the request and response body, aborts the transport, and leaves the same draft/key available for manual retry. Late responses cannot complete an expired attempt or unlock an active retry. This state survives only while the page stays open; no private draft/key is written to browser storage. The separate photo form does not enter the text request.
 
 ## Verification
 
@@ -28,5 +28,9 @@ The actual React form was exercised in a local browser with a disposable synthet
 The synthetic responder and temporary development servers were stopped after verification. The browser accessibility tree exposed labels, alerts, statuses, regions, and focus changes. This is semantic/keyboard evidence, not a claim that VoiceOver, TalkBack, NVDA, or a physical phone was tested.
 
 ## Release follow-up
+
+October 5 review follow-up on `feature/review-acceptance`: **76 frontend tests**, lint and production build pass. Three deterministic regressions cover hanging requests, stalled JSON bodies, retained-key recovery, late responses and timer cleanup. An independent code review found no actionable issue. The actual React form against a separate loopback synthetic responder timed out a deliberately stalled response, announced the uncertain outcome, retained the locked note, and succeeded only after **Try again**. The responder recorded two requests with the same key/body and one logical synthetic note; this is UI evidence, not an additional database persistence claim.
+
+A permitted 100-character unbroken guest name reproduced horizontal overflow at 320 CSS pixels (document width 1,515 pixels). Inherited `overflow-wrap: anywhere` on the note review/result fixes it: the same input produces a 305-pixel document inside a 320-pixel viewport. Physical-phone and 200% text-zoom acceptance remain open.
 
 Before treating text collection as wedding ready, run the saved, rejected, and interrupted paths on an iPhone with Safari/VoiceOver and an Android phone with Chrome/TalkBack. Check actual touch targets, 200% text zoom, keyboard navigation on desktop, announced focus and errors, and recovery after the browser loses connectivity. Use synthetic notes against an approved test environment; do not use real guest content. Production security, hosting, monitoring, and recovery checks are tracked separately.
