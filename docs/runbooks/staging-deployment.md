@@ -6,6 +6,8 @@ The October 5 Render inspection found only `kevinandmel-coming-soon`, a deployed
 
 ## Provider and cost checkpoint
 
+Ryan declined purchases on October 5, 2026. Leave the prepared Render forms unsubmitted; no paid provisioning or hosted deployment is authorized. Continue disposable local/emulator checks while retaining hosted HTTPS, memory/proxy/session and physical-phone acceptance as pending. The quoted plan below is a future candidate, not approved spending.
+
 D-02 selects Render for Spring and managed PostgreSQL in Ohio, and private Cloudflare R2 for original media; Ryan confirmed on October 5 to retain this stack. Cloudflare [Containers](https://developers.cloudflare.com/containers/) can run Java, but [D1](https://developers.cloudflare.com/d1/) uses SQLite and [Hyperdrive](https://developers.cloudflare.com/hyperdrive/) connects to a separately hosted database, so an all-Cloudflare move would require additional routing/database work. The retained stack is settled; application capacity and its budget still need approval.
 
 These are candidate monthly costs checked October 5; confirm the dashboard quotation before creating anything. [Render pricing](https://render.com/pricing) is authoritative. Domain, R2 usage, other services, workspace charges and taxes are additional where applicable.

@@ -23,6 +23,8 @@ Discard clears the file input and audio source, hides the player and returns foc
 
 ## Device procedure
 
+Paid hosting is deferred by Ryan as of October 5. Supplemental emulator checks can use the prepared loopback preview through the dedicated ADB reverse, with the user opening Chrome/TalkBack and granting microphone permission deliberately. Label these observations **Android emulator / loopback**, including the exact browser version and secure-context result; they are not hosted HTTPS, actual iPhone or physical Android evidence. The phone/HTTPS matrix below stays pending until its stated environment is available.
+
 After the separately approved full-app HTTPS staging deployment, open its normal certificate-valid URL and `/staging/audio`. Enter the existing temporary staging admission credentials privately. Do not bypass a certificate warning. Use only a made-up test message, without names or private content. Audio stays in page memory until discarded or navigated away; downloading is optional and explicit.
 
 Select **Actual iPhone**, **Android emulator**, or **Actual Android phone** accurately. Enter the actual device model, OS version and browser/version; the browser's initial version suggestion needs operator confirmation. Desktop responsive viewport emulation is distinct from an Android emulator and is not an Android MediaRecorder/codec test.
