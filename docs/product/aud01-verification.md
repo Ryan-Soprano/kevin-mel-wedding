@@ -1,6 +1,6 @@
 # AUD-01 local audio feasibility check
 
-Prepared October 5, 2026 for AUD-01 and [D-03 / D-04](../decisions/contribution-and-audio-limits.md). The disposable probe is ready for approved HTTPS staging at **`/staging/audio`**. It is separate from the wedding guest UI, sends no audio or evidence to an API, and does not implement production AUD-02/AUD-03 recording, storage or server validation. Actual iPhone Safari and physical Android Chrome acceptance remain pending. Ryan chose emulator checks now while retaining the physical Android requirement. Actual Android tablet hardware can provide supplemental evidence recorded under its own environment label; it does not satisfy physical Android phone acceptance.
+Prepared October 5, 2026 for AUD-01 and [D-03 / D-04](../decisions/contribution-and-audio-limits.md). The disposable probe is ready for approved HTTPS staging at **`/staging/audio`**. It is separate from the wedding guest UI, sends no audio or evidence to an API, and does not implement production AUD-02/AUD-03 recording, storage or server validation. The October 6 iPhone Safari report verifies basic capture, audible replay and discard; remaining Safari controls and physical Android Chrome acceptance stay pending. Ryan chose emulator checks now while retaining the physical Android requirement. Actual Android tablet hardware can provide supplemental evidence recorded under its own environment label; it does not satisfy physical Android phone acceptance.
 
 ## What is prepared and locally checked
 
@@ -31,6 +31,18 @@ Anyone with the temporary URL can open these static test files. The URL is recor
 
 ## Device procedure
 
+### Actual iPhone Safari report — 2026-10-06
+
+Ryan supplied `aud01-technical-results.json` at `2026-10-06T20:17:35.829Z` (October 6, 15:17 Chicago), from **Actual iPhone / iPhone 13 Pro / reported Safari 26.6.1**, using **signal-check-1** in a secure context. This correctly labeled physical-phone report supersedes the earlier provisional model name for this device. Its iOS field is literally **“iOS 26.6w”**; Ryan subsequently corrected the version to **iOS 26.6.2**. Preserve the original export unchanged and use that operator-confirmed correction in the evidence summary.
+
+The last recorded clip reports **182,285 bytes / 6.7275 decoded seconds / one channel / 48,000 Hz**, byte-observed **WebM**, requested/reported `audio/webm;codecs=opus`, Blob type `audio/webm; codecs=opus`, local decode pass and SHA-256 `0621c6bff29937f1ba6e87737d1e4321cc58fdfd513991d41c0dc88ebfa8f297`. Offline decoding measures **-23.62 dBFS RMS / -0.74 dBFS peak**; exact silence and low-signal flags are false. This is decoded-signal evidence, not speech recognition or independently detected codec validation. The actual clip bytes and cross-device replay were not supplied.
+
+The operator marks generated speaker audibility, permission, record/stop, audible replay and discard **pass**. Events show two ordinary request/record/stop/check/ready sequences separated by idle, consistent with a second intentional attempt. Credit successful permission allowance, short record/stop (including the operator's microphone-indicator check), audible replay, and discard/re-record. The combined permission allow/deny field does not establish denial: neither a denial event nor a separate denied-path observation is supplied. Pause/resume and focus specifics are also not separately recorded.
+
+Existing-file/full written-note fallback, interruption, two-minute/25 MB boundaries, accessibility and same-byte cross-device replay remain untested. WebM with declared Opus now has iPhone Safari and DuckDuckGo capture/replay evidence; final production acceptance still requires the retained Android phone and actual server content/duration/codec verification. No AUD-01/D-03/D-04 status becomes Done from this partial report.
+
+The approved free audio-only preview was restarted October 6, with a new temporary URL recorded in the tracker/local state. It serves the exact four current files through normal certificate-valid HTTPS, retains microphone-self/no-store/connect-src-none, and exposes no archive/API/database/R2. The previous session's URL remains historical. No paid resource or full-app deployment is introduced.
+
 ### User-reported replay issue and diagnostic retest — 2026-10-05
 
 Ryan reported permitted recording followed by silence or air-like playback on his iPhone and computer. He then confirmed the computer had the wrong microphone selected; selecting the correct microphone made recording and audible replay work. He subsequently confirmed the iPhone now works as well, without identifying what changed. Both successful record/replay results are user-observed; exact browser/version and technical JSON are not yet supplied. The iPhone success cannot yet be labeled the required Safari pass. Ryan described the phone as an “iPhone 13 Plus” on the latest compatible iOS; verify its Settings model/version rather than inferring an exact hardware or OS version. Safari pasted-address search behavior is separate from microphone or playback behavior.
@@ -59,9 +71,9 @@ Run the checks below, mark each pass/fail only after observing it, and export th
 
 | Check | Actual iPhone Safari over HTTPS | Android emulator Chrome | Physical Android Chrome over HTTPS | Evidence required |
 |---|---|---|---|---|
-| Secure context and explicit microphone action | Permission allowed, user-reported; Safari/exact version pending | Pending | Pending | Correct environment/version; no permission prompt before Start; private admission required only for gated full staging, not the approved public static preview |
-| Allow permission, record 10–20 seconds, stop | Pending | Pending | Pending | Requested/reported/Blob MIME; byte-derived container; decoded duration/size/SHA-256; microphone indicator off after stop |
-| Audible local replay, pause, replay again, discard | Record/replay now works, user-reported; required Safari/version and remaining controls pending | Pending | Pending | Manual pass/fail; native player usable; discarded URL/player cleared; focus returns to Start or file picker when recording unsupported |
+| Secure context and explicit microphone action | Secure context + allowance pass, Oct 6 Safari report; iOS corrected by Ryan to 26.6.2 | Pending | Pending | Correct environment/version; no permission prompt before Start; private admission required only for gated full staging, not the approved public static preview |
+| Allow permission, short recording, stop | Pass, Oct 6: 6.7275 seconds / 182,285 bytes; operator record/stop pass | Pending | Pending | Requested/reported/Blob MIME; byte-derived container; decoded duration/size/SHA-256; microphone indicator off after stop; longer capture/boundary checks are separate |
+| Audible local replay, pause, replay again, discard | Audible replay + discard/re-record pass, Oct 6; pause/resume and focus details pending | Pending | Pending | Manual pass/fail; native player usable; discarded URL/player cleared; focus returns to Start or file picker when recording unsupported |
 | Deny/block permission and retry/fallback | Pending | Pending | Pending | Clear denial; no silent recording/submission; file picker and written-note path remain available; permission changes performed by user |
 | Existing-file fallback | Pending | Pending | Pending | A supported short synthetic audio file decodes/replays; corrupt/empty/overlong/oversize input rejected without upload |
 | Actual generated-byte cross-device replay | Pending | Supplemental only | Pending | User-transferred synthetic Blob; matching input/download SHA-256 and size; decoded duration and audible replay on receiving device |
