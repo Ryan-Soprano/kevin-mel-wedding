@@ -68,3 +68,20 @@ test("finishing one type retains the other unsent draft and its leave-page warni
   assert.equal(hasUnfinishedWork(flow), true);
   assert.equal(flow.forms.note.hasDraft, true);
 });
+
+test("enabled audio preserves its stopped draft and locks navigation during recording or uncertain confirmation", () => {
+  let flow = select(createGuestFlow({ audioEnabled: true }), "audio");
+  assert.equal(flow.screen, "audio");
+  flow = report(flow, "audio", { hasDraft: true });
+  const choices = guestFlowReducer(flow, { type: "BACK" });
+  assert.equal(choices.forms.audio.hasDraft, true); assert.deepEqual(choices.started, ["audio"]);
+  for (const state of [{ busy: true }, { pending: true }]) {
+    const locked = report(flow, "audio", state);
+    assert.equal(navigationLocked(locked), true);
+    assert.equal(guestFlowReducer(locked, { type: "BACK" }), locked);
+    assert.equal(select(locked, "note"), locked);
+  }
+  const saved = report(flow, "audio", { complete: true, hasDraft: true });
+  assert.equal(hasUnfinishedWork(saved), false);
+  assert.equal(guestFlowReducer(saved, { type: "FINISHED", kind: "audio" }).screen, "done");
+});

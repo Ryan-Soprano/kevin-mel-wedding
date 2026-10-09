@@ -140,29 +140,31 @@ public final class R2ObjectStorage implements ObjectStorage, AutoCloseable {
     public void requireAvailable() { /* Configured. Connection health is established by actual IO. */ }
 
     public UploadGrant authorize(UUID id, String key, String type, long byteSize, Instant expires) {
-        if (!key.equals("staging/" + id) || !PhotoRequest.TYPES.contains(type)
-                || byteSize < 1 || byteSize > PhotoRequest.MAX_BYTES) throw new IllegalArgumentException("Invalid upload scope.");
-        long seconds = Math.min(300, Duration.between(Instant.now(), expires).getSeconds());
+        if (!key.equals("staging/" + id) || !MediaTypes.validTypeAndSize(type, byteSize)) throw new IllegalArgumentException("Invalid upload scope.");
+        long seconds = signatureSeconds(Instant.now(), expires);
         if (seconds < 1) throw StorageConfiguration.unavailable();
         try {
             var signed = signer.presignPutObject(PutObjectPresignRequest.builder()
                     .signatureDuration(Duration.ofSeconds(seconds))
                     .putObjectRequest(PutObjectRequest.builder().bucket(bucket).key(key).contentType(type)
                             .contentLength(byteSize).build()).build());
+            Instant checkedAt = Instant.now();
+            if (signed == null || signed.url() == null || signed.expiration() == null
+                    || !signed.expiration().isAfter(checkedAt) || signed.expiration().isAfter(expires)
+                    || signed.expiration().isAfter(checkedAt.plusSeconds(300))) throw StorageConfiguration.unavailable();
             // Content-Length is signed, but browsers derive this forbidden header from the original File.
             // Reject an SDK result that omits the boundary rather than issue an unbounded permission.
             if (!signed.signedHeaders().containsKey("content-length")
                     || !signed.signedHeaders().get("content-length").equals(java.util.List.of(Long.toString(byteSize)))) {
                 throw StorageConfiguration.unavailable();
             }
-            return new UploadGrant(id, "PUT", signed.url().toString(), expires, Map.of("Content-Type", type));
+            return new UploadGrant(id, "PUT", signed.url().toString(), signed.expiration(), Map.of("Content-Type", type));
         } catch (SdkException failure) { throw StorageConfiguration.unavailable(); }
     }
 
     public ReadGrant authorizeRead(String key, String type, long byteSize, Instant expires) {
         if (key == null || !key.matches("originals/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}")
-                || type == null || !PhotoRequest.TYPES.contains(type)
-                || byteSize < 1 || byteSize > PhotoRequest.MAX_BYTES || expires == null
+                || !MediaTypes.validTypeAndSize(type, byteSize) || expires == null
                 || Duration.between(Instant.now(), expires).getSeconds() < 1) {
             throw StorageConfiguration.privateMediaUnavailable();
         }
@@ -172,15 +174,19 @@ public final class R2ObjectStorage implements ObjectStorage, AutoCloseable {
                     || !type.equals(metadata.contentType())) {
                 throw StorageConfiguration.privateMediaUnavailable();
             }
-            long seconds = Math.min(300, Duration.between(Instant.now(), expires).getSeconds());
+            long seconds = signatureSeconds(Instant.now(), expires);
             if (seconds < 1) throw StorageConfiguration.privateMediaUnavailable();
             String extension = switch (type) {
                 case "image/jpeg" -> "jpg";
                 case "image/png" -> "png";
                 case "image/webp" -> "webp";
+                case "audio/webm" -> "webm";
+                case "audio/ogg" -> "ogg";
+                case "audio/mp4" -> "m4a";
                 default -> throw StorageConfiguration.privateMediaUnavailable();
             };
-            String disposition = "inline; filename=\"photo-" + key.substring("originals/".length()) + "." + extension + "\"";
+            String disposition = "inline; filename=\"" + (MediaTypes.AUDIO_TYPES.contains(type) ? "voice-" : "photo-")
+                    + key.substring("originals/".length()) + "." + extension + "\"";
             var signed = signer.presignGetObject(GetObjectPresignRequest.builder()
                     .signatureDuration(Duration.ofSeconds(seconds))
                     .getObjectRequest(GetObjectRequest.builder().bucket(bucket).key(key)
@@ -218,7 +224,7 @@ public final class R2ObjectStorage implements ObjectStorage, AutoCloseable {
 
     public void publish(String key, byte[] bytes, String type) {
         checkKey(key);
-        if (!key.startsWith("originals/") || bytes.length > PhotoRequest.MAX_BYTES || !PhotoRequest.TYPES.contains(type)) {
+        if (!key.startsWith("originals/") || bytes == null || !MediaTypes.validTypeAndSize(type, bytes.length)) {
             throw new IllegalArgumentException("Invalid original scope.");
         }
         try {
@@ -230,8 +236,7 @@ public final class R2ObjectStorage implements ObjectStorage, AutoCloseable {
     /** Offline recovery must never replace a different existing original, including a racing write. */
     public void publishRecovered(String key, byte[] bytes, String type) {
         checkKey(key);
-        if (!key.startsWith("originals/") || bytes == null || bytes.length < 1
-                || bytes.length > PhotoRequest.MAX_BYTES || !PhotoRequest.TYPES.contains(type)) {
+        if (!key.startsWith("originals/") || bytes == null || !MediaTypes.validTypeAndSize(type, bytes.length)) {
             throw new IllegalArgumentException("Invalid recovery original scope.");
         }
         try {
@@ -261,6 +266,10 @@ public final class R2ObjectStorage implements ObjectStorage, AutoCloseable {
         if (!key.matches("(staging|originals)/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}")) {
             throw new IllegalArgumentException("Invalid object scope.");
         }
+    }
+    /** Signing starts after this calculation. Leave one full second within the server deadline. */
+    static long signatureSeconds(Instant checkedAt, Instant deadline) {
+        return Math.min(300, Duration.between(checkedAt, deadline).getSeconds() - 1);
     }
     @Override public void close() { signer.close(); s3.close(); }
 }

@@ -20,23 +20,27 @@ import java.util.zip.CRC32;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import tools.jackson.databind.JsonNode;
 
-/** Version one is intentionally pinned to the reviewed V8 schema, with no account material. */
+/** Strict V8/v1 and V9/v2 archive schemas; no account or application configuration material. */
 final class RecoverySchema {
     static final int MAX_ROWS = 100_000;
-    static final List<Table> TABLES = List.of(
+    private static final String ASSET_COLUMNS = "id:u memory_id:u object_key:s original_filename:s detected_format:s byte_size:l checksum_sha256:s upload_state:s created_at:t updated_at:t declared_content_type:s? expected_byte_size:l? expected_checksum_sha256:s?";
+    private static final List<String> AUDIO_COLUMNS = List.of("expected_duration_ms", "audio_duration_ms", "audio_codec", "audio_container");
+    private static final List<Table> LEGACY_TABLES = List.of(
         table("contribution", "id:u event_key:s guest_name:s? idempotency_key:s created_at:t request_fingerprint:s?"),
         table("memory", "id:u contribution_id:u memory_type:s text_content:s? review_status:s visibility:s created_at:t updated_at:t client_item_id:u? caption:s? item_position:i? revision:i delete_after:t? purge_started_at:t? purged_at:t?"),
-        table("media_asset", "id:u memory_id:u object_key:s original_filename:s detected_format:s byte_size:l checksum_sha256:s upload_state:s created_at:t updated_at:t declared_content_type:s? expected_byte_size:l? expected_checksum_sha256:s?"),
+        table("media_asset", ASSET_COLUMNS),
         table("upload_grant", "id:u media_asset_id:u object_key:s created_at:t expires_at:t"),
         table("review_audit", "memory_id:u actor_account_id:u from_status:s to_status:s before_revision:i after_revision:i acted_at:t"),
         table("deletion_ledger", "memory_id:u contribution_id:u asset_id:u? submission_key_digest:s delete_after:t recorded_at:t purged_at:t?"),
         table("erased_submission_key", "key_digest:s erased_at:t"));
+    static final List<Table> TABLES = LEGACY_TABLES.stream().map(table -> table.name().equals("media_asset")
+        ? table("media_asset", ASSET_COLUMNS + " expected_duration_ms:l? audio_duration_ms:l? audio_codec:s? audio_container:s?") : table).toList();
     private static final List<String> MIGRATIONS = List.of(
         "V1__create_memory_archive_schema.sql", "V2__add_contribution_request_fingerprint.sql", "V3__add_photo_upload_lifecycle.sql",
         "V4__create_archive_accounts.sql", "V5__create_login_throttle.sql", "V6__add_inbox_revision.sql",
-        "V7__add_private_review_retention.sql", "V8__anonymous_submission_protection.sql");
+        "V7__add_private_review_retention.sql", "V8__anonymous_submission_protection.sql", "V9__add_verified_audio_lifecycle.sql");
 
-    static String requireReviewed(JdbcClient db) {
+    static Reviewed requireReviewed(JdbcClient db) {
         try {
             // Resource names are obtained from actual reviewed migration history below; never from bundle paths.
             var allHistory = db.sql("SELECT version, script, checksum, type, success FROM flyway_schema_history ORDER BY installed_rank")
@@ -50,8 +54,9 @@ final class RecoverySchema {
                     schemaMarker = true;
                 } else history.add(migration);
             }
-            if (history.size() != 8) throw invalid();
+            if (history.size() != 8 && history.size() != 9) throw invalid();
             var digest = MessageDigest.getInstance("SHA-256");
+            var legacyDigest = MessageDigest.getInstance("SHA-256");
             for (int i = 0; i < history.size(); i++) {
                 Migration migration = history.get(i);
                 if (!Integer.toString(i + 1).equals(migration.version()) || !migration.success()
@@ -73,15 +78,20 @@ final class RecoverySchema {
                 if ((int) crc.getValue() != migration.checksum()) throw invalid();
                 digest.update(migration.script().getBytes(StandardCharsets.UTF_8)); digest.update((byte) 0);
                 digest.update(canonical.toString().getBytes(StandardCharsets.UTF_8)); digest.update((byte) 0);
+                if (i < 8) {
+                    legacyDigest.update(migration.script().getBytes(StandardCharsets.UTF_8)); legacyDigest.update((byte) 0);
+                    legacyDigest.update(canonical.toString().getBytes(StandardCharsets.UTF_8)); legacyDigest.update((byte) 0);
+                }
             }
-            requireColumns(db);
-            return HexFormat.of().formatHex(digest.digest());
+            int bundleVersion = history.size() == 8 ? 1 : 2;
+            requireColumns(db, tables(bundleVersion));
+            return new Reviewed(bundleVersion, HexFormat.of().formatHex(digest.digest()), HexFormat.of().formatHex(legacyDigest.digest()));
         } catch (RecoveryException failure) { throw failure; }
         catch (Exception failure) { throw invalid(); }
     }
 
-    private static void requireColumns(JdbcClient db) {
-        for (var table : TABLES) {
+    private static void requireColumns(JdbcClient db, List<Table> definitions) {
+        for (var table : definitions) {
             var actual = db.sql("SELECT column_name, udt_name, is_nullable FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = :name")
                 .param("name", table.name()).query((rs, row) -> new PhysicalColumn(rs.getString("column_name"), rs.getString("udt_name"), "YES".equals(rs.getString("is_nullable")))).list();
             if (actual.size() != table.columns().size()) throw invalid();
@@ -100,11 +110,15 @@ final class RecoverySchema {
     }
 
     static Map<String, List<Map<String, Object>>> read(JdbcClient db) {
+        return read(db, 2);
+    }
+
+    static Map<String, List<Map<String, Object>>> read(JdbcClient db, int version) {
         var result = new LinkedHashMap<String, List<Map<String, Object>>>();
         var encodedSize = new java.util.concurrent.atomic.AtomicLong(1024);
         var writer = tools.jackson.databind.json.JsonMapper.builder().build();
         long total = 0;
-        for (Table table : TABLES) {
+        for (Table table : tables(version)) {
             long count = db.sql("SELECT COUNT(*) FROM " + table.name()).query(Long.class).single();
             if ((total += count) > MAX_ROWS) throw new RecoveryException("METADATA_LIMIT");
             String order = table.name().equals("review_audit") ? "memory_id, after_revision" : table.columns().getFirst().name();
@@ -120,23 +134,27 @@ final class RecoverySchema {
         return result;
     }
 
-    static Map<String, List<Map<String, Object>>> decode(JsonNode node) {
+    static Map<String, List<Map<String, Object>>> decode(JsonNode node, int version) {
         if (node == null || !node.isObject() || node.size() != TABLES.size()) throw invalid();
         var result = new LinkedHashMap<String, List<Map<String, Object>>>();
         int total = 0;
-        for (Table table : TABLES) {
+        for (Table table : tables(version)) {
             JsonNode rows = node.get(table.name());
             if (rows == null || !rows.isArray() || (total += rows.size()) > MAX_ROWS) throw invalid();
             var decoded = new ArrayList<Map<String, Object>>();
-            for (JsonNode row : rows) decoded.add(table.decode(row));
+            for (JsonNode row : rows) {
+                var value = table.decode(row);
+                if (version == 1 && table.name().equals("media_asset")) AUDIO_COLUMNS.forEach(name -> value.put(name, null));
+                decoded.add(value);
+            }
             result.put(table.name(), List.copyOf(decoded));
         }
         return result;
     }
 
-    static void insert(JdbcClient db, Map<String, List<Map<String, Object>>> tables) {
-        for (Table table : TABLES) {
-            for (var row : tables.get(table.name())) {
+    static void insert(JdbcClient db, Map<String, List<Map<String, Object>>> rows, int targetVersion) {
+        for (Table table : tables(targetVersion)) {
+            for (var row : rows.get(table.name())) {
                 var query = db.sql("INSERT INTO " + table.name() + " (" + table.columnNames() + ") VALUES ("
                     + String.join(",", table.columns().stream().map(c -> ":" + c.name()).toList()) + ")");
                 for (Column column : table.columns()) {
@@ -155,6 +173,17 @@ final class RecoverySchema {
         return result;
     }
     static RecoveryException invalid() { return new RecoveryException("INVALID_METADATA"); }
+    private static List<Table> tables(int version) {
+        if (version == 1) return LEGACY_TABLES;
+        if (version == 2) return TABLES;
+        throw invalid();
+    }
+    record Reviewed(int bundleVersion, String fingerprint, String legacyFingerprint) {
+        boolean accepts(int version, String suppliedFingerprint) {
+            return version == bundleVersion && fingerprint.equals(suppliedFingerprint)
+                || bundleVersion == 2 && version == 1 && legacyFingerprint.equals(suppliedFingerprint);
+        }
+    }
     private static Table table(String name, String definition) {
         var columns = new ArrayList<Column>();
         for (String part : definition.split(" ")) {

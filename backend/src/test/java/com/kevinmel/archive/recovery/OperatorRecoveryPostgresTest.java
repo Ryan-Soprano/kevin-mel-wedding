@@ -33,6 +33,8 @@ import javax.sql.DataSource;
 
 import com.kevinmel.archive.contribution.ContributionRepository;
 import com.kevinmel.archive.media.ObjectStorage;
+import com.kevinmel.archive.media.AudioFixtures;
+import com.kevinmel.archive.media.AudioVerifier;
 import com.kevinmel.archive.media.PhotoAdmissionPolicy;
 import com.kevinmel.archive.media.PhotoRepository;
 import com.kevinmel.archive.media.PhotoRequest;
@@ -109,8 +111,8 @@ class OperatorRecoveryPostgresTest {
         assertThat(exported.contributions()).isEqualTo(2);
         assertThat(exported.memories()).isEqualTo(5);
         assertThat(exported.originals()).isEqualTo(2);
-        assertThat(exported.pendingPhotos()).isEqualTo(1);
-        assertThat(exported.failedPhotos()).isEqualTo(1);
+        assertThat(exported.pendingMedia()).isEqualTo(1);
+        assertThat(exported.failedMedia()).isEqualTo(1);
         assertThat(exported.unavailableOriginals()).isZero();
         assertPrivateBundle(bundle);
         try (var files = Files.walk(bundle)) {
@@ -164,6 +166,144 @@ class OperatorRecoveryPostgresTest {
         assertThat(target.db().sql("SELECT media_asset_id FROM upload_grant WHERE id = :id").param("id", id)
                 .query(UUID.class).single()).isEqualTo(batch.assets().getFirst());
         assertThat(targetStorage.objects).isEmpty();
+    }
+
+    @Test void versionTwoPreservesAudioOriginalsVerifiedMetadataAndUnfinishedAudioIntents() throws Exception {
+        note(source, "Synthetic note alongside audio", null);
+        photos(source, sourceStorage, "UPLOADED");
+        var voices = List.of(audio(source, sourceStorage, "audio/webm", "UPLOADED"),
+            audio(source, sourceStorage, "audio/ogg", "UPLOADED"), audio(source, sourceStorage, "audio/mp4", "UPLOADED"));
+        var pending = audio(source, sourceStorage, "audio/webm", "PENDING");
+        audio(source, sourceStorage, "audio/mp4", "FAILED");
+        grant(source, pending.asset(), NOW.minusSeconds(600), NOW.minusSeconds(300));
+        var before = snapshot(source);
+        Path bundle = temporary.resolve("audio-archive");
+
+        var exported = export(bundle);
+        assertThat(exported.ready()).isTrue();
+        assertThat(exported.memories()).isEqualTo(7);
+        assertThat(exported.originals()).isEqualTo(4);
+        assertThat(exported.pendingMedia()).isEqualTo(1);
+        assertThat(exported.failedMedia()).isEqualTo(1);
+        var manifest = JSON.readTree(Files.readAllBytes(bundle.resolve("manifest.json")));
+        assertThat(manifest.get("version").intValue()).isEqualTo(2);
+        assertThat(manifest.get("counts").has("pendingMedia")).isTrue();
+        assertThat(manifest.get("counts").has("pendingPhotos")).isFalse();
+        for (var voice : voices) assertThat(Files.readAllBytes(bundle.resolve("originals").resolve(voice.asset().toString())))
+            .isEqualTo(voice.bytes());
+        var restored = restore(bundle);
+        assertThat(restored.originals()).isEqualTo(4);
+        assertThat(snapshot(target)).isEqualTo(before);
+        for (var voice : voices) {
+            assertThat(targetStorage.objects.get("originals/" + voice.asset())).isEqualTo(voice.bytes());
+            assertThat(target.db().sql("SELECT audio_duration_ms FROM media_asset WHERE id = :id").param("id", voice.asset())
+                .query(Long.class).single()).isEqualTo(voice.verified().durationMs());
+        }
+        assertThat(target.db().sql("SELECT expected_duration_ms FROM media_asset WHERE id = :id").param("id", voices.getFirst().asset())
+            .query(Long.class).single()).isEqualTo(60_000L);
+    }
+
+    @Test void rehashedAudioDurationCannotSubstituteForDecodedOriginalDuration() throws Exception {
+        var voice = audio(source, sourceStorage, "audio/webm", "UPLOADED");
+        Path bundle = temporary.resolve("changed-audio-duration");
+        assertThat(export(bundle).ready()).isTrue();
+        ObjectNode metadata = (ObjectNode) JSON.readTree(Files.readAllBytes(bundle.resolve("metadata.json")));
+        long changedDuration = voice.verified().durationMs() + 1;
+        ((ObjectNode) metadata.get("tables").get("media_asset").get(0)).put("audio_duration_ms", changedDuration);
+        rewriteMetadataDigest(bundle, metadata);
+        ObjectNode manifest = (ObjectNode) JSON.readTree(Files.readAllBytes(bundle.resolve("manifest.json")));
+        ((ObjectNode) manifest.get("originals").get(0)).put("audioDurationMs", changedDuration);
+        Files.write(bundle.resolve("manifest.json"), JSON.writeValueAsBytes(manifest));
+        assertThatThrownBy(() -> restore(bundle)).isInstanceOf(RecoveryException.class);
+        assertEmptyTarget();
+    }
+
+    @Test void changedAudioOriginalHashMakesExportUnreadyAndBlocksRestoration() {
+        var voice = audio(source, sourceStorage, "audio/mp4", "UPLOADED");
+        byte[] changed = voice.bytes().clone();
+        changed[changed.length - 1] ^= 1;
+        sourceStorage.objects.put("originals/" + voice.asset(), changed);
+        Path bundle = temporary.resolve("audio-original-integrity");
+        var result = export(bundle);
+        assertThat(result.ready()).isFalse();
+        assertThat(result.unavailableOriginals()).isEqualTo(1);
+        assertThat(result.originals()).isZero();
+        assertThatThrownBy(() -> restore(bundle)).isInstanceOf(RecoveryException.class);
+        assertEmptyTarget();
+    }
+
+    @Test void olderAudioBundleReplaysCurrentErasureAndReservesAbsentSubmissionKeys() {
+        var voice = audio(source, sourceStorage, "audio/ogg", "UPLOADED");
+        var kept = note(source, "Synthetic retained sibling note", "Retained synthetic guest");
+        Path bundle = temporary.resolve("before-audio-erasure");
+        assertThat(export(bundle).ready()).isTrue();
+        softDelete(source, voice.memory());
+        assertThat(new RetentionService(source.retention(), sourceStorage, fixed(NOW)).purgeBatch(20))
+            .isEqualTo(new RetentionService.Batch(1, 0));
+        String absentKey = UUID.randomUUID().toString();
+        sourceStorage.record(new DeletionRecord(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
+            SubmissionKeyDigest.sha256(absentKey), NOW.minusSeconds(1), NOW));
+
+        var restored = restore(bundle);
+        assertThat(restored.originals()).isZero();
+        assertThat(restored.replayedDeletions()).isEqualTo(2);
+        assertThat(targetStorage.objects).isEmpty();
+        assertThat(count(target, "media_asset")).isZero();
+        assertThat(string(target, "SELECT caption FROM memory WHERE id = :id", voice.memory())).isNull();
+        assertThat(string(target, "SELECT text_content FROM memory WHERE id = :id", kept.memory())).isEqualTo(kept.message());
+        assertThat(count(target, "erased_submission_key")).isEqualTo(2);
+        assertThatThrownBy(() -> target.tx().execute(ignored -> target.contributions().saveTextContribution(
+            "kevin-mel-wedding", null, "Synthetic attempted erased-key reuse", absentKey))).isInstanceOf(RuntimeException.class);
+    }
+
+    @Test void exactVersionOneV8PackageRestoresIntoV9WithNullAudioFields() throws Exception {
+        source = schema("8");
+        var note = legacyNote(source, "Synthetic legacy note");
+        var batch = legacyPhotos(source, sourceStorage, "UPLOADED", "PENDING");
+        Path bundle = temporary.resolve("legacy-v8");
+        assertThat(export(bundle).ready()).isTrue();
+        var manifest = JSON.readTree(Files.readAllBytes(bundle.resolve("manifest.json")));
+        assertThat(manifest.get("version").intValue()).isEqualTo(1);
+        assertThat(manifest.get("counts").has("pendingPhotos")).isTrue();
+        assertThat(manifest.get("originals").get(0).has("audioDurationMs")).isFalse();
+        assertThat(Files.readString(bundle.resolve("metadata.json"))).doesNotContain("expected_duration_ms");
+        // Current authority may contain an erased audio contribution created after this V8 backup.
+        String newerAudioKey = UUID.randomUUID().toString();
+        sourceStorage.record(new DeletionRecord(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
+            SubmissionKeyDigest.sha256(newerAudioKey), NOW.minusSeconds(1), NOW));
+
+        var restored = restore(bundle);
+        assertThat(restored.originals()).isEqualTo(1);
+        assertThat(restored.replayedDeletions()).isEqualTo(1);
+        assertThat(string(target, "SELECT text_content FROM memory WHERE id = :id", note.memory())).isEqualTo(note.message());
+        assertThat(targetStorage.objects.get("originals/" + batch.assets().getFirst())).isEqualTo(batch.bytes().getFirst());
+        assertThat(target.db().sql("SELECT COUNT(*) FROM media_asset WHERE expected_duration_ms IS NOT NULL OR audio_duration_ms IS NOT NULL OR audio_codec IS NOT NULL OR audio_container IS NOT NULL")
+            .query(Long.class).single()).isZero();
+        assertThat(target.db().sql("SELECT COUNT(*) FROM erased_submission_key WHERE key_digest = :digest")
+            .param("digest", SubmissionKeyDigest.sha256(newerAudioKey)).query(Long.class).single()).isEqualTo(1);
+        assertThatThrownBy(() -> target.tx().execute(ignored -> target.contributions().saveTextContribution(
+            "kevin-mel-wedding", null, "Synthetic attempted post-backup audio key reuse", newerAudioKey))).isInstanceOf(RuntimeException.class);
+    }
+
+    @Test void versionOneRejectsAudioEvenWithValidRehashedMetadata() throws Exception {
+        source = schema("8");
+        legacyPhotos(source, sourceStorage, "UPLOADED");
+        Path bundle = temporary.resolve("legacy-rehashed-audio");
+        assertThat(export(bundle).ready()).isTrue();
+        ObjectNode metadata = (ObjectNode) JSON.readTree(Files.readAllBytes(bundle.resolve("metadata.json")));
+        ((ObjectNode) metadata.get("tables").get("memory").get(0)).put("memory_type", "AUDIO");
+        rewriteMetadataDigest(bundle, metadata);
+        assertThatThrownBy(() -> restore(bundle)).isInstanceOf(RecoveryException.class);
+        assertEmptyTarget();
+    }
+
+    @Test void versionTwoCannotRestoreIntoAnOlderV8Target() {
+        audio(source, sourceStorage, "audio/mp4", "UPLOADED");
+        Path bundle = temporary.resolve("v2-requires-v9");
+        assertThat(export(bundle).ready()).isTrue();
+        target = schema("8");
+        assertThatThrownBy(() -> restore(bundle)).isInstanceOf(RecoveryException.class);
+        assertEmptyTarget();
     }
 
     @Test void largerArchiveRestoresEveryContributionAndMemoryWithAccurateCounts() {
@@ -559,12 +699,15 @@ class OperatorRecoveryPostgresTest {
         assertThat(targetStorage.operations).noneMatch(operation -> operation.startsWith("publish:")
                 || operation.startsWith("record:") || operation.startsWith("delete-"));
     }
-    private Fixture schema() {
+    private Fixture schema() { return schema(null); }
+    private Fixture schema(String migrationTarget) {
         String schema = "recovery_" + UUID.randomUUID().toString().replace("-", "");
         schemas.add(schema);
         String url = postgres.getJdbcUrl() + (postgres.getJdbcUrl().contains("?") ? "&" : "?") + "currentSchema=" + schema;
         var data = new DriverManagerDataSource(url, postgres.getUsername(), postgres.getPassword());
-        Flyway.configure().dataSource(data).schemas(schema).defaultSchema(schema).load().migrate();
+        var migration = Flyway.configure().dataSource(data).schemas(schema).defaultSchema(schema);
+        if (migrationTarget != null) migration.target(migrationTarget);
+        migration.load().migrate();
         var db = JdbcClient.create(data);
         var manager = new JdbcTransactionManager(data);
         var contributions = new ContributionRepository(db);
@@ -606,6 +749,83 @@ class OperatorRecoveryPostgresTest {
         }
         normalize(fixture, saved.receipt().contributionId(), memories);
         return new PhotoBatch(saved.receipt().contributionId(), key, request, memories, assets, bytes);
+    }
+    private static Voice audio(Fixture fixture, MemoryStorage storage, String type, String state) {
+        byte[] bytes = AudioFixtures.audio(type, 1.0);
+        UUID contribution = UUID.randomUUID(), memory = UUID.randomUUID(), asset = UUID.randomUUID();
+        String key = UUID.randomUUID().toString();
+        var verified = new AudioVerifier().verify(bytes, new PhotoRepository.Asset(asset, "originals/" + asset,
+            type, bytes.length, hash(bytes), "UPLOADED", "AUDIO", 60_000L));
+        fixture.db().sql("""
+            INSERT INTO contribution(id, event_key, guest_name, idempotency_key, created_at, request_fingerprint)
+            VALUES (:id, 'kevin-mel-wedding', 'Synthetic voice guest', :key, :at, :fingerprint)
+            """).param("id", contribution).param("key", key).param("at", time(NOW.minusSeconds(3600)))
+            .param("fingerprint", "a".repeat(64)).update();
+        fixture.db().sql("""
+            INSERT INTO memory(id, contribution_id, memory_type, client_item_id, caption, item_position, created_at, updated_at)
+            VALUES (:id, :contribution, 'AUDIO', :client, 'Synthetic voice caption', 0, :at, :at)
+            """).param("id", memory).param("contribution", contribution).param("client", UUID.randomUUID())
+            .param("at", time(NOW.minusSeconds(3600))).update();
+        boolean uploaded = "UPLOADED".equals(state);
+        fixture.db().sql("""
+            INSERT INTO media_asset(id, memory_id, object_key, original_filename, detected_format, byte_size,
+                checksum_sha256, upload_state, created_at, updated_at, declared_content_type, expected_byte_size,
+                expected_checksum_sha256, expected_duration_ms, audio_duration_ms, audio_codec, audio_container)
+            VALUES (:id, :memory, :key, 'synthetic-voice-original', :format, :size, :hash, :state, :at, :at,
+                :type, :size, :hash, 60000, :duration, :codec, :container)
+            """).param("id", asset).param("memory", memory).param("key", "originals/" + asset).param("format", uploaded ? type : "unverified")
+            .param("size", bytes.length).param("hash", hash(bytes)).param("state", state).param("at", time(NOW.minusSeconds(3600)))
+            .param("type", type).param("duration", uploaded ? verified.durationMs() : null)
+            .param("codec", uploaded ? verified.codec() : null).param("container", uploaded ? verified.container() : null).update();
+        if (uploaded) storage.objects.put("originals/" + asset, bytes);
+        return new Voice(contribution, memory, asset, key, bytes, verified);
+    }
+    private static PhotoBatch legacyPhotos(Fixture fixture, MemoryStorage storage, String... states) {
+        UUID contribution = UUID.randomUUID(); String key = UUID.randomUUID().toString();
+        var items = new ArrayList<PhotoRequest.Item>(); var memories = new ArrayList<UUID>();
+        var assets = new ArrayList<UUID>(); var originals = new ArrayList<byte[]>();
+        for (int index = 0; index < states.length; index++) {
+            byte[] bytes = png(index + 1); originals.add(bytes);
+            items.add(new PhotoRequest.Item(UUID.randomUUID(), "synthetic-legacy-" + index + ".png", "image/png", bytes.length, hash(bytes), "Synthetic legacy caption " + index));
+        }
+        var request = new PhotoRequest(null, List.copyOf(items));
+        fixture.db().sql("""
+            INSERT INTO contribution(id, event_key, idempotency_key, created_at, request_fingerprint)
+            VALUES (:id, 'kevin-mel-wedding', :key, :at, :fingerprint)
+            """).param("id", contribution).param("key", key).param("at", time(NOW.minusSeconds(3600)))
+            .param("fingerprint", request.fingerprint()).update();
+        for (int index = 0; index < states.length; index++) {
+            UUID memory = UUID.randomUUID(), asset = UUID.randomUUID(); memories.add(memory); assets.add(asset);
+            var item = items.get(index); byte[] bytes = originals.get(index);
+            fixture.db().sql("""
+                INSERT INTO memory(id, contribution_id, memory_type, client_item_id, caption, item_position, created_at, updated_at)
+                VALUES (:id, :contribution, 'PHOTO', :client, :caption, :position, :at, :at)
+                """).param("id", memory).param("contribution", contribution).param("client", item.clientItemId())
+                .param("caption", item.caption()).param("position", index).param("at", time(NOW.minusSeconds(3600))).update();
+            fixture.db().sql("""
+                INSERT INTO media_asset(id, memory_id, object_key, original_filename, detected_format, byte_size,
+                    checksum_sha256, upload_state, created_at, updated_at, declared_content_type, expected_byte_size, expected_checksum_sha256)
+                VALUES (:id, :memory, :key, :filename, :format, :size, :hash, :state, :at, :at, 'image/png', :size, :hash)
+                """).param("id", asset).param("memory", memory).param("key", "originals/" + asset)
+                .param("filename", item.originalFilename()).param("format", "UPLOADED".equals(states[index]) ? "image/png" : "unverified")
+                .param("size", bytes.length).param("hash", hash(bytes)).param("state", states[index]).param("at", time(NOW.minusSeconds(3600))).update();
+            if ("UPLOADED".equals(states[index])) storage.objects.put("originals/" + asset, bytes);
+        }
+        return new PhotoBatch(contribution, key, request, memories, assets, originals);
+    }
+    private static Text legacyNote(Fixture fixture, String message) {
+        UUID contribution = UUID.randomUUID(), memory = UUID.randomUUID(); String key = UUID.randomUUID().toString();
+        fixture.db().sql("""
+            INSERT INTO contribution(id, event_key, idempotency_key, created_at, request_fingerprint)
+            VALUES (:id, 'kevin-mel-wedding', :key, :at, :fingerprint)
+            """).param("id", contribution).param("key", key).param("at", time(NOW.minusSeconds(3600)))
+            .param("fingerprint", "a".repeat(64)).update();
+        fixture.db().sql("""
+            INSERT INTO memory(id, contribution_id, memory_type, text_content, created_at, updated_at)
+            VALUES (:id, :contribution, 'TEXT', :message, :at, :at)
+            """).param("id", memory).param("contribution", contribution).param("message", message)
+            .param("at", time(NOW.minusSeconds(3600))).update();
+        return new Text(contribution, memory, key, message, null);
     }
     private static void normalize(Fixture fixture, UUID contribution, List<UUID> memories) {
         fixture.db().sql("UPDATE contribution SET created_at = :at WHERE id = :id")
@@ -674,6 +894,7 @@ class OperatorRecoveryPostgresTest {
     private record Text(UUID contribution, UUID memory, String key, String message, String guest) { }
     private record PhotoBatch(UUID contribution, String key, PhotoRequest request, List<UUID> memories,
             List<UUID> assets, List<byte[]> bytes) { }
+    private record Voice(UUID contribution, UUID memory, UUID asset, String key, byte[] bytes, AudioVerifier.Verified verified) { }
 
     /** Durable synthetic stores are separate from each database and separate from one another. */
     private static final class MemoryStorage implements ObjectStorage, DeletionStorage {

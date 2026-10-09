@@ -11,11 +11,12 @@ import java.util.UUID;
 
 import com.kevinmel.archive.retention.DeletionRecord;
 import com.kevinmel.archive.retention.SubmissionKeyDigest;
+import com.kevinmel.archive.media.MediaTypes;
 
 /** Validate the complete import graph before publishing any original or deletion evidence. */
 final class RecoveryMetadata {
     private static final Set<String> STATES = Set.of("PENDING", "KEEP", "ARCHIVED", "DELETE");
-    private static final Set<String> TYPES = Set.of("image/jpeg", "image/png", "image/webp");
+    private final int version;
     private final Map<String, List<Map<String, Object>>> tables;
     private final Map<UUID, Map<String, Object>> contributions;
     private final Map<UUID, Map<String, Object>> memories;
@@ -23,7 +24,12 @@ final class RecoveryMetadata {
     private final Map<UUID, Map<String, Object>> assetsByMemory = new HashMap<>();
 
     RecoveryMetadata(Map<String, List<Map<String, Object>>> tables, Instant at) {
+        this(tables, at, 2);
+    }
+
+    RecoveryMetadata(Map<String, List<Map<String, Object>>> tables, Instant at, int version) {
         this.tables = tables;
+        this.version = version;
         contributions = indexed("contribution", "id"); memories = indexed("memory", "id"); assets = indexed("media_asset", "id");
         for (var asset : assets.values()) if (assetsByMemory.put(uuid(asset, "memory_id"), asset) != null) throw invalid();
         validate(at);
@@ -75,7 +81,7 @@ final class RecoveryMetadata {
         var ownedAssets = new HashSet<UUID>();
         for (var m : memories.values()) {
             UUID contribution = uuid(m, "contribution_id");
-            if (!contributions.containsKey(contribution) || !Set.of("TEXT", "PHOTO").contains(text(m, "memory_type"))
+            if (!contributions.containsKey(contribution) || !(version == 1 ? Set.of("TEXT", "PHOTO") : Set.of("TEXT", "PHOTO", "AUDIO")).contains(text(m, "memory_type"))
                     || !STATES.contains(text(m, "review_status")) || !"COUPLE_ONLY".equals(m.get("visibility"))
                     || number(m, "revision") < 1 || instant(m, "updated_at").isBefore(instant(m, "created_at"))) throw invalid();
             boolean deleted = "DELETE".equals(m.get("review_status")), purged = m.get("purged_at") != null;
@@ -92,20 +98,33 @@ final class RecoveryMetadata {
         }
         for (var a : assets.values()) {
             UUID id = uuid(a, "id"), owner = uuid(a, "memory_id"); var memory = memories.get(owner);
-            if (memory == null || !"PHOTO".equals(memory.get("memory_type")) || memory.get("purged_at") != null || !ownedAssets.add(owner)
+            boolean audio = memory != null && "AUDIO".equals(memory.get("memory_type"));
+            String declared = text(a, "declared_content_type");
+            if (memory == null || !Set.of("PHOTO", "AUDIO").contains(text(memory, "memory_type")) || memory.get("purged_at") != null || !ownedAssets.add(owner)
                     || !("originals/" + id).equals(a.get("object_key")) || id.version() != 4
                     || !Set.of("PENDING", "FAILED", "UPLOADED").contains(text(a, "upload_state"))
-                    || number(a, "byte_size") < 1 || number(a, "byte_size") > 10_000_000
+                    || !MediaTypes.validTypeAndSize(declared, number(a, "byte_size"))
+                    || (audio != MediaTypes.AUDIO_TYPES.contains(declared))
                     || a.get("expected_byte_size") == null || number(a, "expected_byte_size") != number(a, "byte_size")
-                    || !TYPES.contains(text(a, "declared_content_type"))
                     || instant(a, "updated_at").isBefore(instant(a, "created_at"))) throw invalid();
             bounded(a, "original_filename", 255, false); hash(a, "checksum_sha256", false); hash(a, "expected_checksum_sha256", false);
             if (!a.get("checksum_sha256").equals(a.get("expected_checksum_sha256"))) throw invalid();
             if ("UPLOADED".equals(a.get("upload_state"))) {
                 if (!a.get("declared_content_type").equals(a.get("detected_format"))) throw invalid();
             } else if (!"unverified".equals(a.get("detected_format"))) throw invalid();
+            if (!audio) {
+                if (a.get("expected_duration_ms") != null || a.get("audio_duration_ms") != null
+                    || a.get("audio_codec") != null || a.get("audio_container") != null) throw invalid();
+            } else {
+                if (a.get("expected_duration_ms") == null || number(a, "expected_duration_ms") < 1
+                    || number(a, "expected_duration_ms") > MediaTypes.AUDIO_MAX_DURATION_MS) throw invalid();
+                if ("UPLOADED".equals(a.get("upload_state"))) {
+                    if (a.get("audio_duration_ms") == null || !MediaTypes.audioMetadataMatches(declared,
+                        text(a, "audio_container"), text(a, "audio_codec"), number(a, "audio_duration_ms"))) throw invalid();
+                } else if (a.get("audio_duration_ms") != null || a.get("audio_codec") != null || a.get("audio_container") != null) throw invalid();
+            }
         }
-        for (var m : memories.values()) if ("PHOTO".equals(m.get("memory_type")) && m.get("purged_at") == null
+        for (var m : memories.values()) if (Set.of("PHOTO", "AUDIO").contains(text(m, "memory_type")) && m.get("purged_at") == null
                 && !ownedAssets.contains(uuid(m, "id"))) throw invalid();
         var populated = new HashSet<UUID>(); for (var memory : memories.values()) populated.add(uuid(memory, "contribution_id"));
         if (!populated.equals(contributions.keySet())) throw invalid();

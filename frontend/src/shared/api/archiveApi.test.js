@@ -51,7 +51,7 @@ for (const [name, mutate] of [
   });
 }
 
-test("audio duration and provisional size limits are checked", () => {
+test("audio duration and size limits are checked", () => {
   for (const duration of [0, 121, Infinity]) {
     const payload = copy(AUDIO_REQUEST);
     payload.items[0].durationSeconds = duration;
@@ -60,6 +60,29 @@ test("audio duration and provisional size limits are checked", () => {
   const payload = copy(AUDIO_REQUEST);
   payload.items[0].byteSize = 25_000_001;
   assert.throws(() => normalizeMediaContribution(payload), { code: "VALIDATION_FAILED" });
+});
+
+test("audio metadata accepts only canonical production MIME types and one item", () => {
+  for (const type of ["audio/webm", "audio/ogg", "audio/mp4"]) {
+    const payload = copy(AUDIO_REQUEST); payload.items[0].declaredContentType = type;
+    assert.equal(normalizeMediaContribution(payload).items[0].declaredContentType, type);
+  }
+  for (const type of ["video/webm", "video/mp4", "audio/wav", "audio/mpeg", "audio/webm;codecs=opus"]) {
+    const payload = copy(AUDIO_REQUEST); payload.items[0].declaredContentType = type;
+    assert.throws(() => normalizeMediaContribution(payload), { code: "VALIDATION_FAILED" });
+  }
+  assert.throws(() => normalizeMediaContribution({ ...AUDIO_REQUEST, items: [AUDIO_REQUEST.items[0], AUDIO_REQUEST.items[0]] }), { code: "VALIDATION_FAILED" });
+});
+
+test("private audio details require verified canonical media, bounded size and actual duration", async () => {
+  const audio = { ...MEDIA_DETAIL, memoryType: "AUDIO", media: { ...MEDIA_DETAIL.media,
+    originalFilename: "message.webm", detectedContentType: "audio/webm", durationSeconds: 2.5 } };
+  assert.deepEqual(await returning(audio).getMemory(IDS.photo), audio);
+  assert.deepEqual(await returning({ items: [audio], nextCursor: null }).listMemories(), { items: [audio], nextCursor: null });
+  for (const media of [{ durationSeconds: null }, { durationSeconds: 120.001 }, { detectedContentType: "video/webm" },
+    { detectedContentType: "audio/wav" }, { byteSize: 25_000_001 }]) {
+    await assert.rejects(returning({ ...audio, media: { ...audio.media, ...media } }).getMemory(IDS.photo), { code: "CONTRACT_MISMATCH" });
+  }
 });
 
 test("receipts enforce item states, privacy, cardinality, and aggregate completion", () => {

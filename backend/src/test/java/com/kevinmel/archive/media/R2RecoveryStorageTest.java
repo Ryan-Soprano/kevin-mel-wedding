@@ -82,7 +82,7 @@ class R2RecoveryStorageTest {
                     .isInstanceOf(IllegalArgumentException.class);
             assertThatThrownBy(() -> storage.publishRecovered("originals/" + UUID.randomUUID(), new byte[0], "image/png"))
                     .isInstanceOf(IllegalArgumentException.class);
-            assertThatThrownBy(() -> storage.publishRecovered("originals/" + UUID.randomUUID(), ORIGINAL, "audio/webm"))
+            assertThatThrownBy(() -> storage.publishRecovered("originals/" + UUID.randomUUID(), ORIGINAL, "audio/mpeg"))
                     .isInstanceOf(IllegalArgumentException.class);
             verifyNoInteractions(client);
         }

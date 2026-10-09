@@ -1,5 +1,6 @@
 import { ApiError, contractMismatch, createApiClient, parseRetryAfter } from "./apiClient.js";
 import { ALLOWED_FILE_TYPES, MAX_PHOTO_BYTES, MAX_PHOTOS } from "../../features/media/mediaConstraints.js";
+import { AUDIO_CONTENT_TYPES, MAX_AUDIO_BYTES, MAX_AUDIO_SECONDS } from "../../features/audio/audioConstraints.js";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const KEY = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -78,14 +79,13 @@ export function normalizeMediaContribution({ guestName = null, memoryType, items
       add(field + ".originalFilename", "Use a filename, not a file path, of 1–255 characters.");
     }
     const photo = memoryType === "PHOTO";
-    // Audio types are provisional until D-03 has real-device evidence.
     if (typeof item?.declaredContentType !== "string"
       || (photo ? !ALLOWED_FILE_TYPES.has(item.declaredContentType)
-        : !/^(audio\/[a-z0-9.+-]+|video\/(webm|mp4))$/.test(item.declaredContentType))) {
+        : !AUDIO_CONTENT_TYPES.has(item.declaredContentType))) {
       add(field + ".declaredContentType", "This declared media format is unsupported.");
     }
-    if (!positiveInteger(item?.byteSize) || item.byteSize > (photo ? MAX_PHOTO_BYTES : 25_000_000)) {
-      add(field + ".byteSize", "This file exceeds the provisional size limit.");
+    if (!positiveInteger(item?.byteSize) || item.byteSize > (photo ? MAX_PHOTO_BYTES : MAX_AUDIO_BYTES)) {
+      add(field + ".byteSize", "This file exceeds the size limit.");
     }
     if (typeof item?.checksumSha256 !== "string" || !/^[0-9a-f]{64}$/.test(item.checksumSha256)) {
       add(field + ".checksumSha256", "Supply a lowercase SHA-256 checksum of the original file.");
@@ -95,7 +95,7 @@ export function normalizeMediaContribution({ guestName = null, memoryType, items
       add(field + ".caption", "Captions must be 500 characters or fewer.");
     }
     if (!photo && (!Number.isFinite(item?.durationSeconds)
-      || item.durationSeconds <= 0 || item.durationSeconds > 120)) {
+      || item.durationSeconds <= 0 || item.durationSeconds > MAX_AUDIO_SECONDS)) {
       add(field + ".durationSeconds", "Audio must be between zero and 120 seconds.");
     }
     return {
@@ -172,12 +172,14 @@ function decodeMemory(value) {
     throw contractMismatch();
   }
   if (value.media && (!positiveInteger(value.media.byteSize)
+    || value.media.byteSize > (value.memoryType === "AUDIO" ? MAX_AUDIO_BYTES : MAX_PHOTO_BYTES)
     || typeof value.media.originalFilename !== "string" || !value.media.originalFilename.trim()
     || typeof value.media.detectedContentType !== "string"
+    || !(value.memoryType === "AUDIO" ? AUDIO_CONTENT_TYPES : ALLOWED_FILE_TYPES).has(value.media.detectedContentType)
     || !/^[0-9a-f]{64}$/.test(value.media.checksumSha256)
     || value.media.uploadState !== "UPLOADED"
     || (value.memoryType === "AUDIO"
-      ? !Number.isFinite(value.media.durationSeconds) || value.media.durationSeconds <= 0
+      ? !Number.isFinite(value.media.durationSeconds) || value.media.durationSeconds <= 0 || value.media.durationSeconds > MAX_AUDIO_SECONDS
       : value.media.durationSeconds !== null))) throw contractMismatch();
   return value;
 }
@@ -203,7 +205,7 @@ function decodeGrant(value) {
   return value;
 }
 
-/** Durable v1 adapter for text, photos, sessions and photo playback; audio and inbox/review routes remain future server work. */
+/** Durable v1 adapter for guest memories, sessions, and private review/playback. */
 export function createArchiveApi({
   client = createApiClient(), uploadFetch = globalThis.fetch,
 } = {}) {

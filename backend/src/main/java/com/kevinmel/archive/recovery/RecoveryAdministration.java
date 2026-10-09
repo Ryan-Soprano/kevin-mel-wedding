@@ -30,7 +30,7 @@ public final class RecoveryAdministration {
     static int run(String[] args) {
         if (args.length == 1 && "--help".equals(args[0])) {
             System.out.println("""
-                    Offline note/photo archive-data export and restore (current reviewed migrations required):
+                    Offline note/photo/audio archive-data export and restore (reviewed V8 or V9 migrations required):
                       --expect-environment <local|staging|production> export <new-private-directory>
                       --expect-environment <local|staging|production> restore <private-backup-directory>
                     An interactive console and exact confirmation are required. Stop source/target traffic,
@@ -91,9 +91,9 @@ public final class RecoveryAdministration {
                     var service = new OperatorRecovery(source, storage, ledger(storage, true), ledger(storage, true),
                             Clock.systemUTC(), storageIdentity(endpoint, bucket));
                     var result = service.exportTo(directory);
-                    console.printf("Export: %d contributions, %d memories, %d originals; %d pending photos, %d failed photos, %d unavailable originals. Restore-ready: %s.%n",
-                            result.contributions(), result.memories(), result.originals(), result.pendingPhotos(),
-                            result.failedPhotos(), result.unavailableOriginals(), result.ready());
+                    console.printf("Export: %d contributions, %d memories, %d originals; %d pending media, %d failed media, %d unavailable originals. Restore-ready: %s.%n",
+                            result.contributions(), result.memories(), result.originals(), result.pendingMedia(),
+                            result.failedMedia(), result.unavailableOriginals(), result.ready());
                     return result.ready() ? 0 : 1;
                 }
                 try (var authority = R2ObjectStorage.openPrivate(authorityEndpoint, authorityBucket,

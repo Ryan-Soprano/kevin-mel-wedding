@@ -24,6 +24,8 @@ import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 import software.amazon.awssdk.services.s3.presigner.model.PresignedGetObjectRequest;
+import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
+import software.amazon.awssdk.services.s3.presigner.model.PresignedPutObjectRequest;
 
 class R2ObjectStorageTest {
     @Test void privateGetHeadsTheExactOriginalBeforeSigningItsScopeMetadataAndActualExpiry() throws Exception {
@@ -98,7 +100,7 @@ class R2ObjectStorageTest {
                     "originals/11111111-1111-1111-8111-111111111111")) {
                 assertPrivateUnavailable(() -> storage.authorizeRead(key, "image/png", 41, Instant.now().plusSeconds(300)));
             }
-            for (String type : Arrays.asList(null, "image/gif", "image/png; charset=utf-8", "audio/webm")) {
+            for (String type : Arrays.asList(null, "image/gif", "image/png; charset=utf-8", "audio/wav", "audio/webm;codecs=opus", "video/webm")) {
                 assertPrivateUnavailable(() -> storage.authorizeRead(original, type, 41, Instant.now().plusSeconds(300)));
             }
             for (long size : new long[]{-1, 0, PhotoRequest.MAX_BYTES + 1L}) {
@@ -237,6 +239,58 @@ class R2ObjectStorageTest {
                         Instant.now().plusSeconds(300))).isInstanceOf(IllegalArgumentException.class);
             }
         }
+    }
+
+    @Test void audioScopesSignExactSizesAndUseOnlyConstantPrivateVoiceNames() throws Exception {
+        for (var type : Map.of("audio/webm", "webm", "audio/ogg", "ogg", "audio/mp4", "m4a").entrySet()) {
+            var client = mock(S3Client.class);
+            // Exercise the actual SDK directly; no spy/instrumentation is needed for these URL assertions.
+            var signer = syntheticSigner();
+            when(client.headObject(any(HeadObjectRequest.class))).thenReturn(HeadObjectResponse.builder()
+                    .contentLength((long) MediaTypes.AUDIO_MAX_BYTES).contentType(type.getKey()).build());
+            UUID id = UUID.randomUUID();
+            try (var storage = new R2ObjectStorage("private-test", client, signer)) {
+                var put = storage.authorize(id, "staging/" + id, type.getKey(), MediaTypes.AUDIO_MAX_BYTES, Instant.now().plusSeconds(300));
+                assertThat(URLDecoder.decode(URI.create(put.uploadUrl()).getRawQuery(), java.nio.charset.StandardCharsets.UTF_8))
+                        .contains("X-Amz-SignedHeaders=content-length;content-type;host");
+                var grant = storage.authorizeRead("originals/" + id, type.getKey(), MediaTypes.AUDIO_MAX_BYTES, Instant.now().plusSeconds(120));
+                String query = URLDecoder.decode(URI.create(grant.url()).getRawQuery(), java.nio.charset.StandardCharsets.UTF_8);
+                assertThat(query).contains("response-content-type=" + type.getKey(), "response-cache-control=no-store",
+                        "response-content-disposition=inline; filename=\"voice-" + id + "." + type.getValue() + "\"");
+                assertThat(grant.expiresAt()).isAfter(Instant.now()).isBefore(Instant.now().plusSeconds(120));
+                assertThatThrownBy(() -> storage.authorize(id, "staging/" + id, type.getKey(), MediaTypes.AUDIO_MAX_BYTES + 1L,
+                        Instant.now().plusSeconds(300))).isInstanceOf(IllegalArgumentException.class);
+                assertPrivateUnavailable(() -> storage.authorizeRead("originals/" + id, type.getKey(), MediaTypes.AUDIO_MAX_BYTES + 1L,
+                        Instant.now().plusSeconds(300)));
+            }
+        }
+    }
+
+    @Test void returnedUploadPermissionUsesTheActualSdkExpiryWithinItsServerDeadline() {
+        var signer = spy(syntheticSigner());
+        var issued = new AtomicReference<PresignedPutObjectRequest>();
+        doAnswer(invocation -> {
+            var signed = (PresignedPutObjectRequest) invocation.callRealMethod();
+            issued.set(signed); return signed;
+        }).when(signer).presignPutObject(any(PutObjectPresignRequest.class));
+        UUID id = UUID.randomUUID();
+        Instant databaseDeadline = Instant.now().plusSeconds(300);
+        try (var storage = new R2ObjectStorage("private-test", mock(S3Client.class), signer)) {
+            var grant = storage.authorize(id, "staging/" + id, "audio/webm", 41, databaseDeadline);
+            assertThat(grant.expiresAt()).isEqualTo(issued.get().expiration()).isAfter(Instant.now()).isBefore(databaseDeadline);
+            assertThat(grant.uploadUrl()).isEqualTo(issued.get().url().toString());
+            assertThat(grant.grantId()).isEqualTo(id);
+        }
+    }
+
+    @Test void signatureDurationLeavesTimeForTheSdkOnExactAndFractionalClockTicks() {
+        Instant now = Instant.parse("2026-10-09T12:00:00Z");
+        assertThat(R2ObjectStorage.signatureSeconds(now, now.plusSeconds(120))).isEqualTo(119);
+        assertThat(R2ObjectStorage.signatureSeconds(now.plusMillis(1), now.plusSeconds(120))).isEqualTo(118);
+        assertThat(R2ObjectStorage.signatureSeconds(now, now.plusSeconds(300))).isEqualTo(299);
+        assertThat(R2ObjectStorage.signatureSeconds(now, now.plusSeconds(900))).isEqualTo(300);
+        assertThat(R2ObjectStorage.signatureSeconds(now, now.plusMillis(1500))).isZero();
+        assertThat(R2ObjectStorage.signatureSeconds(now, now.minusSeconds(1))).isNegative();
     }
 
     @Test void signedServerIoPreservesExactBytesBoundsReadsAndHidesFailures() throws Exception {

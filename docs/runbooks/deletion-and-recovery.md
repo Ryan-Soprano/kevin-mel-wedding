@@ -4,7 +4,7 @@
 
 Kevin and Melanie choose review states through the authenticated inbox. Keep remains private; Archive is recoverable. Restore to inbox chooses `PENDING`. Delete requires a separate confirmation and sets the first server decision's deadline to 30 elapsed days later. A current-revision repeat is a no-op; a stale revision conflicts. Neither repeat taps nor recovery requests extend the deadline.
 
-Until the deadline, the couple can find the item under **Recently deleted** and restore it. New photo playback permissions are unavailable while deleted. At the exact deadline the item is unavailable to list/detail/review, even while storage cleanup is retrying. Previously issued playback permissions can last until their own five-minute expiry, and downloaded copies cannot be recalled.
+Until the deadline, the couple can find the item under **Recently deleted** and restore it. New photo/audio playback permissions are unavailable while deleted. At the exact deadline the item is unavailable to list/detail/review, even while storage cleanup is retrying. Previously issued playback permissions can last until their own five-minute expiry, and downloaded copies cannot be recalled.
 
 Ryan operates retention maintenance that enforces expired couple decisions. Maintenance supplies no new keep/archive/delete/publication choices, and operator/developer application roles receive no review endpoints. The offline console starts no HTTP server and requires a matching environment and typed confirmation.
 
@@ -16,7 +16,7 @@ Private R2 must permit server-only conditional PUT/GET/list for `deletions/v1/` 
 
 ## Write-ahead erasure
 
-1. Lock an expired private note/verified-photo memory, freeze its SQL plan and mark purge started. Review and guest media IO cannot revive claimed/expired/purged items.
+1. Lock an expired private note/verified-photo/verified-audio memory, freeze its SQL plan and mark purge started. Audio requires a canonical WebM/Opus, Ogg/Opus or MP4/AAC original, verified duration over zero and at most 120 seconds, and the same confirmed size/checksum/type/owned-key invariants as photo originals. Pending or failed audio is not claimed as verified original media. Review and guest media IO cannot revive claimed/expired/purged items.
 2. Validate the memory/contribution/asset ownership and staging scopes. Store the immutable, bounded JSON plan privately at `deletions/v1/<memory UUID>.json` with `If-None-Match: *`. A duplicate write succeeds only if the existing record is identical. A mismatch, malformed ledger or storage failure stops that item before acknowledging purge.
 3. Delete only its server-derived `originals/<asset UUID>` and known `staging/<grant UUID>` objects. Missing objects are safe to retry; unknown IO failures remain unconfirmed.
 4. In a transaction, remove media/grant metadata and scrub the note/caption. Clear the envelope's guest name only after every sibling is purged. Retain the minimal private memory/envelope IDs, type/order, retry fingerprint/key reservation, state/revision and timestamps; a valid guest replay returns the prior receipt instead of recreating content.
@@ -33,13 +33,13 @@ MSYS2_ARG_CONV_EXCL='*' java -cp "$archive_account_classpath" com.kevinmel.archi
 MSYS2_ARG_CONV_EXCL='*' java -cp "$archive_account_classpath" com.kevinmel.archive.retention.RetentionAdministration --expect-environment local replay-ledger
 ```
 
-The latter commands require typing `purge-expired in local` or `replay-ledger in local`. Use `staging`/`production` only with the corresponding reviewed target. Nonlocal commands require explicit database URL, username and password settings; local defaults cannot satisfy this check. Labels do not identify a database: privately verify the actual connection and bucket first. The console uses `application.properties` and environment overrides, does not load profile files or apply migrations, and requires V7 already applied. Never redirect a write command's input; credentials belong in private runtime settings, not arguments/history. Output contains only counts and safe failures. A nonzero result may represent partial cleanup and must not be interpreted as rollback.
+The latter commands require typing `purge-expired in local` or `replay-ledger in local`. Use `staging`/`production` only with the corresponding reviewed target. Nonlocal commands require explicit database URL, username and password settings; local defaults cannot satisfy this check. Labels do not identify a database: privately verify the actual connection and bucket first. The console uses `application.properties` and environment overrides, does not load profile files or apply migrations, and requires reviewed V9 already applied for current retention claims. Never redirect a write command's input; credentials belong in private runtime settings, not arguments/history. Output contains only counts and safe failures. A nonzero result may represent partial cleanup and must not be interpreted as rollback.
 
 ## Restore without resurrection
 
 Contribution-bearing rolling backups may retain a deleted copy until that backup's own 30-day expiry. Live purge cannot erase those historical copies immediately. OPS-02 owns the backup retention and restore implementation, with OPS-03 monitoring; no hosted RPO/RTO claim is made here.
 
-The [OPS-02 operator recovery console](operator-recovery.md) now exports note/photo archive data and verifies isolated restoration with current independent deletion evidence. It supplements a full database backup; it does not prove hosted scheduling, actual provider recovery-copy durability or the operating RPO/RTO targets. Audio remains later acceptance.
+The [OPS-02 operator recovery console](operator-recovery.md) now exports note/photo/audio archive data and verifies isolated restoration with current independent deletion evidence. Audio metadata and exact original bytes survive the version 2 package; older audio packages replay current erasure and reserve absent submission keys. It supplements a full database backup; it does not prove hosted scheduling, actual provider recovery-copy durability or the operating RPO/RTO targets. Physical-device audio acceptance remains deferred.
 
 For any restore:
 

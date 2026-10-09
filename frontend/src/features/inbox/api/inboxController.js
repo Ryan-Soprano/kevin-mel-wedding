@@ -1,6 +1,7 @@
 import { createArchiveApi } from "../../../shared/api/archiveApi.js";
 import { ApiError, contractMismatch } from "../../../shared/api/apiClient.js";
 import { ALLOWED_FILE_TYPES, MAX_PHOTO_BYTES } from "../../media/mediaConstraints.js";
+import { AUDIO_CONTENT_TYPES, MAX_AUDIO_BYTES, MAX_AUDIO_SECONDS } from "../../audio/audioConstraints.js";
 
 const EMPTY_ITEMS = Object.freeze([]);
 const idlePhoto = () => Object.freeze({ phase: "idle", url: null, error: null });
@@ -31,12 +32,13 @@ function photoFailure(code = "PHOTO_UNAVAILABLE") {
   return new ApiError("The original photo is unavailable.", { code });
 }
 
-function photoMessage(failure) {
-  if (failure?.code === "PHOTO_INTEGRITY") return "This photo did not match its saved original. It has not been displayed. Try loading it again.";
-  if (failure?.code === "PHOTO_EXPIRED") return "The photo link expired. Try loading the original again.";
-  if (failure?.code === "REQUEST_TIMED_OUT") return "The photo took too long to load. Try loading it again.";
-  if (failure?.status === 429) return "Please wait before trying to load this photo again.";
-  return "The original photo could not be loaded. The memory is still here. Try loading it again.";
+function photoMessage(failure, audio = false) {
+  const kind = audio ? "audio" : "photo";
+  if (failure?.code === "PHOTO_INTEGRITY") return `This ${kind} did not match its saved original. It has not been displayed. Try loading it again.`;
+  if (failure?.code === "PHOTO_EXPIRED") return `The ${kind} link expired. Try loading the original again.`;
+  if (failure?.code === "REQUEST_TIMED_OUT") return `The ${kind} took too long to load. Try loading it again.`;
+  if (failure?.status === 429) return `Please wait before trying to load this ${kind} again.`;
+  return `The original ${kind} could not be loaded. The memory is still here. Try loading it again.`;
 }
 
 /**
@@ -204,7 +206,7 @@ export function createInboxController({
     publish({ items: EMPTY_ITEMS, nextCursor: null, pageResetVersion: state.pageResetVersion + 1,
       detail: frozenCopy(memory), review: idleReview(), notice, error: null });
     assertCurrent(op);
-    if (memory.memoryType === "PHOTO" && memory.reviewStatus !== "DELETE") await photo(op, memory);
+    if (["PHOTO", "AUDIO"].includes(memory.memoryType) && memory.reviewStatus !== "DELETE") await photo(op, memory);
   }
 
   function reviewFailure(failure) {
@@ -272,7 +274,7 @@ export function createInboxController({
     try { Promise.resolve(response.body?.cancel()).catch(() => {}); } catch { /* Stream may already be closed. */ }
   }
 
-  async function readPhoto(op, url, media, signal) {
+  async function readPhoto(op, url, media, signal, maxBytes) {
     const response = await fetchImpl(url, { method: "GET", credentials: "omit", redirect: "error",
       referrerPolicy: "no-referrer", cache: "no-store", signal });
     try { assertCurrent(op); } catch (failure) { cancelBody(response); throw failure; }
@@ -298,7 +300,7 @@ export function createInboxController({
         assertCurrent(op);
         if (next.done) break;
         bytes += next.value.byteLength;
-        if (bytes > media.byteSize || bytes > MAX_PHOTO_BYTES) throw photoFailure("PHOTO_INTEGRITY");
+        if (bytes > media.byteSize || bytes > maxBytes) throw photoFailure("PHOTO_INTEGRITY");
         chunks.push(next.value);
       }
       if (bytes !== media.byteSize) throw photoFailure("PHOTO_INTEGRITY");
@@ -316,10 +318,14 @@ export function createInboxController({
 
   async function photo(op, memory) {
     const media = memory.media;
+    const audio = memory.memoryType === "AUDIO";
+    const maxBytes = audio ? MAX_AUDIO_BYTES : MAX_PHOTO_BYTES;
+    const types = audio ? AUDIO_CONTENT_TYPES : ALLOWED_FILE_TYPES;
     publish({ photo: Object.freeze({ phase: "loading", url: null, error: null }) });
     try {
-      if (!media || !Number.isSafeInteger(media.byteSize) || media.byteSize < 1 || media.byteSize > MAX_PHOTO_BYTES
-        || !ALLOWED_FILE_TYPES.has(media.detectedContentType) || !/^[0-9a-f]{64}$/.test(media.checksumSha256)) {
+      if (!media || !Number.isSafeInteger(media.byteSize) || media.byteSize < 1 || media.byteSize > maxBytes
+        || !types.has(media.detectedContentType) || !/^[0-9a-f]{64}$/.test(media.checksumSha256)
+        || (audio && (!Number.isFinite(media.durationSeconds) || media.durationSeconds <= 0 || media.durationSeconds > MAX_AUDIO_SECONDS))) {
         throw photoFailure("PHOTO_INTEGRITY");
       }
       const grant = await bounded(op, signal => api.getPlayback(memory.memoryId, { signal }));
@@ -327,7 +333,7 @@ export function createInboxController({
       try { url = new URL(grant.url); } catch { throw photoFailure("PHOTO_INTEGRITY"); }
       if (url.protocol !== "https:" || url.username || url.password) throw photoFailure("PHOTO_INTEGRITY");
       if (!Number.isFinite(Date.parse(grant.expiresAt)) || Date.parse(grant.expiresAt) <= now()) throw photoFailure("PHOTO_EXPIRED");
-      const blob = await bounded(op, signal => readPhoto(op, url.href, media, signal), photoTimeoutMs);
+      const blob = await bounded(op, signal => readPhoto(op, url.href, media, signal, maxBytes), photoTimeoutMs);
       assertCurrent(op);
       const nextUrl = createObjectURL(blob);
       if (!current(op)) { revokeObjectURL(nextUrl); return; }
@@ -335,7 +341,7 @@ export function createInboxController({
       publish({ photo: Object.freeze({ phase: "ready", url: nextUrl, error: null }) });
     } catch (failure) {
       if (!current(op)) return;
-      if (!authFailure(failure)) publish({ photo: Object.freeze({ phase: "error", url: null, error: photoMessage(failure) }) });
+      if (!authFailure(failure)) publish({ photo: Object.freeze({ phase: "error", url: null, error: photoMessage(failure, audio) }) });
     }
   }
 
@@ -454,7 +460,7 @@ export function createInboxController({
         const detail = frozenCopy(await bounded(op, signal => api.getMemory(id, { signal })));
         publish({ detail });
         assertCurrent(op);
-        if (detail.memoryType === "PHOTO" && detail.reviewStatus !== "DELETE") await photo(op, detail);
+        if (["PHOTO", "AUDIO"].includes(detail.memoryType) && detail.reviewStatus !== "DELETE") await photo(op, detail);
       }, failure => {
         if (authFailure(failure)) return;
         if (failure?.status === 404) unavailableReview();
@@ -469,14 +475,15 @@ export function createInboxController({
       return state;
     },
     retryPhoto() {
-      if (state.phase !== "detail" || state.detail?.memoryType !== "PHOTO" || state.detail.reviewStatus === "DELETE"
+      if (state.phase !== "detail" || !["PHOTO", "AUDIO"].includes(state.detail?.memoryType) || state.detail.reviewStatus === "DELETE"
         || !state.session?.authenticated || disposed || reviewIntent) return Promise.resolve(state);
       const detail = state.detail;
       const op = start({ phase: "detail", detail });
       return run(op, () => photo(op, detail), failure => {
-        if (!authFailure(failure)) publish({ photo: Object.freeze({ phase: "error", url: null, error: photoMessage(failure) }) });
+        if (!authFailure(failure)) publish({ photo: Object.freeze({ phase: "error", url: null, error: photoMessage(failure, detail.memoryType === "AUDIO") }) });
       });
     },
+    retryMedia() { return controller.retryPhoto(); },
     reviewMemory(targetStatus) {
       if (!REVIEW_STATES.has(targetStatus)) throw new TypeError("Choose a supported private review state.");
       if (reviewInFlight) return reviewInFlight;

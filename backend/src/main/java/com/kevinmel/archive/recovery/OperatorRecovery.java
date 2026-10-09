@@ -36,6 +36,8 @@ import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import com.kevinmel.archive.media.ObjectStorage;
+import com.kevinmel.archive.media.AudioVerifier;
+import com.kevinmel.archive.media.MediaTypes;
 import com.kevinmel.archive.media.PhotoRepository;
 import com.kevinmel.archive.media.PhotoVerifier;
 import com.kevinmel.archive.media.R2ObjectStorage;
@@ -55,7 +57,7 @@ public final class OperatorRecovery {
     public static final int MAX_MANIFEST_BYTES = 4_194_304;
     public static final int MAX_ORIGINALS = 10_000;
     public static final long MAX_ORIGINAL_BYTES = 7_500_000_000L;
-    private static final int MAX_PHOTO_BYTES = 10_000_000;
+    private static final int MAX_MEDIA_BYTES = 25_000_000;
     private static final JsonMapper JSON = JsonMapper.builder().enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
         .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS).build();
     private final JdbcClient db;
@@ -65,6 +67,7 @@ public final class OperatorRecovery {
     private final DeletionStorage target;
     private final Clock clock;
     private final String authorityIdentity;
+    private final AudioVerifier audioVerifier = new AudioVerifier();
 
     OperatorRecovery(DataSource dataSource, ObjectStorage storage, DeletionStorage authority,
             DeletionStorage target, Clock clock) {
@@ -89,9 +92,12 @@ public final class OperatorRecovery {
             Instant at = clock.instant();
             var transaction = new TransactionTemplate(manager);
             transaction.setIsolationLevel(TransactionDefinition.ISOLATION_REPEATABLE_READ); transaction.setReadOnly(true);
-            Snapshot snapshot = Objects.requireNonNull(transaction.execute(ignored -> new Snapshot(
-                RecoverySchema.requireReviewed(db), RecoverySchema.read(db))));
-            var graph = new RecoveryMetadata(snapshot.tables(), at);
+            Snapshot snapshot = Objects.requireNonNull(transaction.execute(ignored -> {
+                var schema = RecoverySchema.requireReviewed(db);
+                return new Snapshot(schema, RecoverySchema.read(db, schema.bundleVersion()));
+            }));
+            int version = snapshot.schema().bundleVersion();
+            var graph = new RecoveryMetadata(snapshot.tables(), at, version);
             List<DeletionRecord> ledger = readLedger(authority, at);
             graph.validatePlans(ledger, at); requireSuperset(ledger, graph.packagedPlans());
             if (graph.uploaded().size() > MAX_ORIGINALS) throw failure("ORIGINAL_LIMIT");
@@ -109,21 +115,21 @@ public final class OperatorRecovery {
                 boolean available = false;
                 if (!erasedAssets.contains(original.assetId())) {
                     try {
-                        byte[] bytes = storage.read("originals/" + original.assetId(), MAX_PHOTO_BYTES).orElseThrow(() -> failure("ORIGINAL_UNAVAILABLE"));
+                        byte[] bytes = storage.read("originals/" + original.assetId(), MAX_MEDIA_BYTES).orElseThrow(() -> failure("ORIGINAL_UNAVAILABLE"));
                         verify(bytes, original);
                         writePrivate(originals.resolve(original.assetId().toString()), bytes); available = true; stored++;
                     } catch (RecoveryException failure) { unavailable++; }
                     catch (RuntimeException failure) { unavailable++; }
                 }
-                objects.add(new Original(original.assetId(), original.memoryId(), original.byteSize(), original.sha256(), original.contentType(), available));
+                objects.add(original.available(available));
             }
             var report = new ExportResult(unavailable == 0, graph.contributions(), graph.memories(), stored,
                 graph.stateCount("PENDING"), graph.stateCount("FAILED"), unavailable);
             var manifest = new LinkedHashMap<String, Object>();
-            manifest.put("version", 1); manifest.put("eventKey", "kevin-mel-wedding"); manifest.put("createdAt", at.toString());
-            manifest.put("schemaFingerprint", snapshot.schemaFingerprint()); manifest.put("authorityIdentity", authorityIdentity);
+            manifest.put("version", version); manifest.put("eventKey", "kevin-mel-wedding"); manifest.put("createdAt", at.toString());
+            manifest.put("schemaFingerprint", snapshot.schema().fingerprint()); manifest.put("authorityIdentity", authorityIdentity);
             manifest.put("metadata", Map.of("byteSize", metadata.length, "sha256", sha256(metadata)));
-            manifest.put("ready", report.ready()); manifest.put("counts", counts(report)); manifest.put("originals", objects.stream().map(Original::json).toList());
+            manifest.put("ready", report.ready()); manifest.put("counts", counts(report, version)); manifest.put("originals", objects.stream().map(object -> object.json(version)).toList());
             byte[] encoded = JSON.writeValueAsBytes(manifest);
             if (encoded.length > MAX_MANIFEST_BYTES) throw failure("MANIFEST_LIMIT");
             writePrivate(root.resolve("manifest.json"), encoded); return report;
@@ -134,7 +140,7 @@ public final class OperatorRecovery {
     public RestoreResult restoreFrom(Path bundle) {
         try {
             Instant now = clock.instant();
-            String schema = RecoverySchema.requireReviewed(db);
+            var schema = RecoverySchema.requireReviewed(db);
             Prepared prepared = preflight(bundle, schema, now);
             List<DeletionRecord> ledger = readLedger(authority, now);
             prepared.graph().validatePlans(ledger, now);
@@ -154,7 +160,7 @@ public final class OperatorRecovery {
                 for (var table : RecoverySchema.TABLES) if (db.sql("SELECT COUNT(*) FROM " + table.name()).query(Long.class).single() != 0) {
                     throw failure("TARGET_NOT_EMPTY");
                 }
-                RecoverySchema.insert(db, prepared.tables());
+                RecoverySchema.insert(db, prepared.tables(), schema.bundleVersion());
                 verifyImportedCounts(prepared.tables());
                 var retention = new RetentionRepository(db, manager);
                 // All identities and staging paths must pass before the first external mutation.
@@ -162,9 +168,9 @@ public final class OperatorRecovery {
                 int published = 0;
                 for (var original : prepared.originals()) {
                     if (erased.contains(original.assetId())) continue;
-                    byte[] bytes = readAgain(prepared.root().resolve("originals").resolve(original.assetId().toString()), MAX_PHOTO_BYTES);
+                    byte[] bytes = readAgain(prepared.root().resolve("originals").resolve(original.assetId().toString()), MAX_MEDIA_BYTES);
                     verify(bytes, original);
-                    var existing = storage.read("originals/" + original.assetId(), MAX_PHOTO_BYTES);
+                    var existing = storage.read("originals/" + original.assetId(), MAX_MEDIA_BYTES);
                     if (existing.isPresent()) {
                         if (!MessageDigest.isEqual(existing.get(), bytes)) throw failure("TARGET_OBJECT_CONFLICT");
                     }
@@ -172,7 +178,7 @@ public final class OperatorRecovery {
                     // This also revalidates MIME when a matching object predated the current attempt.
                     if (storage instanceof R2ObjectStorage r2) r2.publishRecovered("originals/" + original.assetId(), bytes, original.contentType());
                     else if (existing.isEmpty()) storage.publish("originals/" + original.assetId(), bytes, original.contentType());
-                    byte[] confirmed = storage.read("originals/" + original.assetId(), MAX_PHOTO_BYTES)
+                    byte[] confirmed = storage.read("originals/" + original.assetId(), MAX_MEDIA_BYTES)
                         .orElseThrow(() -> failure("TARGET_OBJECT_UNCONFIRMED"));
                     verify(confirmed, original); published++;
                 }
@@ -180,7 +186,7 @@ public final class OperatorRecovery {
                 // Replay exactly the fully preflighted authority snapshot; never discover new delete plans mid-write.
                 var replay = new RetentionService(retention, new FrozenLedger(target, ledger), clock);
                 int applied = replay.replayLedger();
-                verifyAfterReplay(prepared.tables(), ledger);
+                verifyAfterReplay(prepared.tables(), ledger, schema.bundleVersion());
                 var result = new RestoreResult(prepared.graph().contributions(), prepared.graph().memories(), published, applied);
                 // Relationship/constraint checks execute in the same import transaction, before commit.
                 db.sql("SET CONSTRAINTS ALL IMMEDIATE").update();
@@ -190,14 +196,14 @@ public final class OperatorRecovery {
         catch (IOException | RuntimeException failure) { throw failure("RESTORE_UNCONFIRMED"); }
     }
 
-    private Prepared preflight(Path bundle, String schema, Instant now) throws IOException {
+    private Prepared preflight(Path bundle, RecoverySchema.Reviewed schema, Instant now) throws IOException {
         Path root = checkedPath(bundle); if (!Files.isDirectory(root, LinkOption.NOFOLLOW_LINKS)) throw failure("INVALID_BUNDLE");
         requireEntries(root, Set.of("manifest.json", "metadata.json", "originals"));
         JsonNode manifest = JSON.readTree(readPrivate(root.resolve("manifest.json"), MAX_MANIFEST_BYTES));
         fields(manifest, "version", "eventKey", "createdAt", "schemaFingerprint", "authorityIdentity", "metadata", "ready", "counts", "originals");
-        if (!manifest.path("version").isInt() || manifest.path("version").intValue() != 1
+        int version = manifest.path("version").isInt() ? manifest.path("version").intValue() : 0;
+        if (!schema.accepts(version, RecoverySchema.string(manifest.get("schemaFingerprint")))
                 || !"kevin-mel-wedding".equals(RecoverySchema.string(manifest.get("eventKey")))
-                || !schema.equals(RecoverySchema.string(manifest.get("schemaFingerprint")))
                 || !authorityIdentity.equals(RecoverySchema.string(manifest.get("authorityIdentity")))
                 || !manifest.get("ready").isBoolean()) throw failure("INVALID_BUNDLE");
         Instant created = Instant.parse(RecoverySchema.string(manifest.get("createdAt")));
@@ -207,7 +213,7 @@ public final class OperatorRecovery {
         if (integer(manifest.get("metadata").get("byteSize")) != encoded.length
                 || !sha256(encoded).equals(RecoverySchema.string(manifest.get("metadata").get("sha256")))) throw failure("BUNDLE_INTEGRITY");
         JsonNode metadata = JSON.readTree(encoded); fields(metadata, "tables", "authorityLedger");
-        var tables = RecoverySchema.decode(metadata.get("tables")); var graph = new RecoveryMetadata(tables, created);
+        var tables = RecoverySchema.decode(metadata.get("tables"), version); var graph = new RecoveryMetadata(tables, created, version);
         List<DeletionRecord> packaged = decodeLedger(metadata.get("authorityLedger"), created);
         graph.validatePlans(packaged, created); requireSuperset(packaged, graph.packagedPlans());
         JsonNode list = manifest.get("originals");
@@ -217,17 +223,24 @@ public final class OperatorRecovery {
         int available = 0, unavailable = 0; long bytes = 0;
         var packagedErased = erasedAssets(packaged);
         for (JsonNode entry : list) {
-            fields(entry, "assetId", "memoryId", "byteSize", "sha256", "contentType", "available");
+            if (version == 1) fields(entry, "assetId", "memoryId", "byteSize", "sha256", "contentType", "available");
+            else fields(entry, "assetId", "memoryId", "byteSize", "sha256", "contentType", "available", "audioDurationMs", "audioCodec", "audioContainer");
             String idText = RecoverySchema.string(entry.get("assetId")); UUID id = UUID.fromString(idText);
             if (!id.toString().equals(idText) || !entry.get("available").isBoolean() || !ids.add(id)) throw failure("INVALID_BUNDLE");
             String memoryText = RecoverySchema.string(entry.get("memoryId")); UUID memory = UUID.fromString(memoryText);
             if (!memory.toString().equals(memoryText)) throw failure("INVALID_BUNDLE");
-            Original object = new Original(id, memory, integer(entry.get("byteSize")), RecoverySchema.string(entry.get("sha256")),
-                RecoverySchema.string(entry.get("contentType")), entry.get("available").booleanValue());
             Original want = expected.get(id);
-            if (want == null || !want.memoryId().equals(object.memoryId()) || want.byteSize() != object.byteSize() || !want.sha256().equals(object.sha256())
-                    || !want.contentType().equals(object.contentType()) || (bytes += object.byteSize()) > MAX_ORIGINAL_BYTES) throw failure("INVALID_BUNDLE");
-            if (object.available()) { names.add(idText); available++; verify(readPrivate(root.resolve("originals").resolve(idText), MAX_PHOTO_BYTES), object); }
+            if (want == null) throw failure("INVALID_BUNDLE");
+            Original object = new Original(id, memory, integer(entry.get("byteSize")), RecoverySchema.string(entry.get("sha256")),
+                RecoverySchema.string(entry.get("contentType")), entry.get("available").booleanValue(),
+                version == 1 ? null : nullableInteger(entry.get("audioDurationMs")),
+                version == 1 ? null : nullableString(entry.get("audioCodec")),
+                version == 1 ? null : nullableString(entry.get("audioContainer")), want.expectedDurationMs());
+            if (!want.memoryId().equals(object.memoryId()) || want.byteSize() != object.byteSize() || !want.sha256().equals(object.sha256())
+                    || !want.contentType().equals(object.contentType()) || !Objects.equals(want.audioDurationMs(), object.audioDurationMs())
+                    || !Objects.equals(want.audioCodec(), object.audioCodec()) || !Objects.equals(want.audioContainer(), object.audioContainer())
+                    || (bytes += object.byteSize()) > MAX_ORIGINAL_BYTES) throw failure("INVALID_BUNDLE");
+            if (object.available()) { names.add(idText); available++; verify(readPrivate(root.resolve("originals").resolve(idText), MAX_MEDIA_BYTES), object); }
             else if (!packagedErased.contains(id)) unavailable++;
             objects.add(object);
         }
@@ -236,8 +249,10 @@ public final class OperatorRecovery {
         requireEntries(originals, names);
         var report = new ExportResult(unavailable == 0, graph.contributions(), graph.memories(), available, graph.stateCount("PENDING"), graph.stateCount("FAILED"), unavailable);
         if (manifest.get("ready").booleanValue() != report.ready()) throw failure("INVALID_BUNDLE");
-        JsonNode counts = manifest.get("counts"); fields(counts, "contributions", "memories", "originals", "pendingPhotos", "failedPhotos", "unavailableOriginals");
-        for (var count : counts(report).entrySet()) if (integer(counts.get(count.getKey())) != count.getValue()) throw failure("INVALID_BUNDLE");
+        JsonNode counts = manifest.get("counts");
+        if (version == 1) fields(counts, "contributions", "memories", "originals", "pendingPhotos", "failedPhotos", "unavailableOriginals");
+        else fields(counts, "contributions", "memories", "originals", "pendingMedia", "failedMedia", "unavailableOriginals");
+        for (var count : counts(report, version).entrySet()) if (integer(counts.get(count.getKey())) != count.getValue()) throw failure("INVALID_BUNDLE");
         return new Prepared(root, tables, graph, List.copyOf(objects), packaged);
     }
 
@@ -281,7 +296,7 @@ public final class OperatorRecovery {
             throw failure("IMPORT_COUNT_MISMATCH");
         }
     }
-    private void verifyAfterReplay(Map<String, List<Map<String, Object>>> tables, List<DeletionRecord> ledger) {
+    private void verifyAfterReplay(Map<String, List<Map<String, Object>>> tables, List<DeletionRecord> ledger, int version) {
         var erased = erasedAssets(ledger);
         var ledgerIds = new HashSet<UUID>(); for (var row : tables.get("deletion_ledger")) ledgerIds.add(uuid(row, "memory_id"));
         var keyDigests = new HashSet<String>(); for (var row : tables.get("erased_submission_key")) keyDigests.add(text(row, "key_digest"));
@@ -294,21 +309,30 @@ public final class OperatorRecovery {
         for (var count : expected.entrySet()) if (db.sql("SELECT COUNT(*) FROM " + count.getKey()).query(Long.class).single().longValue() != count.getValue().longValue()) {
             throw failure("REPLAY_COUNT_MISMATCH");
         }
-        new RecoveryMetadata(RecoverySchema.read(db), clock.instant());
+        new RecoveryMetadata(RecoverySchema.read(db, version), clock.instant(), version);
     }
     private static Original original(Map<String, Object> row, boolean available) {
-        return new Original(uuid(row, "id"), uuid(row, "memory_id"), number(row, "byte_size"), text(row, "checksum_sha256"), text(row, "detected_format"), available);
+        return new Original(uuid(row, "id"), uuid(row, "memory_id"), number(row, "byte_size"), text(row, "checksum_sha256"), text(row, "detected_format"), available,
+            (Long) row.get("audio_duration_ms"), text(row, "audio_codec"), text(row, "audio_container"), (Long) row.get("expected_duration_ms"));
     }
-    private static void verify(byte[] bytes, Original original) {
+    private void verify(byte[] bytes, Original original) {
         try {
-            new PhotoVerifier().verify(bytes, new PhotoRepository.Asset(original.assetId(), "originals/" + original.assetId(),
-                original.contentType(), original.byteSize(), original.sha256(), "UPLOADED"));
+            var expected = new PhotoRepository.Asset(original.assetId(), "originals/" + original.assetId(),
+                original.contentType(), original.byteSize(), original.sha256(), "UPLOADED",
+                MediaTypes.AUDIO_TYPES.contains(original.contentType()) ? "AUDIO" : "PHOTO", original.expectedDurationMs());
+            if (MediaTypes.AUDIO_TYPES.contains(original.contentType())) {
+                var actual = audioVerifier.verify(bytes, expected);
+                if (!actual.contentType().equals(original.contentType()) || !actual.container().equals(original.audioContainer())
+                    || !actual.codec().equals(original.audioCodec()) || !Long.valueOf(actual.durationMs()).equals(original.audioDurationMs())) throw failure("ORIGINAL_INTEGRITY");
+            } else new PhotoVerifier().verify(bytes, expected);
         } catch (RuntimeException failure) { throw failure("ORIGINAL_INTEGRITY"); }
     }
-    private static Map<String, Integer> counts(ExportResult report) {
+    private static Map<String, Integer> counts(ExportResult report, int version) {
         return Map.of("contributions", report.contributions(), "memories", report.memories(), "originals", report.originals(),
-            "pendingPhotos", report.pendingPhotos(), "failedPhotos", report.failedPhotos(), "unavailableOriginals", report.unavailableOriginals());
+            version == 1 ? "pendingPhotos" : "pendingMedia", report.pendingMedia(), version == 1 ? "failedPhotos" : "failedMedia", report.failedMedia(), "unavailableOriginals", report.unavailableOriginals());
     }
+    private static Long nullableInteger(JsonNode node) { if (node == null) throw failure("INVALID_BUNDLE"); return node.isNull() ? null : integer(node); }
+    private static String nullableString(JsonNode node) { if (node == null) throw failure("INVALID_BUNDLE"); return node.isNull() ? null : RecoverySchema.string(node); }
     private static long integer(JsonNode node) {
         if (node == null || !node.isIntegralNumber() || !node.canConvertToLong() || node.longValue() < 0) throw failure("INVALID_BUNDLE");
         return node.longValue();
@@ -387,17 +411,23 @@ public final class OperatorRecovery {
         if (!names.equals(expected)) throw failure("INVALID_BUNDLE");
     }
     private static RecoveryException failure(String code) { return new RecoveryException(code); }
-    public record ExportResult(boolean ready, int contributions, int memories, int originals, int pendingPhotos, int failedPhotos, int unavailableOriginals) { }
+    public record ExportResult(boolean ready, int contributions, int memories, int originals, int pendingMedia, int failedMedia, int unavailableOriginals) { }
     public record RestoreResult(int contributions, int memories, int originals, int replayedDeletions) { }
-    private record Snapshot(String schemaFingerprint, Map<String, List<Map<String, Object>>> tables) {
+    private record Snapshot(RecoverySchema.Reviewed schema, Map<String, List<Map<String, Object>>> tables) {
         @Override public String toString() { return "RecoverySnapshot[redacted]"; }
     }
     private record Prepared(Path root, Map<String, List<Map<String, Object>>> tables, RecoveryMetadata graph,
             List<Original> originals, List<DeletionRecord> packagedAuthority) {
         @Override public String toString() { return "PreparedRecovery[redacted]"; }
     }
-    private record Original(UUID assetId, UUID memoryId, long byteSize, String sha256, String contentType, boolean available) {
-        Map<String, Object> json() { return Map.of("assetId", assetId.toString(), "memoryId", memoryId.toString(), "byteSize", byteSize, "sha256", sha256, "contentType", contentType, "available", available); }
+    private record Original(UUID assetId, UUID memoryId, long byteSize, String sha256, String contentType, boolean available,
+            Long audioDurationMs, String audioCodec, String audioContainer, Long expectedDurationMs) {
+        Original available(boolean value) { return new Original(assetId, memoryId, byteSize, sha256, contentType, value, audioDurationMs, audioCodec, audioContainer, expectedDurationMs); }
+        Map<String, Object> json(int version) {
+            var result = new LinkedHashMap<String, Object>(Map.of("assetId", assetId.toString(), "memoryId", memoryId.toString(), "byteSize", byteSize, "sha256", sha256, "contentType", contentType, "available", available));
+            if (version == 2) { result.put("audioDurationMs", audioDurationMs); result.put("audioCodec", audioCodec); result.put("audioContainer", audioContainer); }
+            return result;
+        }
         @Override public String toString() { return "RecoveryOriginal[redacted]"; }
     }
     private record FrozenLedger(DeletionStorage delegate, List<DeletionRecord> plans) implements DeletionStorage {

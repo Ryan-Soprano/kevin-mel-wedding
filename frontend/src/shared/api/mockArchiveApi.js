@@ -189,7 +189,7 @@ export function createMockArchiveApi({ scenario = "success", delayMs = 0, now = 
       if (url.pathname === "/api/memories" && method === "GET") {
         const filtered = scenario === "empty" ? [] : memories.filter((item) =>
           available(item) && (item.memoryType === "TEXT"
-            || (item.memoryType === "PHOTO" && item.media?.uploadState === "UPLOADED"))
+            || (["PHOTO", "AUDIO"].includes(item.memoryType) && item.media?.uploadState === "UPLOADED"))
           && item.reviewStatus === (url.searchParams.get("reviewStatus") ?? "PENDING"))
           .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.memoryId.localeCompare(a.memoryId));
         const offset = Number((url.searchParams.get("cursor") ?? "offset:0").split(":")[1]);
