@@ -1,4 +1,4 @@
-import { ApiError, contractMismatch, createApiClient } from "./apiClient.js";
+import { ApiError, contractMismatch, createApiClient, parseRetryAfter } from "./apiClient.js";
 import { ALLOWED_FILE_TYPES, MAX_PHOTO_BYTES, MAX_PHOTOS } from "../../features/media/mediaConstraints.js";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -282,6 +282,7 @@ export function createArchiveApi({
       if (!response.ok) throw new ApiError("The file was not uploaded. Retry this item.", {
         code: [401, 403].includes(response.status) ? "UPLOAD_GRANT_EXPIRED" : "UPLOAD_FAILED",
         status: response.status,
+        retryAfterSeconds: parseRetryAfter(response.headers.get("Retry-After")),
       });
       return { transferred: true };
     },
