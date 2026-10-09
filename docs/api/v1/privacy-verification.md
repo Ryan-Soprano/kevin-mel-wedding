@@ -1,0 +1,87 @@
+# SEC-02 privacy and configuration verification
+
+Reviewed October 9, 2026 in the visible checkout on `feature/anonymous-protections`, based on `bb0f3e2`. This record separates source and synthetic test evidence from provider, hosted HTTPS and physical-device acceptance. No real accounts, private guest content, provider settings, deployment or credential distribution were used in this review. The ignored local R2 credential file was not read.
+
+**SEC-02 remains open for hosted and shared-device acceptance.** The local review establishes the implemented boundaries below; it does not establish the configuration of a future production deployment. [SEC-01](https://app.notion.com/p/3dad9739c6bc816aada2c689df7fa4e2) owns anonymous abuse protection. [SEC-02](https://app.notion.com/p/3dad9739c6bc81f5a989d3af6684b8b4) owns this privacy review. The [security release checklist and debt register](../../runbooks/security-review.md) assigns the remaining checks.
+
+## Acceptance evidence
+
+| SEC-02 requirement | Evidence available locally | Remaining acceptance |
+|---|---|---|
+| Browser bundles, repository, responses and logs exclude privileged secrets and unauthorized private content | Server-only configuration, image exclusions, browser asset marker scan, safe error handlers and existing response regressions reviewed; focused frontend privacy tests pass | Recheck the final packaged artifact and actual hosted application/proxy logs using synthetic markers; this source scan is not a full secret-history audit |
+| Production HTTPS, sessions, CSRF, CORS and direct-storage access are verified on the actual deployment | Production startup guards, Secure profile, session/origin/role tests, private single-object storage signing and historical isolated R2 evidence | Approved hosted HTTPS/proxy/browser path, exact deployed origin and bucket policy; unsigned storage denial and token/public-access settings on that environment |
+| Private responses are not cached and logout/shared-device use does not expose the inbox to a later guest | API/client no-store, immediate sign-out/lifecycle clearing, Blob URL revocation, stale-result suppression, fresh access on return, lost-logout recovery and authorization-failure clearing pass synthetic tests | Browser Back/Forward cache, tab return, idle expiry, sign-out and failed sign-out on actual shared devices; downloaded bytes and still-valid bearer URLs remain recipient-controlled |
+| Operator and deferred protections have owners and revisit triggers | [Security debt register](../../runbooks/security-review.md#security-debt-register) records Ryan's operational ownership and couple-only application authority | Ryan records concrete provider/device outcomes before public collection and private reveal |
+
+## Source boundaries reviewed
+
+### Secrets, payloads and diagnostics
+
+- `application.properties` reads database/R2/throttle values only on the server. Storage defaults disabled; reveal defaults closed. The checked-in database password and throttle fallback are explicitly synthetic local defaults, not provider credentials. `ArchiveAccessPolicy` and `LoginThrottle` reject an incomplete production configuration.
+- Vite's configuration loads only `BACKEND_` for the development proxy. Application source does not read `VITE_*` environment settings. `frontend/index.html` loads local application code and contains no analytics, external script, font or image dependency. The contract-preview entrypoint is separate from the normal build.
+- `.gitignore` excludes local environment files, logs, private source photos and generated output. `.dockerignore` permits the source trees and excludes environment files, local settings, logs, `.aws`, Git and generated/dependency directories. The Dockerfile supplies no provider secrets in build arguments or image layers; runtime settings remain operator-entered.
+- `ApiExceptionHandler` replaces database/transaction/parser diagnostics with fixed safe JSON errors. `SecurityErrorWriter` applies the same envelope outside MVC. Neither logs caught exception text. Expected errors carry only a random request ID, safe code/message and field validation where applicable. Spring Security logging is pinned to WARN because debug/trace diagnostics can include session identifiers. Retention maintenance logs only counts and fixed messages.
+- The source scan found no frontend console logging, localStorage/sessionStorage/IndexedDB persistence, analytics, service worker, cookie manipulation or HTML injection through `dangerouslySetInnerHTML`. Guest names, messages, captions and filenames render as ordinary React text children. Password input is cleared when login starts; the inbox controller copies only session contract fields into presentation state.
+- Authorized inbox responses deliberately contain private guest names, text/captions and verified photo metadata. Receipts contain IDs/states only. Inbox details exclude storage keys, retry keys and signed permissions; playback is a separate authorized endpoint. The existing HTTP security suites test these distinctions with synthetic content.
+
+On October 9, the inspected `frontend/dist` snapshot contained the main HTML plus local main/inbox JS and CSS assets and no source map or contract-preview file. The scan was repeated after the final 231-test/lint/build frontend run. Marker checks reported zero matching generated files for `MEMORY_ARCHIVE_R2_ACCESS_KEY_ID`, `MEMORY_ARCHIVE_R2_SECRET_ACCESS_KEY`, `MEMORY_ARCHIVE_DB_PASSWORD`, `MEMORY_ARCHIVE_STAGING_PASSWORD`, `MEMORY_ARCHIVE_LOGIN_THROTTLE_SECRET`, the R2 endpoint suffix and a private-key header. Only marker counts were emitted, never matching asset contents or private configuration. This checks accidental exposure paths in that build, not every possible secret value, ignored file or Git-history revision.
+
+Application exception handling is reviewed for expected failure paths. Actual hosting access logs, proxy logs, third-party diagnostics and operator terminal history have not been inspected. Configure and verify those through the release checklist; source-level safe responses are not proof of provider log redaction.
+
+### HTTPS, sessions, CSRF and origin
+
+`ArchiveAccessPolicy` accepts only local/staging/production labels and requires the production profile to agree with the production environment. Production startup requires Secure session cookies and a configured HTTPS public origin without user information, path, query or fragment. `LoginThrottle` requires a production secret of at least 32 UTF-8 bytes. The production profile enables Secure cookies. Local HTTP intentionally uses the local cookie setting; HTTPS staging enables Secure cookies and has a separate temporary admission gate.
+
+The server cookie is `MEMORY_ARCHIVE_SESSION`, `Path=/`, HttpOnly and SameSite=Lax, with cookie-only tracking and a 30-minute inactivity timeout. Sessions reside in application memory; restart clears authentication and multiple instances do not share sessions. `SessionService` invokes the session-ID/CSRF rotation strategy and explicitly saves the authenticated context. Logout invalidates the session, clears the context and expires the same cookie. There is no public signup, recovery or account-administration endpoint.
+
+Session login/logout and review mutations require session CSRF. The configured or request origin check rejects a mismatching Origin and cross-site fetch metadata. Guest contribution/grant/finalize routes use narrowly scoped CSRF exceptions together with their independent same-origin, JSON/contract and retry-capability checks; these exceptions do not apply to private review or session mutations. The application adds no cross-origin API CORS permission. The frontend uses same-origin credentials for API requests.
+
+`RequestPeerCapture` captures the connection peer before forwarded-header processing. Login and anonymous throttles use the captured peer, not caller forwarding headers. This prevents a caller inventing an address; a trusted deployment proxy can still put guests in one shared peer bucket. Hosted forwarding and capacity acceptance remain required. Staging explicitly trusts its approved HTTPS proxy; its admission credentials do not confer couple access. No actual hosted HTTPS result is claimed here.
+
+Evidence reviewed: `SessionHttpTest` covers contract/body checks, credential failures, CSRF rotation/stale-token rejection, foreign-origin/cross-site rejection, cookie clearing/logout cycles, role/reveal gates and safe failures. `RequestPeerCaptureTest` covers spoofed forwarding, missing capture, distinct peers and request-end cleanup. The production/configuration and actual-image evidence in [AUTH-01 verification](auth-verification.md) is historical local evidence, not a new deployed pass.
+
+### Couple authorization and operator separation
+
+Private HTTP routes require COUPLE authority. `SessionIdentityFilter` and `ArchiveAuthorization` re-read account existence, enabled state, username, role and credential version before protected access. Reveal must be open. Production permits the separate `kevin` and `melanie` couple identities only. Generic principals, OPERATOR/DEVELOPER roles, guest retry capabilities and UUID knowledge do not grant inbox or playback access.
+
+`InboxService`, private playback and `ReviewService` enforce authorization at the service boundary as well as routing. Review rechecks authority after acquiring its row lock, so a queued mutation cannot retain authority after account revocation. Keep/Archive/Restore/Delete remain private review actions and do not publish content.
+
+Ryan remains the sole privileged infrastructure operator. Kevin and Melanie alone moderate and decide publication. Kade is development-only. An operator's independent database/bucket access is an infrastructure privilege with access to originals; application role separation cannot hide data from a database or bucket administrator. Do not assign Ryan or Kade COUPLE authority to demonstrate access. Real credentials and reveal onboarding remain governed by the [account runbook](../../runbooks/account-access.md).
+
+Evidence reviewed: `InboxHttpSecurityTest`, `ReviewHttpSecurityTest` and `SessionHttpTest` cover anonymous/capability refusal, current-account revocation, foreign-principal and operator/developer exclusion, closed reveal, safe errors and no retrieval permissions in metadata. Backend tests were inspected during this review; their execution result is recorded by the overall SEC verification run, not inferred from source.
+
+### Storage, caching and signed permissions
+
+`R2StorageConfiguration` validates an HTTPS R2 S3 endpoint, bucket and nonblank server credentials before enabling storage. Browser upload permissions target server-selected staging objects; saved originals use a separate namespace. Playback requires current couple/reveal authorization, selects the eligible original server-side, checks actual size/MIME through authenticated HEAD and signs an exact original GET for at most 300 seconds. `R2ObjectStorageTest` covers scope, supported metadata, actual signed expiry, missing/mismatched HEAD and safe storage failures.
+
+SEC-01 also signs the upload intent's expected Content-Length and verifies that the presigner included it, while returning only Content-Type to JavaScript. The browser derives Content-Length from the original File; application code cannot set that forbidden header. This closes the source-level unsigned-size gap, but actual browser/R2 handling and rejection of a changed-size transfer remain provider acceptance, not a result of the synthetic signing test. The operator pause and original-byte reservation limit admission of new photo work; already issued grants remain bearer permissions until expiry.
+
+`ApiResponseHeadersFilter` sets `Cache-Control: no-store` for API responses, including paths handled by security errors. The JSON client also sets `cache: no-store`. Original publication carries no-store metadata and signed GET requests require no-store responses. Photo detail fetches the HTTPS grant with `credentials: omit`, `redirect: error`, `referrerPolicy: no-referrer` and `cache: no-store`; application session/CSRF/retry/authorization headers do not enter the storage request. The bounded stream must match stored MIME, byte count and SHA-256 before creating an owned Blob URL. The same verified Blob supplies preview/download, and owned URLs are revoked on navigation, sign-out and disposal.
+
+The source does not establish the bucket's actual public-access or CORS settings. Historical October 5 isolated R2 evidence covers exact bytes, scopes, actual expiry and unsigned denial; the last recorded bucket policy was PUT-only and actual browser GET/HEAD adjustment remains unverified. Keep `r2.dev` and public custom domains disabled and use an exact approved origin allowlist. The [R2 acceptance checklist](../../runbooks/private-photo-storage.md#authenticated-photo-playback--auth-02-home-acceptance) owns those provider checks.
+
+Signed GET/PUT URLs are reusable bearer permissions until their own expiry. Logout, credential recovery, disablement, closed reveal or a review Delete prevents new playback issuance; it does not revoke an already issued URL or a download already underway. Clearing app state, revoking a Blob URL and no-store do not erase a saved file, screenshot, browser download or another recipient's copy. Original bytes may include embedded photo metadata because preservation is intentional; no metadata-stripping guarantee is made.
+
+## Synthetic frontend verification
+
+Executed October 9 with the installed Node runtime, without a provider connection:
+
+```text
+node --test frontend/src/shared/api/apiClient.test.js frontend/src/features/inbox/api/inboxController.test.js frontend/src/shared/api/archiveApi.test.js
+```
+
+**106 tests passed, zero failures/skips.** Relevant cases prove no-store/same-origin transport, safe transport errors, no credential echoes in session state, fresh CSRF before login/logout, immediate private-state clearing, 401/403 clearing, lost-logout recovery, refusal of stale late responses, bounded/integrity-checked media, omitted credentials/referrer and owned URL revocation. Signed links and raw transport messages do not enter presentation errors. This uses synthetic fetch/session fixtures; it does not prove browser cookie behavior, Back/Forward cache handling or a deployed R2 CORS policy.
+
+The completed frontend run passes **231 tests**, zero failures/skips, plus ESLint and the production build. This includes new controller and lifecycle regressions as well as the SEC-01 retry tests. The frontend agent executed that full run after implementing the source changes below; the focused 106-test result above was executed independently during this review before the lifecycle additions.
+
+`attachInboxPrivacyLifecycle` handles pagehide, document-hidden and window-blur events. The UI synchronously flushes clearing of the current session, private rows/detail/photo/notice, login fields, deletion confirmation and page cursors; the controller cancels its generation and revokes owned Blob URLs. A pageshow, visible-document or focus return rechecks the current session before fetching new inbox/current-memory content. Hidden documents do not resume. Expired/anonymous or denied access cannot restore earlier private state, and an unconfirmed logout still requires invalidation recovery.
+
+Suspending an unfinished requested sign-out also marks logout unconfirmed, even before a transport error/timeout arrives. Returning resolves that earlier sign-out through fresh-session/invalidation recovery before any private content can load; the old logout response cannot revive content. A dedicated regression covers a hanging sign-out interrupted by lifecycle hiding.
+
+The review workflow normally locks navigation/sign-out while a mutation is pending or uncertain. Lifecycle suspension still hides its private content and retains only four primitive action fields: memory ID, expected revision, original status and intended status. On return it checks fresh access and reconciles the current memory; it does not automatically resend an uncertain change. Manual same-action recovery uses the fresh session token, and a late old response cannot restore the suspended content. New regressions cover this path, anonymous/403 returns, failed-access recovery, stale completion and event hookup/cleanup.
+
+These are synthetic controller/event tests. Actual-browser Back/Forward cache capture, original-file download/save dialog, password-manager focus behavior, physical phones and the hosted cookie/proxy path remain untested. Idle server expiry and revocation clear a still-visible screen on its next API or lifecycle event; there is no idle presentation timer. Shared-device acceptance must exercise these practical boundaries rather than infer them from no-store or the event tests.
+
+## Deferred release checks
+
+Use the [security release checklist](../../runbooks/security-review.md) on an approved HTTPS deployment with disposable synthetic accounts/content before public guest collection or couple reveal. Record date, deployed commit, environment/origin, browser/OS and pass/fail outcomes only. Exclude credentials, cookies, CSRF/retry keys, signed URLs and private content. Hosted/device acceptance remains deferred in accordance with the current project decision; local source/test evidence must not silently replace it.

@@ -23,7 +23,7 @@ public class StorageConfiguration {
     ObjectStorage disabledStorage() {
         return new ObjectStorage() {
             public void requireAvailable() { throw unavailable(); }
-            public UploadGrant authorize(UUID id, String key, String type, Instant expiry) { throw unavailable(); }
+            public UploadGrant authorize(UUID id, String key, String type, long byteSize, Instant expiry) { throw unavailable(); }
             public ReadGrant authorizeRead(String key, String type, long size, Instant expiry) { throw privateMediaUnavailable(); }
             public Optional<byte[]> read(String key, int max) { throw unavailable(); }
             public void publish(String key, byte[] bytes, String type) { throw unavailable(); }
@@ -35,6 +35,6 @@ public class StorageConfiguration {
     }
 
     static ApiException privateMediaUnavailable() {
-        return new ApiException(503, "MEDIA_UNAVAILABLE", "The saved photo is temporarily unavailable. Please try again later.");
+        return new ApiException(503, "MEDIA_UNAVAILABLE", "The saved memory is temporarily unavailable. Please try again later.");
     }
 }

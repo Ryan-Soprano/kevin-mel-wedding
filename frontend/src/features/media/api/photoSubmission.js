@@ -40,7 +40,9 @@ export function createPhotoSubmission({
     get retryAfterSeconds() { return Math.max(0, Math.ceil((retryAt - now()) / 1000)); },
     submit(raw, onProgress = () => {}) {
       if (inFlight) return inFlight;
-      if (retryAt > now()) throw new ApiError("Please wait before retrying.", { code: "RATE_LIMITED", status: 429 });
+      if (retryAt > now()) throw new ApiError("Please wait before retrying.", {
+        code: "RATE_LIMITED", status: 429, retryAfterSeconds: Math.ceil((retryAt - now()) / 1000),
+      });
       const validated = normalized(raw);
       if (draft && (raw.file !== file || validated.guestName !== draft.guestName
         || validated.items[0].caption !== draft.items[0].caption)) {
@@ -82,7 +84,8 @@ export function createPhotoSubmission({
         });
         return receipt;
       })().catch((error) => {
-        if (error instanceof ApiError && error.status === 429 && error.retryAfterSeconds !== null) {
+        if (error instanceof ApiError && [429, 503].includes(error.status)
+          && Number.isFinite(error.retryAfterSeconds) && error.retryAfterSeconds >= 0) {
           retryAt = now() + error.retryAfterSeconds * 1000;
         }
         if (error.code === "INVALID_MEDIA" && error.status === 422 && !error.unknownOutcome) {

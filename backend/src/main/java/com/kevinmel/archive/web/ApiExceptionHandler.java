@@ -17,7 +17,10 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 public class ApiExceptionHandler {
     @ExceptionHandler(ApiException.class)
     public ResponseEntity<ErrorResponse> handleApi(ApiException exception, HttpServletRequest request) {
-        return response(exception.status(), exception.code(), exception.getMessage(), exception.fieldErrors(), request);
+        var result = response(exception.status(), exception.code(), exception.getMessage(), exception.fieldErrors(), request);
+        if (exception.retryAfterSeconds() == 0) return result;
+        return ResponseEntity.status(result.getStatusCode()).headers(result.getHeaders())
+                .header("Retry-After", Long.toString(exception.retryAfterSeconds())).body(result.getBody());
     }
 
     @ExceptionHandler({DataAccessException.class, TransactionException.class})

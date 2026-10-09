@@ -11,6 +11,7 @@ import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.kevinmel.archive.web.ApiException;
+import com.kevinmel.archive.retention.SubmissionKeyDigest;
 
 @Repository
 public class ContributionRepository {
@@ -47,12 +48,14 @@ public class ContributionRepository {
             String eventKey, String guestName, String message, String idempotencyKey) {
         var inserted = jdbcClient.sql("""
                 INSERT INTO contribution (event_key, guest_name, idempotency_key, request_fingerprint)
-                VALUES (:eventKey, :guestName, :idempotencyKey,
+                SELECT :eventKey, :guestName, :idempotencyKey,
                 """ + FINGERPRINT + """
-                ) ON CONFLICT (idempotency_key) DO NOTHING RETURNING id
+                WHERE NOT EXISTS (SELECT 1 FROM erased_submission_key WHERE key_digest = :digest)
+                ON CONFLICT (idempotency_key) DO NOTHING RETURNING id
                 """)
                 .param("eventKey", eventKey).param("guestName", guestName)
                 .param("message", message).param("idempotencyKey", idempotencyKey)
+                .param("digest", SubmissionKeyDigest.sha256(idempotencyKey))
                 .query(UUID.class).optional();
         UUID contributionId;
         if (inserted.isPresent()) {
@@ -69,7 +72,7 @@ public class ContributionRepository {
                     .param("eventKey", eventKey).param("guestName", guestName)
                     .param("message", message).param("idempotencyKey", idempotencyKey)
                     .query((rs, row) -> new Existing(rs.getObject("id", UUID.class), rs.getBoolean("equivalent")))
-                    .optional().orElseThrow(ApiException::conflict);
+                    .optional().orElseThrow(ApiException::notFound);
             // Unbackfillable legacy keys stay reserved, never silently recycled.
             if (!existing.equivalent()) throw ApiException.conflict();
             contributionId = existing.id();
@@ -87,7 +90,9 @@ public class ContributionRepository {
                         rs.getObject("created_at", OffsetDateTime.class).toInstant()))
                 .optional().orElseThrow(ApiException::notFound);
         var memories = jdbcClient.sql("""
-                SELECT m.id, m.client_item_id, m.memory_type, m.review_status, m.visibility, a.upload_state
+                SELECT m.id, m.client_item_id, m.memory_type, m.review_status, m.visibility,
+                       CASE WHEN m.purged_at IS NOT NULL AND m.memory_type IN ('PHOTO', 'AUDIO') THEN 'UPLOADED'
+                            ELSE a.upload_state END AS upload_state
                 FROM memory m LEFT JOIN media_asset a ON a.memory_id = m.id
                 WHERE m.contribution_id = :id
                 ORDER BY m.item_position NULLS FIRST, m.created_at, m.id

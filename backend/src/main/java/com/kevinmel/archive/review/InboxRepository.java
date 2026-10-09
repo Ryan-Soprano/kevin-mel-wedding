@@ -2,6 +2,8 @@ package com.kevinmel.archive.review;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -12,39 +14,54 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.kevinmel.archive.web.ApiException;
+
 @Repository
 public class InboxRepository {
     private static final String SELECT = """
             SELECT m.id AS memory_id, c.id AS contribution_id, c.guest_name, m.memory_type,
                 m.text_content, m.caption, m.review_status, m.visibility, m.revision,
-                m.created_at, m.updated_at,
-                a.original_filename, a.detected_format, a.byte_size, a.checksum_sha256, a.upload_state
+                m.created_at, m.updated_at, m.delete_after,
+                a.original_filename, a.detected_format, a.byte_size, a.checksum_sha256, a.upload_state, a.audio_duration_ms
             FROM memory m
             JOIN contribution c ON c.id = m.contribution_id
             LEFT JOIN media_asset a ON a.memory_id = m.id
             WHERE c.event_key = 'kevin-mel-wedding' AND m.visibility = 'COUPLE_ONLY'
-                AND m.review_status IN ('PENDING', 'KEEP', 'ARCHIVED')
-                AND (m.memory_type = 'TEXT' OR (m.memory_type = 'PHOTO'
+                AND m.review_status IN ('PENDING', 'KEEP', 'ARCHIVED', 'DELETE')
+                AND m.purge_started_at IS NULL AND m.purged_at IS NULL
+                AND (m.review_status <> 'DELETE' OR m.delete_after > :now)
+                AND (m.memory_type = 'TEXT' OR (m.memory_type IN ('PHOTO', 'AUDIO')
                     AND a.upload_state = 'UPLOADED'
-                    AND a.detected_format IN ('image/jpeg', 'image/png', 'image/webp')
-                    AND a.byte_size BETWEEN 1 AND 10000000
+                    AND ((m.memory_type = 'PHOTO' AND a.detected_format IN ('image/jpeg', 'image/png', 'image/webp')
+                        AND a.byte_size BETWEEN 1 AND 10000000 AND a.expected_duration_ms IS NULL
+                        AND a.audio_duration_ms IS NULL AND a.audio_container IS NULL AND a.audio_codec IS NULL)
+                        OR (m.memory_type = 'AUDIO' AND a.byte_size BETWEEN 1 AND 25000000
+                            AND a.expected_duration_ms BETWEEN 1 AND 120000 AND a.audio_duration_ms BETWEEN 1 AND 120000
+                            AND ((a.detected_format = 'audio/webm' AND a.audio_container = 'webm' AND a.audio_codec = 'opus')
+                                OR (a.detected_format = 'audio/ogg' AND a.audio_container = 'ogg' AND a.audio_codec = 'opus')
+                                OR (a.detected_format = 'audio/mp4' AND a.audio_container = 'mp4' AND a.audio_codec = 'aac'))))
                     AND a.expected_byte_size = a.byte_size
                     AND a.expected_checksum_sha256 = a.checksum_sha256
                     AND a.declared_content_type = a.detected_format
                     AND a.object_key = 'originals/' || a.id::text))
             """;
     private final JdbcClient db;
+    private final Clock clock;
 
-    public InboxRepository(JdbcClient db) { this.db = db; }
+    public InboxRepository(JdbcClient db, Clock clock) {
+        this.db = db;
+        this.clock = clock;
+    }
 
     @Transactional(readOnly = true)
     public List<MemoryDetail> list(InboxQuery query) {
         String sql = SELECT + " AND m.review_status = :status";
         if (query.cursor() != null) sql += " AND (m.created_at, m.id) < (:createdAt, :memoryId)";
         sql += " ORDER BY m.created_at DESC, m.id DESC LIMIT :fetchLimit";
-        var statement = db.sql(sql).param("status", query.reviewStatus()).param("fetchLimit", query.limit() + 1);
+        var statement = db.sql(sql).param("status", query.reviewStatus()).param("fetchLimit", query.limit() + 1)
+                .param("now", timestamp(clock.instant()));
         if (query.cursor() != null) {
-            statement = statement.param("createdAt", OffsetDateTime.ofInstant(query.cursor().createdAt(), ZoneOffset.UTC))
+            statement = statement.param("createdAt", timestamp(query.cursor().createdAt()))
                     .param("memoryId", query.cursor().memoryId());
         }
         return statement.query(InboxRepository::map).list();
@@ -53,18 +70,55 @@ public class InboxRepository {
     @Transactional(readOnly = true)
     public Optional<MemoryDetail> detail(UUID memoryId) {
         return db.sql(SELECT + " AND m.id = :memoryId").param("memoryId", memoryId)
-                .query(InboxRepository::map).optional();
+                .param("now", timestamp(clock.instant())).query(InboxRepository::map).optional();
+    }
+
+    /** Caller holds one transaction through revision update and audit. Lock memory before any asset lock. */
+    public Optional<MemoryDetail> lockDetail(UUID memoryId) {
+        return db.sql(SELECT + " AND m.id = :memoryId FOR UPDATE OF m").param("memoryId", memoryId)
+                .param("now", timestamp(clock.instant())).query(InboxRepository::map).optional();
+    }
+
+    public MemoryDetail changeReview(MemoryDetail current, String status, Instant deleteAfter, Instant actedAt) {
+        int changed = db.sql("""
+                UPDATE memory SET review_status = :status, delete_after = :deadline,
+                    revision = revision + 1, updated_at = :acted
+                WHERE id = :id AND revision = :revision AND purge_started_at IS NULL AND purged_at IS NULL
+                """).param("status", status).param("deadline", timestamp(deleteAfter)).param("acted", timestamp(actedAt))
+                .param("id", current.memoryId()).param("revision", current.revision()).update();
+        if (changed != 1) throw new ApiException(412, "REVIEW_CONFLICT", "This memory changed. Reload it before reviewing it again.");
+        return new MemoryDetail(current.memoryId(), current.contributionId(), current.guestName(), current.memoryType(),
+                current.textContent(), current.caption(), status, current.visibility(), current.revision() + 1,
+                current.createdAt(), actedAt, deleteAfter, current.media());
+    }
+
+    public void auditReview(MemoryDetail before, MemoryDetail after, UUID actorId, Instant actedAt) {
+        db.sql("""
+                INSERT INTO review_audit(memory_id, actor_account_id, from_status, to_status,
+                    before_revision, after_revision, acted_at)
+                VALUES (:memory, :actor, :before, :after, :oldRevision, :revision, :acted)
+                """).param("memory", before.memoryId()).param("actor", actorId)
+                .param("before", before.reviewStatus()).param("after", after.reviewStatus())
+                .param("oldRevision", before.revision()).param("revision", after.revision())
+                .param("acted", timestamp(actedAt)).update();
+    }
+
+    private static OffsetDateTime timestamp(Instant instant) {
+        return instant == null ? null : OffsetDateTime.ofInstant(instant, ZoneOffset.UTC);
     }
 
     private static MemoryDetail map(ResultSet rs, int row) throws SQLException {
         String type = rs.getString("memory_type");
-        var media = "PHOTO".equals(type) ? new MemoryDetail.PhotoMedia(
+        var durationMs = rs.getObject("audio_duration_ms", Long.class);
+        var media = "PHOTO".equals(type) || "AUDIO".equals(type) ? new MemoryDetail.PhotoMedia(
                 rs.getString("original_filename"), rs.getString("detected_format"), rs.getLong("byte_size"),
-                rs.getString("checksum_sha256"), null, rs.getString("upload_state")) : null;
+                rs.getString("checksum_sha256"), durationMs == null ? null : durationMs / 1000d, rs.getString("upload_state")) : null;
+        var deleteAfter = rs.getObject("delete_after", OffsetDateTime.class);
         return new MemoryDetail(rs.getObject("memory_id", UUID.class), rs.getObject("contribution_id", UUID.class),
-                rs.getString("guest_name"), type, rs.getString("text_content"), "PHOTO".equals(type) ? rs.getString("caption") : null,
+                rs.getString("guest_name"), type, rs.getString("text_content"), "TEXT".equals(type) ? null : rs.getString("caption"),
                 rs.getString("review_status"), rs.getString("visibility"), rs.getInt("revision"),
                 rs.getObject("created_at", OffsetDateTime.class).toInstant(),
-                rs.getObject("updated_at", OffsetDateTime.class).toInstant(), null, media);
+                rs.getObject("updated_at", OffsetDateTime.class).toInstant(),
+                deleteAfter == null ? null : deleteAfter.toInstant(), media);
     }
 }

@@ -8,7 +8,7 @@ import java.util.UUID;
 /** Only the server can publish a verified original; browser grants target staging keys. */
 public interface ObjectStorage {
     void requireAvailable();
-    UploadGrant authorize(UUID grantId, String stagingKey, String contentType, Instant expiresAt);
+    UploadGrant authorize(UUID grantId, String stagingKey, String contentType, long byteSize, Instant expiresAt);
     ReadGrant authorizeRead(String originalKey, String contentType, long byteSize, Instant expiresAt);
     Optional<byte[]> read(String objectKey, int maxBytes);
     void publish(String originalKey, byte[] bytes, String contentType);

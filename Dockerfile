@@ -4,6 +4,8 @@ WORKDIR /build/frontend
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
 COPY frontend/ ./
+ARG VITE_AUDIO_ENABLED=false
+ENV VITE_AUDIO_ENABLED=$VITE_AUDIO_ENABLED
 RUN npm run build
 
 FROM eclipse-temurin:25.0.4.1_1-jdk-noble AS backend-build
@@ -19,6 +21,9 @@ COPY frontend/spikes/audio/*.html frontend/spikes/audio/*.js frontend/spikes/aud
 RUN ./backend/mvnw -f backend/pom.xml --batch-mode -DskipTests package
 
 FROM eclipse-temurin:25.0.4.1_1-jre-noble AS runtime
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 ENV SPRING_PROFILES_ACTIVE=staging
 # Render SSH/dashboard shells require a named user, usable shell and private SSH home.

@@ -414,3 +414,21 @@ button:focus-visible {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+.audio-memory-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 12px 0;
+}
+
+.audio-memory audio,
+.inbox-audio {
+  display: block;
+  width: min(100%, 480px);
+  margin: 16px 0;
+}
+
+.audio-memory-preview p {
+  overflow-wrap: anywhere;
+}

@@ -48,6 +48,11 @@ function fixture(overrides = {}) {
     listMemories: async options => { calls.push(["list", options]); return { items: [copy(MEMORY_DETAIL), copy(photo)], nextCursor: "next-page" }; },
     getMemory: async (id, options) => { calls.push(["detail", id, options]); return copy(id === IDS.photo ? photo : MEMORY_DETAIL); },
     getPlayback: async (id, options) => { calls.push(["playback", id, options]); return copy(PLAYBACK); },
+    reviewMemory: async (id, change, options) => {
+      calls.push(["review", id, change, options]);
+      return { ...copy(id === IDS.photo ? photo : MEMORY_DETAIL), reviewStatus: change.reviewStatus,
+        revision: change.revision + 1, deleteAfter: change.reviewStatus === "DELETE" ? "2027-11-09T15:00:00Z" : null };
+    },
     ...overrides.api,
   };
   const { api: ignored, ...options } = overrides;
@@ -125,6 +130,47 @@ test("inbox pages replace rather than append and returning from detail preserves
   assert.equal(f.controller.getSnapshot().detail, null);
 });
 
+test("detail404 removes the stale cached page and reloads the same filter on Back while temporary failures preserve it", async () => {
+  for (const status of [404, 503]) {
+    const f = await entered(fixture());
+    const deleted = { ...MEMORY_DETAIL, reviewStatus: "DELETE", deleteAfter: "2027-11-09T15:00:00Z" };
+    let missing = false;
+    f.api.listMemories = async options => {
+      f.calls.push(["list", options]);
+      return { items: missing ? [] : [deleted], nextCursor: missing ? null : "old-next-page" };
+    };
+    await f.controller.loadInbox("DELETE", "loaded-page-two");
+    const cached = f.controller.getSnapshot().items;
+    const before = f.calls.filter(call => call[0] === "list").length;
+    missing = true;
+    f.api.getMemory = async () => { throw new ApiError("synthetic detail failure", { status }); };
+    await f.controller.openMemory(IDS.text);
+    if (status === 404) {
+      assert.equal(f.controller.getSnapshot().items.length, 0);
+      assert.equal(f.controller.getSnapshot().nextCursor, null);
+      assert.equal(f.controller.getSnapshot().pageResetVersion, 1);
+    } else {
+      assert.equal(f.controller.getSnapshot().items, cached);
+      assert.equal(f.controller.getSnapshot().nextCursor, "old-next-page");
+      assert.equal(f.controller.getSnapshot().pageResetVersion, 0);
+    }
+    await f.controller.backToInbox();
+    const state = f.controller.getSnapshot();
+    assert.equal(state.phase, "inbox");
+    assert.equal(state.reviewStatus, "DELETE");
+    assert.equal(state.error, null);
+    if (status === 404) {
+      assert.equal(f.calls.filter(call => call[0] === "list").length, before + 1);
+      assert.equal(f.calls.at(-1)[1].reviewStatus, "DELETE");
+      assert.equal(f.calls.at(-1)[1].cursor, undefined);
+      assert.equal(state.items.length, 0);
+    } else {
+      assert.equal(f.calls.filter(call => call[0] === "list").length, before);
+      assert.equal(state.items, cached);
+    }
+  }
+});
+
 test("a changed filter clears the previous filter's private rows while loading", async () => {
   const held = deferred();
   const f = await entered(fixture());
@@ -199,6 +245,60 @@ test("logout retry uses a fresh token when the old session is still active", asy
   await f.controller.logout();
   await f.controller.logout();
   assert.deepEqual(tokens, ["logout-retry-token-1", "logout-retry-token-2"]);
+  assert.equal(f.controller.getSnapshot().logoutUnconfirmed, false);
+});
+
+test("access unavailable can still sign out a live non-couple session with fresh CSRF and cleared private content", async () => {
+  const held = deferred();
+  const f = await entered(fixture());
+  await f.controller.openMemory(IDS.photo);
+  f.api.listMemories = async () => { throw authError(403); };
+  await f.controller.loadInbox();
+  assert.equal(f.controller.getSnapshot().phase, "unavailable");
+  assert.equal(f.controller.getSnapshot().session, null);
+  f.api.getSession = async () => ({ ...COUPLE_SESSION, csrfToken: "fresh-unavailable-signout-token",
+    user: { displayName: "Synthetic developer", roles: ["DEVELOPER"] } });
+  f.api.logout = options => { f.calls.push(["logout", options]); return held.promise; };
+  const leaving = f.controller.logout();
+  await turn();
+  const request = f.calls.at(-1);
+  assert.equal(request[0], "logout");
+  assert.equal(request[1].csrfToken, "fresh-unavailable-signout-token");
+  const pending = f.controller.getSnapshot();
+  assert.equal(pending.busy, true);
+  assert.equal(pending.session, null);
+  assert.equal(pending.detail, null);
+  assert.equal(pending.items.length, 0);
+  assert.equal(pending.photo.url, null);
+  assert.deepEqual(f.revoked, ["blob:original-1"]);
+  held.resolve();
+  await leaving;
+  assert.equal(f.controller.getSnapshot().phase, "login");
+  assert.equal(f.controller.getSnapshot().logoutUnconfirmed, false);
+});
+
+test("unavailable sign-out lost response requires deliberate retry before access can be reopened", async () => {
+  const f = await entered(fixture());
+  f.api.listMemories = async () => { throw authError(403); };
+  await f.controller.loadInbox();
+  const tokens = [];
+  let sessions = 0;
+  f.api.getSession = async () => ({ ...COUPLE_SESSION, csrfToken: "unavailable-signout-token-" + (++sessions) });
+  f.api.logout = async options => {
+    tokens.push(options.csrfToken);
+    if (tokens.length === 1) throw new ApiError("synthetic lost logout response", { unknownOutcome: true });
+  };
+  await f.controller.logout();
+  const unconfirmed = f.controller.getSnapshot();
+  assert.equal(unconfirmed.phase, "unavailable");
+  assert.equal(unconfirmed.logoutUnconfirmed, true);
+  assert.equal(unconfirmed.session, null);
+  assert.equal(unconfirmed.items.length, 0);
+  const listCount = f.calls.filter(call => call[0] === "list").length;
+  await f.controller.loadSession();
+  assert.deepEqual(tokens, ["unavailable-signout-token-1", "unavailable-signout-token-2"]);
+  assert.equal(f.calls.filter(call => call[0] === "list").length, listCount);
+  assert.equal(f.controller.getSnapshot().phase, "login");
   assert.equal(f.controller.getSnapshot().logoutUnconfirmed, false);
 });
 
@@ -546,4 +646,442 @@ test("real playback missing-object errors preserve decoded metadata and delibera
   assert.equal(f.controller.getSnapshot().photo.phase, "ready");
   assert.equal(f.created[0].blob.size, bytes.length);
   f.controller.dispose();
+});
+
+for (const [fromStatus, targetStatus] of [["PENDING", "KEEP"], ["KEEP", "ARCHIVED"], ["ARCHIVED", "PENDING"], ["DELETE", "PENDING"]]) {
+  test(`confirmed ${fromStatus} to ${targetStatus} uses persisted revision and resets only the inbox page`, async () => {
+    const f = await entered(fixture({ api: { getMemory: async () => ({ ...MEMORY_DETAIL, reviewStatus: fromStatus,
+      revision: 7, deleteAfter: fromStatus === "DELETE" ? "2027-11-09T15:00:00Z" : null }) } }));
+    await f.controller.loadInbox("ARCHIVED", "old-page-two");
+    await f.controller.openMemory(IDS.text);
+    await f.controller.reviewMemory(targetStatus);
+    const state = f.controller.getSnapshot();
+    assert.equal(state.phase, "detail");
+    assert.equal(state.detail.reviewStatus, targetStatus);
+    assert.equal(state.detail.revision, 8);
+    assert.equal(state.review.phase, "idle");
+    assert.equal(state.items.length, 0);
+    assert.equal(state.pageResetVersion, 1);
+    assert.equal(state.reviewStatus, "ARCHIVED");
+    const call = f.calls.find(call => call[0] === "review");
+    assert.deepEqual(call[2], { reviewStatus: targetStatus, revision: 7 });
+    assert.equal(call[3].csrfToken, COUPLE_SESSION.csrfToken);
+    assert.equal(call[3].signal instanceof AbortSignal, true);
+    await f.controller.backToInbox();
+    assert.equal(f.calls.at(-1)[0], "list");
+    assert.equal(f.calls.at(-1)[1].reviewStatus, "ARCHIVED");
+    assert.equal(f.calls.at(-1)[1].cursor, undefined);
+    assert.equal(f.controller.getSnapshot().detail, null);
+  });
+}
+
+test("same-state review accepts an unchanged persisted revision, while a changed status requires exactly one increment", async () => {
+  const f = await entered(fixture({ api: { reviewMemory: async () => copy(MEMORY_DETAIL) } }));
+  await f.controller.openMemory(IDS.text);
+  await f.controller.reviewMemory("PENDING");
+  assert.equal(f.controller.getSnapshot().detail.revision, MEMORY_DETAIL.revision);
+  assert.equal(f.controller.getSnapshot().review.phase, "idle");
+  f.api.reviewMemory = async () => ({ ...MEMORY_DETAIL, reviewStatus: "KEEP" });
+  await f.controller.reviewMemory("KEEP");
+  assert.equal(f.controller.getSnapshot().review.phase, "uncertain");
+  assert.equal(f.controller.getSnapshot().detail.reviewStatus, "PENDING");
+});
+
+test("pending review coalesces repeated taps and prevents navigation, sign-out and another mutation from cancelling it", async () => {
+  const held = deferred();
+  const f = await entered(fixture());
+  await f.controller.openMemory(IDS.photo);
+  let mutationCalls = 0, mutationSignal;
+  f.api.reviewMemory = (_id, _change, options) => { mutationCalls++; mutationSignal = options.signal; return held.promise; };
+  const saving = f.controller.reviewMemory("KEEP");
+  assert.equal(f.controller.reviewMemory("ARCHIVED"), saving);
+  await turn();
+  const callsBefore = f.calls.length;
+  await f.controller.loadInbox("DELETE");
+  await f.controller.openMemory(IDS.text);
+  await f.controller.retryPhoto();
+  await f.controller.logout();
+  await f.controller.loadSession();
+  await f.controller.login({ username: "synthetic", password: "synthetic" });
+  f.controller.backToInbox();
+  assert.equal(f.calls.length, callsBefore);
+  assert.equal(mutationSignal.aborted, false);
+  assert.equal(mutationCalls, 1);
+  assert.equal(f.controller.getSnapshot().review.targetStatus, "KEEP");
+  assert.equal(f.controller.getSnapshot().photo.url, null);
+  assert.deepEqual(f.revoked, ["blob:original-1"]);
+  held.resolve({ ...photo, reviewStatus: "KEEP", revision: 2 });
+  await saving;
+  assert.equal(f.controller.getSnapshot().detail.reviewStatus, "KEEP");
+  assert.equal(f.controller.getSnapshot().photo.phase, "ready");
+});
+
+test("an unknown review remains locked after an old-revision read and retries only the frozen original change", async () => {
+  const f = await entered(fixture());
+  await f.controller.openMemory(IDS.text);
+  const attempts = [];
+  f.api.reviewMemory = async (id, change, options) => {
+    attempts.push({ id, change, csrfToken: options.csrfToken });
+    if (attempts.length === 1) throw new ApiError("raw lost result", { code: "NETWORK_ERROR", unknownOutcome: true });
+    return { ...MEMORY_DETAIL, reviewStatus: "KEEP", revision: 2 };
+  };
+  await f.controller.reviewMemory("KEEP");
+  assert.equal(f.controller.getSnapshot().review.phase, "uncertain");
+  await f.controller.retryReview();
+  assert.equal(attempts.length, 1);
+  await f.controller.reloadReview();
+  assert.equal(f.controller.getSnapshot().review.phase, "uncertain");
+  assert.equal(f.controller.getSnapshot().review.canRetry, true);
+  const locked = f.controller.getSnapshot();
+  await f.controller.reviewMemory("DELETE");
+  await f.controller.logout();
+  f.controller.backToInbox();
+  assert.equal(f.controller.getSnapshot(), locked);
+  await f.controller.retryReview();
+  assert.deepEqual(attempts[0], attempts[1]);
+  assert.deepEqual(attempts[1].change, { reviewStatus: "KEEP", revision: 1 });
+  assert.equal(f.controller.getSnapshot().review.phase, "idle");
+  assert.equal(f.controller.getSnapshot().detail.reviewStatus, "KEEP");
+  assert.equal(JSON.stringify(f.controller.getSnapshot()).includes("raw lost result"), false);
+});
+
+for (const currentStatus of ["KEEP", "ARCHIVED"]) {
+  test(`advanced revision reconciliation shows current ${currentStatus} without resending or claiming attribution`, async () => {
+    const f = await entered(fixture());
+    await f.controller.openMemory(IDS.text);
+    let attempts = 0;
+    f.api.reviewMemory = async () => { attempts++; throw new ApiError("lost", { unknownOutcome: true }); };
+    await f.controller.reviewMemory("KEEP");
+    f.api.getMemory = async () => ({ ...MEMORY_DETAIL, reviewStatus: currentStatus, revision: 3 });
+    await f.controller.reloadReview();
+    const state = f.controller.getSnapshot();
+    assert.equal(attempts, 1);
+    assert.equal(state.review.phase, "idle");
+    assert.equal(state.detail.reviewStatus, currentStatus);
+    assert.equal(state.detail.revision, 3);
+    assert.match(state.notice, /does not identify who changed it/);
+    assert.equal(state.pageResetVersion, 1);
+  });
+}
+
+for (const status of [412, 428]) {
+  test(`known ${status} rejection requires current-state reload before another explicit action`, async () => {
+    const f = await entered(fixture());
+    await f.controller.openMemory(IDS.text);
+    let attempts = 0;
+    f.api.reviewMemory = async () => { attempts++; throw new ApiError("raw conflict", { status }); };
+    await f.controller.reviewMemory("KEEP");
+    assert.equal(f.controller.getSnapshot().review.phase, "conflict");
+    await f.controller.retryReview();
+    await f.controller.reviewMemory("DELETE");
+    assert.equal(attempts, 1);
+    await f.controller.reloadReview();
+    assert.equal(f.controller.getSnapshot().review.phase, "idle");
+    assert.equal(f.controller.getSnapshot().detail.revision, 1);
+    assert.equal(attempts, 1);
+  });
+}
+
+test("CSRF rejection refreshes the session and memory explicitly, never automatically resending", async () => {
+  const f = await entered(fixture());
+  await f.controller.openMemory(IDS.text);
+  const tokens = [];
+  f.api.reviewMemory = async (_id, change, options) => {
+    tokens.push(options.csrfToken);
+    if (tokens.length === 1) throw new ApiError("raw csrf", { status: 403, code: "CSRF_INVALID" });
+    return { ...MEMORY_DETAIL, reviewStatus: change.reviewStatus, revision: change.revision + 1 };
+  };
+  await f.controller.reviewMemory("KEEP");
+  assert.equal(f.controller.getSnapshot().review.phase, "csrf");
+  assert.equal(f.controller.getSnapshot().session.authenticated, true);
+  f.api.getSession = async () => ({ ...COUPLE_SESSION, csrfToken: "fresh-review-session-token" });
+  await f.controller.refreshReviewSession();
+  assert.equal(tokens.length, 1);
+  assert.equal(f.controller.getSnapshot().review.phase, "idle");
+  await f.controller.reviewMemory("KEEP");
+  assert.deepEqual(tokens, [COUPLE_SESSION.csrfToken, "fresh-review-session-token"]);
+});
+
+test("CSRF recovery rejects lower revisions and preserves the frozen recovery lock", async () => {
+  const f = await entered(fixture({ api: { getMemory: async () => ({ ...MEMORY_DETAIL, revision: 4 }),
+    reviewMemory: async () => { throw new ApiError("csrf", { status: 403, code: "CSRF_INVALID" }); } } }));
+  await f.controller.openMemory(IDS.text);
+  await f.controller.reviewMemory("KEEP");
+  f.api.getMemory = async () => ({ ...MEMORY_DETAIL, revision: 3 });
+  await f.controller.refreshReviewSession();
+  assert.equal(f.controller.getSnapshot().review.phase, "csrf");
+  assert.equal(f.controller.getSnapshot().detail.revision, 4);
+});
+
+for (const [status, code] of [[400, "VALIDATION_FAILED"], [412, "REVISION_CONFLICT"], [428, "PRECONDITION_REQUIRED"], [429, "RATE_LIMITED"], [403, "CSRF_INVALID"]]) {
+  test(`a known ${status} retry rejection cannot erase the original mutation's uncertainty`, async () => {
+    const f = await entered(fixture());
+    await f.controller.openMemory(IDS.text);
+    let attempts = 0;
+    f.api.reviewMemory = async () => {
+      attempts++;
+      if (attempts === 1) throw new ApiError("first result lost", { unknownOutcome: true });
+      throw new ApiError("retry rejected", { status, code });
+    };
+    await f.controller.reviewMemory("KEEP");
+    await f.controller.reloadReview();
+    await f.controller.retryReview();
+    if (status === 403) await f.controller.refreshReviewSession();
+    else await f.controller.reloadReview();
+    assert.equal(attempts, 2);
+    assert.equal(f.controller.getSnapshot().review.phase, "uncertain");
+    assert.equal(f.controller.getSnapshot().review.canRetry, true);
+    await f.controller.reviewMemory("ARCHIVED");
+    await f.controller.logout();
+    assert.equal(f.controller.getSnapshot().phase, "detail");
+    assert.equal(attempts, 2);
+    f.api.getMemory = async () => ({ ...MEMORY_DETAIL, reviewStatus: "KEEP", revision: 2 });
+    await f.controller.reloadReview();
+    assert.equal(f.controller.getSnapshot().review.phase, "idle");
+  });
+}
+
+for (const status of [401, 403]) {
+  test(`${status} on mutation clears content, session, intent and owned preview without exposing raw errors`, async () => {
+    const f = await entered(fixture({ api: { reviewMemory: async () => { throw authError(status); } } }));
+    await f.controller.openMemory(IDS.photo);
+    await f.controller.reviewMemory("KEEP");
+    const state = f.controller.getSnapshot();
+    assert.equal(state.phase, status === 401 ? "login" : "unavailable");
+    assert.equal(state.detail, null);
+    assert.equal(state.session, null);
+    assert.equal(state.items.length, 0);
+    assert.equal(state.photo.url, null);
+    assert.equal(state.review.phase, "idle");
+    assert.deepEqual(f.revoked, ["blob:original-1"]);
+    assert.equal(JSON.stringify(state).includes("secret raw error"), false);
+  });
+}
+
+test("delete revokes original preview, forbids playback and restore obtains a fresh original", async () => {
+  const f = await entered(fixture());
+  await f.controller.openMemory(IDS.photo);
+  await f.controller.reviewMemory("DELETE");
+  const deleted = f.controller.getSnapshot().detail;
+  assert.equal(deleted.reviewStatus, "DELETE");
+  assert.equal(deleted.deleteAfter, "2027-11-09T15:00:00Z");
+  assert.equal(f.controller.getSnapshot().photo.phase, "idle");
+  const playbackCount = f.calls.filter(call => call[0] === "playback").length;
+  await f.controller.retryPhoto();
+  f.controller.backToInbox();
+  f.api.getMemory = async () => copy(deleted);
+  await f.controller.openMemory(IDS.photo);
+  assert.equal(f.calls.filter(call => call[0] === "playback").length, playbackCount);
+  await f.controller.reviewMemory("PENDING");
+  assert.equal(f.controller.getSnapshot().detail.deleteAfter, null);
+  assert.equal(f.controller.getSnapshot().photo.phase, "ready");
+  assert.deepEqual(f.revoked, ["blob:original-1"]);
+});
+
+test("expired deletion discovered during reconciliation clears detail and reloads inbox page one", async () => {
+  const f = await entered(fixture());
+  await f.controller.openMemory(IDS.text);
+  f.api.reviewMemory = async () => { throw new ApiError("lost", { unknownOutcome: true }); };
+  await f.controller.reviewMemory("DELETE");
+  f.api.getMemory = async () => { throw new ApiError("expired", { status: 404 }); };
+  await f.controller.reloadReview();
+  assert.equal(f.controller.getSnapshot().detail, null);
+  assert.equal(f.controller.getSnapshot().review.phase, "idle");
+  await f.controller.backToInbox();
+  assert.equal(f.calls.at(-1)[0], "list");
+  assert.equal(f.calls.at(-1)[1].cursor, undefined);
+});
+
+test("a confirmed review stays confirmed when reloading its photo fails", async () => {
+  const f = await entered(fixture());
+  await f.controller.openMemory(IDS.photo);
+  f.api.getPlayback = async () => { throw new ApiError("storage unavailable", { status: 503 }); };
+  await f.controller.reviewMemory("KEEP");
+  assert.equal(f.controller.getSnapshot().detail.reviewStatus, "KEEP");
+  assert.equal(f.controller.getSnapshot().review.phase, "idle");
+  assert.match(f.controller.getSnapshot().notice, /Kept privately/);
+  assert.equal(f.controller.getSnapshot().photo.phase, "error");
+});
+
+test("mutation deadline covers a stalled real JSON body and ignores its late result after same-revision recovery", async () => {
+  const held = deferred(), clock = timers();
+  let signal, attempts = 0;
+  const api = createArchiveApi({ client: createApiClient({ fetchImpl: async (path, options) => {
+    if (options.method === "PATCH") {
+      attempts++;
+      signal = options.signal;
+      return { status: 200, ok: true, headers: new Headers({ "Content-Type": "application/json", ETag: '"2"' }), json: () => held.promise };
+    }
+    const payload = path === "/api/session" ? COUPLE_SESSION
+      : path.includes("?") ? { items: [MEMORY_DETAIL], nextCursor: null } : MEMORY_DETAIL;
+    return new Response(JSON.stringify(payload), { headers: { "Content-Type": "application/json" } });
+  } }) });
+  const f = await entered(fixture({ api, ...clock }));
+  await f.controller.openMemory(IDS.text);
+  const saving = f.controller.reviewMemory("KEEP");
+  await turn();
+  assert.equal(clock.expire(), 30_000);
+  await saving;
+  assert.equal(signal.aborted, true);
+  assert.equal(f.controller.getSnapshot().review.phase, "uncertain");
+  await f.controller.reloadReview();
+  assert.equal(f.controller.getSnapshot().review.canRetry, true);
+  const recovered = f.controller.getSnapshot();
+  held.resolve({ ...MEMORY_DETAIL, reviewStatus: "KEEP", revision: 2 });
+  await turn();
+  assert.equal(f.controller.getSnapshot(), recovered);
+  assert.equal(attempts, 1);
+  assert.equal(clock.pending.size, 0);
+});
+
+test("an advanced reconciliation cannot be overwritten by a late timed-out PATCH or disposal", async () => {
+  const held = deferred(), clock = timers();
+  const f = await entered(fixture({ ...clock }));
+  await f.controller.openMemory(IDS.text);
+  f.api.reviewMemory = () => held.promise;
+  const saving = f.controller.reviewMemory("KEEP");
+  await turn();
+  clock.expire();
+  await saving;
+  f.api.getMemory = async () => ({ ...MEMORY_DETAIL, reviewStatus: "ARCHIVED", revision: 3 });
+  await f.controller.reloadReview();
+  assert.equal(f.controller.getSnapshot().detail.reviewStatus, "ARCHIVED");
+  held.resolve({ ...MEMORY_DETAIL, reviewStatus: "KEEP", revision: 2 });
+  await turn();
+  assert.equal(f.controller.getSnapshot().detail.reviewStatus, "ARCHIVED");
+  f.controller.dispose();
+  assert.equal(f.controller.getSnapshot().detail, null);
+  assert.equal(f.controller.getSnapshot().session, null);
+  assert.equal(clock.pending.size, 0);
+});
+
+test("suspending a private photo immediately clears all presentation and revokes its owned preview", async () => {
+  const f = await entered(fixture());
+  await f.controller.openMemory(IDS.photo);
+  assert.equal(f.controller.getSnapshot().photo.phase, "ready");
+  const before = f.calls.length;
+  const hidden = f.controller.suspend();
+  assert.equal(hidden.phase, "checking"); assert.equal(hidden.session, null);
+  assert.deepEqual(hidden.items, []); assert.equal(hidden.detail, null); assert.equal(hidden.nextCursor, null);
+  assert.equal(hidden.photo.url, null); assert.equal(hidden.notice, null); assert.equal(hidden.busy, false);
+  assert.deepEqual(f.revoked, ["blob:original-1"]);
+  assert.equal(f.calls.length, before, "hiding never makes a request");
+  assert.equal(f.controller.suspend(), hidden, "repeated hidden events are idempotent");
+});
+
+test("restoration shares one fresh session check and never redisplays old rows before authorization", async () => {
+  const f = await entered(fixture());
+  const waiting = deferred();
+  let checks = 0, lists = 0;
+  f.api.getSession = async () => { checks++; return waiting.promise; };
+  f.api.listMemories = async () => { lists++; return { items: [{ ...MEMORY_DETAIL, message: "freshly authorized text" }], nextCursor: null }; };
+  f.controller.suspend();
+  const restoring = f.controller.resume();
+  assert.equal(f.controller.resume(), restoring);
+  await turn();
+  assert.equal(checks, 1); assert.equal(lists, 0);
+  assert.equal(f.controller.getSnapshot().session, null); assert.deepEqual(f.controller.getSnapshot().items, []);
+  waiting.resolve(copy(COUPLE_SESSION));
+  await restoring;
+  assert.equal(lists, 1); assert.equal(f.controller.getSnapshot().phase, "inbox");
+  assert.equal(f.controller.getSnapshot().items[0].message, "freshly authorized text");
+  assert.equal(f.controller.getSnapshot().photo.url, null);
+  const restored = f.controller.getSnapshot();
+  await f.controller.resume(); assert.equal(f.controller.getSnapshot(), restored); assert.equal(checks, 1);
+});
+
+for (const status of [0, 401, 403]) {
+  test(`restored ${status || "anonymous"} session cannot redisplay content or request private records`, async () => {
+    const f = await entered(fixture());
+    await f.controller.openMemory(IDS.photo);
+    const before = f.calls.length;
+    f.api.getSession = async () => { if (status) throw authError(status); return copy(ANONYMOUS_SESSION); };
+    f.controller.suspend(); await f.controller.resume();
+    const state = f.controller.getSnapshot();
+    assert.equal(state.phase, status === 403 ? "unavailable" : "login");
+    assert.equal(state.session, null); assert.deepEqual(state.items, []); assert.equal(state.detail, null); assert.equal(state.photo.url, null);
+    assert.equal(f.calls.length, before); assert.deepEqual(f.revoked, ["blob:original-1"]);
+  });
+}
+
+test("suspending an in-flight review keeps only its action identity and reconciles before deliberate retry", async () => {
+  const f = await entered(fixture());
+  await f.controller.openMemory(IDS.text);
+  const waiting = deferred(), attempts = [];
+  f.api.reviewMemory = async (id, change, options) => {
+    attempts.push({ id, change, options });
+    return attempts.length === 1 ? waiting.promise : { ...MEMORY_DETAIL, reviewStatus: change.reviewStatus, revision: change.revision + 1 };
+  };
+  const first = f.controller.reviewMemory("KEEP"); await turn();
+  const hidden = f.controller.suspend(); await first;
+  assert.equal(attempts[0].options.signal.aborted, true);
+  assert.equal(hidden.detail, null); assert.equal(hidden.session, null); assert.deepEqual(hidden.items, []);
+  assert.equal(JSON.stringify(hidden).includes(MEMORY_DETAIL.message), false);
+  await f.controller.reloadReview(); await f.controller.retryReview();
+  assert.equal(attempts.length, 1, "a hidden action cannot issue requests");
+  f.api.getSession = async () => ({ ...COUPLE_SESSION, csrfToken: "fresh-after-return" });
+  await f.controller.resume();
+  assert.equal(attempts.length, 1, "restoration never resends a review mutation");
+  assert.equal(f.controller.getSnapshot().review.phase, "uncertain");
+  assert.equal(f.controller.getSnapshot().review.canRetry, true);
+  await f.controller.reviewMemory("DELETE"); assert.equal(attempts.length, 1);
+  await f.controller.retryReview();
+  assert.equal(attempts.length, 2); assert.equal(attempts[1].id, attempts[0].id);
+  assert.deepEqual(attempts[1].change, attempts[0].change); assert.deepEqual(attempts[1].change, { reviewStatus: "KEEP", revision: 1 });
+  assert.equal(attempts[1].options.csrfToken, "fresh-after-return");
+  waiting.resolve({ ...MEMORY_DETAIL, reviewStatus: "ARCHIVED", revision: 3 }); await turn();
+  assert.equal(f.controller.getSnapshot().detail.reviewStatus, "KEEP", "late original mutation cannot restore its private response");
+});
+
+test("a failed restoration keeps an uncertain review hidden and recoverable through checking access again", async () => {
+  const f = await entered(fixture());
+  await f.controller.openMemory(IDS.text);
+  let mutations = 0, sessions = 0;
+  f.api.reviewMemory = async () => { mutations++; throw new ApiError("lost", { unknownOutcome: true }); };
+  await f.controller.reviewMemory("KEEP"); f.controller.suspend();
+  f.api.getSession = async () => {
+    if (++sessions === 1) throw new ApiError("private response", { status: 503 });
+    return copy(COUPLE_SESSION);
+  };
+  await f.controller.resume();
+  assert.equal(f.controller.getSnapshot().phase, "unavailable"); assert.equal(f.controller.getSnapshot().detail, null);
+  assert.equal(f.controller.getSnapshot().session, null); assert.deepEqual(f.controller.getSnapshot().items, []);
+  f.api.getMemory = async () => ({ ...MEMORY_DETAIL, reviewStatus: "KEEP", revision: 2 });
+  await f.controller.loadSession();
+  assert.equal(sessions, 2); assert.equal(mutations, 1);
+  assert.equal(f.controller.getSnapshot().phase, "detail"); assert.equal(f.controller.getSnapshot().review.phase, "idle");
+  assert.equal(f.controller.getSnapshot().detail.reviewStatus, "KEEP");
+});
+
+test("hiding during restoration aborts its request and ignores a late authorized result", async () => {
+  const f = await entered(fixture());
+  const waiting = deferred(); let signal, lists = 0;
+  f.api.getSession = async options => { signal = options.signal; return waiting.promise; };
+  f.api.listMemories = async () => { lists++; return { items: [MEMORY_DETAIL], nextCursor: null }; };
+  f.controller.suspend(); const restoring = f.controller.resume(); await turn();
+  f.controller.suspend(); await restoring;
+  assert.equal(signal.aborted, true); assert.equal(f.controller.getSnapshot().session, null);
+  waiting.resolve(copy(COUPLE_SESSION)); await turn();
+  assert.equal(lists, 0); assert.deepEqual(f.controller.getSnapshot().items, []);
+  f.api.getSession = async () => copy(COUPLE_SESSION);
+  await f.controller.resume(); assert.equal(lists, 1);
+});
+
+test("hiding an unfinished sign-out keeps it unconfirmed and restoration resolves it before private access", async () => {
+  const f = await entered(fixture());
+  const waiting = deferred(); let signouts = 0, firstSignal;
+  f.api.logout = async options => {
+    if (++signouts === 1) { firstSignal = options.signal; return waiting.promise; }
+  };
+  const signout = f.controller.logout(); await turn();
+  assert.equal(signouts, 1);
+  f.controller.suspend(); await signout;
+  assert.equal(firstSignal.aborted, true); assert.equal(f.controller.getSnapshot().logoutUnconfirmed, true);
+  const before = f.calls.length;
+  await f.controller.resume();
+  assert.equal(signouts, 2); assert.equal(f.controller.getSnapshot().phase, "login");
+  assert.equal(f.controller.getSnapshot().logoutUnconfirmed, false);
+  assert.ok(f.calls.slice(before).every(call => call[0] === "session"), "return never opens the private inbox during sign-out recovery");
+  waiting.resolve(); await turn();
+  assert.equal(f.controller.getSnapshot().phase, "login"); assert.deepEqual(f.controller.getSnapshot().items, []);
 });

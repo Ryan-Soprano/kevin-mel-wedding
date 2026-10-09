@@ -48,6 +48,8 @@ class ContributionUpgradeRestartTest {
         String legacyKey = UUID.randomUUID().toString();
         UUID legacyId = UUID.randomUUID();
         UUID legacyMemory = UUID.randomUUID();
+        UUID legacyDeletedId = UUID.randomUUID();
+        UUID legacyDeletedMemory = UUID.randomUUID();
         String reservedKey = UUID.randomUUID().toString();
         try (var connection = DriverManager.getConnection(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword())) {
             try (var insert = connection.prepareStatement("INSERT INTO contribution(id, event_key, guest_name, idempotency_key) VALUES (?, 'kevin-mel-wedding', ?, ?)")) {
@@ -55,6 +57,15 @@ class ContributionUpgradeRestartTest {
             }
             try (var insert = connection.prepareStatement("INSERT INTO memory(id, contribution_id, memory_type, text_content) VALUES (?, ?, 'TEXT', ?)")) {
                 insert.setObject(1, legacyMemory); insert.setObject(2, legacyId); insert.setString(3, "\ufefflegacy\u00a0"); insert.executeUpdate();
+            }
+            try (var insert = connection.prepareStatement("INSERT INTO contribution(id, event_key, idempotency_key) VALUES (?, 'kevin-mel-wedding', ?)")) {
+                insert.setObject(1, legacyDeletedId); insert.setString(2, UUID.randomUUID().toString()); insert.executeUpdate();
+            }
+            try (var insert = connection.prepareStatement("""
+                    INSERT INTO memory(id, contribution_id, memory_type, text_content, review_status, created_at, updated_at)
+                    VALUES (?, ?, 'TEXT', 'Legacy retained deletion', 'DELETE', '2026-09-01T00:00:00Z', '2026-09-02T00:00:00Z')
+                    """)) {
+                insert.setObject(1, legacyDeletedMemory); insert.setObject(2, legacyDeletedId); insert.executeUpdate();
             }
             try (var insert = connection.prepareStatement("INSERT INTO contribution(event_key, idempotency_key) VALUES ('kevin-mel-wedding', ?)")) {
                 insert.setString(1, reservedKey); insert.executeUpdate();
@@ -77,6 +88,12 @@ class ContributionUpgradeRestartTest {
             var jdbc = first.getBean(org.springframework.jdbc.core.simple.JdbcClient.class);
             assertThat(jdbc.sql("SELECT revision FROM memory WHERE id = :id")
                     .param("id", legacyMemory).query(Integer.class).single()).isEqualTo(1);
+            assertThat(jdbc.sql("""
+                    SELECT delete_after = updated_at + INTERVAL '30 days'
+                        AND purge_started_at IS NULL AND purged_at IS NULL
+                        AND text_content = 'Legacy retained deletion'
+                    FROM memory WHERE id = :id
+                    """).param("id", legacyDeletedMemory).query(Boolean.class).single()).isTrue();
         }
         try (var restarted = start()) {
             var replay = request(restarted, "POST", "/api/contributions", key, "{\"message\":\"restart fixture\"}");
@@ -89,6 +106,12 @@ class ContributionUpgradeRestartTest {
                     .param("key", key).query(Long.class).single()).isEqualTo(1);
             assertThat(jdbc.sql("SELECT text_content FROM memory WHERE id = :id")
                     .param("id", legacyMemory).query(String.class).single()).isEqualTo("\ufefflegacy\u00a0");
+            assertThat(jdbc.sql("""
+                    SELECT delete_after = updated_at + INTERVAL '30 days'
+                        AND purge_started_at IS NULL AND purged_at IS NULL
+                        AND text_content = 'Legacy retained deletion'
+                    FROM memory WHERE id = :id
+                    """).param("id", legacyDeletedMemory).query(Boolean.class).single()).isTrue();
         }
     }
 }

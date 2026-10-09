@@ -41,12 +41,17 @@ class InboxPostgresHttpTest {
     @LocalServerPort int port;
     @Autowired JdbcClient db;
     @Autowired PasswordEncoder encoder;
+    @Autowired com.kevinmel.archive.contribution.ContributionRepository contributions;
+    @Autowired com.kevinmel.archive.media.PhotoRepository photos;
+    @Autowired org.springframework.transaction.PlatformTransactionManager transactions;
     private static final Instant TIME = Instant.parse("2026-10-09T12:00:00.123456Z");
     private static final String PASSWORD = "synthetic-inbox-only-password";
     private final List<UUID> contributionIds = new ArrayList<>();
+    private final List<String> erasedDigests = new ArrayList<>();
     private UUID accountId;
     private String username;
     private HttpClient client;
+    private String csrfToken;
 
     @BeforeEach void fixtures() {
         accountId = UUID.randomUUID();
@@ -60,6 +65,8 @@ class InboxPostgresHttpTest {
 
     @AfterEach void removeOnlyOwnedFixtures() {
         for (UUID contribution : contributionIds) {
+            db.sql("DELETE FROM review_audit WHERE memory_id IN (SELECT id FROM memory WHERE contribution_id = :contribution)")
+                    .param("contribution", contribution).update();
             db.sql("""
                     DELETE FROM media_asset WHERE memory_id IN
                     (SELECT id FROM memory WHERE contribution_id = :contribution)
@@ -67,6 +74,7 @@ class InboxPostgresHttpTest {
             db.sql("DELETE FROM memory WHERE contribution_id = :contribution").param("contribution", contribution).update();
             db.sql("DELETE FROM contribution WHERE id = :contribution").param("contribution", contribution).update();
         }
+        for (String digest : erasedDigests) db.sql("DELETE FROM erased_submission_key WHERE key_digest = :digest").param("digest", digest).update();
         if (accountId != null) db.sql("DELETE FROM archive_account WHERE id = :id").param("id", accountId).update();
     }
 
@@ -145,7 +153,7 @@ class InboxPostgresHttpTest {
         }
         assertThat(ids(get("/api/memories?reviewStatus=KEEP"))).containsExactly(kept.toString());
         assertThat(ids(get("/api/memories?reviewStatus=ARCHIVED"))).containsExactly(archived.toString());
-        assertThat(get("/api/memories?reviewStatus=DELETE").statusCode()).isEqualTo(400);
+        assertThat(ids(get("/api/memories?reviewStatus=DELETE"))).isEmpty();
     }
 
     @Test void credentialVersionAndDisablementRevokeActualSessions() throws Exception {
@@ -170,6 +178,210 @@ class InboxPostgresHttpTest {
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 
+
+    @Test void persistedReviewsAreAtomicNoOpAndReversibleWithoutExtendingDeletion() throws Exception {
+        UUID note = memory(1, "kevin-mel-wedding", "PENDING", "TEXT", TIME, "Synthetic Guest");
+        login();
+        var kept = patch(note, "KEEP", 1);
+        assertThat(kept.statusCode()).isEqualTo(200);
+        assertThat(kept.headers().firstValue("ETag")).contains("\"2\"");
+        String updated = JsonPath.read(kept.body(), "$.updatedAt");
+        var repeatedKeep = patch(note, "KEEP", 2);
+        assertThat(repeatedKeep.statusCode()).isEqualTo(200);
+        assertThat((String) JsonPath.read(repeatedKeep.body(), "$.updatedAt")).isEqualTo(updated);
+        assertThat(patch(note, "ARCHIVED", 1).statusCode()).isEqualTo(412);
+
+        Instant deletionRequestedAt = Instant.now();
+        var deleted = patch(note, "DELETE", 2);
+        Instant deletionReturnedAt = Instant.now();
+        assertThat(deleted.statusCode()).isEqualTo(200);
+        String deadline = JsonPath.read(deleted.body(), "$.deleteAfter");
+        assertThat(Instant.parse(deadline)).isBetween(deletionRequestedAt.plusSeconds(30L * 86400).minusMillis(1),
+                deletionReturnedAt.plusSeconds(30L * 86400).plusMillis(1));
+        var repeatedDelete = patch(note, "DELETE", 3);
+        assertThat(repeatedDelete.statusCode()).isEqualTo(200);
+        assertThat((String) JsonPath.read(repeatedDelete.body(), "$.deleteAfter")).isEqualTo(deadline);
+        assertThat(repeatedDelete.headers().firstValue("ETag")).contains("\"3\"");
+        assertThat(ids(get("/api/memories?reviewStatus=DELETE"))).containsExactly(note.toString());
+        assertThat(get("/api/memories/" + note).statusCode()).isEqualTo(200);
+
+        var restored = patch(note, "PENDING", 3);
+        assertThat(restored.statusCode()).isEqualTo(200);
+        assertThat(restored.headers().firstValue("ETag")).contains("\"4\"");
+        assertThat((Object) JsonPath.read(restored.body(), "$.deleteAfter")).isNull();
+        assertThat(ids(get("/api/memories?reviewStatus=DELETE"))).isEmpty();
+        assertThat(ids(get("/api/memories"))).containsExactly(note.toString());
+        assertThat(db.sql("SELECT count(*) FROM review_audit WHERE memory_id = :id").param("id", note).query(Integer.class).single()).isEqualTo(3);
+        assertThat(db.sql("SELECT actor_account_id FROM review_audit WHERE memory_id = :id").param("id", note).query(UUID.class).list())
+                .hasSize(3).containsOnly(accountId);
+    }
+
+    @Test void concurrentSameRevisionRequestsHaveOneWinnerAndOneAudit() throws Exception {
+        UUID note = memory(1, "kevin-mel-wedding", "PENDING", "TEXT", TIME, null);
+        login();
+        var first = client.sendAsync(patchRequest(note, "KEEP", 1), HttpResponse.BodyHandlers.ofString());
+        var second = client.sendAsync(patchRequest(note, "ARCHIVED", 1), HttpResponse.BodyHandlers.ofString());
+        var one = first.get(30, java.util.concurrent.TimeUnit.SECONDS);
+        var two = second.get(30, java.util.concurrent.TimeUnit.SECONDS);
+        assertThat(List.of(one.statusCode(), two.statusCode())).containsExactlyInAnyOrder(200, 412);
+        assertThat(db.sql("SELECT revision FROM memory WHERE id = :id").param("id", note).query(Integer.class).single()).isEqualTo(2);
+        assertThat(db.sql("SELECT count(*) FROM review_audit WHERE memory_id = :id").param("id", note).query(Integer.class).single()).isEqualTo(1);
+    }
+
+    @Test void expiredClaimedAndPurgedRowsNeverReturnPrivateContentOrAcceptReview() throws Exception {
+        UUID note = memory(1, "kevin-mel-wedding", "DELETE", "TEXT", TIME, null);
+        login();
+        assertThat(ids(get("/api/memories?reviewStatus=DELETE"))).isEmpty();
+        assertThat(get("/api/memories/" + note).statusCode()).isEqualTo(404);
+        assertThat(patch(note, "PENDING", 1).statusCode()).isEqualTo(404);
+        db.sql("UPDATE memory SET delete_after = CURRENT_TIMESTAMP + INTERVAL '1 day', purge_started_at = CURRENT_TIMESTAMP WHERE id = :id")
+                .param("id", note).update();
+        assertThat(get("/api/memories/" + note).statusCode()).isEqualTo(404);
+        assertThat(patch(note, "KEEP", 1).statusCode()).isEqualTo(404);
+        db.sql("UPDATE memory SET purged_at = CURRENT_TIMESTAMP, text_content = NULL, caption = NULL WHERE id = :id").param("id", note).update();
+        assertThat(ids(get("/api/memories?reviewStatus=DELETE"))).isEmpty();
+        assertThat(patch(note, "PENDING", 1).statusCode()).isEqualTo(404);
+        assertThat(db.sql("SELECT count(*) FROM review_audit WHERE memory_id = :id").param("id", note).query(Integer.class).single()).isZero();
+    }
+
+    @Test void purgedTextRetainsGuestReceiptIdentityAndCannotRecreateContent() throws Exception {
+        String key = UUID.randomUUID().toString();
+        String body = "{\"guestName\":\"Synthetic Guest\",\"message\":\"Synthetic text that will be scrubbed\"}";
+        var created = postText(key, body);
+        assertThat(created.statusCode()).isEqualTo(201);
+        UUID contribution = UUID.fromString(JsonPath.read(created.body(), "$.contributionId"));
+        UUID note = UUID.fromString(JsonPath.read(created.body(), "$.memories[0].memoryId"));
+        contributionIds.add(contribution);
+        scrubTombstone(note);
+        db.sql("UPDATE contribution SET guest_name = NULL WHERE id = :id").param("id", contribution).update();
+        eraseKey(key);
+
+        var replay = postText(key, body);
+        assertThat(replay.statusCode()).isEqualTo(200);
+        assertThat((String) JsonPath.read(replay.body(), "$.memories[0].memoryId")).isEqualTo(note.toString());
+        assertThat((String) JsonPath.read(replay.body(), "$.memories[0].reviewStatus")).isEqualTo("DELETE");
+        assertThat((String) JsonPath.read(replay.body(), "$.completion")).isEqualTo("COMPLETE");
+        assertThat(replay.body()).doesNotContain("Synthetic Guest", "will be scrubbed", "textContent", key);
+        assertThat(postText(key, "{\"message\":\"changed\"}").statusCode()).isEqualTo(409);
+        assertThat(db.sql("SELECT text_content IS NULL FROM memory WHERE id = :id").param("id", note)
+                .query(Boolean.class).single()).isTrue();
+        assertThat(db.sql("SELECT count(*) FROM memory WHERE contribution_id = :id").param("id", contribution).query(Integer.class).single()).isEqualTo(1);
+    }
+
+    @Test void purgedPhotoPreservesBatchReceiptIdsAndSuccessfulUploadState() {
+        String key = UUID.randomUUID().toString();
+        var request = photoRequest(2);
+        var created = photos.create(request, key);
+        UUID contribution = created.receipt().contributionId();
+        contributionIds.add(contribution);
+        UUID first = created.receipt().memories().getFirst().memoryId();
+        UUID sibling = created.receipt().memories().getLast().memoryId();
+        db.sql("UPDATE media_asset SET detected_format = declared_content_type, upload_state = 'UPLOADED' WHERE memory_id IN (:first,:sibling)")
+                .param("first", first).param("sibling", sibling).update();
+        scrubTombstone(first);
+        db.sql("DELETE FROM media_asset WHERE memory_id = :id").param("id", first).update();
+        eraseKey(key);
+        var replay = photos.create(request, key).receipt();
+        assertThat(replay.memories()).extracting(com.kevinmel.archive.contribution.ContributionReceipt.MemoryReceipt::memoryId)
+                .containsExactly(first, sibling);
+        assertThat(replay.memories()).extracting(com.kevinmel.archive.contribution.ContributionReceipt.MemoryReceipt::uploadState)
+                .containsExactly("UPLOADED", "UPLOADED");
+        assertThat(replay.memories().getFirst().reviewStatus()).isEqualTo("DELETE");
+        assertThat(replay.completion()).isEqualTo("COMPLETE");
+        assertThat(db.sql("SELECT guest_name FROM contribution WHERE id = :id").param("id", contribution).query(String.class).single())
+                .isEqualTo("Synthetic Guest");
+        assertThat(db.sql("SELECT count(*) FROM memory WHERE contribution_id = :id").param("id", contribution).query(Integer.class).single()).isEqualTo(2);
+    }
+
+    @Test void erasedKeyFromBackupPredatingEnvelopeRejectsFreshTextAndPhotoCreation() {
+        for (String key : List.of(UUID.randomUUID().toString(), UUID.randomUUID().toString())) {
+            eraseKey(key);
+            assertThatThrownBy(() -> contributions.saveTextContribution("kevin-mel-wedding", null, "must not resurrect", key))
+                    .isInstanceOf(com.kevinmel.archive.web.ApiException.class)
+                    .satisfies(e -> assertThat(((com.kevinmel.archive.web.ApiException)e).status()).isEqualTo(404));
+            assertThatThrownBy(() -> photos.create(photoRequest(1), key))
+                    .isInstanceOf(com.kevinmel.archive.web.ApiException.class)
+                    .satisfies(e -> assertThat(((com.kevinmel.archive.web.ApiException)e).status()).isEqualTo(404));
+            assertThat(db.sql("SELECT count(*) FROM contribution WHERE idempotency_key = :key").param("key", key).query(Integer.class).single()).isZero();
+        }
+    }
+
+
+    @Test void guestPhotoIoAndPlaybackHonorDeletionDeadlineAndPurgeClaim() throws Exception {
+        String key = UUID.randomUUID().toString();
+        var created = photos.create(photoRequest(1), key).receipt();
+        UUID contribution = created.contributionId();
+        UUID photo = created.memories().getFirst().memoryId();
+        contributionIds.add(contribution);
+        db.sql("UPDATE media_asset SET detected_format = declared_content_type, upload_state = 'UPLOADED' WHERE memory_id = :id")
+                .param("id", photo).update();
+        db.sql("UPDATE memory SET review_status = 'DELETE', delete_after = CURRENT_TIMESTAMP + INTERVAL '1 day' WHERE id = :id")
+                .param("id", photo).update();
+        var transaction = new org.springframework.transaction.support.TransactionTemplate(transactions);
+        com.kevinmel.archive.media.PhotoRepository.Asset retainedAsset = transaction.execute(status -> photos.lock(contribution, photo, key));
+        assertThat(retainedAsset).isNotNull();
+        login();
+        assertThat(get("/api/memories/" + photo).statusCode()).isEqualTo(200);
+        assertThat(get("/api/memories/" + photo + "/playback").statusCode()).isEqualTo(404);
+
+        db.sql("UPDATE memory SET delete_after = CURRENT_TIMESTAMP - INTERVAL '1 second' WHERE id = :id")
+                .param("id", photo).update();
+        assertPhotoUnavailable(transaction, contribution, photo, key);
+        db.sql("UPDATE memory SET delete_after = CURRENT_TIMESTAMP + INTERVAL '1 day', purge_started_at = CURRENT_TIMESTAMP WHERE id = :id")
+                .param("id", photo).update();
+        assertPhotoUnavailable(transaction, contribution, photo, key);
+        db.sql("UPDATE memory SET purged_at = CURRENT_TIMESTAMP, text_content = NULL, caption = NULL WHERE id = :id")
+                .param("id", photo).update();
+        assertPhotoUnavailable(transaction, contribution, photo, key);
+        assertThat(get("/api/memories/" + photo).statusCode()).isEqualTo(404);
+        assertThat(db.sql("SELECT count(*) FROM upload_grant WHERE media_asset_id = (SELECT id FROM media_asset WHERE memory_id = :id)")
+                .param("id", photo).query(Integer.class).single()).isZero();
+    }
+
+    private void assertPhotoUnavailable(org.springframework.transaction.support.TransactionTemplate transaction,
+            UUID contribution, UUID photo, String key) {
+        assertThatThrownBy(() -> transaction.execute(status -> photos.lock(contribution, photo, key)))
+                .isInstanceOf(com.kevinmel.archive.web.ApiException.class)
+                .satisfies(failure -> assertThat(((com.kevinmel.archive.web.ApiException) failure).status()).isEqualTo(404));
+    }
+
+    private void scrubTombstone(UUID id) {
+        db.sql("""
+                UPDATE memory SET review_status = 'DELETE', delete_after = CURRENT_TIMESTAMP - INTERVAL '1 second',
+                    purge_started_at = CURRENT_TIMESTAMP, purged_at = CURRENT_TIMESTAMP, text_content = NULL, caption = NULL
+                WHERE id = :id
+                """).param("id", id).update();
+    }
+    private void eraseKey(String key) {
+        String digest = com.kevinmel.archive.retention.SubmissionKeyDigest.sha256(key);
+        erasedDigests.add(digest);
+        db.sql("INSERT INTO erased_submission_key(key_digest, erased_at) VALUES (:digest,CURRENT_TIMESTAMP) ON CONFLICT DO NOTHING")
+                .param("digest", digest).update();
+    }
+    private static com.kevinmel.archive.media.PhotoRequest photoRequest(int count) {
+        var items = new ArrayList<java.util.Map<String,Object>>();
+        for (int i=0; i<count; i++) items.add(java.util.Map.of("clientItemId", UUID.randomUUID().toString(),
+                "originalFilename", "synthetic.png", "declaredContentType", "image/png", "byteSize", 100,
+                "checksumSha256", "a".repeat(64), "caption", "Synthetic caption"));
+        return com.kevinmel.archive.media.PhotoRequest.from(java.util.Map.of("memoryType", "PHOTO", "guestName", "Synthetic Guest", "items", items));
+    }
+    private HttpResponse<String> postText(String key, String body) throws Exception {
+        return client.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/contributions"))
+                .timeout(Duration.ofSeconds(20)).header("X-Api-Contract", "1").header("Content-Type", "application/json")
+                .header("Idempotency-Key", key).header("Origin", "http://localhost:" + port)
+                .POST(HttpRequest.BodyPublishers.ofString(body)).build(), HttpResponse.BodyHandlers.ofString());
+    }
+    private HttpResponse<String> patch(UUID memory, String status, int revision) throws Exception {
+        return client.send(patchRequest(memory, status, revision), HttpResponse.BodyHandlers.ofString());
+    }
+    private HttpRequest patchRequest(UUID memory, String status, int revision) {
+        return HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/memories/" + memory + "/review"))
+                .timeout(Duration.ofSeconds(20)).header("X-Api-Contract", "1").header("X-CSRF-Token", csrfToken)
+                .header("If-Match", "\"" + revision + "\"").header("Content-Type", "application/json")
+                .header("Origin", "http://localhost:" + port)
+                .method("PATCH", HttpRequest.BodyPublishers.ofString("{\"reviewStatus\":\"" + status + "\"}")).build();
+    }
+
     private UUID memory(int number, String event, String status, String type, Instant at, String name) {
         UUID contribution = UUID.randomUUID();
         UUID memory = UUID.fromString("00000000-0000-4000-8000-" + String.format("%012d", number));
@@ -181,8 +393,9 @@ class InboxPostgresHttpTest {
                 """).param("id", contribution).param("event", event).param("name", name)
                 .param("key", "synthetic-private-key-" + UUID.randomUUID()).param("created", timestamp).update();
         db.sql("""
-                INSERT INTO memory (id, contribution_id, memory_type, text_content, review_status, created_at, updated_at)
-                VALUES (:id, :contribution, :type, :text, :status, :created, :created)
+                INSERT INTO memory (id, contribution_id, memory_type, text_content, review_status, created_at, updated_at, delete_after)
+                VALUES (:id, :contribution, :type, :text, :status, :created, :created,
+                    CASE WHEN CAST(:status AS text) = 'DELETE' THEN CURRENT_TIMESTAMP - INTERVAL '1 second' ELSE NULL END)
                 """).param("id", memory).param("contribution", contribution).param("type", type)
                 .param("text", "TEXT".equals(type) ? "<script>synthetic markup</script>" : null)
                 .param("status", status).param("created", timestamp).update();
@@ -211,7 +424,9 @@ class InboxPostgresHttpTest {
                 .timeout(Duration.ofSeconds(20)).header("X-Api-Contract", "1").header("X-CSRF-Token", token)
                 .header("Origin", "http://localhost:" + port).header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString("{\"username\":\"" + username + "\",\"password\":\"" + PASSWORD + "\"}")).build();
-        assertThat(client.send(request, HttpResponse.BodyHandlers.ofString()).statusCode()).isEqualTo(200);
+        var response = client.send(request, HttpResponse.BodyHandlers.ofString());
+        assertThat(response.statusCode()).isEqualTo(200);
+        csrfToken = JsonPath.read(response.body(), "$.csrfToken");
     }
     private HttpResponse<String> get(String path) throws Exception {
         return client.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))

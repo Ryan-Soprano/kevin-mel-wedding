@@ -121,3 +121,27 @@ test("429 respects retry delay without automatic transfer or key rotation", asyn
   assert.throws(() => f.submit(raw), { status: 429 }); assert.equal(calls, 1);
   now = 10_000; await assert.rejects(f.submit(raw)); assert.equal(calls, 2);
 });
+
+test("503 finalizer delay retains original bytes and recovers with the existing grant after deliberate retry", async () => {
+  let time = 0, attempts = 0;
+  const f = fixture({ finalizeUpload: async (...args) => {
+    f.calls.push(["finalize", ...args]);
+    if (++attempts === 1) throw new ApiError("Busy", {
+      code: "MEDIA_UNAVAILABLE", status: 503, retryAfterSeconds: 5, unknownOutcome: true,
+    });
+    f.receipt = done; return done;
+  } });
+  const submission = createPhotoSubmission({ api: f.api, now: () => time,
+    randomUUID: () => id, digest: async () => "1".repeat(64) });
+  await assert.rejects(submission.submit(raw), { status: 503, retryAfterSeconds: 5 });
+  assert.equal(submission.complete, false); assert.equal(submission.pending, true);
+  assert.throws(() => submission.startAnother());
+  const before = f.calls.length;
+  assert.throws(() => submission.submit(raw), { status: 429, retryAfterSeconds: 5 });
+  assert.equal(f.calls.length, before);
+  time = 5000; assert.equal(f.calls.length, before);
+  assert.equal(await submission.submit(raw), done);
+  assert.deepEqual(f.calls.slice(before).map(call => call[0]), ["receipt", "finalize"]);
+  assert.equal(f.calls.filter(call => call[0] === "upload").length, 1);
+  assert.equal(f.calls.filter(call => call[0] === "finalize")[1][3], grant.grantId);
+});

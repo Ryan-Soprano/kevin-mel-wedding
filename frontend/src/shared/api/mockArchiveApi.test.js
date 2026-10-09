@@ -1,9 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createMockArchiveApi } from "./mockArchiveApi.js";
-import { AUDIO_REQUEST, IDS, PHOTO_REQUEST, SCENARIOS, TEXT_REQUEST } from "./v1/fixtures.js";
+import { AUDIO_REQUEST, CREATED_AT, IDS, PHOTO_REQUEST, SCENARIOS, TEXT_REQUEST } from "./v1/fixtures.js";
 
 const options = { idempotencyKey: IDS.key };
+const DAY = 86400000;
+const REVIEW_TIME = Date.parse(CREATED_AT) + DAY;
 async function signIn(api) {
   const anonymous = await api.getSession();
   return api.login({ username: "synthetic", password: "synthetic" }, { csrfToken: anonymous.csrfToken });
@@ -234,7 +236,7 @@ test("invalid login and empty inbox have deterministic fixtures", async () => {
 });
 
 test("cursor pages, stale-review conflicts, private KEEP, and recoverable DELETE", async () => {
-  const api = createMockArchiveApi();
+  const api = createMockArchiveApi({ now: () => REVIEW_TIME });
   await api.createTextContribution(TEXT_REQUEST, options);
   const session = await signIn(api);
   const page = await api.listMemories({ limit: 1 });
@@ -249,10 +251,186 @@ test("cursor pages, stale-review conflicts, private KEEP, and recoverable DELETE
   await assert.rejects(api.reviewMemory(IDS.text, { reviewStatus: "ARCHIVED", revision: 1 }, csrf), { code: "REVIEW_CONFLICT", status: 412 });
   const deleted = await api.reviewMemory(IDS.text, { reviewStatus: "DELETE", revision: kept.revision }, csrf);
   assert.equal(Date.parse(deleted.deleteAfter) - Date.parse(deleted.updatedAt), 30 * 86400000);
-  const restored = await api.reviewMemory(IDS.text, { reviewStatus: "KEEP", revision: deleted.revision }, csrf);
+  const restored = await api.reviewMemory(IDS.text, { reviewStatus: "PENDING", revision: deleted.revision }, csrf);
   assert.equal(restored.deleteAfter, null);
   assert.equal(restored.visibility, "COUPLE_ONLY");
+  assert.equal(restored.reviewStatus, "PENDING");
+  assert.equal((await api.listMemories()).items.some((item) => item.memoryId === IDS.text), true);
   await assert.rejects(api.reviewMemory(IDS.text, { reviewStatus: "PENDING", revision: restored.revision }, { csrfToken: "wrong-but-long-token" }), { code: "CSRF_INVALID" });
+});
+
+test("same-state reviews preserve the whole memory, and stale same-state requests still conflict", async () => {
+  let now = REVIEW_TIME;
+  const api = createMockArchiveApi({ now: () => now });
+  const session = await signIn(api);
+  const csrf = { csrfToken: session.csrfToken };
+  let current = await api.getMemory(IDS.text);
+
+  for (const reviewStatus of ["PENDING", "KEEP", "ARCHIVED", "DELETE", "PENDING"]) {
+    if (current.reviewStatus !== reviewStatus) {
+      const previous = current;
+      current = await api.reviewMemory(IDS.text, { reviewStatus, revision: current.revision }, csrf);
+      assert.equal(current.revision, previous.revision + 1);
+      assert.equal(current.updatedAt, new Date(now).toISOString());
+      await assert.rejects(api.reviewMemory(IDS.text, { reviewStatus, revision: previous.revision }, csrf), {
+        code: "REVIEW_CONFLICT", status: 412,
+      });
+    }
+    now += DAY;
+    assert.deepEqual(await api.reviewMemory(IDS.text, { reviewStatus, revision: current.revision }, csrf), current);
+    assert.deepEqual(await api.getMemory(IDS.text), current);
+  }
+});
+
+test("first DELETE uses server time and repeated DELETE cannot extend its recovery deadline", async () => {
+  // Fixture timestamps are in the future; deletion must use server time even when
+  // updatedAt is clamped to preserve the fixture's creation ordering.
+  let now = Date.parse(CREATED_AT) - DAY;
+  const api = createMockArchiveApi({ now: () => now });
+  const session = await signIn(api);
+  const csrf = { csrfToken: session.csrfToken };
+  const deleted = await api.reviewMemory(IDS.text, { reviewStatus: "DELETE", revision: 1 }, csrf);
+  assert.equal(deleted.deleteAfter, new Date(now + 30 * DAY).toISOString());
+  assert.equal(deleted.updatedAt, CREATED_AT);
+  now += 2 * DAY;
+  assert.deepEqual(await api.reviewMemory(IDS.text, { reviewStatus: "DELETE", revision: deleted.revision }, csrf), deleted);
+  await assert.rejects(api.reviewMemory(IDS.text, { reviewStatus: "DELETE", revision: 1 }, csrf), {
+    code: "REVIEW_CONFLICT", status: 412,
+  });
+  assert.deepEqual((await api.listMemories({ reviewStatus: "DELETE" })).items, [deleted]);
+});
+
+test("deleted text and photos remain recoverable before expiry and disappear at the exact deadline", async () => {
+  let now = REVIEW_TIME;
+  const api = createMockArchiveApi({ now: () => now });
+  const receipt = await api.createMediaContribution(PHOTO_REQUEST, options);
+  await finalize(api, receipt, await transfer(api, receipt));
+  await finalize(api, receipt, await transfer(api, receipt, 1));
+  const session = await signIn(api);
+  const csrf = { csrfToken: session.csrfToken };
+  const firstPhotoId = receipt.memories[0].memoryId;
+  const secondPhotoId = receipt.memories[1].memoryId;
+  const deletedText = await api.reviewMemory(IDS.text, { reviewStatus: "DELETE", revision: 1 }, csrf);
+  const deletedPhoto = await api.reviewMemory(firstPhotoId, { reviewStatus: "DELETE", revision: 1 }, csrf);
+  now += DAY;
+  const laterPhoto = await api.reviewMemory(secondPhotoId, { reviewStatus: "DELETE", revision: 1 }, csrf);
+
+  now = Date.parse(deletedText.deleteAfter) - 1;
+  const beforeExpiry = await api.listMemories({ reviewStatus: "DELETE", limit: 1 });
+  assert.equal(beforeExpiry.items.length, 1);
+  assert.ok(beforeExpiry.nextCursor);
+  assert.deepEqual(await api.getMemory(IDS.text), deletedText);
+  assert.deepEqual(await api.getMemory(firstPhotoId), deletedPhoto);
+
+  now += 1;
+  assert.deepEqual(await api.listMemories({ reviewStatus: "DELETE", limit: 1 }), {
+    items: [laterPhoto], nextCursor: null,
+  });
+  for (const memory of [deletedText, deletedPhoto]) {
+    await assert.rejects(api.getMemory(memory.memoryId), { code: "NOT_FOUND", status: 404 });
+    await assert.rejects(api.reviewMemory(memory.memoryId, {
+      reviewStatus: "PENDING", revision: memory.revision,
+    }, csrf), { code: "NOT_FOUND", status: 404 });
+    await assert.rejects(api.getPlayback(memory.memoryId), { code: "NOT_FOUND", status: 404 });
+  }
+  now = Date.parse(laterPhoto.deleteAfter);
+  assert.deepEqual(await api.listMemories({ reviewStatus: "DELETE" }), { items: [], nextCursor: null });
+  await assert.rejects(api.getMemory(secondPhotoId), { code: "NOT_FOUND", status: 404 });
+});
+
+test("DELETE prevents photo playback throughout recovery, and restoring to inbox enables it again", async () => {
+  let now = REVIEW_TIME;
+  const api = createMockArchiveApi({ now: () => now });
+  const receipt = await api.createMediaContribution(PHOTO_REQUEST, options);
+  await finalize(api, receipt, await transfer(api, receipt));
+  const memoryId = receipt.memories[0].memoryId;
+  const session = await signIn(api);
+  const csrf = { csrfToken: session.csrfToken };
+  assert.ok((await api.getPlayback(memoryId)).url.startsWith("https:"));
+  const deleted = await api.reviewMemory(memoryId, { reviewStatus: "DELETE", revision: 1 }, csrf);
+  await assert.rejects(api.getPlayback(memoryId), { code: "NOT_FOUND", status: 404 });
+  api.setScenario("playbackUnavailable");
+  await assert.rejects(api.getPlayback(memoryId), { code: "NOT_FOUND", status: 404 });
+  api.setScenario("success");
+  now += DAY;
+  const restored = await api.reviewMemory(memoryId, { reviewStatus: "PENDING", revision: deleted.revision }, csrf);
+  assert.equal(restored.deleteAfter, null);
+  assert.equal(restored.visibility, "COUPLE_ONLY");
+  assert.ok((await api.getPlayback(memoryId)).url.startsWith("https:"));
+  assert.equal((await api.listMemories()).items.some((item) => item.memoryId === memoryId), true);
+  const deletedAgain = await api.reviewMemory(memoryId, { reviewStatus: "DELETE", revision: restored.revision }, csrf);
+  assert.equal(deletedAgain.deleteAfter, new Date(now + 30 * DAY).toISOString());
+});
+
+test("concurrent review requests at one revision commit exactly one change", async () => {
+  const api = createMockArchiveApi({ now: () => REVIEW_TIME });
+  const session = await signIn(api);
+  const csrf = { csrfToken: session.csrfToken };
+  const results = await Promise.allSettled(["KEEP", "ARCHIVED"].map((reviewStatus) =>
+    api.reviewMemory(IDS.text, { reviewStatus, revision: 1 }, csrf)));
+  const succeeded = results.filter((result) => result.status === "fulfilled");
+  const rejected = results.filter((result) => result.status === "rejected");
+  assert.equal(succeeded.length, 1);
+  assert.equal(rejected.length, 1);
+  assert.equal(rejected[0].reason.code, "REVIEW_CONFLICT");
+  assert.equal(rejected[0].reason.status, 412);
+  assert.equal(succeeded[0].value.revision, 2);
+  assert.deepEqual(await api.getMemory(IDS.text), succeeded[0].value);
+});
+
+test("lost review responses reconcile from detail and list without replaying a stale mutation", async () => {
+  let now = REVIEW_TIME;
+  const api = createMockArchiveApi({ now: () => now });
+  const session = await signIn(api);
+  const csrf = { csrfToken: session.csrfToken };
+  api.setScenario("uncertainSubmission");
+  await assert.rejects(api.reviewMemory(IDS.text, { reviewStatus: "DELETE", revision: 1 }, csrf), {
+    code: "NETWORK_ERROR", unknownOutcome: true,
+  });
+  const committed = await api.getMemory(IDS.text);
+  assert.equal(committed.reviewStatus, "DELETE");
+  assert.equal(committed.revision, 2);
+  assert.equal(committed.deleteAfter, new Date(now + 30 * DAY).toISOString());
+  assert.deepEqual((await api.listMemories({ reviewStatus: "DELETE" })).items, [committed]);
+  now += DAY;
+  await assert.rejects(api.reviewMemory(IDS.text, { reviewStatus: "DELETE", revision: 1 }, csrf), {
+    code: "REVIEW_CONFLICT", status: 412,
+  });
+  assert.deepEqual(await api.reviewMemory(IDS.text, { reviewStatus: "DELETE", revision: committed.revision }, csrf), committed);
+  const restored = await api.reviewMemory(IDS.text, { reviewStatus: "PENDING", revision: committed.revision }, csrf);
+  assert.equal(restored.revision, 3);
+});
+
+test("same-state no-ops require the current session's CSRF token", async () => {
+  const api = createMockArchiveApi({ now: () => REVIEW_TIME });
+  const first = await signIn(api);
+  const second = await signIn(api);
+  const original = await api.getMemory(IDS.text);
+  await assert.rejects(api.reviewMemory(IDS.text, { reviewStatus: "PENDING", revision: 1 }, {
+    csrfToken: first.csrfToken,
+  }), { code: "CSRF_INVALID", status: 403 });
+  assert.deepEqual(await api.reviewMemory(IDS.text, { reviewStatus: "PENDING", revision: 1 }, {
+    csrfToken: second.csrfToken,
+  }), original);
+});
+
+test("inbox lists include text and finalized photos/audio while unfinished media remains private", async () => {
+  const api = createMockArchiveApi();
+  const photos = await api.createMediaContribution(PHOTO_REQUEST, options);
+  const audio = await api.createMediaContribution(AUDIO_REQUEST, { idempotencyKey: IDS.secondClientItem });
+  const audioOptions = { idempotencyKey: IDS.secondClientItem };
+  const audioMemory = audio.memories[0];
+  const audioGrant = await api.authorizeUpload(audio.contributionId, audioMemory.memoryId, audioOptions);
+  await api.uploadMedia(audioGrant, new Blob());
+  await api.finalizeUpload(audio.contributionId, audioMemory.memoryId, audioGrant.grantId, audioOptions);
+  await signIn(api);
+  assert.deepEqual((await api.listMemories()).items.map((item) => item.memoryType).sort(), ["AUDIO", "TEXT"]);
+  assert.equal((await api.getMemory(audioMemory.memoryId)).memoryType, "AUDIO");
+  assert.ok((await api.getPlayback(audioMemory.memoryId)).url.startsWith("https:"));
+  await finalize(api, photos, await transfer(api, photos));
+  const page = await api.listMemories();
+  assert.deepEqual(page.items.map((item) => item.memoryType).sort(), ["AUDIO", "PHOTO", "TEXT"]);
+  assert.equal(page.items.some((item) => item.memoryId === photos.memories[1].memoryId), false);
 });
 
 test("playback failure does not remove the stored memory", async () => {

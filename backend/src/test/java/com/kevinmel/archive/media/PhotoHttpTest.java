@@ -228,7 +228,7 @@ class PhotoHttpTest {
     static class FakeStorage implements ObjectStorage {
         final Map<String, byte[]> objects = new ConcurrentHashMap<>(); volatile int publishes; volatile boolean outage;
         public void requireAvailable() { if (outage) throw StorageConfiguration.unavailable(); }
-        public UploadGrant authorize(UUID id, String key, String type, Instant expires) {
+        public UploadGrant authorize(UUID id, String key, String type, long byteSize, Instant expires) {
             requireAvailable(); return new UploadGrant(id, "PUT", "https://storage.example/" + key, expires, Map.of("Content-Type", type));
         }
         public ReadGrant authorizeRead(String key, String type, long size, Instant expires) {
