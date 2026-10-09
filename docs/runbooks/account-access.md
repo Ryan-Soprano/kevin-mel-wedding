@@ -1,6 +1,8 @@
 # Private account provisioning and recovery
 
-Prepared 2026-10-05 for AUTH-01. Preparing this runbook and console utility has not provisioned real accounts, sent invitations, changed provider settings, or deployed the application. Kevin and Melanie must not receive credentials or notifications before the reveal. Ryan owns infrastructure and recovery; Kevin and Melanie alone moderate and publish. Kade has development access only.
+Prepared 2026-10-05 for AUTH-01; collaboration policy clarified 2026-10-09. Preparing this runbook and console utility has not provisioned real accounts, sent invitations, changed provider settings, or deployed the application. Kevin and Melanie already know about the project and may join product discussions and synthetic usability tests now. Account creation, confidential credential handoff and access activation remain deliberate operator actions. Ryan owns infrastructure and recovery; Kevin and Melanie alone moderate and publish. Kade has development access only.
+
+The existing `MEMORY_ARCHIVE_REVEALED` name denotes the technical couple-access gate. It no longer represents surprise secrecy or a requirement to wait until after the wedding. Agree on the access target and timing separately from the October 31 archive handoff/collection-close milestone.
 
 ## Account boundaries
 
@@ -30,7 +32,7 @@ The utility does not load Spring profile files. Set its environment and reveal v
 
 The utility opens no HTTP listener, starts no Spring application/component scan, and initializes no R2 client. It does not apply Flyway migrations. Apply the application's reviewed migrations through the normal startup/release process first; `archive_account` from V4 must exist.
 
-Application and utility processes read their own configuration at startup. Setting the reveal environment variable in the utility terminal does not change an already-running application. Keep reveal closed in production until the agreed reveal and separately authorized onboarding.
+Application and utility processes read their own configuration at startup. Setting the reveal environment variable in the utility terminal does not change an already-running application. Keep the production access gate closed until the agreed access activation and separately authorized onboarding.
 
 ## Build and launch locally
 
@@ -100,7 +102,7 @@ archive_account_admin --expect-environment staging disable synthetic-kevin
 
 Each mutation still requires its exact confirmation; create/reset still ask for a password twice through hidden console input. Help alone does not prove console availability. If a mutation reports that no interactive system console is available, stop and use a supported interactive shell; do not replace hidden input with environment variables, password flags, files, pipes or SQL account inserts. Use distinct disposable usernames when separate acceptance phases would otherwise exceed the five-attempt login cap.
 
-Use the real same-origin session adapter in a controlled HTTPS browser check for synthetic login, cookie/CSRF rotation, logout, reset/disable revocation and renewed login. Staging HTTP Basic admission is independent and grants no couple session. The couple login screen and real reveal-day onboarding remain separate tasks. When finished, disable the synthetic accounts, return application and operator reveal settings to their intended closed state, close the private console and remove the helper function with `unset -f archive_account_admin`. Preserve only nonsensitive dated outcomes.
+Use the real same-origin session adapter in a controlled HTTPS browser check for synthetic login, cookie/CSRF rotation, logout, reset/disable revocation and renewed login. Staging HTTP Basic admission is independent and grants no couple session. Actual hosted login acceptance and real-account onboarding remain separate tasks. When finished, disable the synthetic accounts, return application and operator reveal settings to their intended closed state, close the private console and remove the helper function with `unset -f archive_account_admin`. Preserve only nonsensitive dated outcomes.
 
 ### Local packaged-console verification — 2026-10-05
 
@@ -108,11 +110,11 @@ The rebuilt actual runtime image passes a scoped exercise with a separate labell
 
 With an actual Docker TTY, create accepted exact confirmation and two hidden password entries without echo; the resulting synthetic COUPLE account was disabled with credential version `0` and a bcrypt hash. Separate confirmed enable, hidden-input reset and disable commands retained its identity/role and produced enabled/version `1`, enabled/version `2` and disabled/version `3`. An incorrect expected environment was refused without mutation. Metadata checks recorded only safe fields and a boolean for the bcrypt format; no password/hash was printed. The small operator-JVM heap above worked alongside the running application. All owned containers/tmpfs data/network were removed. This proves the local packaged console path, not actual Render SSH access, hosted browser authentication or real-account onboarding.
 
-## Reveal-day provisioning
+## Couple account provisioning
 
-Real-account provisioning is a separate hands-on operator action after the reveal has been agreed and explicitly authorized. No real accounts have been provisioned by this implementation.
+Real-account provisioning is a separate hands-on operator action after the target and access timing have been agreed and explicitly authorized. No real accounts have been provisioned by this implementation. Couple participation in design or synthetic testing does not itself activate production accounts.
 
-1. Ryan verifies the production target and its secure access path, confirms the reveal with the couple, and explicitly enables the reveal setting for the approved application/utility configuration. Production must use HTTPS and the production session-cookie configuration before browser login.
+1. Ryan verifies the production target and its secure access path, confirms access timing with the couple, and explicitly enables the reveal/access setting for the approved application/utility configuration. Production must use HTTPS and the production session-cookie configuration before browser login.
 2. Use the reviewed utility with `--expect-environment production` to create `kevin` / `Kevin` / `COUPLE` and, separately, `melanie` / `Melanie` / `COUPLE`. Each person receives a distinct password. Keep both accounts disabled until the confidential handoff is ready.
 3. Establish the identity of the intended recipient directly. Handoff must use an agreed confidential channel; do not paste credentials into Git, Notion, tickets, logs, screenshots, shell arguments/history, or this chat. Do not send invitations or email as part of the utility.
 4. Enable each account with its own confirmed command. Have each person verify their own login through the application's couple login flow. If a temporary password was used, perform an owner-present console reset to their chosen secret before routine use; this version has no public self-service password-change page.
