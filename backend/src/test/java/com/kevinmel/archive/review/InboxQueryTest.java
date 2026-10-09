@@ -18,7 +18,7 @@ class InboxQueryTest {
 
     @Test void defaultsAndSupportedLimitsFilters() {
         assertThat(InboxQuery.from(null, null, null)).isEqualTo(new InboxQuery("PENDING", 20, null));
-        for (String status : List.of("PENDING", "KEEP", "ARCHIVED")) {
+        for (String status : List.of("PENDING", "KEEP", "ARCHIVED", "DELETE")) {
             for (String limit : List.of("1", "20", "100")) {
                 var query = InboxQuery.from(status, limit, null);
                 assertThat(query.reviewStatus()).isEqualTo(status);
@@ -28,7 +28,7 @@ class InboxQueryTest {
     }
 
     @Test void invalidQueriesHaveSafeValidationErrors() {
-        for (String status : List.of("", "pending", "DELETE", "PUBLIC", "PENDING,KEEP")) {
+        for (String status : List.of("", "pending", "PUBLIC", "PENDING,KEEP")) {
             rejects(() -> InboxQuery.from(status, "20", null), "VALIDATION_FAILED");
         }
         for (String limit : List.of("", "0", "101", "-1", "1.5", " 20", "20 ", "1000", "20,20", "true")) {

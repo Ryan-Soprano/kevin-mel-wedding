@@ -99,7 +99,7 @@ class InboxHttpSecurityTest {
         var session = session(couple);
         mvc.perform(get("/api/memories").session(session))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error.code").value("UNSUPPORTED_CONTRACT"));
-        for (String parameter : List.of("DELETE", "pending")) {
+        for (String parameter : List.of("PUBLIC", "pending")) {
             mvc.perform(get("/api/memories").session(session).header("X-Api-Contract", "1").param("reviewStatus", parameter))
                     .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"));
         }

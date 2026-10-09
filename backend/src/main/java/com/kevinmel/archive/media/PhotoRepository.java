@@ -1,5 +1,6 @@
 package com.kevinmel.archive.media;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.UUID;
@@ -12,14 +13,17 @@ import org.springframework.transaction.annotation.Transactional;
 import com.kevinmel.archive.contribution.ContributionReceipt;
 import com.kevinmel.archive.contribution.ContributionRepository;
 import com.kevinmel.archive.web.ApiException;
+import com.kevinmel.archive.retention.SubmissionKeyDigest;
 
 @Repository
 public class PhotoRepository {
     private final JdbcClient db;
     private final ContributionRepository contributions;
-    public PhotoRepository(JdbcClient db, ContributionRepository contributions) {
+    private final Clock clock;
+    public PhotoRepository(JdbcClient db, ContributionRepository contributions, Clock clock) {
         this.db = db;
         this.contributions = contributions;
+        this.clock = clock;
     }
 
     @Transactional(isolation = Isolation.READ_COMMITTED)
@@ -27,10 +31,11 @@ public class PhotoRepository {
         String fingerprint = request.fingerprint();
         var inserted = db.sql("""
                 INSERT INTO contribution(event_key, guest_name, idempotency_key, request_fingerprint)
-                VALUES ('kevin-mel-wedding', :name, :key, :fingerprint)
+                SELECT 'kevin-mel-wedding', :name, :key, :fingerprint
+                WHERE NOT EXISTS (SELECT 1 FROM erased_submission_key WHERE key_digest = :digest)
                 ON CONFLICT (idempotency_key) DO NOTHING RETURNING id
                 """).param("name", request.guestName()).param("key", key).param("fingerprint", fingerprint)
-                .query(UUID.class).optional();
+                .param("digest", SubmissionKeyDigest.sha256(key)).query(UUID.class).optional();
         UUID id;
         if (inserted.isPresent()) {
             id = inserted.get();
@@ -55,7 +60,7 @@ public class PhotoRepository {
         } else {
             var existing = db.sql("SELECT id, request_fingerprint FROM contribution WHERE idempotency_key = :key")
                     .param("key", key).query((rs, row) -> new Existing(rs.getObject("id", UUID.class), rs.getString("request_fingerprint")))
-                    .single();
+                    .optional().orElseThrow(ApiException::notFound);
             if (!fingerprint.equals(existing.fingerprint())) throw ApiException.conflict();
             id = existing.id();
         }
@@ -64,6 +69,21 @@ public class PhotoRepository {
 
     // Called inside the service/finalizer transaction. Locking serializes grants/finalization for an item.
     public Asset lock(UUID contributionId, UUID memoryId, String key) {
+        // All lifecycle and upload work takes the memory lock first, then the asset lock.
+        var memory = db.sql("""
+                SELECT m.review_status, m.delete_after
+                FROM contribution c JOIN memory m ON m.contribution_id = c.id
+                WHERE c.id = :contribution AND m.id = :memory AND c.idempotency_key = :key
+                    AND c.event_key = 'kevin-mel-wedding' AND m.memory_type = 'PHOTO'
+                    AND m.purge_started_at IS NULL AND m.purged_at IS NULL
+                FOR UPDATE OF m
+                """).param("contribution", contributionId).param("memory", memoryId).param("key", key)
+                .query((rs, row) -> new GuestMemory(rs.getString("review_status"),
+                        rs.getObject("delete_after", OffsetDateTime.class)))
+                .optional().orElseThrow(ApiException::notFound);
+        if ("DELETE".equals(memory.reviewStatus()) && !clock.instant().isBefore(memory.deleteAfter().toInstant())) {
+            throw ApiException.notFound();
+        }
         return db.sql("""
                 SELECT a.id, a.object_key, a.declared_content_type, a.expected_byte_size,
                     a.expected_checksum_sha256, a.upload_state
@@ -111,4 +131,5 @@ public class PhotoRepository {
     public record Asset(UUID id, String originalKey, String contentType, long byteSize, String checksum, String state) {}
     public record Grant(String stagingKey, Instant expiresAt) {}
     private record Existing(UUID id, String fingerprint) {}
+    private record GuestMemory(String reviewStatus, OffsetDateTime deleteAfter) {}
 }

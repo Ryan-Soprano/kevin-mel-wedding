@@ -5,6 +5,7 @@ import java.net.URI;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
+import java.util.ArrayList;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
@@ -20,12 +21,17 @@ import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.S3Configuration;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
+import software.amazon.awssdk.services.s3.model.ListObjectsV2Request;
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
+
+import com.kevinmel.archive.retention.DeletionRecord;
+import com.kevinmel.archive.retention.DeletionStorage;
 
 /** Privileged credentials stay in the server; grants authorize one exact staging PUT or verified original GET. */
 public final class R2ObjectStorage implements ObjectStorage, AutoCloseable {
@@ -53,6 +59,82 @@ public final class R2ObjectStorage implements ObjectStorage, AutoCloseable {
         this.bucket = Objects.requireNonNull(bucket);
         this.s3 = Objects.requireNonNull(s3);
         this.signer = Objects.requireNonNull(signer);
+    }
+
+    /** Used only by the offline retention console; credentials remain server-side. */
+    public static R2ObjectStorage openPrivate(String endpoint, String bucket, String access, String secret) {
+        if (endpoint == null || !endpoint.matches("https://[0-9a-f]{32}\\.r2\\.cloudflarestorage\\.com")
+                || bucket == null || !bucket.matches("[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]")
+                || access == null || access.isBlank() || secret == null || secret.isBlank()) {
+            throw new IllegalArgumentException("Private retention storage is not configured.");
+        }
+        return new R2ObjectStorage(URI.create(endpoint), bucket, access, secret);
+    }
+
+    /** Write ahead of erasure. Never overwrite an independent tombstone after database rollback. */
+    public void recordDeletion(DeletionRecord record) {
+        Objects.requireNonNull(record);
+        String key = "deletions/v1/" + record.memoryId() + ".json";
+        try {
+            byte[] bytes = record.encode();
+            s3.putObject(PutObjectRequest.builder().bucket(bucket).key(key).ifNoneMatch("*")
+                    .contentType("application/json").contentLength((long) bytes.length).cacheControl("no-store").build(),
+                    RequestBody.fromBytes(bytes));
+        } catch (S3Exception failure) {
+            if (failure.statusCode() != 412 || !record.equals(readDeletion(key))) throw retentionUnavailable();
+        } catch (SdkException failure) { throw retentionUnavailable(); }
+    }
+
+    public DeletionStorage.Page deletionLedger(String cursor, int limit) {
+        if (limit < 1 || limit > 100 || (cursor != null && (cursor.isBlank() || cursor.length() > 4096))) {
+            throw new IllegalArgumentException("Invalid deletion-ledger page.");
+        }
+        try {
+            var page = s3.listObjectsV2(ListObjectsV2Request.builder().bucket(bucket)
+                    .prefix("deletions/v1/").maxKeys(limit).continuationToken(cursor).build());
+            if (page == null || page.contents().size() > limit) throw retentionUnavailable();
+            var records = new ArrayList<DeletionRecord>();
+            for (var entry : page.contents()) {
+                String key = entry.key();
+                if (key == null || !key.matches("deletions/v1/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.json")) {
+                    throw retentionUnavailable();
+                }
+                var record = readDeletion(key);
+                if (!key.equals("deletions/v1/" + record.memoryId() + ".json")) throw retentionUnavailable();
+                records.add(record);
+            }
+            String next = Boolean.TRUE.equals(page.isTruncated()) ? page.nextContinuationToken() : null;
+            if (Boolean.TRUE.equals(page.isTruncated()) && (next == null || next.isBlank() || next.length() > 4096 || next.equals(cursor))) {
+                throw retentionUnavailable();
+            }
+            return new DeletionStorage.Page(records, next);
+        } catch (SdkException failure) { throw retentionUnavailable(); }
+    }
+
+    private DeletionRecord readDeletion(String key) {
+        try (var stream = s3.getObject(GetObjectRequest.builder().bucket(bucket).key(key).build())) {
+            byte[] bytes = stream.readNBytes(DeletionRecord.MAX_BYTES + 1);
+            if (bytes.length > DeletionRecord.MAX_BYTES) { stream.abort(); throw retentionUnavailable(); }
+            return DeletionRecord.decode(bytes);
+        } catch (SdkException | IOException | IllegalArgumentException failure) { throw retentionUnavailable(); }
+    }
+
+    public void deleteRetainedOriginal(UUID assetId) { deleteRetained("originals/", assetId); }
+    public void deleteRetainedStaging(UUID grantId) { deleteRetained("staging/", grantId); }
+
+    private void deleteRetained(String prefix, UUID id) {
+        Objects.requireNonNull(id);
+        // Caller supplies only a server-owned identifier; arbitrary object keys are impossible.
+        try { s3.deleteObject(DeleteObjectRequest.builder().bucket(bucket).key(prefix + id).build()); }
+        catch (S3Exception failure) {
+            if (failure.statusCode() != 404 || failure.awsErrorDetails() == null
+                    || !"NoSuchKey".equals(failure.awsErrorDetails().errorCode())) throw retentionUnavailable();
+        } catch (SdkException failure) { throw retentionUnavailable(); }
+    }
+
+    private static com.kevinmel.archive.web.ApiException retentionUnavailable() {
+        return new com.kevinmel.archive.web.ApiException(503, "RETENTION_UNAVAILABLE",
+                "Retention maintenance could not be confirmed. No successful purge is reported.");
     }
 
     public void requireAvailable() { /* Configured. Connection health is established by actual IO. */ }

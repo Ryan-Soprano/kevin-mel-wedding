@@ -34,7 +34,7 @@ function wait(ms, signal) {
 }
 
 /** An isolated in-memory server used through the real adapter and JSON transport. */
-export function createMockArchiveApi({ scenario = "success", delayMs = 0 } = {}) {
+export function createMockArchiveApi({ scenario = "success", delayMs = 0, now = () => Date.now() } = {}) {
   if (!SCENARIOS.includes(scenario)) throw new TypeError("Unknown mock scenario.");
   const contributions = new Map();
   const grants = new Map();
@@ -43,6 +43,7 @@ export function createMockArchiveApi({ scenario = "success", delayMs = 0 } = {})
   let sessionVersion = 0;
   let next = 1;
   let lostResponse = false;
+  let lostReviewResponse = false;
   let failedTransfer = false;
   const nextId = () => "00000000-0000-4000-8000-" + String(next++).padStart(12, "0");
 
@@ -183,9 +184,13 @@ export function createMockArchiveApi({ scenario = "success", delayMs = 0 } = {})
         return failure("AUTH_REQUIRED", "Please sign in again.", 401);
       }
       if (scenario === "forbidden") return failure("ARCHIVE_UNAVAILABLE", "Archive access is unavailable.", 403);
+      const serverTime = now();
+      const available = (item) => item.reviewStatus !== "DELETE" || Date.parse(item.deleteAfter) > serverTime;
       if (url.pathname === "/api/memories" && method === "GET") {
         const filtered = scenario === "empty" ? [] : memories.filter((item) =>
-          item.reviewStatus === (url.searchParams.get("reviewStatus") ?? "PENDING"))
+          available(item) && (item.memoryType === "TEXT"
+            || (item.memoryType === "PHOTO" && item.media?.uploadState === "UPLOADED"))
+          && item.reviewStatus === (url.searchParams.get("reviewStatus") ?? "PENDING"))
           .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.memoryId.localeCompare(a.memoryId));
         const offset = Number((url.searchParams.get("cursor") ?? "offset:0").split(":")[1]);
         const limit = Number(url.searchParams.get("limit") ?? 20);
@@ -197,10 +202,12 @@ export function createMockArchiveApi({ scenario = "success", delayMs = 0 } = {})
       }
       const detailPath = url.pathname.match(/^\/api\/memories\/([^/]+)(?:\/(review|playback))?$/);
       const memory = memories.find((item) => item.memoryId === detailPath?.[1]);
-      if (!memory) return failure("NOT_FOUND", "That memory is unavailable.", 404);
+      if (!memory || !available(memory)) return failure("NOT_FOUND", "That memory is unavailable.", 404);
       if (!detailPath[2] && method === "GET") return reply(memory, 200, { ETag: '"' + memory.revision + '"' });
       if (detailPath[2] === "playback" && method === "GET") {
-        if (memory.memoryType === "TEXT") return failure("NOT_FOUND", "This memory has no media.", 404);
+        if (memory.memoryType === "TEXT" || memory.reviewStatus === "DELETE") {
+          return failure("NOT_FOUND", "This memory has no available media.", 404);
+        }
         if (scenario === "playbackUnavailable") return failure("MEDIA_UNAVAILABLE", "The original is temporarily unavailable.", 503);
         return reply(PLAYBACK);
       }
@@ -213,18 +220,19 @@ export function createMockArchiveApi({ scenario = "success", delayMs = 0 } = {})
         if (!["PENDING", "KEEP", "ARCHIVED", "DELETE"].includes(body?.reviewStatus)) {
           return failure("VALIDATION_FAILED", "Choose a valid review state.", 400);
         }
-        if (memory.reviewStatus === "DELETE" && Date.parse(memory.deleteAfter) <= Date.now()) {
-          return failure("NOT_FOUND", "The recovery window has ended.", 404);
-        }
+        if (memory.reviewStatus === body.reviewStatus) return reply(memory, 200, { ETag: '"' + memory.revision + '"' });
         const deleting = body.reviewStatus === "DELETE";
-        const previousDeleteAfter = memory.deleteAfter;
         memory.reviewStatus = body.reviewStatus;
         memory.revision += 1;
-        memory.updatedAt = new Date().toISOString();
+        memory.updatedAt = new Date(serverTime).toISOString();
         // Fixtures describe a future wedding; keep the mock clock ordered.
         if (Date.parse(memory.updatedAt) < Date.parse(memory.createdAt)) memory.updatedAt = memory.createdAt;
         memory.deleteAfter = deleting
-          ? previousDeleteAfter ?? new Date(Date.parse(memory.updatedAt) + 30 * 86400000).toISOString() : null;
+          ? new Date(serverTime + 30 * 86400000).toISOString() : null;
+        if (scenario === "uncertainSubmission" && !lostReviewResponse) {
+          lostReviewResponse = true;
+          throw new TypeError("Synthetic lost response after review commit.");
+        }
         return reply(memory, 200, { ETag: '"' + memory.revision + '"' });
       }
     }
