@@ -160,9 +160,9 @@ class DatabaseMigrationTest {
                     .param("review", review).param("memory", memoryId).update();
             assertThat(playback.findPlayable(memoryId).orElseThrow().assetId()).isEqualTo(assetId);
         }
-        jdbcClient.sql("UPDATE memory SET review_status = 'DELETE' WHERE id = :memory").param("memory", memoryId).update();
+        jdbcClient.sql("UPDATE memory SET review_status = 'DELETE', delete_after = CURRENT_TIMESTAMP + INTERVAL '30 days' WHERE id = :memory").param("memory", memoryId).update();
         assertThat(playback.findPlayable(memoryId)).isEmpty();
-        jdbcClient.sql("UPDATE memory SET review_status = 'PENDING' WHERE id = :memory").param("memory", memoryId).update();
+        jdbcClient.sql("UPDATE memory SET review_status = 'PENDING', delete_after = NULL WHERE id = :memory").param("memory", memoryId).update();
         for (String change : List.of("upload_state = 'PENDING'", "expected_byte_size = 99",
                 "expected_checksum_sha256 = '" + "d".repeat(64) + "'", "declared_content_type = 'image/jpeg'",
                 "object_key = 'incoming/synthetic'")) {
@@ -395,7 +395,7 @@ class DatabaseMigrationTest {
                     .query(String.class)
                     .single();
 
-            assertThat(migrationsBefore).isEqualTo(6);
+            assertThat(migrationsBefore).isEqualTo(7);
             assertThat(migrationsAfter).isEqualTo(migrationsBefore);
             assertThat(storedMessage)
                     .isEqualTo("Existing fixture memory");

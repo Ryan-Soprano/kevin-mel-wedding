@@ -1,9 +1,11 @@
 import { createArchiveApi } from "../../../shared/api/archiveApi.js";
-import { ApiError } from "../../../shared/api/apiClient.js";
+import { ApiError, contractMismatch } from "../../../shared/api/apiClient.js";
 import { ALLOWED_FILE_TYPES, MAX_PHOTO_BYTES } from "../../media/mediaConstraints.js";
 
 const EMPTY_ITEMS = Object.freeze([]);
 const idlePhoto = () => Object.freeze({ phase: "idle", url: null, error: null });
+const idleReview = () => Object.freeze({ phase: "idle", targetStatus: null, error: null, canRetry: false });
+const REVIEW_STATES = new Set(["PENDING", "KEEP", "ARCHIVED", "DELETE"]);
 const interrupted = () => new ApiError("The request was cancelled.", { code: "REQUEST_ABORTED" });
 
 function frozenCopy(value) {
@@ -49,8 +51,9 @@ export function createInboxController({
 } = {}) {
   let state = Object.freeze({ phase: "checking", session: null, busy: false, error: null,
     reviewStatus: "PENDING", items: EMPTY_ITEMS, nextCursor: null, detail: null,
-    photo: idlePhoto(), logoutUnconfirmed: false });
+    photo: idlePhoto(), review: idleReview(), notice: null, pageResetVersion: 0, logoutUnconfirmed: false });
   let generation = 0, operation = null, disposed = false, objectUrl = null;
+  let reviewIntent = null, reviewInFlight = null, reviewUncertain = false, inboxDirty = false;
   let notifying = false, notifyAgain = false;
   const listeners = new Set();
 
@@ -110,7 +113,7 @@ export function createInboxController({
     if (op.controller.signal.aborted) throw op.controller.signal.reason ?? interrupted();
   }
 
-  async function bounded(op, task, duration = apiTimeoutMs) {
+  async function bounded(op, task, duration = apiTimeoutMs, mutation = false) {
     assertCurrent(op);
     const signal = op.controller.signal;
     let timer, onAbort;
@@ -118,7 +121,7 @@ export function createInboxController({
       onAbort = () => reject(signal.reason ?? interrupted());
       signal.addEventListener("abort", onAbort, { once: true });
       timer = setTimeoutImpl(() => {
-        const failure = new ApiError("The request took too long.", { code: "REQUEST_TIMED_OUT" });
+        const failure = new ApiError("The request took too long.", { code: "REQUEST_TIMED_OUT", unknownOutcome: mutation });
         op.controller.abort(failure);
       }, duration);
     });
@@ -137,7 +140,11 @@ export function createInboxController({
 
   function clearPrivate(patch = {}) {
     revokePhoto();
-    publish({ session: null, items: EMPTY_ITEMS, nextCursor: null, detail: null, photo: idlePhoto(), ...patch });
+    reviewIntent = null;
+    reviewUncertain = false;
+    inboxDirty = false;
+    publish({ session: null, items: EMPTY_ITEMS, nextCursor: null, detail: null, photo: idlePhoto(),
+      review: idleReview(), notice: null, ...patch });
   }
 
   function authFailure(failure) {
@@ -173,6 +180,91 @@ export function createInboxController({
       ...(cursor !== null ? { cursor } : {}), signal }));
     assertCurrent(op);
     publish({ phase: "inbox", reviewStatus, items: frozenCopy(result.items), nextCursor: result.nextCursor, detail: null });
+    inboxDirty = false;
+  }
+
+  function unavailableReview() {
+    reviewIntent = null;
+    reviewUncertain = false;
+    inboxDirty = true;
+    publish({ items: EMPTY_ITEMS, nextCursor: null, pageResetVersion: state.pageResetVersion + 1,
+      detail: null, review: idleReview(), error: "This memory is unavailable. Return to the inbox and reload it." });
+  }
+
+  function reviewState(phase, error = null, canRetry = false) {
+    return Object.freeze({ phase, targetStatus: reviewIntent?.targetStatus ?? null, error, canRetry });
+  }
+
+  async function acceptCurrentReview(op, memory, notice) {
+    assertCurrent(op);
+    reviewIntent = null;
+    reviewUncertain = false;
+    inboxDirty = true;
+    publish({ items: EMPTY_ITEMS, nextCursor: null, pageResetVersion: state.pageResetVersion + 1,
+      detail: frozenCopy(memory), review: idleReview(), notice, error: null });
+    assertCurrent(op);
+    if (memory.memoryType === "PHOTO" && memory.reviewStatus !== "DELETE") await photo(op, memory);
+  }
+
+  function reviewFailure(failure) {
+    if (failure?.status === 403 && failure.code === "CSRF_INVALID") {
+      publish({ review: reviewState("csrf", "Refresh your session, then reconsider this change. No automatic retry will be made.") });
+    } else if (authFailure(failure)) {
+      // Authentication failures also clear the frozen review intent and owned previews.
+    } else if ([412, 428].includes(failure?.status)) {
+      publish({ review: reviewState("conflict", "This memory changed or its revision could not be checked. Reload its current state before choosing an action.") });
+    } else if (failure?.status === 404) {
+      unavailableReview();
+    } else if (failure?.unknownOutcome || !failure?.status || failure.status >= 500) {
+      reviewUncertain = true;
+      publish({ review: reviewState("uncertain", "We could not confirm whether this change was saved. Reload the current state before doing anything else.") });
+    } else if (reviewUncertain) {
+      // A rejected retry cannot establish what happened to the first timed-out request.
+      publish({ review: reviewState("uncertain", "This retry was not accepted, but the earlier request is still unconfirmed. Reload the current state before doing anything else.") });
+    } else {
+      reviewIntent = null;
+      publish({ review: idleReview(), error: failure?.status === 429
+        ? "Please wait before choosing this action again. The change was not accepted."
+        : "The change was not accepted. Your memory is still here; reload it before trying again." });
+    }
+  }
+
+  function rememberReviewRun(op, task, onFailure = reviewFailure) {
+    const completion = run(op, task, onFailure).finally(() => {
+      if (reviewInFlight === completion) reviewInFlight = null;
+    });
+    reviewInFlight = completion;
+    return completion;
+  }
+
+  function sendReview() {
+    const intent = reviewIntent;
+    const token = state.session?.csrfToken;
+    const op = start({ phase: "detail", review: reviewState("saving"), notice: null });
+    return rememberReviewRun(op, async () => {
+      const memory = await bounded(op, signal => api.reviewMemory(intent.memoryId, {
+        reviewStatus: intent.targetStatus, revision: intent.expectedRevision,
+      }, { csrfToken: token, signal }), apiTimeoutMs, true);
+      if (memory.memoryId !== intent.memoryId || memory.reviewStatus !== intent.targetStatus
+        || memory.revision !== intent.expectedRevision + (intent.fromStatus === intent.targetStatus ? 0 : 1)) throw contractMismatch();
+      await acceptCurrentReview(op, memory, {
+        PENDING: "Restored to your pending inbox. This memory stays private.",
+        KEEP: "Kept privately. This memory has not been published.",
+        ARCHIVED: "Archived privately. You can restore it to your inbox.",
+        DELETE: "Moved to Recently deleted. You can restore it during its 30-day recovery window.",
+      }[memory.reviewStatus]);
+    });
+  }
+
+  async function reconcileReview(op, memory, notice) {
+    const intent = reviewIntent;
+    if (memory.memoryId !== intent.memoryId || memory.revision < intent.expectedRevision) throw contractMismatch();
+    if (reviewUncertain && memory.revision === intent.expectedRevision) {
+      // A read can precede a late commit, including after a known rejection of a retry.
+      if (memory.reviewStatus !== intent.fromStatus) throw contractMismatch();
+      publish({ detail: frozenCopy(memory), review: reviewState("uncertain",
+        "The current read still shows the earlier revision. The first request may still finish. Retry only this same change, or reload again.", true) });
+    } else await acceptCurrentReview(op, memory, notice);
   }
 
   function cancelBody(response) {
@@ -254,8 +346,9 @@ export function createInboxController({
       return () => listeners.delete(listener);
     },
     loadSession() {
+      if (reviewIntent) return Promise.resolve(state);
       if (state.logoutUnconfirmed) return controller.logout();
-      const op = start({ phase: "checking", session: null, items: EMPTY_ITEMS, nextCursor: null, detail: null });
+      const op = start({ phase: "checking", session: null, items: EMPTY_ITEMS, nextCursor: null, detail: null, notice: null });
       return run(op, async () => {
         const session = sessionCopy(await bounded(op, signal => api.getSession({ signal })));
         publish({ session, phase: session.authenticated ? "inbox" : "login" });
@@ -265,7 +358,8 @@ export function createInboxController({
       });
     },
     login(credentials) {
-      const op = start({ phase: "login", session: null, items: EMPTY_ITEMS, nextCursor: null, detail: null, logoutUnconfirmed: false });
+      if (reviewIntent) return Promise.resolve(state);
+      const op = start({ phase: "login", session: null, items: EMPTY_ITEMS, nextCursor: null, detail: null, notice: null, logoutUnconfirmed: false });
       return run(op, async () => {
         const fresh = await bounded(op, signal => api.getSession({ signal }));
         const session = sessionCopy(await bounded(op, signal => api.login(
@@ -283,6 +377,7 @@ export function createInboxController({
       });
     },
     logout() {
+      if (reviewIntent) return Promise.resolve(state);
       const op = start({ phase: "checking", session: null, items: EMPTY_ITEMS, nextCursor: null, detail: null, logoutUnconfirmed: false });
       return run(op, async () => {
         const fresh = await bounded(op, signal => api.getSession({ signal }));
@@ -292,46 +387,103 @@ export function createInboxController({
         error: "Sign-out could not be confirmed. Private content is hidden here. Retry signing out before leaving a shared device." }));
     },
     loadInbox(reviewStatus = "PENDING", cursor = null) {
-      if (!state.session?.authenticated || disposed) return Promise.resolve(state);
+      if (!state.session?.authenticated || disposed || reviewIntent) return Promise.resolve(state);
       const changed = reviewStatus !== state.reviewStatus;
-      const op = start({ phase: "inbox", reviewStatus, detail: null,
+      const op = start({ phase: "inbox", reviewStatus, detail: null, notice: null,
         ...(changed ? { items: EMPTY_ITEMS, nextCursor: null } : {}) });
       return run(op, () => page(op, reviewStatus, cursor), failure => {
         if (!authFailure(failure)) publish({ error: "Your inbox could not be loaded. Try loading it again." });
       });
     },
     openMemory(id) {
-      if (!state.session?.authenticated || disposed) return Promise.resolve(state);
-      const op = start({ phase: "detail", detail: null });
+      if (!state.session?.authenticated || disposed || reviewIntent) return Promise.resolve(state);
+      const op = start({ phase: "detail", detail: null, notice: null });
       return run(op, async () => {
         const detail = frozenCopy(await bounded(op, signal => api.getMemory(id, { signal })));
         publish({ detail });
-        if (detail.memoryType === "PHOTO") await photo(op, detail);
+        assertCurrent(op);
+        if (detail.memoryType === "PHOTO" && detail.reviewStatus !== "DELETE") await photo(op, detail);
       }, failure => {
-        if (!authFailure(failure)) publish({ error: failure?.status === 404
-          ? "This memory is unavailable. Return to the inbox and load it again."
-          : "This memory could not be loaded. Return to the inbox and try again." });
+        if (authFailure(failure)) return;
+        if (failure?.status === 404) unavailableReview();
+        else publish({ error: "This memory could not be loaded. Return to the inbox and try again." });
       });
     },
     backToInbox() {
-      if (disposed || !state.session?.authenticated) return state;
+      if (disposed || !state.session?.authenticated || reviewIntent) return state;
+      if (inboxDirty) return controller.loadInbox(state.reviewStatus);
       cancel();
-      publish({ phase: "inbox", busy: false, error: null, detail: null, photo: idlePhoto() });
+      publish({ phase: "inbox", busy: false, error: null, detail: null, photo: idlePhoto(), notice: null });
       return state;
     },
     retryPhoto() {
-      if (state.phase !== "detail" || state.detail?.memoryType !== "PHOTO" || !state.session?.authenticated || disposed) return Promise.resolve(state);
+      if (state.phase !== "detail" || state.detail?.memoryType !== "PHOTO" || state.detail.reviewStatus === "DELETE"
+        || !state.session?.authenticated || disposed || reviewIntent) return Promise.resolve(state);
       const detail = state.detail;
       const op = start({ phase: "detail", detail });
       return run(op, () => photo(op, detail), failure => {
         if (!authFailure(failure)) publish({ photo: Object.freeze({ phase: "error", url: null, error: photoMessage(failure) }) });
       });
     },
+    reviewMemory(targetStatus) {
+      if (!REVIEW_STATES.has(targetStatus)) throw new TypeError("Choose a supported private review state.");
+      if (reviewInFlight) return reviewInFlight;
+      if (disposed || reviewIntent || state.busy || state.phase !== "detail"
+        || !state.detail || !state.session?.authenticated) return Promise.resolve(state);
+      reviewIntent = Object.freeze({ memoryId: state.detail.memoryId, fromStatus: state.detail.reviewStatus,
+        targetStatus, expectedRevision: state.detail.revision });
+      reviewUncertain = false;
+      return sendReview();
+    },
+    retryReview() {
+      if (reviewInFlight) return reviewInFlight;
+      if (disposed || !reviewIntent || state.busy || state.review.phase !== "uncertain"
+        || !state.review.canRetry || !state.session?.authenticated) return Promise.resolve(state);
+      return sendReview();
+    },
+    reloadReview() {
+      if (reviewInFlight) return reviewInFlight;
+      if (disposed || !reviewIntent || state.busy || !["uncertain", "conflict"].includes(state.review.phase)) return Promise.resolve(state);
+      const intent = reviewIntent;
+      const previousPhase = state.review.phase;
+      const op = start({ phase: "detail", review: reviewState("loading"), notice: null });
+      return rememberReviewRun(op, async () => {
+        const memory = await bounded(op, signal => api.getMemory(intent.memoryId, { signal }));
+        await reconcileReview(op, memory, "Current state reloaded. Review it before choosing another action; this does not identify who changed it.");
+      }, failure => {
+        if (authFailure(failure)) return;
+        if (failure?.status === 404) {
+          unavailableReview();
+        } else publish({ review: reviewState(previousPhase, "The current state could not be loaded. Please try reloading it again.") });
+      });
+    },
+    refreshReviewSession() {
+      if (reviewInFlight) return reviewInFlight;
+      if (disposed || !reviewIntent || state.busy || state.review.phase !== "csrf") return Promise.resolve(state);
+      const intent = reviewIntent;
+      const op = start({ phase: "detail", review: reviewState("refreshing"), notice: null });
+      return rememberReviewRun(op, async () => {
+        const session = sessionCopy(await bounded(op, signal => api.getSession({ signal })));
+        if (!session.authenticated) throw new ApiError("Sign in again.", { status: 401 });
+        publish({ session });
+        const memory = await bounded(op, signal => api.getMemory(intent.memoryId, { signal }));
+        await reconcileReview(op, memory, "Session and memory refreshed. Choose the action again if you still want it.");
+      }, failure => {
+        if (authFailure(failure)) return;
+        if (failure?.status === 404) {
+          unavailableReview();
+        } else publish({ review: reviewState("csrf", "The session and current memory could not be refreshed. Try refreshing again.") });
+      });
+    },
     dispose() {
       if (disposed) return;
       cancel();
+      reviewIntent = null;
+      reviewInFlight = null;
+      reviewUncertain = false;
+      inboxDirty = false;
       state = Object.freeze({ ...state, session: null, items: EMPTY_ITEMS, nextCursor: null,
-        detail: null, photo: idlePhoto(), busy: false, error: null });
+        detail: null, photo: idlePhoto(), review: idleReview(), notice: null, busy: false, error: null });
       disposed = true;
       listeners.clear();
     },

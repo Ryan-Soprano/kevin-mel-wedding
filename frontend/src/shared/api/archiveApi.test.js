@@ -200,3 +200,80 @@ test("text rejects NUL and unpaired UTF-16 surrogates before transport", () => {
     assert.throws(() => normalizeTextContribution({ guestName: text, message: "ok" }), { code: "VALIDATION_FAILED" });
   }
 });
+
+test("review PATCH carries exact persisted revision, CSRF and target and accepts its matching ETag", async () => {
+  let request;
+  const memory = { ...MEMORY_DETAIL, reviewStatus: "KEEP", revision: MEMORY_DETAIL.revision + 1 };
+  const api = createArchiveApi({ client: createApiClient({ fetchImpl: async (path, options) => {
+    request = { path, options };
+    return new Response(JSON.stringify(memory), { headers: { "Content-Type": "application/json", ETag: `"${memory.revision}"` } });
+  } }) });
+  const signal = new AbortController().signal;
+  assert.deepEqual(await api.reviewMemory(IDS.text, { reviewStatus: "KEEP", revision: MEMORY_DETAIL.revision }, {
+    csrfToken: ANONYMOUS_SESSION.csrfToken, signal,
+  }), memory);
+  assert.equal(request.path, `/api/memories/${IDS.text}/review`);
+  assert.equal(request.options.method, "PATCH");
+  assert.equal(request.options.headers.get("If-Match"), `"${MEMORY_DETAIL.revision}"`);
+  assert.equal(request.options.headers.get("X-CSRF-Token"), ANONYMOUS_SESSION.csrfToken);
+  assert.equal(request.options.headers.get("X-Api-Contract"), "1");
+  assert.deepEqual(JSON.parse(request.options.body), { reviewStatus: "KEEP" });
+  assert.equal(request.options.credentials, "same-origin");
+  assert.equal(request.options.signal, signal);
+});
+
+test("review adapter accepts a current-revision same-state no-op without inventing a new revision", async () => {
+  const api = createArchiveApi({ client: createApiClient({ fetchImpl: async () => new Response(JSON.stringify(MEMORY_DETAIL), {
+    headers: { "Content-Type": "application/json", ETag: `"${MEMORY_DETAIL.revision}"` },
+  }) }) });
+  assert.deepEqual(await api.reviewMemory(IDS.text, { reviewStatus: "PENDING", revision: MEMORY_DETAIL.revision }, {
+    csrfToken: ANONYMOUS_SESSION.csrfToken,
+  }), MEMORY_DETAIL);
+});
+
+for (const [name, modify, etag] of [
+  ["wrong memory", memory => ({ ...memory, memoryId: IDS.photo }), "valid"],
+  ["wrong target", memory => ({ ...memory, reviewStatus: "ARCHIVED" }), "valid"],
+  ["unrelated revision", memory => ({ ...memory, revision: MEMORY_DETAIL.revision + 2 }), "valid"],
+  ["missing ETag", memory => memory, null],
+  ["wrong ETag", memory => memory, '"999"'],
+  ["weak ETag", memory => memory, `W/"${MEMORY_DETAIL.revision + 1}"`],
+]) {
+  test(`review ${name} is an unknown result rather than confirmed success`, async () => {
+    const memory = modify({ ...MEMORY_DETAIL, reviewStatus: "KEEP", revision: MEMORY_DETAIL.revision + 1 });
+    let calls = 0;
+    const api = createArchiveApi({ client: createApiClient({ fetchImpl: async () => {
+      calls++;
+      return new Response(JSON.stringify(memory), { headers: { "Content-Type": "application/json",
+        ...(etag === null ? {} : { ETag: etag === "valid" ? `"${memory.revision}"` : etag }),
+      } });
+    } }) });
+    await assert.rejects(api.reviewMemory(IDS.text, { reviewStatus: "KEEP", revision: MEMORY_DETAIL.revision }, {
+      csrfToken: ANONYMOUS_SESSION.csrfToken,
+    }), { code: "CONTRACT_MISMATCH", unknownOutcome: true });
+    assert.equal(calls, 1);
+  });
+}
+
+test("review adapter preserves known stale-revision rejection even when target already matches", async () => {
+  let calls = 0;
+  const api = createArchiveApi({ client: createApiClient({ fetchImpl: async () => {
+    calls++;
+    return new Response(JSON.stringify({ error: { code: "REVISION_CONFLICT", message: "stale", requestId: IDS.request } }), {
+      status: 412, headers: { "Content-Type": "application/json" },
+    });
+  } }) });
+  await assert.rejects(api.reviewMemory(IDS.text, { reviewStatus: "KEEP", revision: 1 }, {
+    csrfToken: ANONYMOUS_SESSION.csrfToken,
+  }), { status: 412, unknownOutcome: false });
+  assert.equal(calls, 1);
+});
+
+test("deleted detail decodes its persisted recovery deadline and requires it to be consistent", async () => {
+  const memory = { ...MEMORY_DETAIL, reviewStatus: "DELETE", deleteAfter: "2026-11-09T15:00:00Z" };
+  assert.deepEqual(await returning(memory).getMemory(IDS.text), memory);
+  assert.deepEqual(await returning({ items: [memory], nextCursor: null }).listMemories({ reviewStatus: "DELETE" }), {
+    items: [memory], nextCursor: null,
+  });
+  await assert.rejects(returning({ ...memory, deleteAfter: "2020-01-01T00:00:00Z" }).getMemory(IDS.text), { code: "CONTRACT_MISMATCH" });
+});

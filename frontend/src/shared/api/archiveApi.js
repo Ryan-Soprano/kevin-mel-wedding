@@ -323,11 +323,18 @@ export function createArchiveApi({
       if (!STATES.includes(reviewStatus) || !positiveInteger(revision)) {
         throw new TypeError("Supply a valid review state and the latest memory revision.");
       }
-      return memoryRequest("/api/memories/" + id(memoryId) + "/review", {
+      return client.request("/api/memories/" + id(memoryId) + "/review", {
         method: "PATCH", body: { reviewStatus },
         headers: { ...csrf(csrfToken), "If-Match": '"' + revision + '"' },
         signal,
-      }, memoryId);
+        decode(value, response) {
+          const memory = decodeMemory(value);
+          if (memory.memoryId !== memoryId || memory.reviewStatus !== reviewStatus
+            || ![revision, revision + 1].includes(memory.revision)
+            || response.headers.get("ETag") !== '"' + memory.revision + '"') throw contractMismatch();
+          return memory;
+        },
+      });
     },
     getPlayback(memoryId, { signal } = {}) {
       return client.request("/api/memories/" + id(memoryId) + "/playback", {

@@ -109,7 +109,7 @@ class InboxServiceTest {
         service = service(false);
         rejects(() -> service.list(null, null, null), 403, "ARCHIVE_UNAVAILABLE");
         service = service(true);
-        rejects(() -> service.list("DELETE", "20", null), 400, "VALIDATION_FAILED");
+        rejects(() -> service.list("PUBLIC", "20", null), 400, "VALIDATION_FAILED");
         rejects(() -> service.list("PENDING", "101", null), 400, "VALIDATION_FAILED");
         rejects(() -> service.list("PENDING", "20", "bad-cursor"), 400, "INVALID_CURSOR");
         verifyNoInteractions(repository);

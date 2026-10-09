@@ -13,7 +13,7 @@ MED-01 implements PHOTO intents (one to five), capability-bound grants/finalizat
 
 AUTH-01 implements GET/POST/DELETE `/api/session` with Spring Security server-side sessions, PostgreSQL accounts, bcrypt password hashes, CSRF/session rotation, durable login throttling, credential-version revocation, and reveal/role gates. Provisioning and recovery use a separate console utility. See [AUTH-01 verification](auth-verification.md) and the [account-access runbook](../../runbooks/account-access.md).
 
-AUTH-02 implements `GET /api/memories/{memoryId}/playback` for eligible verified PHOTO originals. The server rechecks current account/reveal access, verifies the private original's size/MIME through authenticated HEAD, then signs a single-object S3 HTTPS GET for at most 300 seconds. See [AUTH-02 verification](authorization-verification.md). INB-01 now implements private note/photo inbox list and detail; review mutations, audio, publication, real production account provisioning and production operations remain later work. See [INB-01 verification](inbox-verification.md) for the exact partial boundary. Mock success is not production-readiness evidence.
+AUTH-02 implements `GET /api/memories/{memoryId}/playback` for eligible verified PHOTO originals. The server rechecks current account/reveal access, verifies the private original's size/MIME through authenticated HEAD, then signs a single-object S3 HTTPS GET for at most 300 seconds. See [AUTH-02 verification](authorization-verification.md). INB-01 implements private note/photo inbox list and detail; INB-02 adds private conditional review mutations, recoverable deleted-item browsing and independent-ledger-backed retention. Audio, publication, real production account provisioning and production operations remain later work. See [INB-01 verification](inbox-verification.md) for the exact partial boundary. Mock success is not production-readiness evidence.
 
 The [staging package](../../runbooks/staging-deployment.md) serves production frontend assets and `/api` through one Spring process. Its staging-only operator access gate is separate from the couple session API. Staging limits overlapping photo finalization to one: a busy request returns `503 MEDIA_UNAVAILABLE` before reading storage or changing item state; deliberate retry retains the same intent, item and capability key. File, dimension and batch limits are unchanged. Local package checks pass; hosted deployment and physical-phone acceptance remain pending.
 
@@ -43,7 +43,7 @@ The [staging package](../../runbooks/staging-deployment.md) serves production fr
 
 ## Endpoint index
 
-AUTH-01 implements session routes, AUTH-02 implements verified PHOTO playback issuance, and INB-01 implements nondeleted note/photo inbox list and detail. Review mutations and audio remain later contracts.
+AUTH-01 implements session routes, AUTH-02 implements verified PHOTO playback issuance, and INB-01 implements note/photo inbox list and detail; INB-02 implements conditional private review and deleted-item recovery. Audio remains later work.
 
 | Method and route | Success | Responsibility |
 |---|---|---|
@@ -55,9 +55,9 @@ AUTH-01 implements session routes, AUTH-02 implements verified PHOTO playback is
 | GET `/api/session` | 200 | Current session and CSRF token, including anonymous |
 | POST `/api/session` | 200 | Couple login; rotate session/CSRF token |
 | DELETE `/api/session` | 204 | Invalidate session and clear cookie; no body |
-| GET `/api/memories` | 200 | Implemented: couple-only paginated nondeleted note/photo inbox |
+| GET `/api/memories` | 200 | Implemented: couple-only paginated note/photo inbox, including recoverable DELETE filter |
 | GET `/api/memories/{memoryId}` | 200 | Implemented: couple-only note/photo detail, revision, and ETag |
-| PATCH `/api/memories/{memoryId}/review` | 200 | Future: conditional private lifecycle change |
+| PATCH `/api/memories/{memoryId}/review` | 200 | Implemented: conditional private Keep/Archive/Restore/Delete |
 | GET `/api/memories/{memoryId}/playback` | 200 | Implemented: current couple/reveal authorization and short-lived GET for an eligible PHOTO original |
 
 ## Text creation and retry identity
@@ -242,7 +242,7 @@ moderation. Mock forbidden simulates the gate, not a calendar policy.
 
 ## Inbox, review, and playback
 
-Implemented list query: `reviewStatus=PENDING&limit=20&cursor=…`. Status is PENDING/KEEP/ARCHIVED; limit 1–100, default 20; cursor optional/opaque. DELETE is reserved for future INB-02 and currently returns 400 VALIDATION_FAILED. Sort createdAt descending,
+Implemented list query: `reviewStatus=PENDING&limit=20&cursor=…`. Status is PENDING/KEEP/ARCHIVED/DELETE; limit 1–100, default 20; cursor optional/opaque. DELETE includes only items still inside their server recovery window and not claimed/purged. Sort createdAt descending,
 then memoryId descending. Production cursor binds filter/last sort tuple; malformed
 or mismatched cursor: 400 INVALID_CURSOR. Do not parse the mock's offset cursor.
 Paging is not a snapshot; refresh after reviews/filter changes.
@@ -258,20 +258,19 @@ valid. MEMORY_DETAIL / MEDIA_DETAIL / INBOX_PAGE / EMPTY_INBOX define full examp
   checksumSha256, durationSeconds (null for PHOTO), uploadState. No URL/internal
   storage key. Inbox contains durable items; receipt reconciles unfinished uploads.
 
-GET detail returns ETag `"1"` matching persisted revision. The current note/photo slice excludes deleted/audio/unfinished/unverified items and returns deleteAfter null. See [INB-01 verification](inbox-verification.md). Future PATCH review sends
+GET detail returns ETag `"1"` matching persisted revision. The note/photo slice excludes audio/unfinished/unverified and expired/claimed/purged items. Recoverable DELETE returns its first deleteAfter; other states return null. See [INB-01 verification](inbox-verification.md) and [INB-02 verification](review-verification.md). PATCH review sends
 `{"reviewStatus":"KEEP"}`, `If-Match: "1"`, X-CSRF-Token. Server atomically
-checks authorization/CSRF/revision, increments revision, returns detail/new ETag.
+checks authorization/CSRF/revision, increments revision for an actual change and returns detail/new ETag. A same-state request at the current revision is a no-op; stale same-state requests still conflict. State and content-free audit commit atomically.
 Missing precondition: 428 PRECONDITION_REQUIRED; stale revision: 412 REVIEW_CONFLICT.
 Reload and let the couple reconsider; never silently overwrite or auto-retry.
 
-The future DELETE review state is soft: deleteAfter = first deletion + 30 days. Repeated DELETE must not
+The implemented DELETE review state is soft: deleteAfter = first deletion + 30 days. Repeated DELETE must not
 extend it. Before expiry, PATCH PENDING/KEEP/ARCHIVED restores and clears deleteAfter.
-After expiry, unavailable items return 404. Cleanup/backup retention owns physical
-deletion. No sibling cascade or memory HTTP DELETE route. KEEP is not publication.
+After expiry, unavailable items return 404. Bounded maintenance writes an independent private deletion ledger before physical object deletion and metadata scrubbing. Retained opaque IDs/retry reservations prevent guest replay from recreating purged content; offline ledger replay reserves erased-key digests even when the backup predates submission creation. The [deletion/recovery runbook](../../runbooks/deletion-and-recovery.md) defines maintenance readiness and rolling-backup implications. No sibling cascade or memory HTTP DELETE route. KEEP is not publication.
 
 PLAYBACK is `{"url":"https://…","expiresAt":"…Z"}`. AUTH-02 implements issuance for the current event's verified PHOTO items with `COUPLE_ONLY` visibility and `UPLOADED` assets. Each request revalidates the session's enabled COUPLE account and requires an open reveal gate. Guest retry capabilities, UUID knowledge, and operator/developer identities grant no playback authority. The server checks the associated private `originals/…` object's size and detected MIME through authenticated HEAD before signing GET for that single object. The S3 API HTTPS URL expires within 300 seconds; `expiresAt` reports the actual signature expiry, rather than a separately guessed time. Public custom domains and `r2.dev` stay disabled for originals and staging.
 
-Unfinished/failed items, TEXT/AUDIO, missing or wrong-event memories, and DELETE items return safe 404. DELETE is deliberately excluded until the future INB-02 restoration flow restores the item. Eligible original missing, metadata mismatch, or unavailable storage returns 503 MEDIA_UNAVAILABLE. Database failure remains 503 SERVICE_UNAVAILABLE. A playback failure does not mean the stored memory disappeared; implemented inbox/detail reads remain available independently of storage. Review mutations remain later work.
+Unfinished/failed items, TEXT/AUDIO, missing or wrong-event memories, and DELETE items return safe 404. DELETE is deliberately excluded until the future INB-02 restoration flow restores the item. Eligible original missing, metadata mismatch, or unavailable storage returns 503 MEDIA_UNAVAILABLE. Database failure remains 503 SERVICE_UNAVAILABLE. A playback failure does not mean the stored memory disappeared; implemented inbox/detail reads remain available independently of storage. INB-02 review mutations remain private and do not issue playback for deleted items.
 
 The signed URL is a reusable bearer permission: anyone possessing it can GET the object until its own expiry. Logout, reset, disablement, and closing reveal block new issuance; they do not revoke an already-issued link or an in-progress download. `Cache-Control: no-store` does not erase downloaded bytes. Never persist/log the URL, and refresh issuance only after expiry through the authenticated app route. The later playback UI must omit application credentials when fetching the object, use `no-referrer`, and never forward session/CSRF/retry headers. A GET signature does not grant PUT, DELETE or HEAD. Real provider HEAD/GET, expiry, CORS, tampering and unsigned/public denial remain in the [home acceptance checklist](../../runbooks/private-photo-storage.md#authenticated-photo-playback--auth-02-home-acceptance).
 
@@ -336,7 +335,7 @@ MSG-01 adds real HTTP/PostgreSQL integration tests and V2 creation fingerprints.
 The fingerprint is SHA-256 over a PostgreSQL JSONB object containing eventKey,
 memoryType TEXT, normalized guestName and message; it is immutable during replay.
 V2 backfills only unambiguous single-text V1 envelopes and preserves their data;
-other legacy keys stay reserved. V3 adds PHOTO client item IDs, captions/order, expected integrity claims and five-minute upload grants without rewriting V1/V2. PHOTO fingerprints use SHA-256 over length-prefixed normalized fields and ordered item metadata, including client IDs, filename, MIME, size, original hash and caption. Changed fields/order conflict; Unicode outer whitespace and UUID case normalize before fingerprinting. Legacy non-text keys remain reserved. V6 adds persisted positive review revisions and the inbox ordering index without rewriting existing migrations. Audio duration and delete deadlines still need later migrations. Never edit applied migrations.
+other legacy keys stay reserved. V3 adds PHOTO client item IDs, captions/order, expected integrity claims and five-minute upload grants without rewriting V1/V2. PHOTO fingerprints use SHA-256 over length-prefixed normalized fields and ordered item metadata, including client IDs, filename, MIME, size, original hash and caption. Changed fields/order conflict; Unicode outer whitespace and UUID case normalize before fingerprinting. Legacy non-text keys remain reserved. V6 adds persisted positive review revisions and the inbox ordering index without rewriting existing migrations. V7 adds delete deadlines, purge claims/content-free tombstones, review audit and independent-ledger replay reservations; audio duration remains later work. Never edit applied migrations.
 
 AUTH-01 adds V4 private accounts and V5 login-throttle counters without changing V1–V3. Runtime/session, recovery, and role-gate evidence belongs in [AUTH-01 verification](auth-verification.md); operation instructions belong in the [account-access runbook](../../runbooks/account-access.md). The approved Spring Security runtime/test starters are recorded in the backend POM.
 
