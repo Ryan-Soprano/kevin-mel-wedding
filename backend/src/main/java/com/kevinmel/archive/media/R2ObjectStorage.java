@@ -227,6 +227,36 @@ public final class R2ObjectStorage implements ObjectStorage, AutoCloseable {
         } catch (SdkException failure) { throw StorageConfiguration.unavailable(); }
     }
 
+    /** Offline recovery must never replace a different existing original, including a racing write. */
+    public void publishRecovered(String key, byte[] bytes, String type) {
+        checkKey(key);
+        if (!key.startsWith("originals/") || bytes == null || bytes.length < 1
+                || bytes.length > PhotoRequest.MAX_BYTES || !PhotoRequest.TYPES.contains(type)) {
+            throw new IllegalArgumentException("Invalid recovery original scope.");
+        }
+        try {
+            s3.putObject(PutObjectRequest.builder().bucket(bucket).key(key).ifNoneMatch("*")
+                    .contentType(type).contentLength((long) bytes.length).cacheControl("no-store").build(),
+                    RequestBody.fromBytes(bytes));
+        } catch (S3Exception failure) {
+            if (failure.statusCode() != 412) throw recoveryUnavailable();
+            try {
+                var metadata = s3.headObject(HeadObjectRequest.builder().bucket(bucket).key(key).build());
+                if (metadata == null || !Objects.equals(metadata.contentLength(), (long) bytes.length)
+                        || !type.equals(metadata.contentType())) throw recoveryUnavailable();
+                var existing = read(key, bytes.length);
+                if (existing.isEmpty() || !java.security.MessageDigest.isEqual(existing.get(), bytes)) {
+                    throw recoveryUnavailable();
+                }
+            } catch (RuntimeException unconfirmed) { throw recoveryUnavailable(); }
+        } catch (SdkException failure) { throw recoveryUnavailable(); }
+    }
+
+    private static com.kevinmel.archive.web.ApiException recoveryUnavailable() {
+        return new com.kevinmel.archive.web.ApiException(503, "RECOVERY_STORAGE_UNAVAILABLE",
+                "The isolated recovery original could not be confirmed.");
+    }
+
     private static void checkKey(String key) {
         if (!key.matches("(staging|originals)/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}")) {
             throw new IllegalArgumentException("Invalid object scope.");

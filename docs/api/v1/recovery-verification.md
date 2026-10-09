@@ -1,0 +1,28 @@
+# Operator export and isolated restore verification — OPS-02
+
+This implementation covers console-only note/photo archive-data recovery. It provides no guest/couple/operator HTTP export, adds no dependency or migration, and exercises no production database or provider. [Operator recovery](../../runbooks/operator-recovery.md) owns commands, private access, consistency and release acceptance; [deletion recovery](../../runbooks/deletion-and-recovery.md) owns the write-ahead erasure invariant.
+
+## Acceptance mapping
+
+| OPS-02 criterion | Implementation and meaningful proof | Remaining acceptance |
+|---|---|---|
+| Export metadata and original media with an ID/file manifest | Versioned private directory with bounded strict metadata, reviewed schema identity, row counts, memory/asset/file relationships and SHA-256/size checks. Contribution grouping/order, retry identity, review state/revision and tombstones survive a real filesystem round trip. | Actual private backup location/encrypted independent copy and provider access acceptance. Consumer export remains ARC-05. |
+| Account for in-progress uploads; report missing originals | Quiescent export rejects active grants, records pending/failed intents separately, preserves expired grant reservation metadata and reports missing/corrupt/unavailable verified originals. Unrelated missing originals block restore. | Operationally stop every source writer and maintenance process, wait for signed PUT expiry, verify representative source size and actual R2 behavior. |
+| Restore into an isolated destination; verify counts, relationships and integrity | Empty migrated PostgreSQL destination, separate synthetic storage, bounded preflight, transactional import, exact original verification, current independent ledger replay and erased-key reservations. Storage failure/retry, populated target, wrong schema, conflicting original bytes and malformed deletion identity are rejection scenarios. | Actual hosted DB/media restore, operator completeness checks and timed full recovery at representative size. |
+| Document location/access/restore; repeat with audio | Ryan-only console, private environment credentials, exact environment/quiescence confirmation, explicit local/remote restore DB target, mechanically read-only source ledger adapter and provider identity binding. Existing account/reveal recovery remains separate. | Hosted backup scheduling and location, independent encrypted copy, account/config recovery, audio after AUD-03 and actual operating evidence for D-07. |
+
+## Important boundaries
+
+The package contains raw guest retry capabilities and private guest content. It excludes credentials/accounts, sessions, throttle counters, application settings and temporary staging bytes. It is privileged archive-data recovery material; it cannot substitute for a full database backup or establish wedding-window five-minute database RPO by itself.
+
+Repeatable-read makes database rows consistent but cannot freeze live provider IO. `MEMORY_ARCHIVE_RECOVERY_QUIESCED=true` and console confirmation assert operator readiness; they do not remotely stop a different application. Stop collection/private traffic, finalization and maintenance, then wait for every issued grant to expire. Pending/failed intents remain unfinished; a restored receipt must not invent a saved original.
+
+Every restore reads the current authoritative independent ledger and requires all packaged records to survive unchanged. It binds that authority to the originating storage identity and rejects future/malformed/identity-conflicting evidence. Replay scrubs newer erased notes/captions/media and reserves submission-key digests even for contributions absent from the backup. Unrelated sibling memories remain intact. Source authority writes/deletes are mechanically forbidden in the console.
+
+The original authoritative source endpoint/bucket must be available or reconstructed with complete current evidence. A recovery copy relocated to another bucket cannot directly satisfy the bound identity in this version; total source loss and independent-copy recovery remain operational acceptance. Exports are not automatically scheduled or expired; operator backup policy must enforce the 30-day retention limit.
+
+Preflight errors make no target mutation. Storage errors can leave partial isolated object copies or ledger writes even when database import rolls back. Keep traffic stopped, inspect the actual target privately and retry only when the database remains empty and existing copied originals match. Never clear a populated target after an uncertain commit.
+
+## Verification evidence
+
+On October 9, the full local backend suite completed 254 tests with zero failures/errors: 253 passed and one actual-symlink test skipped because Windows requires additional symlink privilege. Linux CI runs that scenario. The 24 recovery integration cases use PostgreSQL 17 with reviewed Flyway migrations, temporary filesystem packages and independent synthetic source/destination storage. They cover grouped note/photo/pending/failed restoration, 130-note counts, private output permissions, current-ledger erasure and absent-contribution retry reservations, metadata/media tampering, schema/target rejection, copying races and failure/retry. Three console-boundary and four SDK conditional-copy tests also pass. The combined application packaging succeeds; all six packaged public files match the final frontend build byte-for-byte. Independent review has no remaining blocking findings. Fixtures contain synthetic content only. No provider, hosted, physical-device, audio or continuous-backup pass is implied.

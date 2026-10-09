@@ -39,6 +39,8 @@ The latter commands require typing `purge-expired in local` or `replay-ledger in
 
 Contribution-bearing rolling backups may retain a deleted copy until that backup's own 30-day expiry. Live purge cannot erase those historical copies immediately. OPS-02 owns the backup retention and restore implementation, with OPS-03 monitoring; no hosted RPO/RTO claim is made here.
 
+The [OPS-02 operator recovery console](operator-recovery.md) now exports note/photo archive data and verifies isolated restoration with current independent deletion evidence. It supplements a full database backup; it does not prove hosted scheduling, actual provider recovery-copy durability or the operating RPO/RTO targets. Audio remains later acceptance.
+
 For any restore:
 
 1. Stop collection and private application traffic. Retain the **current independent** `deletions/v1/` ledger; never overwrite it with an older database/media backup. If recovery copies are needed, recover/merge the authoritative ledger before proceeding.

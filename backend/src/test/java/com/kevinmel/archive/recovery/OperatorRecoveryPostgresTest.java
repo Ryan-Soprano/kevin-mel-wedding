@@ -1,0 +1,725 @@
+package com.kevinmel.archive.recovery;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.attribute.AclEntryType;
+import java.nio.file.attribute.AclFileAttributeView;
+import java.nio.file.attribute.PosixFileAttributeView;
+import java.nio.file.attribute.PosixFilePermission;
+import java.security.MessageDigest;
+import java.sql.DriverManager;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HexFormat;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+
+import javax.imageio.ImageIO;
+import javax.sql.DataSource;
+
+import com.kevinmel.archive.contribution.ContributionRepository;
+import com.kevinmel.archive.media.ObjectStorage;
+import com.kevinmel.archive.media.PhotoAdmissionPolicy;
+import com.kevinmel.archive.media.PhotoRepository;
+import com.kevinmel.archive.media.PhotoRequest;
+import com.kevinmel.archive.retention.DeletionRecord;
+import com.kevinmel.archive.retention.DeletionStorage;
+import com.kevinmel.archive.retention.RetentionRepository;
+import com.kevinmel.archive.retention.RetentionService;
+import com.kevinmel.archive.retention.SubmissionKeyDigest;
+import org.flywaydb.core.Flyway;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledOnOs;
+import org.junit.jupiter.api.condition.OS;
+import org.junit.jupiter.api.io.TempDir;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import org.springframework.jdbc.support.JdbcTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.postgresql.PostgreSQLContainer;
+import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.node.ObjectNode;
+
+/** Real directory bundles, separately migrated source/target schemas, and no live provider. */
+@Testcontainers
+class OperatorRecoveryPostgresTest {
+    @Container static PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:17");
+    private static final Instant NOW = Instant.now().truncatedTo(ChronoUnit.MICROS);
+    private static final JsonMapper JSON = JsonMapper.builder().build();
+    private static final List<String> TABLES = List.of("contribution", "memory", "media_asset", "upload_grant",
+            "review_audit", "deletion_ledger", "erased_submission_key");
+    @TempDir Path temporary;
+    private final List<String> schemas = new ArrayList<>();
+    private final MemoryStorage sourceStorage = new MemoryStorage();
+    private final MemoryStorage targetStorage = new MemoryStorage();
+    private Fixture source;
+    private Fixture target;
+
+    @BeforeEach void isolatedDatabasesAndStores() {
+        source = schema(); target = schema();
+    }
+
+    @AfterEach void removeOnlyDisposableSchemas() throws Exception {
+        try (var connection = DriverManager.getConnection(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
+                var statement = connection.createStatement()) {
+            for (String schema : schemas) {
+                if (!schema.matches("recovery_[0-9a-f]{32}")) throw new IllegalStateException("Unsafe fixture schema.");
+                statement.execute("DROP SCHEMA " + schema + " CASCADE");
+            }
+        }
+    }
+
+    @Test void portableBundleRestoresMixedArchiveAndExactOriginalsIntoSeparateEmptyDatabase() throws Exception {
+        var note = note(source, "A private synthetic note", "Synthetic note guest");
+        var batch = photos(source, sourceStorage, "UPLOADED", "PENDING", "FAILED", "UPLOADED");
+        review(source, note.memory(), "KEEP", 3);
+        review(source, batch.memories().get(3), "ARCHIVED", 2);
+        UUID grant = grant(source, batch.assets().get(1), NOW.minusSeconds(600), NOW.minusSeconds(300));
+        grant(source, batch.assets().get(2), NOW.minusSeconds(600), NOW.minusSeconds(300));
+        String reserved = SubmissionKeyDigest.sha256(UUID.randomUUID().toString());
+        source.db().sql("INSERT INTO erased_submission_key(key_digest, erased_at) VALUES (:digest, :at)")
+                .param("digest", reserved).param("at", time(NOW.minusSeconds(60))).update();
+        source.db().sql("""
+                INSERT INTO archive_account(username, display_name, password_hash, role)
+                VALUES ('synthetic.recovery', 'Synthetic excluded operator', 'synthetic-secret-excluded-marker', 'OPERATOR')
+                """).update();
+        var before = snapshot(source);
+        Path bundle = temporary.resolve("portable-archive");
+
+        var exported = export(bundle);
+        assertThat(exported.ready()).isTrue();
+        assertThat(exported.contributions()).isEqualTo(2);
+        assertThat(exported.memories()).isEqualTo(5);
+        assertThat(exported.originals()).isEqualTo(2);
+        assertThat(exported.pendingPhotos()).isEqualTo(1);
+        assertThat(exported.failedPhotos()).isEqualTo(1);
+        assertThat(exported.unavailableOriginals()).isZero();
+        assertPrivateBundle(bundle);
+        try (var files = Files.walk(bundle)) {
+            assertThat(files.filter(Files::isRegularFile).map(bundle::relativize).map(Path::toString).toList())
+                    .hasSize(4)
+                    .contains("manifest.json", "metadata.json")
+                    .noneMatch(name -> name.contains("private-name") || name.contains("caption"));
+        }
+        assertThat(Files.readString(bundle.resolve("metadata.json"))).contains("private-name-0.png", "Synthetic caption 0");
+        assertThat(Files.readString(bundle.resolve("metadata.json"))).doesNotContain("synthetic-secret-excluded-marker", "archive_account");
+        for (int index : List.of(0, 3)) {
+            assertThat(Files.readAllBytes(bundle.resolve("originals").resolve(batch.assets().get(index).toString())))
+                    .isEqualTo(batch.bytes().get(index));
+        }
+
+        var restored = restore(bundle);
+        assertThat(restored.contributions()).isEqualTo(2);
+        assertThat(restored.memories()).isEqualTo(5);
+        assertThat(restored.originals()).isEqualTo(2);
+        assertThat(restored.replayedDeletions()).isZero();
+        assertThat(snapshot(target)).isEqualTo(before);
+        assertThat(target.db().sql("SELECT count(*) FROM archive_account").query(Long.class).single()).isZero();
+        assertThat(targetStorage.objects).hasSize(2);
+        for (int index : List.of(0, 3)) assertThat(targetStorage.objects.get("originals/" + batch.assets().get(index)))
+                .isEqualTo(batch.bytes().get(index));
+        assertThat(count(target, "upload_grant")).isEqualTo(2);
+        assertThat(target.db().sql("SELECT object_key FROM upload_grant WHERE id = :id").param("id", grant)
+                .query(String.class).single()).isEqualTo("staging/" + grant);
+        var receipt = target.contributions().getReceipt(batch.contribution(), batch.key());
+        assertThat(receipt.completion()).isEqualTo("PARTIAL");
+        assertThat(receipt.memories()).extracting(item -> item.memoryId()).containsExactlyElementsOf(batch.memories());
+        assertThat(receipt.memories()).extracting(item -> item.uploadState()).containsExactly("UPLOADED", "PENDING", "FAILED", "UPLOADED");
+        var textReplay = target.tx().execute(ignored -> target.contributions().saveTextContribution(
+                "kevin-mel-wedding", note.guest(), note.message(), note.key()));
+        assertThat(textReplay.created()).isFalse();
+        assertThat(textReplay.memoryId()).isEqualTo(note.memory());
+        assertThat(target.tx().execute(ignored -> target.photos().create(batch.request(), batch.key())).created()).isFalse();
+    }
+
+    @Test void activeUploadGrantPreventsExportUntilExpiryAndItsReservationStillRestores() {
+        var batch = photos(source, sourceStorage, "PENDING");
+        UUID id = grant(source, batch.assets().getFirst(), NOW, NOW.plusSeconds(300));
+        Path active = temporary.resolve("active-grant");
+        assertThatThrownBy(() -> export(active)).isInstanceOf(RecoveryException.class);
+        assertThat(targetStorage.operations).isEmpty();
+        Path expired = temporary.resolve("expired-grant");
+        var exporter = recovery(source, sourceStorage, sourceStorage, sourceStorage, NOW.plusSeconds(300));
+        assertThat(exporter.exportTo(expired).ready()).isTrue();
+        recovery(target, targetStorage, sourceStorage, targetStorage, NOW.plusSeconds(301)).restoreFrom(expired);
+        assertThat(count(target, "upload_grant")).isEqualTo(1);
+        assertThat(target.db().sql("SELECT media_asset_id FROM upload_grant WHERE id = :id").param("id", id)
+                .query(UUID.class).single()).isEqualTo(batch.assets().getFirst());
+        assertThat(targetStorage.objects).isEmpty();
+    }
+
+    @Test void largerArchiveRestoresEveryContributionAndMemoryWithAccurateCounts() {
+        for (int index = 0; index < 130; index++) note(source, "Synthetic recoverable note " + index, null);
+        Path bundle = temporary.resolve("larger-archive");
+        var exported = export(bundle);
+        assertThat(exported.ready()).isTrue();
+        assertThat(exported.contributions()).isEqualTo(130);
+        assertThat(exported.memories()).isEqualTo(130);
+        var restored = restore(bundle);
+        assertThat(restored.contributions()).isEqualTo(130);
+        assertThat(restored.memories()).isEqualTo(130);
+        assertThat(restored.originals()).isZero();
+        assertThat(snapshot(target)).isEqualTo(snapshot(source));
+        assertThat(targetStorage.objects).isEmpty();
+    }
+
+    @Test void missingAndCorruptOriginalsAreExplicitlyIncompleteAndCannotRestore() {
+        var batch = photos(source, sourceStorage, "UPLOADED", "UPLOADED");
+        sourceStorage.objects.remove("originals/" + batch.assets().getFirst());
+        sourceStorage.objects.put("originals/" + batch.assets().get(1), new byte[] { 1, 2, 3 });
+        Path bundle = temporary.resolve("incomplete");
+        var result = export(bundle);
+        assertThat(result.ready()).isFalse();
+        assertThat(result.unavailableOriginals()).isEqualTo(2);
+        assertThat(result.originals()).isZero();
+        assertThatThrownBy(() -> restore(bundle)).isInstanceOf(RecoveryException.class);
+        assertEmptyTarget();
+    }
+
+    @Test void currentIndependentLedgerPreventsResurrectionFromOlderBackupAndReservesAbsentEnvelopeKey() {
+        var batch = photos(source, sourceStorage, "UPLOADED", "UPLOADED");
+        var deletedNote = note(source, "Synthetic note later erased", "Later erased guest");
+        var keptNote = note(source, "Synthetic retained note", "Retained guest");
+        Path old = temporary.resolve("older-backup");
+        assertThat(export(old).ready()).isTrue();
+        var absentNote = note(source, "Created and deleted after backup", "Absent guest");
+        softDelete(source, batch.memories().getFirst());
+        softDelete(source, deletedNote.memory());
+        softDelete(source, absentNote.memory());
+        var service = new RetentionService(source.retention(), sourceStorage, fixed(NOW.plusSeconds(120)));
+        assertThat(service.purgeBatch(100)).isEqualTo(new RetentionService.Batch(3, 0));
+        assertThat(sourceStorage.records).hasSize(3);
+
+        var result = recovery(target, targetStorage, sourceStorage, targetStorage, NOW.plusSeconds(600)).restoreFrom(old);
+        assertThat(result.replayedDeletions()).isEqualTo(3);
+        assertThat(targetStorage.objects.keySet()).containsExactly("originals/" + batch.assets().get(1));
+        assertThat(targetStorage.publications).doesNotContain("originals/" + batch.assets().getFirst());
+        assertThat(string(target, "SELECT caption FROM memory WHERE id = :id", batch.memories().getFirst())).isNull();
+        assertThat(string(target, "SELECT text_content FROM memory WHERE id = :id", deletedNote.memory())).isNull();
+        assertThat(string(target, "SELECT guest_name FROM contribution WHERE id = :id", deletedNote.contribution())).isNull();
+        assertThat(string(target, "SELECT caption FROM memory WHERE id = :id", batch.memories().get(1))).isEqualTo("Synthetic caption 1");
+        assertThat(string(target, "SELECT text_content FROM memory WHERE id = :id", keptNote.memory())).isEqualTo(keptNote.message());
+        assertThat(count(target, "deletion_ledger")).isEqualTo(3);
+        assertThat(count(target, "erased_submission_key")).isEqualTo(3);
+        assertThat(count(target, "media_asset")).isEqualTo(1);
+        assertThat(count(target, "contribution")).isEqualTo(3);
+        assertThat(target.contributions().getReceipt(batch.contribution(), batch.key()).completion()).isEqualTo("COMPLETE");
+        assertThatThrownBy(() -> target.tx().execute(ignored -> target.contributions().saveTextContribution(
+                "kevin-mel-wedding", absentNote.guest(), absentNote.message(), absentNote.key())))
+                .isInstanceOf(com.kevinmel.archive.web.ApiException.class);
+        assertThat(count(target, "contribution")).isEqualTo(3);
+    }
+
+    @Test void storageFailureRollsBackAllMetadataAndRetryReusesExactPublishedBytes() {
+        photos(source, sourceStorage, "UPLOADED", "UPLOADED");
+        note(source, "Must not be partially committed", "Rollback guest");
+        Path bundle = temporary.resolve("storage-retry");
+        assertThat(export(bundle).ready()).isTrue();
+        targetStorage.failPublication = 2;
+        assertThatThrownBy(() -> restore(bundle)).isInstanceOf(RecoveryException.class);
+        for (String table : TABLES) assertThat(count(target, table)).as(table).isZero();
+        assertThat(targetStorage.objects).hasSize(1);
+        var alreadyPublished = new LinkedHashMap<>(targetStorage.objects);
+        assertThat(restore(bundle).originals()).isEqualTo(2);
+        alreadyPublished.forEach((key, bytes) -> assertThat(targetStorage.objects.get(key)).isEqualTo(bytes));
+        assertThat(snapshot(target)).isEqualTo(snapshot(source));
+    }
+
+    @Test void databaseFailureAfterParentInsertRollsBackAllRowsAndRetryPreservesPublishedOriginal() {
+        var batch = photos(source, sourceStorage, "UPLOADED");
+        note(source, "Synthetic atomic database import", null);
+        Path bundle = temporary.resolve("database-retry");
+        assertThat(export(bundle).ready()).isTrue();
+        target.db().sql("""
+                CREATE FUNCTION reject_fixture_import() RETURNS trigger LANGUAGE plpgsql AS $$
+                BEGIN RAISE EXCEPTION 'synthetic import rejection'; END; $$
+                """).update();
+        target.db().sql("""
+                CREATE CONSTRAINT TRIGGER reject_fixture_import AFTER INSERT ON memory
+                DEFERRABLE INITIALLY DEFERRED FOR EACH ROW
+                EXECUTE FUNCTION reject_fixture_import()
+                """).update();
+        assertThatThrownBy(() -> restore(bundle)).isInstanceOf(RecoveryException.class);
+        for (String table : TABLES) assertThat(count(target, table)).as(table).isZero();
+        assertThat(targetStorage.objects.get("originals/" + batch.assets().getFirst())).isEqualTo(batch.bytes().getFirst());
+        target.db().sql("DROP TRIGGER reject_fixture_import ON memory").update();
+        assertThat(restore(bundle).originals()).isEqualTo(1);
+        assertThat(snapshot(target)).isEqualTo(snapshot(source));
+        assertThat(targetStorage.objects.get("originals/" + batch.assets().getFirst())).isEqualTo(batch.bytes().getFirst());
+    }
+
+    @Test void nonemptyTargetIsRejectedBeforeAnyObjectOrLedgerMutation() {
+        note(source, "Source", null);
+        Path bundle = temporary.resolve("nonempty-target");
+        assertThat(export(bundle).ready()).isTrue();
+        note(target, "Existing target data", null);
+        var before = snapshot(target);
+        assertThatThrownBy(() -> restore(bundle)).isInstanceOf(RecoveryException.class);
+        assertThat(snapshot(target)).isEqualTo(before);
+        assertNoTargetMutations();
+    }
+
+    @Test void schemaDriftAndMismatchedOrFailedMigrationHistoryRejectRestoreBeforeWrites() {
+        note(source, "Portable source", null);
+        Path bundle = temporary.resolve("schema-mismatch");
+        assertThat(export(bundle).ready()).isTrue();
+        int checksum = target.db().sql("SELECT checksum FROM flyway_schema_history WHERE version = '8'").query(Integer.class).single();
+        target.db().sql("UPDATE flyway_schema_history SET checksum = checksum + 1 WHERE version = '8'").update();
+        assertThatThrownBy(() -> restore(bundle)).isInstanceOf(RecoveryException.class);
+        assertEmptyTarget();
+        target.db().sql("UPDATE flyway_schema_history SET checksum = :checksum, success = false WHERE version = '8'")
+                .param("checksum", checksum).update();
+        assertThatThrownBy(() -> restore(bundle)).isInstanceOf(RecoveryException.class);
+        assertEmptyTarget();
+        target.db().sql("UPDATE flyway_schema_history SET success = true WHERE version = '8'").update();
+        target.db().sql("ALTER TABLE memory ADD COLUMN unreviewed_recovery_field TEXT").update();
+        assertThatThrownBy(() -> restore(bundle)).isInstanceOf(RecoveryException.class);
+        assertEmptyTarget();
+    }
+
+    @Test void deletionLifecycleWithoutMatchingWriteAheadPlanCannotBeExported() {
+        var note = note(source, "Malformed deletion lifecycle must not be portable", null);
+        softDelete(source, note.memory());
+        source.db().sql("UPDATE memory SET purge_started_at = :at WHERE id = :id")
+                .param("at", time(NOW.minusSeconds(1))).param("id", note.memory()).update();
+        assertThatThrownBy(() -> export(temporary.resolve("unrecorded-started-purge"))).isInstanceOf(RecoveryException.class);
+        source.db().sql("UPDATE memory SET purged_at = :at, text_content = NULL WHERE id = :id")
+                .param("at", time(NOW)).param("id", note.memory()).update();
+        assertThatThrownBy(() -> export(temporary.resolve("unrecorded-completed-purge"))).isInstanceOf(RecoveryException.class);
+        assertEmptyTarget();
+    }
+
+    @Test void unavailableCurrentDeletionAuthorityFailsClosedEvenForOtherwiseValidBundle() {
+        photos(source, sourceStorage, "UPLOADED");
+        Path bundle = temporary.resolve("missing-authority");
+        assertThat(export(bundle).ready()).isTrue();
+        sourceStorage.failLedger = true;
+        assertThatThrownBy(() -> restore(bundle)).isInstanceOf(RecoveryException.class);
+        assertEmptyTarget();
+    }
+
+    @Test void futureCurrentDeletionEvidenceIsRejectedBeforeMetadataOrOriginalWrites() {
+        var note = note(source, "Must remain private in source only", null);
+        Path bundle = temporary.resolve("future-authority");
+        assertThat(export(bundle).ready()).isTrue();
+        var future = new DeletionRecord(note.memory(), note.contribution(), null, SubmissionKeyDigest.sha256(note.key()),
+                NOW.plusSeconds(30), NOW.plusSeconds(60));
+        sourceStorage.records.put(future.memoryId(), future);
+        assertThatThrownBy(() -> restore(bundle)).isInstanceOf(RecoveryException.class);
+        assertEmptyTarget();
+    }
+
+    @Test void cyclicAuthorityPaginationIsRejectedBeforeAnyWrites() {
+        note(source, "Valid portable note", null);
+        Path bundle = temporary.resolve("cyclic-authority");
+        assertThat(export(bundle).ready()).isTrue();
+        DeletionStorage malformed = new DeletionStorage() {
+            @Override public void record(DeletionRecord record) { throw new AssertionError("Authority is read-only."); }
+            @Override public Page ledger(String cursor, int limit) { return new Page(List.of(), "same-cursor"); }
+            @Override public void deleteOriginal(UUID id) { throw new AssertionError("Authority is read-only."); }
+            @Override public void deleteStaging(UUID id) { throw new AssertionError("Authority is read-only."); }
+        };
+        assertThatThrownBy(() -> recovery(target, targetStorage, malformed, targetStorage, NOW.plusSeconds(1)).restoreFrom(bundle))
+                .isInstanceOf(RecoveryException.class);
+        assertEmptyTarget();
+    }
+
+    @Test void backedUpDeletionEvidenceMustStillExistInIndependentCurrentAuthority() {
+        var note = note(source, "Previously deleted note", "Deleted guest");
+        softDelete(source, note.memory());
+        assertThat(new RetentionService(source.retention(), sourceStorage, fixed(NOW)).purgeBatch(100))
+                .isEqualTo(new RetentionService.Batch(1, 0));
+        Path bundle = temporary.resolve("backed-up-deletion");
+        assertThat(export(bundle).ready()).isTrue();
+        sourceStorage.records.clear();
+        assertThatThrownBy(() -> restore(bundle)).isInstanceOf(RecoveryException.class);
+        assertEmptyTarget();
+    }
+
+    @Test void changedAuthorityIdentityCannotReplaceAnExactBackedUpDeletionRecord() {
+        var note = note(source, "Previously erased private text", null);
+        softDelete(source, note.memory());
+        assertThat(new RetentionService(source.retention(), sourceStorage, fixed(NOW)).purgeBatch(100))
+                .isEqualTo(new RetentionService.Batch(1, 0));
+        Path bundle = temporary.resolve("changed-deletion");
+        assertThat(export(bundle).ready()).isTrue();
+        var old = sourceStorage.records.get(note.memory());
+        sourceStorage.records.put(old.memoryId(), new DeletionRecord(old.memoryId(), UUID.randomUUID(), old.assetId(),
+                old.submissionKeyDigest(), old.deleteAfter(), old.recordedAt()));
+        assertThatThrownBy(() -> restore(bundle)).isInstanceOf(RecoveryException.class);
+        assertEmptyTarget();
+    }
+
+    @Test void currentDeletionCannotEraseAnAssetOwnedByAnotherBundledSibling() {
+        var batch = photos(source, sourceStorage, "UPLOADED", "UPLOADED");
+        Path bundle = temporary.resolve("wrong-asset-owner");
+        assertThat(export(bundle).ready()).isTrue();
+        var wrong = new DeletionRecord(batch.memories().getFirst(), batch.contribution(), batch.assets().get(1),
+                SubmissionKeyDigest.sha256(batch.key()), NOW.minusSeconds(1), NOW);
+        sourceStorage.records.put(wrong.memoryId(), wrong);
+        assertThatThrownBy(() -> restore(bundle)).isInstanceOf(RecoveryException.class);
+        assertEmptyTarget();
+    }
+
+    @Test void conflictingExistingDestinationObjectCannotBeOverwrittenByRestoreRetry() {
+        var batch = photos(source, sourceStorage, "UPLOADED");
+        Path bundle = temporary.resolve("conflicting-original");
+        assertThat(export(bundle).ready()).isTrue();
+        String key = "originals/" + batch.assets().getFirst();
+        byte[] conflicting = png(9);
+        targetStorage.objects.put(key, conflicting);
+        assertThatThrownBy(() -> restore(bundle)).isInstanceOf(RecoveryException.class);
+        for (String table : TABLES) assertThat(count(target, table)).as(table).isZero();
+        assertThat(targetStorage.objects).hasSize(1);
+        assertThat(targetStorage.objects.get(key)).isEqualTo(conflicting);
+        assertThat(targetStorage.records).isEmpty();
+        assertThat(targetStorage.publications).isEmpty();
+    }
+
+    @Test void racingDestinationPublicationCannotOverwriteCompetingBytesOrCommitMetadata() {
+        var batch = photos(source, sourceStorage, "UPLOADED");
+        Path bundle = temporary.resolve("racing-destination-original");
+        assertThat(export(bundle).ready()).isTrue();
+        byte[] competing = png(11);
+        targetStorage.competingBytes = competing;
+        assertThatThrownBy(() -> restore(bundle)).isInstanceOf(RecoveryException.class);
+        for (String table : TABLES) assertThat(count(target, table)).as(table).isZero();
+        assertThat(targetStorage.objects).hasSize(1);
+        assertThat(targetStorage.objects.get("originals/" + batch.assets().getFirst())).isEqualTo(competing);
+        assertThat(targetStorage.records).isEmpty();
+        assertThat(targetStorage.publications).isEmpty();
+    }
+
+    @Test void manifestDuplicateKeysUnknownFieldsAndTrailingJsonAreRejectedBeforeWrites() throws Exception {
+        note(source, "Valid source remains local", null);
+        int index = 0;
+        for (String addition : List.of("\"version\":1,", "\"unreviewedField\":true,", "TRAILING")) {
+            Path bundle = temporary.resolve("strict-manifest-" + index++);
+            assertThat(export(bundle).ready()).isTrue();
+            Path manifest = bundle.resolve("manifest.json");
+            String original = Files.readString(manifest);
+            String mutated = addition.equals("TRAILING") ? original + " true" : original.replaceFirst("\\{", "{" + addition);
+            Files.writeString(manifest, mutated);
+            assertThatThrownBy(() -> restore(bundle)).as(addition).isInstanceOf(RecoveryException.class);
+            assertEmptyTarget();
+        }
+    }
+
+    @Test void alteredOriginalAndMetadataHashesFailBeforeAnyTargetWrites() throws Exception {
+        var batch = photos(source, sourceStorage, "UPLOADED");
+        Path photoBundle = temporary.resolve("tampered-original");
+        assertThat(export(photoBundle).ready()).isTrue();
+        Files.write(photoBundle.resolve("originals").resolve(batch.assets().getFirst().toString()), png(10));
+        assertThatThrownBy(() -> restore(photoBundle)).isInstanceOf(RecoveryException.class);
+        assertEmptyTarget();
+
+        Path metadataBundle = temporary.resolve("tampered-metadata");
+        assertThat(export(metadataBundle).ready()).isTrue();
+        Path metadata = metadataBundle.resolve("metadata.json");
+        Files.writeString(metadata, Files.readString(metadata).replace("Synthetic caption 0", "Tampered private caption"));
+        assertThatThrownBy(() -> restore(metadataBundle)).isInstanceOf(RecoveryException.class);
+        assertEmptyTarget();
+    }
+
+    @Test void unlistedExtraFileInBundleIsRejectedBeforeAnyWrites() throws Exception {
+        note(source, "Valid source", null);
+        Path bundle = temporary.resolve("extra-file");
+        assertThat(export(bundle).ready()).isTrue();
+        Files.writeString(bundle.resolve("unlisted-private-extra.json"), "{}");
+        assertThatThrownBy(() -> restore(bundle)).isInstanceOf(RecoveryException.class);
+        assertEmptyTarget();
+    }
+
+    @Test void rehashedMetadataStillRejectsUnknownFieldsDuplicateIdentityAndInvalidStates() throws Exception {
+        photos(source, sourceStorage, "UPLOADED", "PENDING");
+        int index = 0;
+        for (String mutation : List.of("UNKNOWN_FIELD", "DUPLICATE_ID", "INVALID_STATE", "WRONG_OWNER", "BAD_PENDING_FORMAT")) {
+            Path bundle = temporary.resolve("rehashed-metadata-" + index++);
+            assertThat(export(bundle).ready()).isTrue();
+            ObjectNode metadata = (ObjectNode) JSON.readTree(Files.readAllBytes(bundle.resolve("metadata.json")));
+            var tables = metadata.get("tables");
+            ObjectNode firstMemory = (ObjectNode) tables.get("memory").get(0);
+            ObjectNode firstAsset = (ObjectNode) tables.get("media_asset").get(0);
+            ObjectNode secondAsset = (ObjectNode) tables.get("media_asset").get(1);
+            switch (mutation) {
+                case "UNKNOWN_FIELD" -> firstMemory.put("unexpectedPrivateField", "fixture");
+                case "DUPLICATE_ID" -> ((ObjectNode) tables.get("memory").get(1)).put("id", firstMemory.get("id").asString());
+                case "INVALID_STATE" -> firstAsset.put("upload_state", "SILENTLY_COMPLETE");
+                case "WRONG_OWNER" -> firstAsset.put("memory_id", secondAsset.get("memory_id").asString());
+                case "BAD_PENDING_FORMAT" -> {
+                    ObjectNode pending = "PENDING".equals(firstAsset.get("upload_state").asString()) ? firstAsset : secondAsset;
+                    pending.put("detected_format", "image/png");
+                }
+                default -> throw new IllegalStateException("Unknown test mutation.");
+            }
+            rewriteMetadataDigest(bundle, metadata);
+            assertThatThrownBy(() -> restore(bundle)).as(mutation).isInstanceOf(RecoveryException.class);
+            assertEmptyTarget();
+        }
+    }
+
+    @Test void manifestTraversalAndAbsoluteObjectPathsAreRejectedBeforeAnyWrites() throws Exception {
+        photos(source, sourceStorage, "UPLOADED");
+        int index = 0;
+        for (String assetId : List.of("../outside", "/tmp/private-file", "C:\\outside\\private-file")) {
+            Path bundle = temporary.resolve("traversal-" + index++);
+            assertThat(export(bundle).ready()).isTrue();
+            ObjectNode manifest = (ObjectNode) JSON.readTree(Files.readAllBytes(bundle.resolve("manifest.json")));
+            ((ObjectNode) manifest.get("originals").get(0)).put("assetId", assetId);
+            Files.write(bundle.resolve("manifest.json"), JSON.writeValueAsBytes(manifest));
+            assertThatThrownBy(() -> restore(bundle)).as(assetId).isInstanceOf(RecoveryException.class);
+            assertEmptyTarget();
+        }
+    }
+
+    @Test @EnabledOnOs(OS.LINUX)
+    void symlinkedOriginalAndSymlinkedBundleRootAreRejectedBeforeAnyWrites() throws Exception {
+        var batch = photos(source, sourceStorage, "UPLOADED");
+        Path bundle = temporary.resolve("symlinked-original");
+        assertThat(export(bundle).ready()).isTrue();
+        Path original = bundle.resolve("originals").resolve(batch.assets().getFirst().toString());
+        Path outside = temporary.resolve("outside-private-original");
+        Files.move(original, outside);
+        Files.createSymbolicLink(original, outside);
+        assertThatThrownBy(() -> restore(bundle)).isInstanceOf(RecoveryException.class);
+        assertEmptyTarget();
+
+        Path clean = temporary.resolve("real-bundle-root");
+        assertThat(export(clean).ready()).isTrue();
+        Path linked = temporary.resolve("linked-bundle-root");
+        Files.createSymbolicLink(linked, clean);
+        assertThatThrownBy(() -> restore(linked)).isInstanceOf(RecoveryException.class);
+        assertEmptyTarget();
+    }
+
+    private static void rewriteMetadataDigest(Path bundle, ObjectNode metadata) throws Exception {
+        byte[] encoded = JSON.writeValueAsBytes(metadata);
+        Files.write(bundle.resolve("metadata.json"), encoded);
+        ObjectNode manifest = (ObjectNode) JSON.readTree(Files.readAllBytes(bundle.resolve("manifest.json")));
+        ((ObjectNode) manifest.get("metadata")).put("byteSize", encoded.length).put("sha256", hash(encoded));
+        Files.write(bundle.resolve("manifest.json"), JSON.writeValueAsBytes(manifest));
+    }
+
+    private static void assertPrivateBundle(Path bundle) throws Exception {
+        try (var files = Files.walk(bundle)) {
+            for (Path path : files.toList()) {
+                var posix = Files.getFileAttributeView(path, PosixFileAttributeView.class);
+                if (posix != null) {
+                    Set<PosixFilePermission> expected = Files.isDirectory(path)
+                            ? Set.of(PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE, PosixFilePermission.OWNER_EXECUTE)
+                            : Set.of(PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE);
+                    assertThat(posix.readAttributes().permissions()).as(path.getFileName().toString()).isEqualTo(expected);
+                } else {
+                    var acl = Files.getFileAttributeView(path, AclFileAttributeView.class);
+                    assertThat(acl).isNotNull();
+                    var owner = acl.getOwner();
+                    assertThat(acl.getAcl()).filteredOn(entry -> entry.type() == AclEntryType.ALLOW).isNotEmpty()
+                            .allSatisfy(entry -> assertThat(entry.principal()).isEqualTo(owner));
+                }
+            }
+        }
+    }
+
+    private OperatorRecovery.ExportResult export(Path bundle) {
+        return recovery(source, sourceStorage, sourceStorage, sourceStorage, NOW).exportTo(bundle);
+    }
+    private OperatorRecovery.RestoreResult restore(Path bundle) {
+        return recovery(target, targetStorage, sourceStorage, targetStorage, NOW.plusSeconds(1)).restoreFrom(bundle);
+    }
+    private static OperatorRecovery recovery(Fixture db, MemoryStorage objects, DeletionStorage authority,
+            DeletionStorage destination, Instant now) {
+        return new OperatorRecovery(db.source(), objects, authority, destination, fixed(now));
+    }
+    private void assertEmptyTarget() {
+        for (String table : TABLES) assertThat(count(target, table)).as(table).isZero();
+        assertThat(targetStorage.objects).isEmpty();
+        assertNoTargetMutations();
+    }
+    private void assertNoTargetMutations() {
+        assertThat(targetStorage.records).isEmpty();
+        assertThat(targetStorage.publications).isEmpty();
+        assertThat(targetStorage.operations).noneMatch(operation -> operation.startsWith("publish:")
+                || operation.startsWith("record:") || operation.startsWith("delete-"));
+    }
+    private Fixture schema() {
+        String schema = "recovery_" + UUID.randomUUID().toString().replace("-", "");
+        schemas.add(schema);
+        String url = postgres.getJdbcUrl() + (postgres.getJdbcUrl().contains("?") ? "&" : "?") + "currentSchema=" + schema;
+        var data = new DriverManagerDataSource(url, postgres.getUsername(), postgres.getPassword());
+        Flyway.configure().dataSource(data).schemas(schema).defaultSchema(schema).load().migrate();
+        var db = JdbcClient.create(data);
+        var manager = new JdbcTransactionManager(data);
+        var contributions = new ContributionRepository(db);
+        return new Fixture(data, db, contributions, new PhotoRepository(db, contributions, fixed(NOW),
+                new PhotoAdmissionPolicy(false, 7_500_000_000L, 7_500_000_000L)),
+                new RetentionRepository(db, manager), new TransactionTemplate(manager));
+    }
+    private static Text note(Fixture fixture, String message, String guest) {
+        String key = UUID.randomUUID().toString();
+        var saved = fixture.tx().execute(ignored -> fixture.contributions().saveTextContribution(
+                "kevin-mel-wedding", guest, message, key));
+        normalize(fixture, saved.contributionId(), List.of(saved.memoryId()));
+        return new Text(saved.contributionId(), saved.memoryId(), key, message, guest);
+    }
+    private static PhotoBatch photos(Fixture fixture, MemoryStorage storage, String... states) {
+        var items = new ArrayList<PhotoRequest.Item>();
+        var bytes = new ArrayList<byte[]>();
+        for (int index = 0; index < states.length; index++) {
+            byte[] content = png(index + 1);
+            bytes.add(content);
+            items.add(new PhotoRequest.Item(UUID.randomUUID(), "private-name-" + index + ".png",
+                    "image/png", content.length, hash(content), "Synthetic caption " + index));
+        }
+        var request = new PhotoRequest("Synthetic grouped guest", List.copyOf(items));
+        String key = UUID.randomUUID().toString();
+        var saved = fixture.tx().execute(ignored -> fixture.photos().create(request, key));
+        var memories = saved.receipt().memories().stream().map(item -> item.memoryId()).toList();
+        var assets = new ArrayList<UUID>();
+        for (int index = 0; index < states.length; index++) {
+            UUID asset = fixture.db().sql("SELECT id FROM media_asset WHERE memory_id = :memory")
+                    .param("memory", memories.get(index)).query(UUID.class).single();
+            assets.add(asset);
+            fixture.db().sql("""
+                    UPDATE media_asset SET upload_state = :state, detected_format = :format,
+                        created_at = :at, updated_at = :at WHERE id = :asset
+                    """).param("state", states[index]).param("format", "UPLOADED".equals(states[index]) ? "image/png" : "unverified")
+                    .param("at", time(NOW.minusSeconds(3600))).param("asset", asset).update();
+            if ("UPLOADED".equals(states[index])) storage.objects.put("originals/" + asset, bytes.get(index));
+        }
+        normalize(fixture, saved.receipt().contributionId(), memories);
+        return new PhotoBatch(saved.receipt().contributionId(), key, request, memories, assets, bytes);
+    }
+    private static void normalize(Fixture fixture, UUID contribution, List<UUID> memories) {
+        fixture.db().sql("UPDATE contribution SET created_at = :at WHERE id = :id")
+                .param("at", time(NOW.minusSeconds(3600))).param("id", contribution).update();
+        for (UUID memory : memories) fixture.db().sql("UPDATE memory SET created_at = :at, updated_at = :at WHERE id = :id")
+                .param("at", time(NOW.minusSeconds(3600))).param("id", memory).update();
+    }
+    private static UUID grant(Fixture fixture, UUID asset, Instant created, Instant expires) {
+        UUID id = UUID.randomUUID();
+        fixture.db().sql("""
+                INSERT INTO upload_grant(id, media_asset_id, object_key, created_at, expires_at)
+                VALUES (:id, :asset, :key, :created, :expires)
+                """).param("id", id).param("asset", asset).param("key", "staging/" + id)
+                .param("created", time(created)).param("expires", time(expires)).update();
+        return id;
+    }
+    private static void review(Fixture fixture, UUID memory, String state, int revision) {
+        fixture.db().sql("UPDATE memory SET review_status = :state, revision = :revision WHERE id = :id")
+                .param("state", state).param("revision", revision).param("id", memory).update();
+        fixture.db().sql("""
+                INSERT INTO review_audit(memory_id, actor_account_id, from_status, to_status,
+                    before_revision, after_revision, acted_at)
+                VALUES (:memory, :actor, 'PENDING', :state, 1, :revision, :at)
+                """).param("memory", memory).param("actor", UUID.randomUUID()).param("state", state)
+                .param("revision", revision).param("at", time(NOW.minusSeconds(60))).update();
+    }
+    private static void softDelete(Fixture fixture, UUID memory) {
+        fixture.db().sql("""
+                UPDATE memory SET review_status = 'DELETE', delete_after = :deadline,
+                    created_at = :created, updated_at = :decided WHERE id = :id
+                """).param("deadline", time(NOW.minusSeconds(1))).param("created", time(NOW.minusSeconds(40L * 86400)))
+                .param("decided", time(NOW.minusSeconds(30L * 86400 + 1))).param("id", memory).update();
+    }
+    private static Map<String, List<String>> snapshot(Fixture fixture) {
+        var tables = new LinkedHashMap<String, List<String>>();
+        for (String table : TABLES) tables.put(table, fixture.db().sql("SELECT row_to_json(t)::text FROM " + table + " t ORDER BY row_to_json(t)::text")
+                .query(String.class).list());
+        return tables;
+    }
+    private static long count(Fixture fixture, String table) {
+        if (!TABLES.contains(table)) throw new IllegalArgumentException("Unsafe fixture table.");
+        return fixture.db().sql("SELECT count(*) FROM " + table).query(Long.class).single();
+    }
+    private static String string(Fixture fixture, String sql, UUID id) {
+        var rows = fixture.db().sql(sql).param("id", id).query((rs, row) -> rs.getString(1)).list();
+        assertThat(rows).hasSize(1);
+        return rows.getFirst();
+    }
+    private static byte[] png(int variant) {
+        try {
+            var pixels = new BufferedImage(variant + 1, 2, BufferedImage.TYPE_INT_RGB);
+            pixels.setRGB(0, 0, 0x102030 * variant);
+            var out = new ByteArrayOutputStream();
+            ImageIO.write(pixels, "png", out);
+            return out.toByteArray();
+        } catch (Exception failure) { throw new IllegalStateException(failure); }
+    }
+    private static String hash(byte[] bytes) {
+        try { return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes)); }
+        catch (Exception failure) { throw new IllegalStateException(failure); }
+    }
+    private static OffsetDateTime time(Instant instant) { return OffsetDateTime.ofInstant(instant, ZoneOffset.UTC); }
+    private static Clock fixed(Instant instant) { return Clock.fixed(instant, ZoneOffset.UTC); }
+    private record Fixture(DataSource source, JdbcClient db, ContributionRepository contributions,
+            PhotoRepository photos, RetentionRepository retention, TransactionTemplate tx) { }
+    private record Text(UUID contribution, UUID memory, String key, String message, String guest) { }
+    private record PhotoBatch(UUID contribution, String key, PhotoRequest request, List<UUID> memories,
+            List<UUID> assets, List<byte[]> bytes) { }
+
+    /** Durable synthetic stores are separate from each database and separate from one another. */
+    private static final class MemoryStorage implements ObjectStorage, DeletionStorage {
+        final Map<String, byte[]> objects = new LinkedHashMap<>();
+        final Map<UUID, DeletionRecord> records = new LinkedHashMap<>();
+        final List<String> operations = new ArrayList<>();
+        final List<String> publications = new ArrayList<>();
+        int failPublication;
+        boolean failLedger;
+        byte[] competingBytes;
+        @Override public void requireAvailable() { }
+        @Override public UploadGrant authorize(UUID id, String key, String type, long size, Instant expires) {
+            throw new UnsupportedOperationException("Recovery never grants browser uploads.");
+        }
+        @Override public ReadGrant authorizeRead(String key, String type, long size, Instant expires) {
+            throw new UnsupportedOperationException("Recovery never signs browser reads.");
+        }
+        @Override public Optional<byte[]> read(String key, int maxBytes) {
+            operations.add("read:" + key);
+            byte[] bytes = objects.get(key);
+            if (bytes != null && bytes.length > maxBytes) throw new IllegalStateException("Synthetic bound exceeded.");
+            return Optional.ofNullable(bytes).map(byte[]::clone);
+        }
+        @Override public void publish(String key, byte[] bytes, String type) {
+            operations.add("publish:" + key);
+            if (failPublication > 0 && --failPublication == 0) throw new IllegalStateException("Synthetic storage unavailable.");
+            if (competingBytes != null) { objects.put(key, competingBytes.clone()); competingBytes = null; }
+            byte[] old = objects.putIfAbsent(key, bytes.clone());
+            if (old != null && !Arrays.equals(old, bytes)) throw new IllegalStateException("Synthetic object conflict.");
+            publications.add(key);
+        }
+        public void publishRecovered(String key, byte[] bytes, String type) { publish(key, bytes, type); }
+        @Override public void record(DeletionRecord record) {
+            operations.add("record:" + record.memoryId());
+            var old = records.putIfAbsent(record.memoryId(), record);
+            if (old != null && !old.equals(record)) throw new IllegalStateException("Synthetic ledger conflict.");
+        }
+        @Override public Page ledger(String cursor, int limit) {
+            operations.add("ledger");
+            if (failLedger) throw new IllegalStateException("Synthetic missing authority.");
+            int offset = cursor == null ? 0 : Integer.parseInt(cursor);
+            var values = List.copyOf(records.values());
+            int end = Math.min(values.size(), offset + limit);
+            return new Page(values.subList(offset, end), end == values.size() ? null : Integer.toString(end));
+        }
+        @Override public void deleteOriginal(UUID id) { operations.add("delete-original:" + id); objects.remove("originals/" + id); }
+        @Override public void deleteStaging(UUID id) { operations.add("delete-staging:" + id); objects.remove("staging/" + id); }
+    }
+}
