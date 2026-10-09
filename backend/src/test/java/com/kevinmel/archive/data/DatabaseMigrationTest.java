@@ -395,8 +395,8 @@ class DatabaseMigrationTest {
                     .query(String.class)
                     .single();
 
-            assertThat(migrationsBefore).isEqualTo(5);
-            assertThat(migrationsAfter).isEqualTo(5);
+            assertThat(migrationsBefore).isEqualTo(6);
+            assertThat(migrationsAfter).isEqualTo(migrationsBefore);
             assertThat(storedMessage)
                     .isEqualTo("Existing fixture memory");
         } finally {
