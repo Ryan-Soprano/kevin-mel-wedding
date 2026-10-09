@@ -7,19 +7,26 @@ format, size, duration and retry behavior.
 
 ## Automated evidence — October 9
 
-The clean local backend suite ran 297 tests with zero failures/errors: 296 passed
-and the existing actual-symlink case skipped for Windows privilege. Subsequent
-focused SDK tests verify the final one-second signing margin and actual PUT
-expiry response. Final-head Linux CI provides the integrated final revision gate.
+The final clean local backend suite ran 305 tests with zero failures/errors: 304
+passed and the existing actual-symlink case skipped for Windows privilege. This
+includes SDK checks for the final one-second signing margin and actual PUT expiry
+response. Final-head Linux CI provides the integrated final revision gate.
 Frontend validation passes 265 tests without failures/skips, ESLint, enabled and
 default-off production builds, and a clean production dependency audit.
 
-Real FFmpeg synthetic tones exercise WebM/Opus, Ogg/Opus and MP4/AAC. Nineteen
+Real FFmpeg synthetic tones exercise WebM/Opus, Ogg/Opus and MP4/AAC. Twenty-five
 verifier cases cover unchanged originals, wrong container/codec/hash/size,
 truncation and Ogg framing, video/additional streams/channels, the two-minute
-boundary, overlong streaming WebM without a duration header, missing runtime,
+boundary in all three formats, streaming WebM just beyond the cap, interior
+timestamp-gap counting and rejection without a duration header, missing runtime,
 and real hanging/overflowing subprocesses. Timeout/overflow tests hold the
 private original open and verify process termination before file/directory removal.
+
+Linux CI exposed an extra 7 ms of startup silence from `first_pts=0` on FFmpeg 6
+WebM/Opus. Removing that option retains `aresample=async=1` for interior gaps and
+the unchanged strict PCM cap. Windows FFmpeg 9 and the packaged Linux FFmpeg 6
+both pass the boundary and gap regressions. Originals remain unchanged. See the
+[FFmpeg resampler option documentation](https://www.ffmpeg.org/ffmpeg-resampler.html).
 
 Disposable PostgreSQL HTTP/service checks cover committed AUDIO metadata and
 receipts, server duration independent of the client claim, same-key conflicts and
@@ -36,9 +43,10 @@ rejection, current independent audio deletion replay, absent erased-key
 reservations, genuine V8/v1 imports into V9, v1 AUDIO rejection and v2-to-V8
 rejection. Existing note/photo cases remain passing.
 
-The combined Docker image builds with guest audio disabled. Seven checks against
+The combined Docker image builds with guest audio disabled. Thirteen checks against
 its actual nonroot Linux JRE/FFmpeg runtime verify supported originals, hash
-rejection and the decoded streaming-duration cap, with network disabled. The
+rejection, exact boundaries and decoded streaming/timestamp-gap duration caps,
+with network disabled. The
 isolated 2 GB app smoke also passes staging access/assets, private text commit/
 retry/concurrency, SQL/bcrypt couple sessions, Secure cookies, CSRF/logout/account
 revocation, restart and persisted login caps. Its temporary resources are removed;

@@ -119,9 +119,10 @@ public class AudioVerifier {
             checkHeaderDuration(stream.path("duration"));
             var decode = new ArrayList<>(List.of(ffmpeg, "-nostdin", "-v", "warning", "-max_alloc", "67108864", "-xerror", "-err_detect", "explode", "-threads", "1"));
             decode.addAll(input);
-            // Fill timestamp gaps with silence so container timing cannot bypass the playback duration cap.
+            // Count playable samples and fill interior timestamp gaps. Pinning first_pts to zero would
+            // add demuxer/codec startup padding (not playable audio) on older WebM/Opus runtimes.
             decode.addAll(List.of("-map", "0:a:0", "-vn", "-sn", "-dn", "-ac", "1", "-ar", "48000",
-                    "-af", "aresample=async=1:first_pts=0", "-threads", "1", "-f", "s16le", "pipe:1"));
+                    "-af", "aresample=async=1", "-threads", "1", "-f", "s16le", "pipe:1"));
             Result decoded = run(decode, MAX_PCM_BYTES, false);
             if (decoded.exit() != 0 || decoded.errors() || decoded.bytes() == 0 || decoded.bytes() % 2 != 0) throw invalid();
             long durationMs = (decoded.bytes() / 2 * 1000 + 47_999) / 48_000;

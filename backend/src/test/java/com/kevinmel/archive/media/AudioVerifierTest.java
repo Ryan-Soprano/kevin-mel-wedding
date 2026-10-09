@@ -44,11 +44,34 @@ class AudioVerifierTest {
         assertInvalid(() -> verifier.verify(original, asset(original, "audio/webm")));
     }
 
-    @Test void acceptsTwoMinuteBoundaryAndRejectsMatroskaDisguisedAsWebm() {
-        byte[] boundary = AudioFixtures.audio("audio/webm", 120);
-        assertEquals(120_000, verifier.verify(boundary, asset(boundary, "audio/webm")).durationMs());
+    @ParameterizedTest
+    @ValueSource(strings = {"audio/webm", "audio/ogg", "audio/mp4"})
+    void acceptsTwoMinuteBoundaryWithoutAddingCodecStartupPadding(String type) {
+        byte[] boundary = AudioFixtures.audio(type, 120);
+        assertEquals(120_000, verifier.verify(boundary, asset(boundary, type)).durationMs());
+    }
+
+    @Test void rejectsMatroskaDisguisedAsWebm() {
         byte[] matroska = AudioFixtures.generate("audio/webm", 1, List.of("-f", "matroska"));
         assertInvalid(() -> verifier.verify(matroska, asset(matroska, "audio/webm")));
+    }
+
+    @Test void rejectsStreamingWebmJustBeyondTwoMinutes() {
+        byte[] original = AudioFixtures.generate("audio/webm", 120.01, List.of("-live", "1"));
+        assertInvalid(() -> verifier.verify(original, asset(original, "audio/webm")));
+    }
+
+    @Test void countsInteriorTimestampGapInPlaybackDuration() {
+        byte[] original = AudioFixtures.generate("audio/webm", 2,
+                List.of("-af", "asetpts=PTS+gte(T\\,1)/TB", "-live", "1"));
+        long actual = verifier.verify(original, asset(original, "audio/webm")).durationMs();
+        assertTrue(actual >= 2_990 && actual <= 3_010, "Timestamp gap duration: " + actual);
+    }
+
+    @Test void rejectsTimestampGapThatExceedsCapWithoutHeaderDuration() {
+        byte[] original = AudioFixtures.generate("audio/webm", 2,
+                List.of("-af", "asetpts=PTS+gte(T\\,1)*119/TB", "-live", "1"));
+        assertInvalid(() -> verifier.verify(original, asset(original, "audio/webm")));
     }
 
     @ParameterizedTest
