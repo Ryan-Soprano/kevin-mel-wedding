@@ -1,0 +1,97 @@
+.private-inbox {
+  max-width: 760px;
+  overflow-wrap: anywhere;
+}
+
+.private-inbox h1:focus {
+  outline: none;
+}
+
+.inbox-account,
+.inbox-filters,
+.inbox-pagination,
+.inbox-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 20px 0;
+}
+
+.inbox-account {
+  justify-content: space-between;
+}
+
+.inbox-account p,
+.inbox-actions p {
+  margin: 0;
+}
+
+.inbox-filters [aria-pressed="true"] {
+  color: var(--color-surface);
+  background: var(--color-primary);
+}
+
+.inbox-list {
+  display: grid;
+  gap: 20px;
+  padding: 0;
+  list-style: none;
+}
+
+.inbox-card {
+  padding: 20px;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-surface);
+  min-width: 0;
+}
+
+.inbox-card h2 {
+  margin-top: 0;
+  font-size: 1.25rem;
+}
+
+.inbox-excerpt,
+.inbox-note {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.inbox-note {
+  padding: 20px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 8px;
+  background: var(--color-surface);
+}
+
+.inbox-detail {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.inbox-detail > button {
+  width: fit-content;
+  max-width: 100%;
+}
+
+.inbox-original {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 8px;
+}
+
+.inbox-download {
+  display: inline-flex;
+  align-items: center;
+  min-height: 48px;
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+.inbox-download:focus-visible {
+  outline: 3px solid var(--color-primary);
+  outline-offset: 3px;
+}
