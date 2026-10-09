@@ -32,17 +32,29 @@ jobs:
       - name: Make Maven wrapper executable
         run: chmod +x backend/mvnw
 
+      - name: Set weekly image cache key
+        id: image-cache-week
+        run: echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore test container images
+        id: test-images-cache
+        uses: actions/cache/restore@v6
+        timeout-minutes: 2
+        with:
+          path: ${{ runner.temp }}/test-container-images.tar
+          key: ci-images-${{ runner.os }}-${{ runner.arch }}-${{ steps.image-cache-week.outputs.week }}-${{ hashFiles('scripts/prepare-ci-images.sh') }}
+
       - name: Prepare test container images
-        timeout-minutes: 3
-        run: |
-          # Recheck Alpine/Ryuk helper versions when upgrading Testcontainers.
-          # Docker Official Images on ECR Public avoid shared Docker Hub pull limits.
-          docker pull public.ecr.aws/docker/library/postgres:17
-          docker tag public.ecr.aws/docker/library/postgres:17 postgres:17
-          docker pull public.ecr.aws/docker/library/alpine:3.17
-          docker tag public.ecr.aws/docker/library/alpine:3.17 alpine:3.17
-          docker pull "$TESTCONTAINERS_RYUK_CONTAINER_IMAGE"
-          docker image inspect postgres:17 alpine:3.17 "$TESTCONTAINERS_RYUK_CONTAINER_IMAGE" --format '{{.RepoTags}} {{.Id}}'
+        timeout-minutes: 5
+        run: bash scripts/prepare-ci-images.sh "$RUNNER_TEMP/test-container-images.tar"
+
+      - name: Save test container images
+        if: steps.test-images-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        timeout-minutes: 2
+        with:
+          path: ${{ runner.temp }}/test-container-images.tar
+          key: ${{ steps.test-images-cache.outputs.cache-primary-key }}
 
       - name: Install audio verification runtime
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
