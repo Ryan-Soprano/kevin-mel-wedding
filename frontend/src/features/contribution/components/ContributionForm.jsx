@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 
 import { ApiError } from "../../../shared/api/apiClient.js";
 import { normalizeTextContribution } from "../../../shared/api/archiveApi.js";
@@ -6,7 +6,9 @@ import { createTextSubmission } from "../api/textSubmission.js";
 
 const FIELD_NAMES = new Set(["guestName", "message"]);
 
-export default function ContributionForm() {
+export default function ContributionForm({
+  active = true, onFlowStateChange, onDone, onShareAnother,
+} = {}) {
   const submission = useRef(null);
   if (submission.current === null) submission.current = createTextSubmission();
   const nameInput = useRef(null);
@@ -25,6 +27,14 @@ export default function ContributionForm() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [pending, setPending] = useState(false);
   const [retryAfter, setRetryAfter] = useState(0);
+  const busy = isSubmitting || retryAfter > 0;
+  const complete = step === "success" || step === "done";
+  const hasDraft = !complete && (guestName.length > 0 || message.length > 0 || preview !== null);
+  const reportFlow = useEffectEvent(state => onFlowStateChange?.(state));
+
+  useEffect(() => {
+    reportFlow({ busy, pending, hasDraft, complete });
+  }, [busy, pending, hasDraft, complete]);
 
   useEffect(() => {
     if (!retryAfter) return;
@@ -33,6 +43,7 @@ export default function ContributionForm() {
   }, [retryAfter]);
 
   useEffect(() => {
+    if (!active) return;
     if (step === "compose" && focusField.current) {
       (focusField.current === "guestName" ? nameInput : messageInput).current?.focus();
       focusField.current = null;
@@ -41,7 +52,7 @@ export default function ContributionForm() {
     } else if (step === "success" || step === "done") {
       resultHeading.current?.focus();
     }
-  }, [step]);
+  }, [active, step]);
 
   function showValidation(failure) {
     const next = {};
@@ -56,8 +67,10 @@ export default function ContributionForm() {
     setError("");
     focusField.current = next.guestName ? "guestName" : "message";
     if (step === "compose") {
-      (focusField.current === "guestName" ? nameInput : messageInput).current?.focus();
-      focusField.current = null;
+      if (active) {
+        (focusField.current === "guestName" ? nameInput : messageInput).current?.focus();
+        focusField.current = null;
+      }
     } else {
       setStep("compose");
     }
@@ -109,7 +122,7 @@ export default function ContributionForm() {
     }
   }
 
-  function startAnother() {
+  function startAnother(shouldFocus = true) {
     submission.current.startAnother();
     setGuestName("");
     setMessage("");
@@ -118,11 +131,24 @@ export default function ContributionForm() {
     setError("");
     setPending(false);
     setRetryAfter(0);
-    focusField.current = "message";
+    focusField.current = shouldFocus ? "message" : null;
     setStep("compose");
   }
 
-  const busy = isSubmitting || retryAfter > 0;
+  function finish() {
+    if (onDone) {
+      startAnother(false);
+      onDone();
+    } else {
+      setStep("done");
+    }
+  }
+
+  function shareAnother() {
+    startAnother(!onShareAnother);
+    onShareAnother?.();
+  }
+
   return (
     <div className="contribution-flow">
       {step === "compose" && (
@@ -154,7 +180,7 @@ export default function ContributionForm() {
       {step === "review" && (
         <section className="note-review" aria-labelledby="review-heading" aria-busy={isSubmitting}>
           <h2 id="review-heading" ref={reviewHeading} tabIndex={-1}>Ready to send?</h2>
-          <p>From: {preview.guestName ?? "Name not provided"}</p>
+          <p style={{ overflowWrap: "anywhere" }}>From: {preview.guestName ?? "Name not provided"}</p>
           <p className="note-review__message">{preview.message}</p>
           <p>Only Kevin and Melanie can review this note. It will not appear publicly.</p>
           <p className="visually-hidden" role="status" aria-live="polite">{isSubmitting ? "Sending your note…" : ""}</p>
@@ -173,8 +199,8 @@ export default function ContributionForm() {
         <section className="note-result" aria-labelledby="result-heading">
           <h2 id="result-heading" ref={resultHeading} tabIndex={-1}>Thank you — your note was saved for Kevin and Melanie.</h2>
           <p>They can review it privately when their archive is ready.</p>
-          <button type="button" className="button-secondary" onClick={() => setStep("done")}>Done</button>
-          <button type="button" onClick={startAnother}>Write another note</button>
+          <button type="button" className="button-secondary" onClick={finish}>Done</button>
+          <button type="button" onClick={shareAnother}>{onDone || onShareAnother ? "Share another memory" : "Write another note"}</button>
         </section>
       )}
 

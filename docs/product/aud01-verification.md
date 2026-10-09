@@ -1,6 +1,6 @@
 # AUD-01 local audio feasibility check
 
-Prepared October 5, 2026 for AUD-01 and [D-03 / D-04](../decisions/contribution-and-audio-limits.md). The disposable probe is ready for approved HTTPS staging at **`/staging/audio`**. It is separate from the wedding guest UI, sends no audio or evidence to an API, and does not implement production AUD-02/AUD-03 recording, storage or server validation. The October 6 iPhone Safari report verifies basic capture, audible replay and discard; remaining Safari controls and physical Android Chrome acceptance stay pending. Ryan chose emulator checks now while retaining the physical Android requirement. Actual Android tablet hardware can provide supplemental evidence recorded under its own environment label; it does not satisfy physical Android phone acceptance.
+Prepared October 5, 2026 for AUD-01 and [D-03 / D-04](../decisions/contribution-and-audio-limits.md). The disposable probe is ready for approved HTTPS staging at **`/staging/audio`**. It is separate from the wedding guest UI, sends no audio or evidence to an API, and does not implement production AUD-02/AUD-03 recording, storage or server validation. The October 6 iPhone Safari report verifies basic capture, audible replay and discard; remaining Safari controls and physical Android Chrome acceptance stay pending. Ryan deferred further audio/device checks on October 9 while retaining the physical Android requirement. Actual Android tablet hardware can provide supplemental evidence recorded under its own environment label; it does not satisfy physical Android phone acceptance.
 
 ## What is prepared and locally checked
 
@@ -27,7 +27,7 @@ Ryan approved a free temporary Cloudflare Quick Tunnel for the isolated audio-on
 
 Normal certificate-valid public HTTPS GETs return exact source bytes, `no-store`, microphone-self and `connect-src 'none'`; app/API/results/private-source routes and POST/PUT return 404. Browser page loading passes without a microphone prompt or recording. The previous preparation image `sha256:ab96cee5cdbef2bab0611865f8d340d0b4c1868b1840203c79b0e23eb1345eab` separately passes actual-JAR then-current-file/tablet-label, mandatory staging admission and denied private-path checks; the locally running note app remains on the previously verified image.
 
-Anyone with the temporary URL can open these static test files. The URL is recorded in the private acceptance tracker and local test artifacts; stopping the tunnel ends remote access. Audio and technical results stay on each tester's device unless the tester deliberately downloads and transfers them. Use this approved URL for iPhone Safari and remote Android tablet microphone/format/replay evidence. The preview cannot verify the full written-note fallback, production audio upload/validation, full-app HTTPS sessions, R2 or physical Android phone acceptance. Those gates remain explicit in the matrix.
+Anyone with the temporary URL can open these static test files. The URL is recorded in the private acceptance tracker and local test artifacts; stopping the tunnel ends remote access. Audio and technical results stay on each tester's device unless the tester deliberately downloads and transfers them. The approved preview was stopped on October 9 when Ryan deferred further audio/device checks; its temporary URL is historical. Resume with a new owned preview only when testing resumes. The preview cannot verify the full written-note fallback, production audio upload/validation, full-app HTTPS sessions, R2 or physical Android phone acceptance. Those gates remain explicit in the matrix.
 
 ## Device procedure
 
@@ -41,7 +41,7 @@ The operator marks generated speaker audibility, permission, record/stop, audibl
 
 Existing-file/full written-note fallback, interruption, two-minute/25 MB boundaries, accessibility and same-byte cross-device replay remain untested. WebM with declared Opus now has iPhone Safari and DuckDuckGo capture/replay evidence; final production acceptance still requires the retained Android phone and actual server content/duration/codec verification. No AUD-01/D-03/D-04 status becomes Done from this partial report.
 
-The approved free audio-only preview was restarted October 6, with a new temporary URL recorded in the tracker/local state. It serves the exact four current files through normal certificate-valid HTTPS, retains microphone-self/no-store/connect-src-none, and exposes no archive/API/database/R2. The previous session's URL remains historical. No paid resource or full-app deployment is introduced.
+The approved free audio-only preview was restarted October 6, with a new temporary URL recorded in the tracker/local state. It serves the exact four current files through normal certificate-valid HTTPS, retains microphone-self/no-store/connect-src-none, and exposes no archive/API/database/R2. The preview was stopped October 9 when further device/audio checks were deferred; both temporary URLs are historical. No paid resource or full-app deployment is introduced.
 
 ### Safari follow-up operator report — 2026-10-06
 

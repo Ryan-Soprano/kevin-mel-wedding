@@ -74,6 +74,9 @@ class ContributionUpgradeRestartTest {
             assertThat(saved.statusCode()).isEqualTo(201);
             savedBody = saved.body();
             assertThat(first.getBean(Flyway.class).migrate().migrationsExecuted).isZero();
+            var jdbc = first.getBean(org.springframework.jdbc.core.simple.JdbcClient.class);
+            assertThat(jdbc.sql("SELECT revision FROM memory WHERE id = :id")
+                    .param("id", legacyMemory).query(Integer.class).single()).isEqualTo(1);
         }
         try (var restarted = start()) {
             var replay = request(restarted, "POST", "/api/contributions", key, "{\"message\":\"restart fixture\"}");
