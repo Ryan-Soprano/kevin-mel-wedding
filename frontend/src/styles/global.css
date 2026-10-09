@@ -4,6 +4,10 @@
   box-sizing: border-box;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 body {
   margin: 0;
   font-family: system-ui, sans-serif;
@@ -258,6 +262,60 @@ button:focus-visible {
 .photo-batch-actions,
 .photo-batch-summary {
   min-width: 0;
+}
+
+.guest-header {
+  margin-bottom: 28px;
+}
+
+.guest-couple {
+  color: var(--color-primary);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.guest-page h1:focus {
+  outline: none;
+}
+
+.guest-welcome,
+.guest-choices,
+.guest-finished,
+.guest-navigation {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.guest-welcome > button,
+.guest-finished > button,
+.guest-navigation > button,
+.guest-choices > .button-secondary {
+  width: fit-content;
+  max-width: 100%;
+}
+
+.guest-help {
+  color: var(--color-muted);
+  font-size: 0.875rem;
+  overflow-wrap: anywhere;
+}
+
+.guest-choice {
+  display: grid;
+  gap: 8px;
+  padding: 20px;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.guest-choice__title {
+  font-size: 1.25rem;
+  font-weight: 650;
+}
+
+.guest-navigation {
+  margin-bottom: 28px;
 }
 
 .photo-picker,

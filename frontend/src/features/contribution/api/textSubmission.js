@@ -1,6 +1,8 @@
 import { createArchiveApi, normalizeTextContribution } from "../../../shared/api/archiveApi.js";
 import { ApiError } from "../../../shared/api/apiClient.js";
 
+const REQUEST_TIMEOUT_MS = 30_000;
+
 /** Own one logical message/key until its outcome is known; never retry automatically. */
 export function createTextSubmission({ api = createArchiveApi(), randomUUID = () => crypto.randomUUID(), now = Date.now } = {}) {
   let draft = null;
@@ -31,7 +33,22 @@ export function createTextSubmission({ api = createArchiveApi(), randomUUID = ()
         draft = Object.freeze(normalized);
         idempotencyKey = randomUUID();
       }
-      inFlight = Promise.resolve().then(() => api.createTextContribution(draft, { idempotencyKey }))
+      const controller = new AbortController();
+      let timer;
+      // Bound the entire request, including a response body that never finishes.
+      // Racing also ignores a late receipt from a transport that ignores abort.
+      const request = Promise.resolve().then(() => api.createTextContribution(draft, {
+        idempotencyKey, signal: controller.signal,
+      }));
+      const deadline = new Promise((_, reject) => {
+        timer = setTimeout(() => {
+          reject(new ApiError("Could not confirm your note in time. Keep this page open and try again.", {
+            code: "REQUEST_TIMEOUT", unknownOutcome: true,
+          }));
+          controller.abort();
+        }, REQUEST_TIMEOUT_MS);
+      });
+      inFlight = Promise.race([request, deadline])
         .then((saved) => {
           receipt = saved;
           return saved;
@@ -45,7 +62,7 @@ export function createTextSubmission({ api = createArchiveApi(), randomUUID = ()
             idempotencyKey = null;
           }
           throw error;
-        }).finally(() => { inFlight = null; });
+        }).finally(() => { clearTimeout(timer); inFlight = null; });
       return inFlight;
     },
     startAnother() {
