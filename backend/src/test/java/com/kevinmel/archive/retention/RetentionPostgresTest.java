@@ -306,7 +306,8 @@ class RetentionPostgresTest {
         var manager = new JdbcTransactionManager(source);
         var contributions = new ContributionRepository(db);
         return new Fixture(db, new RetentionRepository(db, manager), contributions,
-                new PhotoRepository(db, contributions, Clock.fixed(NOW, ZoneOffset.UTC)), new TransactionTemplate(manager));
+                new PhotoRepository(db, contributions, Clock.fixed(NOW, ZoneOffset.UTC),
+                        new com.kevinmel.archive.media.PhotoAdmissionPolicy(false, 7_500_000_000L, 7_500_000_000L)), new TransactionTemplate(manager));
     }
 
     private RetentionService service(Fixture target, Instant now) {

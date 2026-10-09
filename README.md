@@ -12,6 +12,8 @@ This is a learning project. Explain and agree on infrastructure, dependencies, a
 
 ## Local development
 
+SEC-01 adds durable anonymous note/photo limits, bounded JSON, exact-size upload signing, original/staging reservations and an operator upload pause. The frontend preserves deliberate same-key recovery, and the inbox clears private content on lifecycle changes before rechecking access. See [guest protection verification](docs/api/v1/anonymous-protection-verification.md), [pause/capacity/cleanup](docs/runbooks/guest-protection.md), and [privacy review](docs/api/v1/privacy-verification.md). Actual hosted/provider/device and audio acceptance remain tracked release checks.
+
 The application saves named or anonymous text messages privately in PostgreSQL and returns committed receipts with safe same-key retries. MED-01 adds a single-photo form and an opt-in private R2 upload/finalize path. Photo storage defaults disabled. Ryan's configured test bucket has passed desktop PNG operator comparison/restart/replay and scripted real-R2 JPEG/WebP upload, response recovery and grant restriction/expiry checks; physical-phone, additional operator comparison and bucket-settings acceptance are pending. Follow the [photo storage setup runbook](docs/runbooks/private-photo-storage.md) and [verification record](docs/api/v1/photo-verification.md). Use synthetic content during local development. Production collection still requires the security, operations, and release work tracked in Notion.
 
 ### Prerequisites

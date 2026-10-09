@@ -23,7 +23,11 @@ class PhotoRestartTest {
         @Bean @Primary ObjectStorage fixtureStorage() { return externalStorage; }
     }
     org.springframework.context.ConfigurableApplicationContext start() {
+        return start(false);
+    }
+    org.springframework.context.ConfigurableApplicationContext start(boolean uploadsPaused) {
         return new SpringApplicationBuilder(MemoryArchiveApplication.class, Storage.class).run("--server.port=0",
+                "--archive.media.uploads-paused=" + uploadsPaused,
                 "--spring.datasource.url=" + postgres.getJdbcUrl(), "--spring.datasource.username=" + postgres.getUsername(),
                 "--spring.datasource.password=" + postgres.getPassword());
     }
@@ -41,7 +45,7 @@ class PhotoRestartTest {
             grant = service.authorize(contribution, memory, key).grantId();
             externalStorage.objects.put("staging/" + grant, bytes);
         }
-        try (var second = start()) {
+        try (var second = start(true)) {
             var service = second.getBean(MediaService.class);
             var done = service.finalizeUpload(contribution, memory, key, Map.of("grantId", grant.toString()));
             assertThat(done.completion()).isEqualTo("COMPLETE");

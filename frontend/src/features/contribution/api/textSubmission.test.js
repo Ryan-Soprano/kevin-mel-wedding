@@ -220,3 +220,33 @@ test("a rejected request clears its deadline rather than aborting later", async 
   assert.equal(signal.aborted, false);
   assert.equal(submission.pending, false);
 });
+
+for (const [status, code, seconds] of [[429, "RATE_LIMITED", 17], [503, "SERVICE_UNAVAILABLE", 60]]) {
+  test(`HTTP ${status} Retry-After retains the note and key through real-adapter deliberate recovery`, async () => {
+    let time = 1000, keys = 0;
+    const calls = [];
+    const api = createArchiveApi({ client: createApiClient({ fetchImpl: async (_, options) => {
+      calls.push(options);
+      return new Response(JSON.stringify(calls.length === 1
+        ? { error: { code, message: "Please wait before retrying.", fieldErrors: [] } } : TEXT_RECEIPT), {
+        status: calls.length === 1 ? status : 201,
+        headers: { "Content-Type": "application/json", ...(calls.length === 1 ? { "Retry-After": String(seconds) } : {}) },
+      });
+    } }) });
+    const submission = createTextSubmission({ api, now: () => time,
+      randomUUID: () => { keys++; return IDS.key; } });
+    await assert.rejects(submission.submit(draft), { status, code, retryAfterSeconds: seconds });
+    assert.equal(submission.pending, true); assert.equal(submission.receipt, null);
+    assert.throws(() => submission.startAnother());
+    assert.throws(() => submission.submit(draft), { status: 429, retryAfterSeconds: seconds });
+    assert.equal(calls.length, 1); assert.equal(keys, 1);
+    time += seconds * 1000;
+    assert.equal(calls.length, 1, "expiry does not schedule a request");
+    assert.throws(() => submission.submit({ message: "changed" }), { code: "DRAFT_CHANGED" });
+    const receipt = await submission.submit(draft);
+    assert.equal(receipt.completion, "COMPLETE"); assert.equal(submission.pending, false);
+    assert.equal(calls.length, 2); assert.equal(keys, 1);
+    assert.equal(calls[1].body, calls[0].body);
+    assert.equal(calls[1].headers.get("Idempotency-Key"), calls[0].headers.get("Idempotency-Key"));
+  });
+}

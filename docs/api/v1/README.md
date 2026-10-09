@@ -19,6 +19,10 @@ The [staging package](../../runbooks/staging-deployment.md) serves production fr
 
 ## Shared conventions
 
+SEC-01 protects note/photo creation, receipt, grant and finalize before body parsing with durable global/shared-connection/retry-key limits. Quota failures return `429 RATE_LIMITED` with a remaining-window `Retry-After`; database admission failures return safe `503 SERVICE_UNAVAILABLE`. Creation accepts at most 65,536 JSON bytes, finalize 1,024 bytes, and receipt/grant routes reject bodies. Oversized JSON returns `413 PAYLOAD_TOO_LARGE`; retain the intent and report the boundary instead of silently resending the same oversized request. See [quota and verification details](anonymous-protection-verification.md).
+
+New photo intents and temporary permissions have separate serialized 7.5 GB reservation budgets. Pausing/capacity failures return `503 MEDIA_UNAVAILABLE` with `Retry-After: 60`; busy finalization returns the same code with `Retry-After: 5`. Honor valid 429/503 delays, retain original input/key and saved siblings, and retry deliberately. A pause preserves equivalent intent replay, existing unexpired permission recovery and finalization. Expired staging reservations require confirmed cleanup before release. See the [operator runbook](../../runbooks/guest-protection.md).
+
 - Same-origin REST/JSON under `/api`. Send `Accept: application/json`,
   `X-Api-Contract: 1`, and `Content-Type: application/json` for bodies.
 - The v1 server must honor version 1 without silently falling back to echo.
@@ -172,7 +176,7 @@ size/type/checksum as supported by storage. Expose only Content-Type and optiona
 x-amz-checksum-sha256 upload headers. PUT bytes over HTTPS with cookies omitted
 and redirects rejected. Never forward app cookies, retry/CSRF/authorization headers.
 
-MED-01 grant POST has no request body. R2 signs Content-Type, method PUT, and a unique temporary `staging/<grant UUID>` key; size/checksum are enforced during finalize rather than by an R2 checksum header. Presigned PUTs can be reused until expiry, so finalization publishes only the verified candidate bytes to a separate server-only `originals/<asset UUID>` key. Later browser staging overwrites cannot replace the saved original. Neither filename nor guest text enters object keys. No public GET/playback link appears in a guest receipt. Storage is disabled by default; disabled/unavailable IO returns safe 503 MEDIA_UNAVAILABLE, and database/commit failure remains 503 SERVICE_UNAVAILABLE.
+MED-01 grant POST has no request body. SEC-01 R2 signatures bind Content-Type, expected Content-Length, method PUT and a unique temporary `staging/<grant UUID>` key. The browser derives Content-Length from the original File; it is not an application-set grant header. Size/checksum/format remain independently enforced during finalize rather than by an R2 checksum header. Retrying an unexpired grant reuses its identity/key/deadline; obtaining a fresh grant still returns 201. Presigned PUTs can be reused until expiry, so finalization publishes only the verified candidate bytes to a separate server-only `originals/<asset UUID>` key. Later browser staging overwrites cannot replace the saved original. Neither filename nor guest text enters object keys. No public GET/playback link appears in a guest receipt. Storage is disabled by default; disabled/unavailable IO returns safe 503 MEDIA_UNAVAILABLE, and database/commit failure remains 503 SERVICE_UNAVAILABLE. Actual provider/browser acceptance of the changed size signature remains open.
 
 Then POST finalize with `{"grantId":"…"}`. Server verifies object existence,
 actual size, detected format, checksum, and audio duration before committing
@@ -307,9 +311,9 @@ use items[0].byteSize etc. Render text, never HTML.
 | 409 IDEMPOTENCY_CONFLICT / UPLOAD_INCOMPLETE | Do not auto-replace key; reconcile |
 | 410 UPLOAD_GRANT_EXPIRED | Renew incomplete item's grant |
 | 412 REVIEW_CONFLICT / 428 PRECONDITION_REQUIRED | Reload; deliberate review |
-| 413 PAYLOAD_TOO_LARGE / 422 INVALID_MEDIA | Correct file; retain successful siblings |
+| 413 PAYLOAD_TOO_LARGE / 422 INVALID_MEDIA | Respect JSON/file limits; retain input and successful siblings |
 | 429 RATE_LIMITED | Honor Retry-After seconds/HTTP-date; preserve work |
-| 503 SERVICE_UNAVAILABLE / MEDIA_UNAVAILABLE | Retry later; never imply saved |
+| 503 SERVICE_UNAVAILABLE / MEDIA_UNAVAILABLE | Honor valid Retry-After, retry deliberately with retained identity; never imply saved |
 
 ApiError exposes code, status, safe requestId (or null), fieldErrors,
 retryAfterSeconds, unknownOutcome. Network/cancelled mutations and mutation 5xx

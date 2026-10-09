@@ -2,6 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createPhotoBatchSubmission } from "./photoBatchSubmission.js";
 import { createMockArchiveApi } from "../../../shared/api/mockArchiveApi.js";
+import { createArchiveApi } from "../../../shared/api/archiveApi.js";
+import { createApiClient } from "../../../shared/api/apiClient.js";
 
 // Exercises the real JSON transport/decoders against an isolated synthetic server.
 // The mock does not inspect image content or prove R2/provider readiness.
@@ -136,3 +138,99 @@ test("an explicit new batch after completion uses new group identity while old c
   const creates = f.calls.filter((call) => call.method === "createMediaContribution");
   assert.notEqual(creates[0].args[1].idempotencyKey, creates[1].args[1].idempotencyKey);
 });
+
+function protectedFixture(stage, status, code, seconds) {
+  let time = 1000, failed = false, intent = null, nextGrant = 500, keyCount = 0;
+  const calls = [], grants = new Map(), saved = [false, false, false], hashes = new Map();
+  const id = value => `00000000-0000-4000-8000-${String(value).padStart(12, "0")}`;
+  const photos = saved.map((_, index) => ({ id: id(index + 1),
+    file: new File([`original ${index}`], `photo-${index}.png`, { type: "image/png" }), caption: `caption ${index}` }));
+  const reply = (body, responseStatus = 200, headers = {}) => new Response(JSON.stringify(body), {
+    status: responseStatus, headers: { "Content-Type": "application/json", ...headers },
+  });
+  const receipt = () => ({ contributionId: id(90), eventKey: "kevin-mel-wedding", createdAt: "2026-10-09T12:00:00Z",
+    completion: saved.every(Boolean) ? "COMPLETE" : saved.some(Boolean) ? "PARTIAL" : "PENDING",
+    memories: intent.items.map((item, index) => ({ memoryId: id(100 + index), clientItemId: item.clientItemId,
+      memoryType: "PHOTO", reviewStatus: "PENDING", visibility: "COUPLE_ONLY", uploadState: saved[index] ? "UPLOADED" : "PENDING" })),
+  });
+  function blocked(operation, index = 1) {
+    if (failed || operation !== stage || index !== 1) return null;
+    failed = true;
+    return reply({ error: { code, message: "Please wait, then retry the same photos.", fieldErrors: [] } },
+      status, { "Retry-After": String(seconds) });
+  }
+  const api = createArchiveApi({ client: createApiClient({ fetchImpl: async (url, options) => {
+    const operation = url === "/api/contributions" ? "create" : url.endsWith("/receipt") ? "receipt"
+      : url.endsWith("/upload-grants") ? "grant" : "finalize";
+    const index = operation === "create" || operation === "receipt" ? 1 : Number(url.split("/")[5].slice(-12)) - 100;
+    calls.push({ operation, index, options });
+    const failure = blocked(operation, index); if (failure) return failure;
+    if (operation === "create") { intent = JSON.parse(options.body); return reply(receipt(), 201); }
+    if (operation === "receipt") return reply(receipt());
+    if (operation === "grant") {
+      const grantId = id(nextGrant++);
+      grants.set(grantId, { index, uploaded: false });
+      return reply({ grantId, method: "PUT", uploadUrl: `https://storage.example/${grantId}`,
+        expiresAt: "2099-01-01T00:00:00Z", headers: { "Content-Type": "image/png" } }, 201);
+    }
+    const grant = grants.get(JSON.parse(options.body).grantId);
+    if (!grant.uploaded) return reply({ error: { code: "UPLOAD_INCOMPLETE", message: "Retry the upload.", fieldErrors: [] } }, 409);
+    saved[index] = true; return reply(receipt());
+  } }), uploadFetch: async (url, options) => {
+    const grant = grants.get(new URL(url).pathname.slice(1));
+    calls.push({ operation: "upload", index: grant.index, options });
+    const failure = blocked("upload", grant.index); if (failure) return failure;
+    grant.uploaded = true; return new Response(null, { status: 200 });
+  } });
+  const submission = createPhotoBatchSubmission({ api, now: () => time,
+    randomUUID: () => { keyCount++; return id(900); }, digest: async file => {
+      hashes.set(file, (hashes.get(file) ?? 0) + 1); return "1".repeat(64);
+    } });
+  return { submission, calls, photos, hashes, raw: { guestName: " Guest ", photos },
+    advance: () => { time += seconds * 1000; }, get keyCount() { return keyCount; } };
+}
+
+for (const [label, stage, status, code, seconds] of [
+  ["throttled creation", "create", 429, "RATE_LIMITED", 17],
+  ["paused or capacity-limited creation", "create", 503, "MEDIA_UNAVAILABLE", 60],
+  ["paused grants", "grant", 503, "MEDIA_UNAVAILABLE", 60],
+  ["busy finalization", "finalize", 503, "MEDIA_UNAVAILABLE", 5],
+  ["storage delay", "upload", 503, "UPLOAD_FAILED", 9],
+]) {
+  test(`${label} pauses the batch through the real adapter and deliberately recovers the same originals`, async () => {
+    const f = protectedFixture(stage, status, code, seconds);
+    let result;
+    if (stage === "create") {
+      await assert.rejects(f.submission.submit(f.raw), { status, code, retryAfterSeconds: seconds });
+      result = f.submission.snapshot;
+    } else result = await f.submission.submit(f.raw);
+    assert.equal(result.complete, false); assert.equal(result.retained, true);
+    assert.equal(result.savedCount, stage === "create" ? 0 : 1);
+    assert.equal(result.items[2].status, "queued", "later siblings do not issue requests during a pause");
+    assert.equal(result.retryAfterSeconds, seconds); assert.equal(result.error.code, code);
+    assert.equal(result.canStartAnother, false); assert.ok(result.items.every(item => !item.retryEligible));
+    assert.throws(() => f.submission.startAnother(), { code: "BATCH_UNCONFIRMED" });
+    const before = f.calls.length;
+    assert.throws(() => f.submission.retry(), { status: 429, retryAfterSeconds: seconds });
+    assert.equal(f.calls.length, before); f.advance();
+    assert.equal(f.calls.length, before, "delay expiry does not start a request");
+    assert.throws(() => f.submission.submit({ ...f.raw, photos: [{ ...f.photos[0], caption: "changed" }, ...f.photos.slice(1)] }),
+      { code: "DRAFT_CHANGED" });
+    const recovered = await f.submission.retry();
+    assert.equal(recovered.complete, true); assert.equal(recovered.savedCount, 3);
+    assert.equal(f.keyCount, 1); assert.ok([...f.hashes.values()].every(count => count === 1));
+    const requests = f.calls.filter(call => call.operation !== "upload");
+    assert.ok(requests.every(call => call.options.headers.get("Idempotency-Key") === requests[0].options.headers.get("Idempotency-Key")));
+    const creates = requests.filter(call => call.operation === "create");
+    if (stage === "create") assert.equal(creates[1].options.body, creates[0].options.body);
+    else assert.equal(creates.length, 1);
+    const uploads = f.calls.filter(call => call.operation === "upload");
+    assert.ok(uploads.every(call => call.options.body === f.photos[call.index].file));
+    assert.equal(uploads.filter(call => call.index === 0).length, 1, "saved sibling is not transferred again");
+    if (stage === "finalize") {
+      assert.equal(uploads.filter(call => call.index === 1).length, 1, "busy finalization reuses the existing uploaded grant");
+      const finalizations = requests.filter(call => call.operation === "finalize" && call.index === 1);
+      assert.equal(finalizations[1].options.body, finalizations[0].options.body);
+    }
+  });
+}

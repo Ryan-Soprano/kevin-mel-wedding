@@ -139,14 +139,22 @@ public final class R2ObjectStorage implements ObjectStorage, AutoCloseable {
 
     public void requireAvailable() { /* Configured. Connection health is established by actual IO. */ }
 
-    public UploadGrant authorize(UUID id, String key, String type, Instant expires) {
-        if (!key.equals("staging/" + id) || !PhotoRequest.TYPES.contains(type)) throw new IllegalArgumentException("Invalid upload scope.");
+    public UploadGrant authorize(UUID id, String key, String type, long byteSize, Instant expires) {
+        if (!key.equals("staging/" + id) || !PhotoRequest.TYPES.contains(type)
+                || byteSize < 1 || byteSize > PhotoRequest.MAX_BYTES) throw new IllegalArgumentException("Invalid upload scope.");
         long seconds = Math.min(300, Duration.between(Instant.now(), expires).getSeconds());
         if (seconds < 1) throw StorageConfiguration.unavailable();
         try {
             var signed = signer.presignPutObject(PutObjectPresignRequest.builder()
                     .signatureDuration(Duration.ofSeconds(seconds))
-                    .putObjectRequest(PutObjectRequest.builder().bucket(bucket).key(key).contentType(type).build()).build());
+                    .putObjectRequest(PutObjectRequest.builder().bucket(bucket).key(key).contentType(type)
+                            .contentLength(byteSize).build()).build());
+            // Content-Length is signed, but browsers derive this forbidden header from the original File.
+            // Reject an SDK result that omits the boundary rather than issue an unbounded permission.
+            if (!signed.signedHeaders().containsKey("content-length")
+                    || !signed.signedHeaders().get("content-length").equals(java.util.List.of(Long.toString(byteSize)))) {
+                throw StorageConfiguration.unavailable();
+            }
             return new UploadGrant(id, "PUT", signed.url().toString(), expires, Map.of("Content-Type", type));
         } catch (SdkException failure) { throw StorageConfiguration.unavailable(); }
     }

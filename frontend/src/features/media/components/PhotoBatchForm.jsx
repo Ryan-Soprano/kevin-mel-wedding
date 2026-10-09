@@ -20,7 +20,9 @@ function statusText(item) {
 }
 
 function safeError(error) {
-  if (error?.status === 429) return "Please wait before retrying. Your original photos are still here.";
+  if (error?.status === 429 || (error?.status === 503 && error?.retryAfterSeconds > 0)) {
+    return "Please wait before retrying. Keep this page open; your original photos are still here.";
+  }
   if (["VALIDATION_FAILED", "INVALID_MEDIA"].includes(error?.code) && typeof error.message === "string") return error.message;
   return "We could not confirm every photo. Keep this page open and retry the original photos that still need attention.";
 }

@@ -6,7 +6,10 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 const knownInvalid = (error) => error.code === "INVALID_MEDIA" && error.status === 422 && !error.unknownOutcome;
 const renewableGrant = (error) => !error.unknownOutcome
   && ["UPLOAD_INCOMPLETE", "UPLOAD_GRANT_EXPIRED"].includes(error.code);
+const retryDelay = (error) => [429, 503].includes(error.status)
+  && Number.isFinite(error.retryAfterSeconds) && error.retryAfterSeconds >= 0;
 const globalFailure = (error) => error.status === 429
+  || (error.status === 503 && (error.code === "MEDIA_UNAVAILABLE" || retryDelay(error)))
   || ["CONTRACT_MISMATCH", "IDEMPOTENCY_CONFLICT", "NOT_FOUND", "UNAUTHORIZED", "FORBIDDEN"].includes(error.code)
   || ([401, 403].includes(error.status) && error.code !== "UPLOAD_GRANT_EXPIRED");
 
@@ -256,7 +259,7 @@ export function createPhotoBatchSubmission({
   }
 
   function rememberFailure(entry, failure) {
-    if (failure.status === 429 && Number.isFinite(failure.retryAfterSeconds) && failure.retryAfterSeconds >= 0) {
+    if (retryDelay(failure)) {
       retryAt = now() + failure.retryAfterSeconds * 1000;
     }
     entry.error = errorDetails(failure);
@@ -286,7 +289,7 @@ export function createPhotoBatchSubmission({
     }).catch((failure) => {
       if (!disposed) {
         error = errorDetails(failure);
-        if (failure.status === 429 && Number.isFinite(failure.retryAfterSeconds) && failure.retryAfterSeconds >= 0) {
+        if (retryDelay(failure)) {
           retryAt = now() + failure.retryAfterSeconds * 1000;
         }
         // Preparation/known create validation has no accepted server intent to retain.

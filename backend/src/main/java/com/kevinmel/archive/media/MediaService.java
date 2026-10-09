@@ -20,10 +20,10 @@ public class MediaService {
     private final Clock clock;
     private final Semaphore finalizationSlots;
     public MediaService(PhotoRepository photos, PhotoFinalizer finalizer, ObjectStorage storage, Clock clock,
-            @Value("${archive.media.max-concurrent-finalizations:0}") int maxConcurrentFinalizations) {
+            @Value("${archive.media.max-concurrent-finalizations:2}") int maxConcurrentFinalizations) {
         this.photos = photos; this.finalizer = finalizer; this.storage = storage; this.clock = clock;
-        if (maxConcurrentFinalizations < 0) throw new IllegalArgumentException("Finalization limit must be nonnegative.");
-        finalizationSlots = maxConcurrentFinalizations == 0 ? null : new Semaphore(maxConcurrentFinalizations);
+        if (maxConcurrentFinalizations < 1) throw new IllegalArgumentException("Finalization limit must be positive.");
+        finalizationSlots = new Semaphore(maxConcurrentFinalizations);
     }
     public PhotoRepository.Saved create(Map<String, Object> body, String key) {
         var normalized = PhotoRequest.from(body);
@@ -36,11 +36,18 @@ public class MediaService {
         var asset = photos.lock(contributionId, memoryId, key);
         if (asset.state().equals("UPLOADED")) throw new ApiException(409, "ALREADY_COMPLETE", "This photo is already saved.");
         storage.requireAvailable();
+        var active = photos.activeGrant(asset.id(), clock.instant());
+        if (active.isPresent()) {
+            var grant = active.get();
+            return storage.authorize(grant.id(), grant.stagingKey(), asset.contentType(), asset.byteSize(), grant.expiresAt());
+        }
+        photos.requireNewUpload();
+        photos.requireStagingCapacity(asset.byteSize());
         UUID grantId = UUID.randomUUID();
         String stagingKey = "staging/" + grantId;
         var created = clock.instant();
         var expires = created.plusSeconds(300);
-        var grant = storage.authorize(grantId, stagingKey, asset.contentType(), expires);
+        var grant = storage.authorize(grantId, stagingKey, asset.contentType(), asset.byteSize(), expires);
         photos.addGrant(grantId, asset, stagingKey, created, expires);
         return grant;
     }
@@ -52,7 +59,7 @@ public class MediaService {
         }
         // Admit before the transactional read/decode/publish, so waiting requests retain no image buffers or locks.
         if (finalizationSlots != null && !finalizationSlots.tryAcquire()) {
-            throw new ApiException(503, "MEDIA_UNAVAILABLE", "Photo verification is busy. Please retry this photo.");
+            throw new ApiException(503, "MEDIA_UNAVAILABLE", "Photo verification is busy. Please retry this photo.", 5);
         }
         try {
             var result = finalizer.finalizePhoto(contributionId, memoryId, key, UUID.fromString(raw));

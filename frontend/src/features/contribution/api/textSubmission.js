@@ -53,7 +53,8 @@ export function createTextSubmission({ api = createArchiveApi(), randomUUID = ()
           receipt = saved;
           return saved;
         }).catch((error) => {
-          if (error instanceof ApiError && error.status === 429 && error.retryAfterSeconds !== null) {
+          if (error instanceof ApiError && [429, 503].includes(error.status)
+            && Number.isFinite(error.retryAfterSeconds) && error.retryAfterSeconds >= 0) {
             retryAt = now() + error.retryAfterSeconds * 1000;
           }
           // A v1 validation rejection is known not to have committed. Permit correction.

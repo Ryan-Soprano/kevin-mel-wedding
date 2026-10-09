@@ -54,6 +54,7 @@ export function createInboxController({
     photo: idlePhoto(), review: idleReview(), notice: null, pageResetVersion: 0, logoutUnconfirmed: false });
   let generation = 0, operation = null, disposed = false, objectUrl = null;
   let reviewIntent = null, reviewInFlight = null, reviewUncertain = false, inboxDirty = false;
+  let suspended = false, resuming = null;
   let notifying = false, notifyAgain = false;
   const listeners = new Set();
 
@@ -98,10 +99,10 @@ export function createInboxController({
     revokePhoto();
   }
 
-  function start(patch) {
+  function start(patch, purpose = null) {
     if (disposed) return null;
     cancel();
-    const current = { generation, controller: new AbortController() };
+    const current = { generation, controller: new AbortController(), purpose };
     operation = current;
     publish({ busy: true, error: null, photo: idlePhoto(), ...patch });
     return current;
@@ -345,7 +346,58 @@ export function createInboxController({
       if (!disposed) listeners.add(listener);
       return () => listeners.delete(listener);
     },
+    suspend() {
+      if (disposed || (suspended && !resuming)) return state;
+      // Preserve only the frozen action identity, never the displayed memory or token.
+      if (reviewIntent && reviewInFlight) reviewUncertain = true;
+      const logoutUnconfirmed = state.logoutUnconfirmed || operation?.purpose === "logout";
+      suspended = true;
+      resuming = null;
+      reviewInFlight = null;
+      cancel();
+      inboxDirty = true;
+      publish({ phase: "checking", session: null, items: EMPTY_ITEMS, nextCursor: null,
+        detail: null, photo: idlePhoto(), notice: null, busy: false, error: null, logoutUnconfirmed,
+        review: reviewIntent ? reviewState("uncertain") : idleReview(),
+        pageResetVersion: state.pageResetVersion + 1 });
+      return state;
+    },
+    resume() {
+      if (disposed || !suspended) return Promise.resolve(state);
+      if (resuming) return resuming;
+      if (state.logoutUnconfirmed) { suspended = false; return controller.logout(); }
+      const op = start({ phase: "checking", session: null, items: EMPTY_ITEMS, nextCursor: null, detail: null, notice: null });
+      const completion = run(op, async () => {
+        const session = sessionCopy(await bounded(op, signal => api.getSession({ signal })));
+        if (!session.authenticated) {
+          clearPrivate({ phase: "login", error: "Sign in again to view the archive." });
+          suspended = false;
+          return;
+        }
+        publish({ session });
+        if (reviewIntent) {
+          const memory = await bounded(op, signal => api.getMemory(reviewIntent.memoryId, { signal }));
+          publish({ phase: "detail" });
+          await reconcileReview(op, memory, "Current state reloaded after checking access. Review it before choosing another action; this does not identify who changed it.");
+        } else await page(op, state.reviewStatus, null);
+        assertCurrent(op);
+        suspended = false;
+      }, failure => {
+        if (authFailure(failure)) { suspended = false; return; }
+        if (failure?.status === 404 && reviewIntent) {
+          unavailableReview(); suspended = false; return;
+        }
+        // A failed recheck hides all content but keeps an uncertain action recoverable.
+        revokePhoto();
+        publish({ phase: "unavailable", session: null, items: EMPTY_ITEMS, nextCursor: null,
+          detail: null, photo: idlePhoto(), notice: null,
+          error: "Archive access could not be checked. Private content is hidden. Try checking access again." });
+      }).finally(() => { if (resuming === completion) resuming = null; });
+      resuming = completion;
+      return completion;
+    },
     loadSession() {
+      if (suspended) return controller.resume();
       if (reviewIntent) return Promise.resolve(state);
       if (state.logoutUnconfirmed) return controller.logout();
       const op = start({ phase: "checking", session: null, items: EMPTY_ITEMS, nextCursor: null, detail: null, notice: null });
@@ -378,7 +430,7 @@ export function createInboxController({
     },
     logout() {
       if (reviewIntent) return Promise.resolve(state);
-      const op = start({ phase: "checking", session: null, items: EMPTY_ITEMS, nextCursor: null, detail: null, logoutUnconfirmed: false });
+      const op = start({ phase: "checking", session: null, items: EMPTY_ITEMS, nextCursor: null, detail: null, logoutUnconfirmed: false }, "logout");
       return run(op, async () => {
         const fresh = await bounded(op, signal => api.getSession({ signal }));
         if (fresh.authenticated) await bounded(op, signal => api.logout({ csrfToken: fresh.csrfToken, signal }));
@@ -443,7 +495,7 @@ export function createInboxController({
     },
     reloadReview() {
       if (reviewInFlight) return reviewInFlight;
-      if (disposed || !reviewIntent || state.busy || !["uncertain", "conflict"].includes(state.review.phase)) return Promise.resolve(state);
+      if (disposed || suspended || !reviewIntent || state.busy || !["uncertain", "conflict"].includes(state.review.phase)) return Promise.resolve(state);
       const intent = reviewIntent;
       const previousPhase = state.review.phase;
       const op = start({ phase: "detail", review: reviewState("loading"), notice: null });
@@ -459,7 +511,7 @@ export function createInboxController({
     },
     refreshReviewSession() {
       if (reviewInFlight) return reviewInFlight;
-      if (disposed || !reviewIntent || state.busy || state.review.phase !== "csrf") return Promise.resolve(state);
+      if (disposed || suspended || !reviewIntent || state.busy || state.review.phase !== "csrf") return Promise.resolve(state);
       const intent = reviewIntent;
       const op = start({ phase: "detail", review: reviewState("refreshing"), notice: null });
       return rememberReviewRun(op, async () => {
@@ -484,6 +536,8 @@ export function createInboxController({
       inboxDirty = false;
       state = Object.freeze({ ...state, session: null, items: EMPTY_ITEMS, nextCursor: null,
         detail: null, photo: idlePhoto(), review: idleReview(), notice: null, busy: false, error: null });
+      suspended = true;
+      resuming = null;
       disposed = true;
       listeners.clear();
     },
