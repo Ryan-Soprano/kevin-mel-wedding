@@ -7,6 +7,8 @@ import org.springframework.boot.web.servlet.ServletListenerRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
+import org.springframework.core.env.Environment;
+import org.springframework.core.env.Profiles;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.crypto.factory.PasswordEncoderFactories;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -70,16 +72,21 @@ public class SecurityConfiguration {
     @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
     SecurityFilterChain securityFilterChain(HttpSecurity http, CsrfTokenRepository tokens,
             XorCsrfTokenRequestAttributeHandler handler, SecurityContextRepository contexts,
-            ArchiveAccountRepository accounts, ArchiveAccessPolicy policy, SecurityErrorWriter errors) throws Exception {
-        http.authorizeHttpRequests(authorize -> authorize
-                .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
+            ArchiveAccountRepository accounts, ArchiveAccessPolicy policy, SecurityErrorWriter errors,
+            Environment environment) throws Exception {
+        boolean staging = environment.acceptsProfiles(Profiles.of("staging"));
+        http.authorizeHttpRequests(authorize -> {
+            if (staging) authorize.requestMatchers(HttpMethod.GET, "/staging/audio", "/staging/audio/",
+                    "/staging/audio/recorder.js", "/staging/audio/probe-model.js", "/staging/audio/style.css").permitAll();
+            authorize.dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/health", "/api/session", "/api/contributions/*/receipt").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/session", "/api/contributions",
                         "/api/contributions/*/memories/*/upload-grants", "/api/contributions/*/memories/*/finalize").permitAll()
                 .requestMatchers(HttpMethod.DELETE, "/api/session").permitAll()
                 .requestMatchers(HttpMethod.GET, "/", "/index.html", "/assets/**", "/favicon.ico").permitAll()
                 .requestMatchers("/api/memories", "/api/memories/**").hasRole("COUPLE")
-                .anyRequest().denyAll())
+                .anyRequest().denyAll();
+        })
             .securityContext(context -> context.requireExplicitSave(true).securityContextRepository(contexts))
             .csrf(csrf -> csrf.csrfTokenRepository(tokens).csrfTokenRequestHandler(handler)
                     // Guest routes use independent same-origin, JSON and retry-capability checks.
