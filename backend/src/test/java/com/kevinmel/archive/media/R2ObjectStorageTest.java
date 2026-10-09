@@ -220,18 +220,22 @@ class R2ObjectStorageTest {
     @Test void signerRestrictsPutToOneStagingKeyContentTypeAndFiveMinutes() throws Exception {
         try (var storage = new R2ObjectStorage(URI.create("https://" + "a".repeat(32) + ".r2.cloudflarestorage.com"), "private-test", "fixture-access", "fixture-secret")) {
             UUID id = UUID.randomUUID();
-            var grant = storage.authorize(id, "staging/" + id, "image/png", Instant.now().plusSeconds(300));
+            var grant = storage.authorize(id, "staging/" + id, "image/png", 41, Instant.now().plusSeconds(300));
             var uri = URI.create(grant.uploadUrl());
             assertThat(uri.getPath()).isEqualTo("/private-test/staging/" + id);
             var query = URLDecoder.decode(uri.getRawQuery(), java.nio.charset.StandardCharsets.UTF_8);
-            assertThat(query).contains("X-Amz-Algorithm=AWS4-HMAC-SHA256", "X-Amz-SignedHeaders=content-type;host", "/auto/s3/aws4_request", "X-Amz-Signature=");
+            assertThat(query).contains("X-Amz-Algorithm=AWS4-HMAC-SHA256", "X-Amz-SignedHeaders=content-length;content-type;host", "/auto/s3/aws4_request", "X-Amz-Signature=");
             assertThat(query).doesNotContain("fixture-secret", "checksum", "originals/");
             int seconds = Integer.parseInt(Arrays.stream(query.split("&")).filter(p -> p.startsWith("X-Amz-Expires=")).findFirst().orElseThrow().split("=")[1]);
             assertThat(seconds).isBetween(298, 300);
             assertThat(grant.headers()).isEqualTo(Map.of("Content-Type", "image/png"));
             assertThat(grant.toString()).contains("<redacted>").doesNotContain(
                     grant.uploadUrl(), "fixture-access", "fixture-secret", "X-Amz");
-            assertThatThrownBy(() -> storage.authorize(id, "originals/" + id, "image/png", Instant.now().plusSeconds(300))).isInstanceOf(IllegalArgumentException.class);
+            assertThatThrownBy(() -> storage.authorize(id, "originals/" + id, "image/png", 41, Instant.now().plusSeconds(300))).isInstanceOf(IllegalArgumentException.class);
+            for (long size : new long[]{0, -1, PhotoRequest.MAX_BYTES + 1L}) {
+                assertThatThrownBy(() -> storage.authorize(id, "staging/" + id, "image/png", size,
+                        Instant.now().plusSeconds(300))).isInstanceOf(IllegalArgumentException.class);
+            }
         }
     }
 

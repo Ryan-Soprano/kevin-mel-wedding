@@ -41,6 +41,7 @@ class MediaServiceAdmissionTest {
                         .isInstanceOfSatisfying(ApiException.class, failure -> {
                             assertThat(failure.status()).isEqualTo(503);
                             assertThat(failure.code()).isEqualTo("MEDIA_UNAVAILABLE");
+                            assertThat(failure.retryAfterSeconds()).isEqualTo(5);
                         });
                 verify(finalizer, times(1)).finalizePhoto(any(), any(), anyString(), any());
             } finally { finish.countDown(); }

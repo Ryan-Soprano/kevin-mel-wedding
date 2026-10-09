@@ -20,15 +20,35 @@ public class PhotoRepository {
     private final JdbcClient db;
     private final ContributionRepository contributions;
     private final Clock clock;
-    public PhotoRepository(JdbcClient db, ContributionRepository contributions, Clock clock) {
+    private final PhotoAdmissionPolicy admission;
+    public PhotoRepository(JdbcClient db, ContributionRepository contributions, Clock clock, PhotoAdmissionPolicy admission) {
         this.db = db;
         this.contributions = contributions;
         this.clock = clock;
+        this.admission = admission;
     }
 
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public Saved create(PhotoRequest request, String key) {
         String fingerprint = request.fingerprint();
+        // Serialize all photo reservations across processes, not only within one JVM.
+        // Read committed sees the previous holder's committed intent after obtaining this lock.
+        db.sql("SELECT pg_advisory_xact_lock(1263350093, 1)").query((rs, row) -> true).single();
+        var replay = db.sql("SELECT id, request_fingerprint FROM contribution WHERE idempotency_key = :key")
+                .param("key", key).query((rs, row) -> new Existing(rs.getObject("id", UUID.class), rs.getString("request_fingerprint")))
+                .optional();
+        if (replay.isPresent()) {
+            if (!fingerprint.equals(replay.get().fingerprint())) throw ApiException.conflict();
+            return new Saved(contributions.getReceipt(replay.get().id(), key), false);
+        }
+        admission.requireNewUpload();
+        long reserved = db.sql("""
+                SELECT COALESCE(SUM(COALESCE(a.expected_byte_size, a.byte_size)), 0)::bigint
+                FROM media_asset a JOIN memory m ON m.id = a.memory_id
+                WHERE m.purged_at IS NULL
+                """).query(Long.class).single();
+        long requested = request.items().stream().mapToLong(PhotoRequest.Item::byteSize).sum();
+        admission.requireCapacity(reserved, requested);
         var inserted = db.sql("""
                 INSERT INTO contribution(event_key, guest_name, idempotency_key, request_fingerprint)
                 SELECT 'kevin-mel-wedding', :name, :key, :fingerprint
@@ -65,6 +85,29 @@ public class PhotoRepository {
             id = existing.id();
         }
         return new Saved(contributions.getReceipt(id, key), inserted.isPresent());
+    }
+
+    public void requireNewUpload() { admission.requireNewUpload(); }
+
+    public java.util.Optional<ActiveGrant> activeGrant(UUID assetId, Instant now) {
+        return db.sql("""
+                SELECT id, object_key, expires_at FROM upload_grant
+                WHERE media_asset_id = :asset AND expires_at > :now
+                ORDER BY created_at DESC, id DESC LIMIT 1
+                """).param("asset", assetId).param("now", OffsetDateTime.ofInstant(now, java.time.ZoneOffset.UTC))
+                .query((rs, row) -> new ActiveGrant(rs.getObject("id", UUID.class), rs.getString("object_key"),
+                        rs.getObject("expires_at", OffsetDateTime.class).toInstant())).optional();
+    }
+
+    public void requireStagingCapacity(long requestedBytes) {
+        db.sql("SELECT pg_advisory_xact_lock(1263350093, 1)").query((rs, row) -> true).single();
+        // Conservatively retain every grant reservation until its object is confirmed removed.
+        // A lifecycle expiry alone cannot prove physical deletion, so age never releases this budget.
+        long reserved = db.sql("""
+                SELECT COALESCE(SUM(COALESCE(a.expected_byte_size, a.byte_size)), 0)::bigint
+                FROM upload_grant g JOIN media_asset a ON a.id = g.media_asset_id
+                """).query(Long.class).single();
+        admission.requireStagingCapacity(reserved, requestedBytes);
     }
 
     // Called inside the service/finalizer transaction. Locking serializes grants/finalization for an item.
@@ -130,6 +173,7 @@ public class PhotoRepository {
     public record Saved(ContributionReceipt receipt, boolean created) {}
     public record Asset(UUID id, String originalKey, String contentType, long byteSize, String checksum, String state) {}
     public record Grant(String stagingKey, Instant expiresAt) {}
+    public record ActiveGrant(UUID id, String stagingKey, Instant expiresAt) {}
     private record Existing(UUID id, String fingerprint) {}
     private record GuestMemory(String reviewStatus, OffsetDateTime deleteAfter) {}
 }

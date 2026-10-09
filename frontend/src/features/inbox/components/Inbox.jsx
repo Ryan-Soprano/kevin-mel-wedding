@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
+import { attachInboxPrivacyLifecycle } from "../api/inboxPrivacyLifecycle.js";
 import { createInboxController } from "../api/inboxController.js";
 import { memoryTime } from "../memoryDisplay.js";
 import "../inbox.css";
@@ -40,8 +42,16 @@ export default function Inbox({ createController = createInboxController } = {})
       if (next.phase !== "detail" || !next.detail) setDeleteConfirmation(null);
       setSnapshot(next);
     });
-    void current.loadSession();
+    const detachLifecycle = attachInboxPrivacyLifecycle({ controller: current, flush: flushSync, onHide: () => {
+      setUsername("");
+      setPassword("");
+      setDeleteConfirmation(null);
+      setPages([null]);
+    } });
+    if (document.visibilityState === "hidden") current.suspend();
+    else void current.loadSession();
     return () => {
+      detachLifecycle();
       if (controller.current === current) controller.current = null;
       unsubscribe();
       current.dispose();

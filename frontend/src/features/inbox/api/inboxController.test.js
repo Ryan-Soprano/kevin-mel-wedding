@@ -954,3 +954,134 @@ test("an advanced reconciliation cannot be overwritten by a late timed-out PATCH
   assert.equal(f.controller.getSnapshot().session, null);
   assert.equal(clock.pending.size, 0);
 });
+
+test("suspending a private photo immediately clears all presentation and revokes its owned preview", async () => {
+  const f = await entered(fixture());
+  await f.controller.openMemory(IDS.photo);
+  assert.equal(f.controller.getSnapshot().photo.phase, "ready");
+  const before = f.calls.length;
+  const hidden = f.controller.suspend();
+  assert.equal(hidden.phase, "checking"); assert.equal(hidden.session, null);
+  assert.deepEqual(hidden.items, []); assert.equal(hidden.detail, null); assert.equal(hidden.nextCursor, null);
+  assert.equal(hidden.photo.url, null); assert.equal(hidden.notice, null); assert.equal(hidden.busy, false);
+  assert.deepEqual(f.revoked, ["blob:original-1"]);
+  assert.equal(f.calls.length, before, "hiding never makes a request");
+  assert.equal(f.controller.suspend(), hidden, "repeated hidden events are idempotent");
+});
+
+test("restoration shares one fresh session check and never redisplays old rows before authorization", async () => {
+  const f = await entered(fixture());
+  const waiting = deferred();
+  let checks = 0, lists = 0;
+  f.api.getSession = async () => { checks++; return waiting.promise; };
+  f.api.listMemories = async () => { lists++; return { items: [{ ...MEMORY_DETAIL, message: "freshly authorized text" }], nextCursor: null }; };
+  f.controller.suspend();
+  const restoring = f.controller.resume();
+  assert.equal(f.controller.resume(), restoring);
+  await turn();
+  assert.equal(checks, 1); assert.equal(lists, 0);
+  assert.equal(f.controller.getSnapshot().session, null); assert.deepEqual(f.controller.getSnapshot().items, []);
+  waiting.resolve(copy(COUPLE_SESSION));
+  await restoring;
+  assert.equal(lists, 1); assert.equal(f.controller.getSnapshot().phase, "inbox");
+  assert.equal(f.controller.getSnapshot().items[0].message, "freshly authorized text");
+  assert.equal(f.controller.getSnapshot().photo.url, null);
+  const restored = f.controller.getSnapshot();
+  await f.controller.resume(); assert.equal(f.controller.getSnapshot(), restored); assert.equal(checks, 1);
+});
+
+for (const status of [0, 401, 403]) {
+  test(`restored ${status || "anonymous"} session cannot redisplay content or request private records`, async () => {
+    const f = await entered(fixture());
+    await f.controller.openMemory(IDS.photo);
+    const before = f.calls.length;
+    f.api.getSession = async () => { if (status) throw authError(status); return copy(ANONYMOUS_SESSION); };
+    f.controller.suspend(); await f.controller.resume();
+    const state = f.controller.getSnapshot();
+    assert.equal(state.phase, status === 403 ? "unavailable" : "login");
+    assert.equal(state.session, null); assert.deepEqual(state.items, []); assert.equal(state.detail, null); assert.equal(state.photo.url, null);
+    assert.equal(f.calls.length, before); assert.deepEqual(f.revoked, ["blob:original-1"]);
+  });
+}
+
+test("suspending an in-flight review keeps only its action identity and reconciles before deliberate retry", async () => {
+  const f = await entered(fixture());
+  await f.controller.openMemory(IDS.text);
+  const waiting = deferred(), attempts = [];
+  f.api.reviewMemory = async (id, change, options) => {
+    attempts.push({ id, change, options });
+    return attempts.length === 1 ? waiting.promise : { ...MEMORY_DETAIL, reviewStatus: change.reviewStatus, revision: change.revision + 1 };
+  };
+  const first = f.controller.reviewMemory("KEEP"); await turn();
+  const hidden = f.controller.suspend(); await first;
+  assert.equal(attempts[0].options.signal.aborted, true);
+  assert.equal(hidden.detail, null); assert.equal(hidden.session, null); assert.deepEqual(hidden.items, []);
+  assert.equal(JSON.stringify(hidden).includes(MEMORY_DETAIL.message), false);
+  await f.controller.reloadReview(); await f.controller.retryReview();
+  assert.equal(attempts.length, 1, "a hidden action cannot issue requests");
+  f.api.getSession = async () => ({ ...COUPLE_SESSION, csrfToken: "fresh-after-return" });
+  await f.controller.resume();
+  assert.equal(attempts.length, 1, "restoration never resends a review mutation");
+  assert.equal(f.controller.getSnapshot().review.phase, "uncertain");
+  assert.equal(f.controller.getSnapshot().review.canRetry, true);
+  await f.controller.reviewMemory("DELETE"); assert.equal(attempts.length, 1);
+  await f.controller.retryReview();
+  assert.equal(attempts.length, 2); assert.equal(attempts[1].id, attempts[0].id);
+  assert.deepEqual(attempts[1].change, attempts[0].change); assert.deepEqual(attempts[1].change, { reviewStatus: "KEEP", revision: 1 });
+  assert.equal(attempts[1].options.csrfToken, "fresh-after-return");
+  waiting.resolve({ ...MEMORY_DETAIL, reviewStatus: "ARCHIVED", revision: 3 }); await turn();
+  assert.equal(f.controller.getSnapshot().detail.reviewStatus, "KEEP", "late original mutation cannot restore its private response");
+});
+
+test("a failed restoration keeps an uncertain review hidden and recoverable through checking access again", async () => {
+  const f = await entered(fixture());
+  await f.controller.openMemory(IDS.text);
+  let mutations = 0, sessions = 0;
+  f.api.reviewMemory = async () => { mutations++; throw new ApiError("lost", { unknownOutcome: true }); };
+  await f.controller.reviewMemory("KEEP"); f.controller.suspend();
+  f.api.getSession = async () => {
+    if (++sessions === 1) throw new ApiError("private response", { status: 503 });
+    return copy(COUPLE_SESSION);
+  };
+  await f.controller.resume();
+  assert.equal(f.controller.getSnapshot().phase, "unavailable"); assert.equal(f.controller.getSnapshot().detail, null);
+  assert.equal(f.controller.getSnapshot().session, null); assert.deepEqual(f.controller.getSnapshot().items, []);
+  f.api.getMemory = async () => ({ ...MEMORY_DETAIL, reviewStatus: "KEEP", revision: 2 });
+  await f.controller.loadSession();
+  assert.equal(sessions, 2); assert.equal(mutations, 1);
+  assert.equal(f.controller.getSnapshot().phase, "detail"); assert.equal(f.controller.getSnapshot().review.phase, "idle");
+  assert.equal(f.controller.getSnapshot().detail.reviewStatus, "KEEP");
+});
+
+test("hiding during restoration aborts its request and ignores a late authorized result", async () => {
+  const f = await entered(fixture());
+  const waiting = deferred(); let signal, lists = 0;
+  f.api.getSession = async options => { signal = options.signal; return waiting.promise; };
+  f.api.listMemories = async () => { lists++; return { items: [MEMORY_DETAIL], nextCursor: null }; };
+  f.controller.suspend(); const restoring = f.controller.resume(); await turn();
+  f.controller.suspend(); await restoring;
+  assert.equal(signal.aborted, true); assert.equal(f.controller.getSnapshot().session, null);
+  waiting.resolve(copy(COUPLE_SESSION)); await turn();
+  assert.equal(lists, 0); assert.deepEqual(f.controller.getSnapshot().items, []);
+  f.api.getSession = async () => copy(COUPLE_SESSION);
+  await f.controller.resume(); assert.equal(lists, 1);
+});
+
+test("hiding an unfinished sign-out keeps it unconfirmed and restoration resolves it before private access", async () => {
+  const f = await entered(fixture());
+  const waiting = deferred(); let signouts = 0, firstSignal;
+  f.api.logout = async options => {
+    if (++signouts === 1) { firstSignal = options.signal; return waiting.promise; }
+  };
+  const signout = f.controller.logout(); await turn();
+  assert.equal(signouts, 1);
+  f.controller.suspend(); await signout;
+  assert.equal(firstSignal.aborted, true); assert.equal(f.controller.getSnapshot().logoutUnconfirmed, true);
+  const before = f.calls.length;
+  await f.controller.resume();
+  assert.equal(signouts, 2); assert.equal(f.controller.getSnapshot().phase, "login");
+  assert.equal(f.controller.getSnapshot().logoutUnconfirmed, false);
+  assert.ok(f.calls.slice(before).every(call => call[0] === "session"), "return never opens the private inbox during sign-out recovery");
+  waiting.resolve(); await turn();
+  assert.equal(f.controller.getSnapshot().phase, "login"); assert.deepEqual(f.controller.getSnapshot().items, []);
+});
