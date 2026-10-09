@@ -14,7 +14,7 @@ Define the intended guest contribution flow and private couple review flow befor
 - Guest names are optional.
 - Every saved item starts as `PENDING` and `COUPLE_ONLY`.
 - A guest submission never becomes public automatically.
-- Kevin and Melanie review individual memories privately after the wedding reveal.
+- Kevin and Melanie may collaborate on the product and test guest/inbox usability before the wedding. They review individual memories privately through deliberately enabled couple access; the project is no longer a surprise.
 - Ryan operates the infrastructure but does not make moderation or publication decisions.
 - Event planning, RSVPs, travel information, and an unapproved public gallery are outside scope.
 - Wedding materials may advertise only contribution types that pass their implementation and release checks.
@@ -39,7 +39,7 @@ The choose-type screen is therefore a target-state design. Before wedding QR mat
 3. **Safe retries:** interrupted or repeated submissions must not silently create duplicates.
 4. **No dead ends:** every failure state provides a useful retry, edit, or fallback action.
 5. **Accessible without guesswork:** controls use visible labels, status changes are announced, and color is never the only signal.
-6. **Preserve the surprise:** guest-facing copy must not imply that the couple can already access the archive before the reveal.
+6. **Describe access accurately:** Kevin and Melanie already know about the project. Guest-facing copy must reflect the actual private access and notification behavior, and their product/testing involvement may begin before the wedding.
 
 ## Guest journey
 
@@ -284,7 +284,7 @@ On success, announce the new state and offer **Undo** when the lifecycle contrac
 | Preview privacy | Only Kevin and Melanie can review this memory. |
 | Success | Thank you — your memory was saved for Kevin and Melanie. |
 | Retry | Your work is still here. Please try again. |
-| Surprise constraint | Do not say that Kevin and Melanie can already view or receive notifications about submissions. |
+| Access accuracy | Describe the actual enabled couple access; do not promise notifications that the application does not provide. |
 
 ## Confirmed product decisions
 
@@ -292,14 +292,14 @@ On success, announce the new state and offer **Undo** when the lifecycle contrac
 - [x] Create one memory type per pass through the flow; **Share another memory** starts another contribution.
 - [x] Use “Name not provided” in the private inbox when the guest leaves the name blank.
 - [x] Do not show a guest-facing receipt code unless later support testing demonstrates a need.
-- [x] Use “Your memory was saved for Kevin and Melanie” without implying that they can access the archive before the reveal.
+- [x] Use “Your memory was saved for Kevin and Melanie” and describe access according to the deployed configuration.
 - [x] Keep deletion recoverable for 30 days and reflect that window in confirmation and undo copy.
 - [x] Decide the final wedding-ready type list at release freeze and completely hide unsupported types.
 
 ## Acceptance checklist
 
 - [x] Target guest path covers landing, type choice, optional name, compose, preview, submission, result, and failures.
-- [x] Draft privacy, surprise, validation, success, and retry copy is recorded.
+- [x] Draft privacy, access, validation, success, and retry copy is recorded.
 - [x] Couple inbox covers list, detail, loading, empty, error, keep, archive, and delete states.
 - [x] Unsupported release options are gated instead of advertised.
 - [x] Product questions requiring Ryan’s decision are explicitly listed.

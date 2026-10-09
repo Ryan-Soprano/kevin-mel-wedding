@@ -2,6 +2,8 @@
 
 A private home for preserving the couple's memories, beginning with contributions from their wedding guests.
 
+Kevin and Melanie already know about the project and help shape it. Include them in product decisions and synthetic guest/inbox usability testing before the wedding; the October 31 handoff milestone is not a secrecy constraint. See the [project scope](docs/project-plan.md#current-baseline-and-product-scope) and [account-access procedure](docs/runbooks/account-access.md) for deliberate account activation.
+
 ## Start here
 
 - **Choose or claim work:** use the Notion [Memory Archive — Issues](https://app.notion.com/p/2d5a40baef85426a94bd059f7d0e2ce8) database for MVPs, status, ownership, dependencies, acceptance criteria, blockers, pull-request links, and evidence.

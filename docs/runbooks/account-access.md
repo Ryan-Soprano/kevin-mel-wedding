@@ -1,6 +1,8 @@
 # Private account provisioning and recovery
 
-Prepared 2026-10-05 for AUTH-01. Preparing this runbook and console utility has not provisioned real accounts, sent invitations, changed provider settings, or deployed the application. Kevin and Melanie must not receive credentials or notifications before the reveal. Ryan owns infrastructure and recovery; Kevin and Melanie alone moderate and publish. Kade has development access only.
+Prepared 2026-10-05 for AUTH-01; collaboration policy clarified 2026-10-09. Preparing this runbook and console utility has not provisioned real accounts, sent invitations, changed provider settings, or deployed the application. Kevin and Melanie already know about the project and may join product discussions and synthetic usability tests now. Account creation, confidential credential handoff and access activation remain deliberate operator actions. Ryan owns infrastructure and recovery; Kevin and Melanie alone moderate and publish. Kade has development access only.
+
+The existing `MEMORY_ARCHIVE_REVEALED` name denotes the technical couple-access gate. It no longer represents surprise secrecy or a requirement to wait until after the wedding. Agree on the access target and timing separately from the October 31 archive handoff/collection-close milestone.
 
 ## Account boundaries
 
@@ -30,7 +32,7 @@ The utility does not load Spring profile files. Set its environment and reveal v
 
 The utility opens no HTTP listener, starts no Spring application/component scan, and initializes no R2 client. It does not apply Flyway migrations. Apply the application's reviewed migrations through the normal startup/release process first; `archive_account` from V4 must exist.
 
-Application and utility processes read their own configuration at startup. Setting the reveal environment variable in the utility terminal does not change an already-running application. Keep reveal closed in production until the agreed reveal and separately authorized onboarding.
+Application and utility processes read their own configuration at startup. Setting the reveal environment variable in the utility terminal does not change an already-running application. Keep the production access gate closed until the agreed access activation and separately authorized onboarding.
 
 ## Build and launch locally
 
@@ -75,11 +77,11 @@ Exit code `0` means a command committed successfully (or help was shown); `2` me
 
 When the synthetic exercise ends, close this isolated terminal. Return local/staging web application reveal settings to their intended state. Do not copy synthetic credentials into production.
 
-## Reveal-day provisioning
+## Couple account provisioning
 
-Real-account provisioning is a separate hands-on operator action after the reveal has been agreed and explicitly authorized. No real accounts have been provisioned by this implementation.
+Real-account provisioning is a separate hands-on operator action after the target and access timing have been agreed and explicitly authorized. No real accounts have been provisioned by this implementation. Couple participation in design or synthetic testing does not itself activate production accounts.
 
-1. Ryan verifies the production target and its secure access path, confirms the reveal with the couple, and explicitly enables the reveal setting for the approved application/utility configuration. Production must use HTTPS and the production session-cookie configuration before browser login.
+1. Ryan verifies the production target and its secure access path, confirms access timing with the couple, and explicitly enables the reveal/access setting for the approved application/utility configuration. Production must use HTTPS and the production session-cookie configuration before browser login.
 2. Use the reviewed utility with `--expect-environment production` to create `kevin` / `Kevin` / `COUPLE` and, separately, `melanie` / `Melanie` / `COUPLE`. Each person receives a distinct password. Keep both accounts disabled until the confidential handoff is ready.
 3. Establish the identity of the intended recipient directly. Handoff must use an agreed confidential channel; do not paste credentials into Git, Notion, tickets, logs, screenshots, shell arguments/history, or this chat. Do not send invitations or email as part of the utility.
 4. Enable each account with its own confirmed command. Have each person verify their own login through the application's couple login flow. If a temporary password was used, perform an owner-present console reset to their chosen secret before routine use; this version has no public self-service password-change page.
