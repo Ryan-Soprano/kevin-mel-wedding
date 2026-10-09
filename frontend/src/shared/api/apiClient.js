@@ -24,7 +24,7 @@ export function contractMismatch(status = 0) {
   });
 }
 
-function retryAfter(value) {
+export function parseRetryAfter(value) {
   if (!value) return null;
   if (/^\d+$/.test(value)) return Number.isSafeInteger(Number(value)) ? Number(value) : null;
   const date = Date.parse(value);
@@ -93,7 +93,7 @@ export function createApiClient({ fetchImpl = globalThis.fetch } = {}) {
       if (!response.ok) {
         const error = payload?.error;
         const structured = typeof error?.code === "string" && typeof error?.message === "string";
-        const wait = retryAfter(response.headers.get("Retry-After"));
+        const wait = parseRetryAfter(response.headers.get("Retry-After"));
         throw new ApiError(
           structured ? error.message : "The request could not be completed. Please try again.",
           {

@@ -249,3 +249,109 @@ button:focus-visible {
 .photo-remove-button:disabled {
   cursor: not-allowed;
 }
+
+/* Multi-photo form: allow long original names and captions to reflow at narrow widths. */
+.photo-picker,
+.photo-selection,
+.photo-batch-card,
+.photo-batch-result,
+.photo-batch-actions,
+.photo-batch-summary {
+  min-width: 0;
+}
+
+.photo-picker,
+.photo-batch p,
+.photo-batch h3,
+.photo-card__filename {
+  overflow-wrap: anywhere;
+}
+
+.photo-grid--batch {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.photo-grid--batch .photo-card {
+  min-width: 0;
+  border: 1px solid var(--color-border-subtle);
+}
+
+.photo-grid--batch .photo-card--selected {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px rgb(64 87 71 / 20%);
+}
+
+.photo-batch-card {
+  padding: 12px;
+}
+
+.photo-card__filename {
+  margin: 0 0 12px;
+  padding: 8px;
+  font-weight: 600;
+}
+
+.photo-batch-card .photo-card__filename {
+  padding: 0;
+}
+
+.photo-batch-card textarea {
+  min-height: 88px;
+}
+
+.photo-batch-state {
+  margin: 12px 0;
+  font-weight: 600;
+}
+
+.photo-batch-state--failed,
+.photo-batch-state--rejected {
+  color: var(--color-error);
+}
+
+.photo-batch-state--saved {
+  color: var(--color-primary);
+}
+
+.photo-batch-help {
+  font-size: 0.875rem;
+}
+
+.photo-retry-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-height: 48px;
+  margin: 12px 0 0;
+  padding: 8px 0;
+}
+
+.photo-retry-choice input {
+  flex: 0 0 20px;
+  width: 20px;
+  height: 20px;
+  margin: 3px 0 0;
+  padding: 0;
+  accent-color: var(--color-primary);
+}
+
+.photo-batch-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.photo-batch-actions button {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.photo-batch-result h3 {
+  margin: 0 0 12px;
+}
+
+@media (min-width: 560px) {
+  .photo-grid--batch {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

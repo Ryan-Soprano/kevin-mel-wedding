@@ -86,14 +86,15 @@ test("transfer alone is not saved; only successful finalize updates the receipt"
   await assert.rejects(api.authorizeUpload(receipt.contributionId, transferred.memory.memoryId, options), { code: "ALREADY_COMPLETE" });
 });
 
-test("partial batches retry only the failed item and retain original IDs", async () => {
+test("partial batches retry only the failed transfer and retain original IDs", async () => {
   const api = createMockArchiveApi({ scenario: "partialUpload" });
   const receipt = await api.createMediaContribution(PHOTO_REQUEST, options);
   await finalize(api, receipt, await transfer(api, receipt));
   await assert.rejects(transfer(api, receipt, 1), { code: "UPLOAD_FAILED" });
   const partial = await api.getReceipt(receipt.contributionId, options);
   assert.equal(partial.completion, "PARTIAL");
-  assert.equal(partial.memories[1].uploadState, "FAILED");
+  assert.equal(partial.memories[0].uploadState, "UPLOADED");
+  assert.equal(partial.memories[1].uploadState, "PENDING");
   const complete = await finalize(api, receipt, await transfer(api, receipt, 1));
   assert.equal(complete.completion, "COMPLETE");
   assert.deepEqual(complete.memories.map((m) => m.memoryId), receipt.memories.map((m) => m.memoryId));
@@ -101,6 +102,38 @@ test("partial batches retry only the failed item and retain original IDs", async
   const stored = await api.getMemory(complete.memories[1].memoryId);
   assert.equal(stored.media.originalFilename, PHOTO_REQUEST.items[1].originalFilename);
   assert.equal(stored.media.detectedContentType, "image/png");
+});
+
+test("saved items replay expired grants without accepting foreign ownership or expired unfinished siblings", async (t) => {
+  let now = Date.now();
+  t.mock.method(Date, "now", () => now);
+  const api = createMockArchiveApi();
+  const receipt = await api.createMediaContribution(PHOTO_REQUEST, options);
+  const firstTransfer = await transfer(api, receipt);
+  const partial = await finalize(api, receipt, firstTransfer);
+  const secondTransfer = await transfer(api, receipt, 1);
+  now += 300000;
+
+  assert.deepEqual(await finalize(api, receipt, firstTransfer), partial);
+  await assert.rejects(api.finalizeUpload(receipt.contributionId,
+    firstTransfer.memory.memoryId, secondTransfer.grant.grantId, options), {
+    code: "NOT_FOUND", status: 404,
+  });
+  await assert.rejects(api.finalizeUpload(receipt.contributionId,
+    firstTransfer.memory.memoryId, firstTransfer.grant.grantId,
+    { idempotencyKey: IDS.clientItem }), { code: "NOT_FOUND", status: 404 });
+  await assert.rejects(finalize(api, receipt, secondTransfer), {
+    code: "UPLOAD_GRANT_EXPIRED", status: 410,
+  });
+
+  // Replaying a confirmed original must not inspect or reject temporary bytes again.
+  api.setScenario("invalidMedia");
+  assert.deepEqual(await finalize(api, receipt, firstTransfer), partial);
+  assert.deepEqual(await api.getReceipt(receipt.contributionId, options), partial);
+  api.setScenario("success");
+  await signIn(api);
+  const page = await api.listMemories();
+  assert.equal(page.items.filter((item) => item.contributionId === receipt.contributionId).length, 1);
 });
 
 test("expired grants renew against the same item; premature finalization fails", async () => {

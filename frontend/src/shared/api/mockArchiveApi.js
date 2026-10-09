@@ -150,6 +150,9 @@ export function createMockArchiveApi({ scenario = "success", delayMs = 0 } = {})
       }
       const transfer = grants.get(body?.grantId);
       if (!transfer || transfer.memory !== memory) return failure("NOT_FOUND", "That upload grant is unavailable.", 404);
+      // The backend replays a saved item after validating this grant's ownership,
+      // even if its temporary transfer permission has since expired.
+      if (memory.uploadState === "UPLOADED") return reply(refreshReceipt(entry));
       if (Date.parse(transfer.grant.expiresAt) <= Date.now()) {
         return failure("UPLOAD_GRANT_EXPIRED", "Request a new upload link for this item.", 410);
       }
@@ -235,7 +238,7 @@ export function createMockArchiveApi({ scenario = "success", delayMs = 0 } = {})
     if (Date.parse(grant.grant.expiresAt) <= Date.now()) return reply(null, 403);
     if (scenario === "partialUpload" && grant.entry.receipt.memories.indexOf(grant.memory) === 1 && !failedTransfer) {
       failedTransfer = true;
-      grant.memory.uploadState = "FAILED";
+      // A direct storage PUT cannot mutate the application's receipt.
       return reply(null, 503);
     }
     grant.uploaded = true;

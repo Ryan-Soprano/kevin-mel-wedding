@@ -155,6 +155,26 @@ test("playback requires a valid HTTPS URL and expiry", async () => {
   });
 });
 
+test("storage throttling preserves Retry-After for deliberate photo retry", async () => {
+  const api = createArchiveApi({ uploadFetch: async () => new Response(null, {
+    status: 429, headers: { "Retry-After": "11" },
+  }) });
+  const grant = { ...UPLOAD_GRANT, expiresAt: new Date(Date.now() + 60_000).toISOString() };
+  await assert.rejects(api.uploadMedia(grant, new Blob(["synthetic"])), {
+    code: "UPLOAD_FAILED", status: 429, retryAfterSeconds: 11, unknownOutcome: false,
+  });
+});
+
+test("malformed storage retry guidance does not invent a cooldown", async () => {
+  const api = createArchiveApi({ uploadFetch: async () => new Response(null, {
+    status: 503, headers: { "Retry-After": "invalid" },
+  }) });
+  const grant = { ...UPLOAD_GRANT, expiresAt: new Date(Date.now() + 60_000).toISOString() };
+  await assert.rejects(api.uploadMedia(grant, new Blob(["synthetic"])), {
+    status: 503, retryAfterSeconds: null,
+  });
+});
+
 test("resource responses must belong to the requested submission or memory", async () => {
   await assert.rejects(returning(TEXT_RECEIPT).getReceipt(IDS.key, { idempotencyKey: IDS.key }), {
     code: "CONTRACT_MISMATCH", unknownOutcome: false,

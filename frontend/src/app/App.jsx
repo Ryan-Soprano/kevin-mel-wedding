@@ -1,5 +1,5 @@
 import ContributionForm from "../features/contribution/components/ContributionForm.jsx";
-import SinglePhotoForm from "../features/media/components/SinglePhotoForm.jsx";
+import PhotoBatchForm from "../features/media/components/PhotoBatchForm.jsx";
 
 export default function App() {
   return (
@@ -9,7 +9,7 @@ export default function App() {
       <p>Leave a message for us to treasure for the years ahead!</p>
 
       <ContributionForm />
-      <SinglePhotoForm />
+      <PhotoBatchForm />
     </main>
   );
 }
