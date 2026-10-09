@@ -1,7 +1,9 @@
 # UX-01 — guest welcome and navigation
 
-Date: 2026-10-09  
-Base: merged `main` `8f66ac1` (MED-02, PR #18)  
+Date: 2026-10-09
+
+Base: merged `main` `8f66ac1` (MED-02, PR #18)
+
 Branch: `feature/guest-contribution-flow`
 
 ## Implemented behavior
