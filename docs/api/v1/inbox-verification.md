@@ -36,7 +36,7 @@ Local Docker-free results:
 | All backend test sources | Compile successfully with Java 25 and the Maven wrapper |
 | Private response checks | Literal markup stays JSON text; no storage keys, retry/CSRF credentials, signed URLs or database diagnostics appear in inbox/error responses |
 
-The committed PostgreSQL 17 HTTP suite is compiled but awaits execution in CI because Docker is unavailable on this computer. Its five cases cover actual session login/SQL/DTOs, tied-timestamp pagination with a new arrival, event/type/upload/integrity exclusions, account-version/disable/role revocation, and the positive-revision constraint. The populated-V1 upgrade/restart test additionally checks that V6 assigns revision 1 while preserving the existing memory. Synthetic fixtures are isolated and removed by their owned IDs; no provider request is required.
+The PostgreSQL 17 HTTP suite compiles locally; local execution is unavailable because Docker is stopped. Its five cases cover actual session login/SQL/DTOs, tied-timestamp pagination with a new arrival, event/type/upload/integrity exclusions, account-version/disable/role revocation, and the positive-revision constraint. The populated-V1 upgrade/restart test additionally checks that V6 assigns revision 1 while preserving the existing memory. These database cases pass in CI as recorded below. Synthetic fixtures are isolated and removed by their owned IDs; no provider request is required.
 
 Run the local focused suite:
 
@@ -61,3 +61,7 @@ Photo detail deliberately obtains the existing short-lived permission, then fetc
 Frontend evidence: **165 tests pass**, including 32 controller cases (three real-adapter integration scenarios) and the Chicago timestamp boundary case. ESLint, production build and noninteractive initial-screen rendering pass. Independent review corrected pagination failure/recovery history. Browser/physical-device focus, screen-reader behavior, actual file download and new hosted/R2 acceptance remain unverified/deferred.
 
 Ryan requested direct VS Code editing: this implementation is in the primary checkout on `feature/couple-inbox`, based on merged UX-01 PR #19 (`3caa88d`). No new dependency or infrastructure is introduced.
+
+## CI verification
+
+[CI run 37939842152](https://github.com/Ryan-Soprano/kevin-mel-wedding/actions/runs/37939842152) at implementation commit `b5e03c5` passes both jobs: **124 backend tests**, including actual PostgreSQL HTTP/pagination/authorization and migration/upgrade coverage, and **165 frontend tests**, with zero failures/errors/skips. Frontend lockfile installation, lint and production build also pass. Independent review findings are resolved. Actual browser/physical-device/hosted acceptance and complete audio remain open.
