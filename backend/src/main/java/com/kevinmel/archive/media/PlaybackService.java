@@ -27,8 +27,11 @@ public class PlaybackService {
         var asset = media.findPlayable(memoryId).orElseThrow(PlaybackService::notFound);
         // Recheck the key/type boundary here so an alternate repository cannot broaden storage scope.
         if (asset.assetId() == null || !("originals/" + asset.assetId()).equals(asset.objectKey())
-                || asset.contentType() == null || !PhotoRequest.TYPES.contains(asset.contentType())
-                || asset.byteSize() < 1 || asset.byteSize() > PhotoRequest.MAX_BYTES) throw notFound();
+                || !MediaTypes.validTypeAndSize(asset.contentType(), asset.byteSize())
+                || !("PHOTO".equals(asset.memoryType()) && MediaTypes.PHOTO_TYPES.contains(asset.contentType())
+                    && asset.durationMs() == null && asset.container() == null && asset.codec() == null
+                    || "AUDIO".equals(asset.memoryType()) && asset.durationMs() != null
+                        && MediaTypes.audioMetadataMatches(asset.contentType(), asset.container(), asset.codec(), asset.durationMs()))) throw notFound();
         return storage.authorizeRead(asset.objectKey(), asset.contentType(), asset.byteSize(), clock.instant().plus(LINK_LIFETIME));
     }
 

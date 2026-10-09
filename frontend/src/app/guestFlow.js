@@ -1,12 +1,13 @@
-export const MEMORY_TYPES = Object.freeze(["note", "photos"]);
+export const MEMORY_TYPES = Object.freeze(["note", "photos", "audio"]);
 
 const emptyForm = () => ({ busy: false, pending: false, hasDraft: false, complete: false });
 
-export function createGuestFlow() {
+export function createGuestFlow({ audioEnabled = false } = {}) {
   return {
     screen: "welcome",
     started: [],
-    forms: { note: emptyForm(), photos: emptyForm() },
+    forms: { note: emptyForm(), photos: emptyForm(), audio: emptyForm() },
+    audioEnabled: audioEnabled === true,
   };
 }
 
@@ -26,7 +27,7 @@ export function guestFlowReducer(flow, action) {
       if (navigationLocked(flow)) return flow;
       return { ...flow, screen: "choose" };
     case "SELECT":
-      if (!MEMORY_TYPES.includes(action.kind) || navigationLocked(flow)) return flow;
+      if (!MEMORY_TYPES.includes(action.kind) || (action.kind === "audio" && !flow.audioEnabled) || navigationLocked(flow)) return flow;
       return {
         ...flow,
         screen: action.kind,

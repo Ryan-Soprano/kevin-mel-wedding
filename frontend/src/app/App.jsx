@@ -1,20 +1,26 @@
-import { useCallback, useEffect, useReducer, useRef } from "react";
+import { lazy, Suspense, useCallback, useEffect, useReducer, useRef } from "react";
 import ContributionForm from "../features/contribution/components/ContributionForm.jsx";
 import PhotoBatchForm from "../features/media/components/PhotoBatchForm.jsx";
+import { audioCollectionEnabled } from "../features/audio/audioConstraints.js";
 import { createGuestFlow, guestFlowReducer, hasUnfinishedWork, navigationLocked } from "./guestFlow.js";
 
-export default function App() {
-  const [flow, dispatch] = useReducer(guestFlowReducer, undefined, createGuestFlow);
+const AudioForm = lazy(() => import("../features/audio/components/AudioForm.jsx"));
+
+export default function App({ audioEnabled = audioCollectionEnabled(import.meta.env.VITE_AUDIO_ENABLED) } = {}) {
+  const [flow, dispatch] = useReducer(guestFlowReducer, { audioEnabled }, createGuestFlow);
   const heading = useRef(null);
   const started = new Set(flow.started);
   const locked = navigationLocked(flow);
   const unfinished = hasUnfinishedWork(flow);
   const reportNote = useCallback(state => dispatch({ type: "FORM_STATE", kind: "note", state }), []);
   const reportPhotos = useCallback(state => dispatch({ type: "FORM_STATE", kind: "photos", state }), []);
+  const reportAudio = useCallback(state => dispatch({ type: "FORM_STATE", kind: "audio", state }), []);
   const noteDone = useCallback(() => dispatch({ type: "FINISHED", kind: "note" }), []);
   const photosDone = useCallback(() => dispatch({ type: "FINISHED", kind: "photos" }), []);
+  const audioDone = useCallback(() => dispatch({ type: "FINISHED", kind: "audio" }), []);
   const anotherNote = useCallback(() => dispatch({ type: "ANOTHER", kind: "note" }), []);
   const anotherPhotos = useCallback(() => dispatch({ type: "ANOTHER", kind: "photos" }), []);
+  const anotherAudio = useCallback(() => dispatch({ type: "ANOTHER", kind: "audio" }), []);
 
   useEffect(() => {
     heading.current?.focus();
@@ -35,6 +41,7 @@ export default function App() {
     choose: "What would you like to share?",
     note: "A note for Kevin and Melanie",
     photos: "Photos for Kevin and Melanie",
+    audio: "A voice memory for Kevin and Melanie",
     done: "You’re all set.",
   }[flow.screen];
 
@@ -47,7 +54,7 @@ export default function App() {
 
       {flow.screen === "welcome" && (
         <section className="guest-welcome" aria-label="Share a wedding memory">
-          <p>Share a note or your favourite photos from the day.</p>
+          <p>{flow.audioEnabled ? "Share a note, your favourite photos, or a voice memory from the day." : "Share a note or your favourite photos from the day."}</p>
           <p>Your contribution goes to Kevin and Melanie. It is not posted publicly.</p>
           <button type="button" onClick={() => dispatch({ type: "CHOOSE" })}>Share a memory</button>
           <p className="guest-help">No account needed. Your name is optional.</p>
@@ -65,12 +72,16 @@ export default function App() {
             <span className="guest-choice__title">{flow.forms.photos.complete ? "View your saved photos" : flow.forms.photos.hasDraft ? "Continue your photos" : "Add photos"}</span>
             <span>Up to 5 original JPEG, PNG or WebP photos · 10 MB each</span>
           </button>
+          {flow.audioEnabled && <button type="button" className="guest-choice" onClick={() => dispatch({ type: "SELECT", kind: "audio" })}>
+            <span className="guest-choice__title">{flow.forms.audio.complete ? "View your saved voice memory" : flow.forms.audio.hasDraft ? "Continue your voice memory" : "Record a voice memory"}</span>
+            <span>Record or choose one audio clip · up to two minutes and 25 MB</span>
+          </button>}
           <p className="guest-help">Your memories stay private. No account needed.</p>
           <button type="button" className="button-secondary" onClick={() => dispatch({ type: "BACK" })}>Back</button>
         </section>
       )}
 
-      {(flow.screen === "note" || flow.screen === "photos") && (
+      {(flow.screen === "note" || flow.screen === "photos" || flow.screen === "audio") && (
         <nav className="guest-navigation" aria-label="Memory navigation">
           <button type="button" className="button-secondary" disabled={locked} aria-describedby={locked ? "guest-navigation-help" : undefined} onClick={() => dispatch({ type: "BACK" })}>Back to memory choices</button>
           <p id="guest-navigation-help" className="guest-help">
@@ -91,6 +102,13 @@ export default function App() {
       {started.has("photos") && (
         <div hidden={flow.screen !== "photos"}>
           <PhotoBatchForm active={flow.screen === "photos"} onFlowStateChange={reportPhotos} onDone={photosDone} onShareAnother={anotherPhotos} />
+        </div>
+      )}
+      {started.has("audio") && (
+        <div hidden={flow.screen !== "audio"}>
+          <Suspense fallback={<p role="status">Loading voice memory controls…</p>}>
+            <AudioForm active={flow.screen === "audio"} onFlowStateChange={reportAudio} onDone={audioDone} onShareAnother={anotherAudio} />
+          </Suspense>
         </div>
       )}
 

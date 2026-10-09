@@ -220,6 +220,59 @@ class RetentionPostgresTest {
         assertThat(service(fixture, NOW.plusSeconds(1)).purgeBatch(20)).isEqualTo(new RetentionService.Batch(0, 0));
     }
 
+    @Test void onlyVerifiedExpiredAudioIsClaimedAndObjectFailureRetainsAllMetadata() {
+        var voice = audio("UPLOADED");
+        var unfinished = audio("PENDING");
+        softDelete(fixture, voice.memories().getFirst(), NOW.minusSeconds(THIRTY_DAYS));
+        softDelete(fixture, unfinished.memories().getFirst(), NOW.minusSeconds(THIRTY_DAYS));
+        storage.failOriginals = 1;
+        assertThat(service(fixture, NOW).purgeBatch(20)).isEqualTo(new RetentionService.Batch(0, 1));
+        UUID memory = voice.memories().getFirst(), asset = voice.assets().getFirst();
+        assertThat(storage.operations).containsExactly("record:" + memory, "original:" + asset);
+        assertThat(string(fixture, "SELECT caption FROM memory WHERE id = :id", memory)).isEqualTo("Synthetic caption 0");
+        assertThat(fixture.db().sql("SELECT audio_duration_ms FROM media_asset WHERE id = :id").param("id", asset).query(Long.class).single())
+            .isEqualTo(120_000L);
+        assertThat(time(fixture.db(), "SELECT purge_started_at FROM memory WHERE id = :id", unfinished.memories().getFirst())).isNull();
+
+        storage.operations.clear();
+        assertThat(service(fixture, NOW.plusSeconds(1)).purgeBatch(20)).isEqualTo(new RetentionService.Batch(1, 0));
+        assertThat(storage.operations).startsWith("record:" + memory, "original:" + asset);
+        assertThat(storage.operations).containsAll(voice.grants().getFirst().stream().map(id -> "staging:" + id).toList());
+        assertThat(string(fixture, "SELECT caption FROM memory WHERE id = :id", memory)).isNull();
+        assertThat(string(fixture, "SELECT guest_name FROM contribution WHERE id = :id", voice.contribution())).isNull();
+        assertThat(fixture.db().sql("SELECT COUNT(*) FROM media_asset WHERE id = :id").param("id", asset).query(Long.class).single()).isZero();
+        assertThat(storage.originals).containsExactly(unfinished.assets().getFirst());
+        assertThat(fixture.db().sql("SELECT COUNT(*) FROM erased_submission_key WHERE key_digest = :digest")
+            .param("digest", SubmissionKeyDigest.sha256(voice.key())).query(Long.class).single()).isEqualTo(1);
+    }
+
+    @Test void audioLedgerReplaysOlderOriginalAndPreservesAbsentEnvelopeErasedKey() {
+        var voice = audio("UPLOADED");
+        UUID erased = voice.memories().getFirst();
+        softDelete(fixture, erased, NOW.minusSeconds(THIRTY_DAYS));
+        assertThat(service(fixture, NOW).purgeBatch(20)).isEqualTo(new RetentionService.Batch(1, 0));
+        var evidence = storage.records.get(erased);
+        var oldBackup = newSchema();
+        restorePhotoBatch(oldBackup, voice);
+        convertToAudio(oldBackup, voice, "UPLOADED");
+        storage.originals.add(voice.assets().getFirst());
+        storage.staging.addAll(voice.grants().getFirst());
+
+        assertThat(service(oldBackup, NOW.plusSeconds(60)).replayLedger()).isEqualTo(1);
+        assertThat(count(oldBackup, "media_asset")).isZero();
+        assertThat(count(oldBackup, "upload_grant")).isZero();
+        assertThat(string(oldBackup, "SELECT caption FROM memory WHERE id = :id", erased)).isNull();
+        assertThat(storage.originals).isEmpty();
+        assertThat(storage.staging).isEmpty();
+        assertThat(storage.records.get(erased)).isEqualTo(evidence);
+
+        var beforeEnvelope = newSchema();
+        assertThat(service(beforeEnvelope, NOW.plusSeconds(90)).replayLedger()).isEqualTo(1);
+        assertThat(count(beforeEnvelope, "erased_submission_key")).isEqualTo(1);
+        assertThatThrownBy(() -> beforeEnvelope.tx().execute(ignored -> beforeEnvelope.contributions().saveTextContribution(
+            "kevin-mel-wedding", null, "Synthetic attempted erased-key reuse", voice.key()))).isInstanceOf(ApiException.class);
+    }
+
     @Test void independentLedgerReplaysAnOlderBackupAndAlsoReservesKeysBeforeEnvelopeCreation() {
         var batch = photos(2);
         UUID erased = batch.memories().getFirst();
@@ -347,6 +400,24 @@ class RetentionPostgresTest {
             grants.add(List.copyOf(itemGrants));
         }
         return new PhotoBatch(saved.receipt().contributionId(), key, request, memories, List.copyOf(assets), List.copyOf(grants));
+    }
+    private PhotoBatch audio(String state) {
+        var batch = photos(1);
+        convertToAudio(fixture, batch, state);
+        return batch;
+    }
+    private static void convertToAudio(Fixture target, PhotoBatch batch, String state) {
+        boolean uploaded = "UPLOADED".equals(state);
+        target.db().sql("UPDATE memory SET memory_type = 'AUDIO' WHERE id = :id")
+            .param("id", batch.memories().getFirst()).update();
+        target.db().sql("""
+            UPDATE media_asset SET detected_format = :format, declared_content_type = 'audio/webm',
+                byte_size = 25000000, expected_byte_size = 25000000, expected_duration_ms = 120000,
+                audio_duration_ms = :duration, audio_codec = :codec, audio_container = :container, upload_state = :state
+            WHERE id = :id
+            """).param("format", uploaded ? "audio/webm" : "unverified").param("duration", uploaded ? 120_000L : null)
+            .param("codec", uploaded ? "opus" : null).param("container", uploaded ? "webm" : null)
+            .param("state", state).param("id", batch.assets().getFirst()).update();
     }
 
     private static void restorePhotoBatch(Fixture target, PhotoBatch batch) {

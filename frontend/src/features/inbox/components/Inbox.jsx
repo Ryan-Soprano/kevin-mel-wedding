@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { attachInboxPrivacyLifecycle } from "../api/inboxPrivacyLifecycle.js";
 import { createInboxController } from "../api/inboxController.js";
 import { memoryTime } from "../memoryDisplay.js";
+import { stopAudioPlayback } from "../audioPlayback.js";
 import "../inbox.css";
 
 const INITIAL = {
@@ -14,10 +15,14 @@ const INITIAL = {
 };
 const LABELS = { PENDING: "Pending", KEEP: "Kept", ARCHIVED: "Archived", DELETE: "Recently deleted" };
 const REVIEW_LABELS = { PENDING: "Restore to inbox", KEEP: "Keep privately", ARCHIVED: "Archive", DELETE: "Delete" };
+const MEMORY_LABELS = { TEXT: "Written note", PHOTO: "Photo", AUDIO: "Voice memory" };
+const MEMORY_SHORT_LABELS = { TEXT: "note", PHOTO: "photo", AUDIO: "voice memory" };
 
 export default function Inbox({ createController = createInboxController } = {}) {
   const factory = useRef(createController);
   const controller = useRef(null);
+  const audioPlayback = useRef(null);
+  const clearPlayback = useCallback(() => stopAudioPlayback(audioPlayback.current), []);
   const heading = useRef(null);
   const deleteButton = useRef(null);
   const cancelDelete = useRef(null);
@@ -35,6 +40,9 @@ export default function Inbox({ createController = createInboxController } = {})
     let pageVersion = current.getSnapshot().pageResetVersion;
     const unsubscribe = current.subscribe(next => {
       if (controller.current !== current) return;
+      if (audioPlayback.current && (next.photo.phase !== "ready" || next.photo.url !== audioPlayback.current.getAttribute("src"))) {
+        clearPlayback();
+      }
       if (next.pageResetVersion !== pageVersion) {
         pageVersion = next.pageResetVersion;
         setPages([null]);
@@ -43,6 +51,7 @@ export default function Inbox({ createController = createInboxController } = {})
       setSnapshot(next);
     });
     const detachLifecycle = attachInboxPrivacyLifecycle({ controller: current, flush: flushSync, onHide: () => {
+      clearPlayback();
       setUsername("");
       setPassword("");
       setDeleteConfirmation(null);
@@ -51,12 +60,13 @@ export default function Inbox({ createController = createInboxController } = {})
     if (document.visibilityState === "hidden") current.suspend();
     else void current.loadSession();
     return () => {
+      clearPlayback();
       detachLifecycle();
       if (controller.current === current) controller.current = null;
       unsubscribe();
       current.dispose();
     };
-  }, []);
+  }, [clearPlayback]);
 
   useEffect(() => {
     heading.current?.focus();
@@ -209,9 +219,9 @@ export default function Inbox({ createController = createInboxController } = {})
                       {snapshot.items.map(memory => (
                         <li key={memory.memoryId} className="inbox-card">
                           <h2>{memory.guestName ?? "Name not provided"}</h2>
-                          <p>{memory.memoryType === "TEXT" ? "Written note" : "Photo"} · <time dateTime={memory.createdAt}>{memoryTime(memory.createdAt)}</time></p>
+                          <p>{MEMORY_LABELS[memory.memoryType]} · <time dateTime={memory.createdAt}>{memoryTime(memory.createdAt)}</time></p>
                           <p className="inbox-excerpt">{memory.memoryType === "TEXT" ? memory.textContent.slice(0, 180) : memory.caption ?? memory.media.originalFilename}</p>
-                          <button type="button" onClick={() => controller.current?.openMemory(memory.memoryId)} aria-label={`Open ${memory.memoryType === "TEXT" ? "note" : "photo"} from ${memory.guestName ?? "Name not provided"}`}>Open memory</button>
+                          <button type="button" onClick={() => controller.current?.openMemory(memory.memoryId)} aria-label={`Open ${MEMORY_SHORT_LABELS[memory.memoryType]} from ${memory.guestName ?? "Name not provided"}`}>Open memory</button>
                         </li>
                       ))}
                     </ul>
@@ -238,7 +248,7 @@ export default function Inbox({ createController = createInboxController } = {})
               <p><time dateTime={detail.createdAt}>{memoryTime(detail.createdAt)}</time> · Chicago</p>
               <p>Status: {LABELS[detail.reviewStatus]} · Couple only</p>
               {detail.reviewStatus === "DELETE" && (
-                <p className="inbox-deletion-window">This individual memory is in Recently deleted. Restore it before <time dateTime={detail.deleteAfter}>{memoryTime(detail.deleteAfter)}</time> (Chicago), when its 30-day recovery window ends. Deleted photos cannot be opened or downloaded.</p>
+                <p className="inbox-deletion-window">This individual memory is in Recently deleted. Restore it before <time dateTime={detail.deleteAfter}>{memoryTime(detail.deleteAfter)}</time> (Chicago), when its 30-day recovery window ends. Deleted photos and audio cannot be opened or downloaded.</p>
               )}
               {detail.memoryType === "TEXT"
                 ? <p className="inbox-note">{detail.textContent}</p>
@@ -246,30 +256,34 @@ export default function Inbox({ createController = createInboxController } = {})
                   <>
                     {detail.caption && <p className="inbox-note">{detail.caption}</p>}
                     <p className="inbox-filename">{detail.media.originalFilename}</p>
-                    {detail.reviewStatus !== "DELETE" && snapshot.photo.phase === "loading" && <p role="status">Loading and checking the original photo…</p>}
+                    {detail.memoryType === "AUDIO" && <p>{Math.ceil(detail.media.durationSeconds)} seconds · Original audio</p>}
+                    {detail.reviewStatus !== "DELETE" && snapshot.photo.phase === "loading" && <p role="status">Loading and checking the original {detail.memoryType === "AUDIO" ? "audio" : "photo"}…</p>}
                     {detail.reviewStatus !== "DELETE" && snapshot.photo.phase === "error" && (
                       <div className="inbox-actions">
                         <p className="form-error" role="alert">{snapshot.photo.error}</p>
-                        <button type="button" disabled={reviewLocked} onClick={() => controller.current?.retryPhoto()}>Try loading the photo again</button>
+                        <button type="button" disabled={reviewLocked} onClick={() => controller.current?.retryMedia()}>Try loading the {detail.memoryType === "AUDIO" ? "audio" : "photo"} again</button>
                       </div>
                     )}
                     {detail.reviewStatus !== "DELETE" && !reviewLocked && snapshot.photo.phase === "ready" && snapshot.photo.url && (
                       <>
-                        <img className="inbox-original" src={snapshot.photo.url} alt={detail.caption ?? `Photo shared by ${detail.guestName ?? "an unnamed guest"}`} />
-                        <a className="inbox-download" href={snapshot.photo.url} download={detail.media.originalFilename}>Download original photo</a>
+                        {detail.memoryType === "AUDIO"
+                          ? <audio ref={audioPlayback} className="inbox-audio" controls preload="metadata" src={snapshot.photo.url} aria-label={`Voice memory from ${detail.guestName ?? "an unnamed guest"}`} />
+                          : <img className="inbox-original" src={snapshot.photo.url} alt={detail.caption ?? `Photo shared by ${detail.guestName ?? "an unnamed guest"}`} />}
+                        <a className="inbox-download" href={snapshot.photo.url} download={detail.media.originalFilename}>Download original {detail.memoryType === "AUDIO" ? "audio" : "photo"}</a>
+                        {detail.memoryType === "AUDIO" && <p className="guest-help">If this browser cannot play the clip, download the original audio to listen in a supported player.</p>}
                       </>
                     )}
                   </>
                 )}
               {snapshot.notice && <p ref={reviewFeedback} tabIndex={-1} className="inbox-review-notice" role="status">{snapshot.notice}</p>}
               <section className="inbox-review" aria-label="Private review actions">
-                <p className="guest-help">These actions affect this individual memory. Keeping or archiving it does not publish it or change other photos from the same batch.</p>
+                <p className="guest-help">These actions affect this individual memory. Keeping or archiving it does not publish it or change other memories.</p>
                 {["saving", "loading", "refreshing"].includes(snapshot.review.phase) && (
                   <p role="status">{snapshot.review.phase === "saving" ? `Saving: ${REVIEW_LABELS[snapshot.review.targetStatus]}…`
                     : snapshot.review.phase === "refreshing" ? "Refreshing your session and this memory…" : "Loading this memory’s current state…"}</p>
                 )}
                 {snapshot.review.error && <p ref={reviewFeedback} tabIndex={-1} className="form-error" role="alert">{snapshot.review.error}</p>}
-                {reviewLocked && <p className="guest-help">Keep this page open while this change is pending or unconfirmed. Other review actions, navigation, photo loading and sign-out are paused.</p>}
+                {reviewLocked && <p className="guest-help">Keep this page open while this change is pending or unconfirmed. Other review actions, navigation, media loading and sign-out are paused.</p>}
                 {["uncertain", "conflict"].includes(snapshot.review.phase) && (
                   <div className="inbox-actions">
                     <button type="button" disabled={snapshot.busy} onClick={() => controller.current?.reloadReview()}>Reload current state</button>
@@ -288,7 +302,7 @@ export default function Inbox({ createController = createInboxController } = {})
                 {confirmingDelete && (
                   <div className="inbox-delete-confirmation" role="group" aria-labelledby="inbox-delete-title" aria-describedby="inbox-delete-copy">
                     <h3 id="inbox-delete-title">Delete this memory?</h3>
-                    <p id="inbox-delete-copy">Only this memory will move to Recently deleted. You can restore it to your inbox for 30 days after its first deletion. It will no longer be available after that recovery window, and deleted photos cannot be opened or downloaded.</p>
+                    <p id="inbox-delete-copy">Only this memory will move to Recently deleted. You can restore it to your inbox for 30 days after its first deletion. It will no longer be available after that recovery window, and deleted photos and audio cannot be opened or downloaded.</p>
                     <div className="inbox-actions">
                       <button ref={cancelDelete} type="button" className="button-secondary" disabled={snapshot.busy} onClick={cancelConfirmation}>Cancel</button>
                       <button type="button" disabled={snapshot.busy} onClick={() => changeReview("DELETE")}>Confirm delete</button>

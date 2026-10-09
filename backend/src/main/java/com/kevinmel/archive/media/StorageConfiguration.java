@@ -35,6 +35,6 @@ public class StorageConfiguration {
     }
 
     static ApiException privateMediaUnavailable() {
-        return new ApiException(503, "MEDIA_UNAVAILABLE", "The saved photo is temporarily unavailable. Please try again later.");
+        return new ApiException(503, "MEDIA_UNAVAILABLE", "The saved memory is temporarily unavailable. Please try again later.");
     }
 }

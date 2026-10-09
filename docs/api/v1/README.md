@@ -13,7 +13,7 @@ MED-01 implements PHOTO intents (one to five), capability-bound grants/finalizat
 
 AUTH-01 implements GET/POST/DELETE `/api/session` with Spring Security server-side sessions, PostgreSQL accounts, bcrypt password hashes, CSRF/session rotation, durable login throttling, credential-version revocation, and reveal/role gates. Provisioning and recovery use a separate console utility. See [AUTH-01 verification](auth-verification.md) and the [account-access runbook](../../runbooks/account-access.md).
 
-AUTH-02 implements `GET /api/memories/{memoryId}/playback` for eligible verified PHOTO originals. The server rechecks current account/reveal access, verifies the private original's size/MIME through authenticated HEAD, then signs a single-object S3 HTTPS GET for at most 300 seconds. See [AUTH-02 verification](authorization-verification.md). INB-01 implements private note/photo inbox list and detail; INB-02 adds private conditional review mutations, recoverable deleted-item browsing and independent-ledger-backed retention. Audio, publication, real production account provisioning and production operations remain later work. See [INB-01 verification](inbox-verification.md) for the exact partial boundary. Mock success is not production-readiness evidence.
+AUTH-02 implements private playback issuance, now extended to verified AUDIO by AUD-03. Every issuance rechecks current couple/reveal authority, authenticated private-object size/MIME and a single-object GET expiry of at most 300 seconds. The private inbox supports notes, verified photos and verified audio; conditional review and independent-ledger-backed retention remain private. Publication, production onboarding and hosted acceptance remain release work. See [authorization verification](authorization-verification.md) and the [audio runbook](../../runbooks/voice-memories.md).
 
 The [staging package](../../runbooks/staging-deployment.md) serves production frontend assets and `/api` through one Spring process. Its staging-only operator access gate is separate from the couple session API. Staging limits overlapping photo finalization to one: a busy request returns `503 MEDIA_UNAVAILABLE` before reading storage or changing item state; deliberate retry retains the same intent, item and capability key. File, dimension and batch limits are unchanged. Local package checks pass; hosted deployment and physical-phone acceptance remain pending.
 
@@ -47,7 +47,7 @@ New photo intents and temporary permissions have separate serialized 7.5 GB rese
 
 ## Endpoint index
 
-AUTH-01 implements session routes, AUTH-02 implements verified PHOTO playback issuance, and INB-01 implements note/photo inbox list and detail; INB-02 implements conditional private review and deleted-item recovery. Audio remains later work.
+AUTH-01 implements session routes. AUTH-02/AUD-03 provide verified PHOTO/AUDIO playback; the inbox supports note/photo/audio list, detail, conditional private review and deleted-item recovery.
 
 | Method and route | Success | Responsibility |
 |---|---|---|
@@ -59,10 +59,10 @@ AUTH-01 implements session routes, AUTH-02 implements verified PHOTO playback is
 | GET `/api/session` | 200 | Current session and CSRF token, including anonymous |
 | POST `/api/session` | 200 | Couple login; rotate session/CSRF token |
 | DELETE `/api/session` | 204 | Invalidate session and clear cookie; no body |
-| GET `/api/memories` | 200 | Implemented: couple-only paginated note/photo inbox, including recoverable DELETE filter |
-| GET `/api/memories/{memoryId}` | 200 | Implemented: couple-only note/photo detail, revision, and ETag |
+| GET `/api/memories` | 200 | Couple-only paginated note/photo/audio inbox, including recoverable DELETE filter |
+| GET `/api/memories/{memoryId}` | 200 | Couple-only note/photo/audio detail, revision, and ETag |
 | PATCH `/api/memories/{memoryId}/review` | 200 | Implemented: conditional private Keep/Archive/Restore/Delete |
-| GET `/api/memories/{memoryId}/playback` | 200 | Implemented: current couple/reveal authorization and short-lived GET for an eligible PHOTO original |
+| GET `/api/memories/{memoryId}/playback` | 200 | Current couple/reveal authorization and short-lived GET for an eligible PHOTO/AUDIO original |
 
 ## Text creation and retry identity
 
@@ -150,13 +150,18 @@ Example photo item:
 | checksumSha256 | Required 64 lowercase hex characters; SHA-256 of original bytes |
 | caption | Optional/null, raw length at most 500; blank becomes null |
 | Photos | At most five JPEG/PNG/WebP; **10,000,000 bytes each**, matching picker; actual decode limited to 50 million pixels and 20,000 per dimension |
-| Audio | One; provisional **25,000,000 bytes**, over zero and at most 120 seconds |
+| Audio | One; **25,000,000 bytes**, over zero and at most 120 decoded seconds; gated pending device acceptance |
 | durationSeconds | Required finite AUDIO number; omitted for PHOTO request; verified by server |
 
-HEIC/HEIF remains excluded. The audio/webm example is **not** a final production
-allowlist. The adapter permits provisional audio/*, video/webm, video/mp4 metadata
-declarations. D-03 and real-device audio tests must settle actual containers/codecs,
-sniffing rules, and final limits. No shared-network rate threshold is selected here.
+HEIC/HEIF remains excluded. AUD-02/AUD-03 implement a gated audio path with canonical
+`audio/webm` (WebM/Opus), `audio/ogg` (Ogg/Opus), and `audio/mp4` (MP4/AAC). Video and
+additional streams are rejected. Each original is limited to 25,000,000 bytes,
+one or two audio channels, 8–96 kHz, and 120 seconds of decoded playback. Browser
+codec parameters are normalized before intent creation and PUT, without changing
+the original bytes. `durationSeconds` is a client claim rounded to milliseconds
+for retry identity; stored duration comes from independent server decoding.
+Physical phone/browser format acceptance remains deferred, so both guest build
+and server admission gates default off. See the [audio runbook](../../runbooks/voice-memories.md).
 
 PHOTO_RECEIPT initially gives each item clientItemId, memoryType, and uploadState
 PENDING. Obtain UPLOAD_GRANT for each incomplete item:
@@ -184,6 +189,17 @@ UPLOADED. Repeated successful finalize returns current receipt. Failed verificat
 returns 422 INVALID_MEDIA and marks that item FAILED.
 
 PHOTO finalization verifies the declared exact byte count and SHA-256, detected MIME and bounded image decoding. Original bytes and metadata are preserved; sampled decoding is only a verification step. Grant association/capability is checked before returning a repeated completion. An unfinished expired grant cannot finalize (410); a correctly associated completed item's finalize replays its current receipt even after grant expiry. A known verification rejection commits FAILED before 422 is emitted. Storage/DB failure never acknowledges success; a private original written before DB commit failure can be recovered by the same-item retry.
+
+AUDIO uses the same intent, grant, finalize and receipt routes. The server checks
+exact size and SHA-256, strict container framing, one supported audio stream, and
+full bounded FFmpeg decoding. It stores the canonical MIME, container, codec and
+actual decoded duration while preserving the original bytes. Temporary original
+files have owner-only permissions and are removed after verification; decoded PCM
+is counted and discarded. Missing tools, disk/decoder timeouts and storage failures
+return retryable `503 MEDIA_UNAVAILABLE`, retaining the same intent. Invalid bytes
+return `422 INVALID_MEDIA` and commit FAILED. Audio admission disabled after an
+intent was issued preserves equivalent replay, existing unexpired grants and
+finalization; new intents and new audio grants remain gated.
 
 The guest batch photo form retains its original files, normalized name/captions, item IDs, hashes, one contribution key and per-item grants in memory. Repeated taps coalesce. Retry reconciles the receipt and each retained grant before retransfer, skips UPLOADED siblings and preserves item mapping by clientItemId. Only verified UPLOADED items count as saved; only COMPLETE confirms the whole batch. Uncertain outcomes lock editing and retain identity. A known INVALID_MEDIA rejection can recover the same original bytes through a fresh grant; explicit replacement starts a new batch only after all remaining items are known rejected. Already saved siblings remain durable. Refresh/tab closure is not recovery. See [MED-02 verification](../../product/med02-verification.md) for operational timeouts, selective retry and remaining acceptance.
 
@@ -262,7 +278,7 @@ valid. MEMORY_DETAIL / MEDIA_DETAIL / INBOX_PAGE / EMPTY_INBOX define full examp
   checksumSha256, durationSeconds (null for PHOTO), uploadState. No URL/internal
   storage key. Inbox contains durable items; receipt reconciles unfinished uploads.
 
-GET detail returns ETag `"1"` matching persisted revision. The note/photo slice excludes audio/unfinished/unverified and expired/claimed/purged items. Recoverable DELETE returns its first deleteAfter; other states return null. See [INB-01 verification](inbox-verification.md) and [INB-02 verification](review-verification.md). PATCH review sends
+GET detail returns ETag `"1"` matching persisted revision. The inbox includes TEXT and verified PHOTO/AUDIO, excluding unfinished/unverified and expired/claimed/purged items. Audio detail reports server-decoded `durationSeconds`. Recoverable DELETE returns its first deleteAfter; other states return null. See [INB-01 verification](inbox-verification.md) and [INB-02 verification](review-verification.md). PATCH review sends
 `{"reviewStatus":"KEEP"}`, `If-Match: "1"`, X-CSRF-Token. Server atomically
 checks authorization/CSRF/revision, increments revision for an actual change and returns detail/new ETag. A same-state request at the current revision is a no-op; stale same-state requests still conflict. State and content-free audit commit atomically.
 Missing precondition: 428 PRECONDITION_REQUIRED; stale revision: 412 REVIEW_CONFLICT.
@@ -272,9 +288,9 @@ The implemented DELETE review state is soft: deleteAfter = first deletion + 30 d
 extend it. Before expiry, PATCH PENDING/KEEP/ARCHIVED restores and clears deleteAfter.
 After expiry, unavailable items return 404. Bounded maintenance writes an independent private deletion ledger before physical object deletion and metadata scrubbing. Retained opaque IDs/retry reservations prevent guest replay from recreating purged content; offline ledger replay reserves erased-key digests even when the backup predates submission creation. The [deletion/recovery runbook](../../runbooks/deletion-and-recovery.md) defines maintenance readiness and rolling-backup implications. No sibling cascade or memory HTTP DELETE route. KEEP is not publication.
 
-PLAYBACK is `{"url":"https://…","expiresAt":"…Z"}`. AUTH-02 implements issuance for the current event's verified PHOTO items with `COUPLE_ONLY` visibility and `UPLOADED` assets. Each request revalidates the session's enabled COUPLE account and requires an open reveal gate. Guest retry capabilities, UUID knowledge, and operator/developer identities grant no playback authority. The server checks the associated private `originals/…` object's size and detected MIME through authenticated HEAD before signing GET for that single object. The S3 API HTTPS URL expires within 300 seconds; `expiresAt` reports the actual signature expiry, rather than a separately guessed time. Public custom domains and `r2.dev` stay disabled for originals and staging.
+PLAYBACK is `{"url":"https://…","expiresAt":"…Z"}`. AUTH-02/AUD-03 issue it for verified PHOTO/AUDIO items with `COUPLE_ONLY` visibility and `UPLOADED` assets. Each request revalidates the enabled COUPLE account and open reveal gate; guest capabilities, IDs and operator/developer roles grant no authority. Authenticated HEAD must match the private original's size and detected MIME before signing one S3 HTTPS GET for at most 300 seconds. `expiresAt` reports the actual signature expiry. Public custom domains and `r2.dev` stay disabled for originals and staging.
 
-Unfinished/failed items, TEXT/AUDIO, missing or wrong-event memories, and DELETE items return safe 404. DELETE is deliberately excluded until the future INB-02 restoration flow restores the item. Eligible original missing, metadata mismatch, or unavailable storage returns 503 MEDIA_UNAVAILABLE. Database failure remains 503 SERVICE_UNAVAILABLE. A playback failure does not mean the stored memory disappeared; implemented inbox/detail reads remain available independently of storage. INB-02 review mutations remain private and do not issue playback for deleted items.
+Unfinished/failed/unverified items, TEXT, missing or wrong-event memories, and DELETE items return safe 404. Restoring an eligible deleted item permits playback again. A missing eligible original, metadata mismatch or unavailable storage returns 503 MEDIA_UNAVAILABLE; database failure remains 503 SERVICE_UNAVAILABLE. Playback failure does not erase the memory, and inbox/detail reads remain independent of storage. Accepted AUDIO playback remains available when new audio admission is disabled.
 
 The signed URL is a reusable bearer permission: anyone possessing it can GET the object until its own expiry. Logout, reset, disablement, and closing reveal block new issuance; they do not revoke an already-issued link or an in-progress download. `Cache-Control: no-store` does not erase downloaded bytes. Never persist/log the URL, and refresh issuance only after expiry through the authenticated app route. The later playback UI must omit application credentials when fetching the object, use `no-referrer`, and never forward session/CSRF/retry headers. A GET signature does not grant PUT, DELETE or HEAD. Real provider HEAD/GET, expiry, CORS, tampering and unsigned/public denial remain in the [home acceptance checklist](../../runbooks/private-photo-storage.md#authenticated-photo-playback--auth-02-home-acceptance).
 

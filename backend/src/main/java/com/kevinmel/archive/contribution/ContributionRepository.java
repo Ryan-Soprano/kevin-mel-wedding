@@ -91,7 +91,7 @@ public class ContributionRepository {
                 .optional().orElseThrow(ApiException::notFound);
         var memories = jdbcClient.sql("""
                 SELECT m.id, m.client_item_id, m.memory_type, m.review_status, m.visibility,
-                       CASE WHEN m.purged_at IS NOT NULL AND m.memory_type = 'PHOTO' THEN 'UPLOADED'
+                       CASE WHEN m.purged_at IS NOT NULL AND m.memory_type IN ('PHOTO', 'AUDIO') THEN 'UPLOADED'
                             ELSE a.upload_state END AS upload_state
                 FROM memory m LEFT JOIN media_asset a ON a.memory_id = m.id
                 WHERE m.contribution_id = :id

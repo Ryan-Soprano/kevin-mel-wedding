@@ -414,7 +414,7 @@ test("same-state no-ops require the current session's CSRF token", async () => {
   }), original);
 });
 
-test("inbox lists include text and only finalized photos while retaining provisional audio scaffolding", async () => {
+test("inbox lists include text and finalized photos/audio while unfinished media remains private", async () => {
   const api = createMockArchiveApi();
   const photos = await api.createMediaContribution(PHOTO_REQUEST, options);
   const audio = await api.createMediaContribution(AUDIO_REQUEST, { idempotencyKey: IDS.secondClientItem });
@@ -424,12 +424,12 @@ test("inbox lists include text and only finalized photos while retaining provisi
   await api.uploadMedia(audioGrant, new Blob());
   await api.finalizeUpload(audio.contributionId, audioMemory.memoryId, audioGrant.grantId, audioOptions);
   await signIn(api);
-  assert.deepEqual((await api.listMemories()).items.map((item) => item.memoryType), ["TEXT"]);
+  assert.deepEqual((await api.listMemories()).items.map((item) => item.memoryType).sort(), ["AUDIO", "TEXT"]);
   assert.equal((await api.getMemory(audioMemory.memoryId)).memoryType, "AUDIO");
   assert.ok((await api.getPlayback(audioMemory.memoryId)).url.startsWith("https:"));
   await finalize(api, photos, await transfer(api, photos));
   const page = await api.listMemories();
-  assert.deepEqual(page.items.map((item) => item.memoryType).sort(), ["PHOTO", "TEXT"]);
+  assert.deepEqual(page.items.map((item) => item.memoryType).sort(), ["AUDIO", "PHOTO", "TEXT"]);
   assert.equal(page.items.some((item) => item.memoryId === photos.memories[1].memoryId), false);
 });
 

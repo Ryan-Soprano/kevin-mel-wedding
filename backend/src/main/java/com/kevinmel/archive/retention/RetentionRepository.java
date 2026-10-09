@@ -32,10 +32,19 @@ public class RetentionRepository {
                     LEFT JOIN media_asset a ON a.memory_id = m.id
                     WHERE c.event_key = 'kevin-mel-wedding' AND m.visibility = 'COUPLE_ONLY'
                         AND m.review_status = 'DELETE' AND m.purged_at IS NULL AND m.delete_after <= :now
-                        AND (m.memory_type = 'TEXT' OR (m.memory_type = 'PHOTO'
+                        AND (m.memory_type = 'TEXT' OR (m.memory_type IN ('PHOTO', 'AUDIO')
                             AND a.upload_state = 'UPLOADED'
-                            AND a.detected_format IN ('image/jpeg', 'image/png', 'image/webp')
-                            AND a.byte_size BETWEEN 1 AND 10000000
+                            AND ((m.memory_type = 'PHOTO'
+                                AND a.detected_format IN ('image/jpeg', 'image/png', 'image/webp')
+                                AND a.byte_size BETWEEN 1 AND 10000000
+                                AND a.expected_duration_ms IS NULL AND a.audio_duration_ms IS NULL
+                                AND a.audio_codec IS NULL AND a.audio_container IS NULL)
+                                OR (m.memory_type = 'AUDIO' AND a.byte_size BETWEEN 1 AND 25000000
+                                    AND a.expected_duration_ms BETWEEN 1 AND 120000
+                                    AND a.audio_duration_ms BETWEEN 1 AND 120000
+                                    AND ((a.detected_format = 'audio/webm' AND a.audio_container = 'webm' AND a.audio_codec = 'opus')
+                                        OR (a.detected_format = 'audio/ogg' AND a.audio_container = 'ogg' AND a.audio_codec = 'opus')
+                                        OR (a.detected_format = 'audio/mp4' AND a.audio_container = 'mp4' AND a.audio_codec = 'aac'))))
                             AND a.expected_byte_size = a.byte_size
                             AND a.expected_checksum_sha256 = a.checksum_sha256
                             AND a.declared_content_type = a.detected_format
@@ -86,8 +95,8 @@ public class RetentionRepository {
                     || !"kevin-mel-wedding".equals(existing.eventKey())
                     || !record.submissionKeyDigest().equals(existing.keyDigest())
                     || ("TEXT".equals(existing.memoryType()) && record.assetId() != null)
-                    || ("PHOTO".equals(existing.memoryType()) && record.assetId() == null)
-                    || !List.of("TEXT", "PHOTO").contains(existing.memoryType())) throw invalidPlan();
+                    || (List.of("PHOTO", "AUDIO").contains(existing.memoryType()) && record.assetId() == null)
+                    || !List.of("TEXT", "PHOTO", "AUDIO").contains(existing.memoryType())) throw invalidPlan();
             var asset = db.sql("SELECT id, object_key FROM media_asset WHERE memory_id = :id")
                     .param("id", record.memoryId()).query((rs, row) -> {
                         UUID id = rs.getObject("id", UUID.class);
