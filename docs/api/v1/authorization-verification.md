@@ -46,7 +46,7 @@ Frontend behavior was not changed; its existing adapter was exercised against th
 
 ## Remaining acceptance
 
-Keep AUTH-02 in Review until its remaining acceptance passes. The home PostgreSQL 17 full suite now passes as recorded below; native PostgreSQL 18 checks remain supplemental. Real provider checks are recorded below; browser playback needs the local CORS policy to permit GET, and approved hosted acceptance is still open. The [private storage runbook](../../runbooks/private-photo-storage.md#authenticated-photo-playback--auth-02-home-acceptance) contains the complete checklist. Production HTTPS/proxy verification remains with the authorized deployment process.
+Keep AUTH-02 in Review until its remaining acceptance passes. The home PostgreSQL 17 full suite and subsequent real R2/browser checks now pass as recorded below; native PostgreSQL 18 checks remain supplemental. Bucket privacy, token scope and staging-only lifecycle configuration were inspected. Approved hosted HTTPS/device acceptance and the AUTH-01/MED-01 prerequisites remain open. The [private storage runbook](../../runbooks/private-photo-storage.md#authenticated-photo-playback--auth-02-home-acceptance) contains the complete checklist. Production HTTPS/proxy verification remains with the authorized deployment process.
 
 Repeat the focused repository checks with Java 25 and Maven 3.9.16:
 
@@ -74,3 +74,11 @@ The same integrated Linux image was exercised against the existing private test 
 - The bucket's existing PUT-only CORS policy omitted GET permission for `http://127.0.0.1:5173`. A real Codex in-app browser on Windows confirmed the signed-photo fetch was blocked; an unapproved origin received no CORS permission. Ryan was given the exact PUT/GET/HEAD policy adjustment. Browser success, token/public-domain/lifecycle configuration confirmation, authorized hosted HTTPS/device checks and final review remain open. This check does not implement the future playback UI.
 
 All six owned synthetic staging/original objects and the temporary app/database/network were removed after the run; the existing database and earlier bucket objects were not touched. The temporary browser page and in-memory bridge were also removed. Provider checks passed; browser acceptance remains blocked by the concrete CORS setting above.
+
+## Browser and bucket-setting follow-up — 2026-10-05
+
+The later Cloudflare dashboard inspection confirms `PUT`, `GET` and `HEAD` for exactly `http://localhost:5173` and `http://127.0.0.1:5173`, with only `Content-Type` allowed and a 300-second CORS max age. The existing active Object Read & Write token applies only to the test bucket. Public development URL is disabled and there is no public custom domain. Ryan approved saving the enabled `expire-temporary-photo-uploads` rule: completed objects under `staging/` expire after one day. The original seven-day incomplete-multipart abort rule remains enabled; originals have no deletion rule. Actual asynchronous lifecycle deletion has not been observed.
+
+The integrated image's isolated real-R2 harness was repeated with tiny synthetic JPEG/PNG/WebP fixtures. All three retained exact bytes through publication, authenticated HEAD and signed GET. Signature scope, unsigned-access denial, current-session gates, missing-object handling and actual five-minute expiry passed again. The controlled Windows Codex in-app browser fetched the signed JPEG with credentials omitted and `no-referrer`, and computed a matching SHA-256 in memory. An unapproved-origin request received no CORS permission. The earlier PUT-only browser failure is resolved.
+
+Only the run-owned synthetic objects, app/database/network, browser probe file and in-memory bridge were removed. Existing database data and retained earlier fixtures were untouched. Hosted proxy/cookies, the eventual exact HTTPS CORS origin, physical devices and prerequisite acceptance remain open; no hosted application or real couple account was created.

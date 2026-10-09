@@ -14,6 +14,8 @@ jobs:
     name: Backend tests
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      TESTCONTAINERS_RYUK_CONTAINER_IMAGE: ghcr.io/testcontainers/ryuk:0.14.0
 
     steps:
       - name: Check out repository
@@ -29,6 +31,18 @@ jobs:
 
       - name: Make Maven wrapper executable
         run: chmod +x backend/mvnw
+
+      - name: Prepare test container images
+        timeout-minutes: 3
+        run: |
+          # Recheck Alpine/Ryuk helper versions when upgrading Testcontainers.
+          # Docker Official Images on ECR Public avoid shared Docker Hub pull limits.
+          docker pull public.ecr.aws/docker/library/postgres:17
+          docker tag public.ecr.aws/docker/library/postgres:17 postgres:17
+          docker pull public.ecr.aws/docker/library/alpine:3.17
+          docker tag public.ecr.aws/docker/library/alpine:3.17 alpine:3.17
+          docker pull "$TESTCONTAINERS_RYUK_CONTAINER_IMAGE"
+          docker image inspect postgres:17 alpine:3.17 "$TESTCONTAINERS_RYUK_CONTAINER_IMAGE" --format '{{.RepoTags}} {{.Id}}'
 
       - name: Install audio verification runtime
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg

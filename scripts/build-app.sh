@@ -25,6 +25,8 @@ fi
 npm --prefix frontend run build
 mkdir -p backend/target/classes/static
 cp -R frontend/dist/. backend/target/classes/static/
+mkdir -p backend/target/classes/staging-audio
+cp -R frontend/spikes/audio/*.html frontend/spikes/audio/*.js frontend/spikes/audio/*.css backend/target/classes/staging-audio/
 ./backend/mvnw -f backend/pom.xml --batch-mode -DskipTests package
 
 printf '\nBuilt %s/backend/target/memory-archive-0.0.1-SNAPSHOT.jar\n' "$repo_root"
