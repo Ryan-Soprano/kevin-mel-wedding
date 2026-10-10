@@ -16,6 +16,7 @@ import java.util.UUID;
 import com.kevinmel.archive.security.*;
 import com.kevinmel.archive.album.AlbumMemberships;
 import com.kevinmel.archive.timeline.TimelineMemberships;
+import com.kevinmel.archive.library.TagMemberships;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -45,6 +46,7 @@ class ReviewHttpSecurityTest {
     @MockitoBean InboxRepository repository;
     @MockitoBean AlbumMemberships albums;
     @MockitoBean TimelineMemberships timeline;
+    @MockitoBean TagMemberships tags;
     @MockitoBean Clock clock;
     private ArchiveAccount couple;
 

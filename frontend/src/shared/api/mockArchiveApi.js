@@ -3,6 +3,7 @@ import { createArchiveApi } from "./archiveApi.js";
 import { normalizeMemoryMetadata, sameMetadata } from "../../features/inbox/memoryMetadata.js";
 import { createMockAlbumServer } from "../../features/albums/api/mockAlbumServer.js";
 import { createMockTimelineServer } from "../../features/timeline/api/mockTimelineServer.js";
+import { createMockLibraryServer } from "../../features/library/api/mockLibraryServer.js";
 import {
   ANONYMOUS_SESSION, COUPLE_SESSION, CREATED_AT, IDS, INBOX_PAGE,
   MEDIA_DETAIL, MEMORY_DETAIL, PLAYBACK, SCENARIOS, UPLOAD_GRANT, VALIDATION_ERROR,
@@ -53,6 +54,8 @@ export function createMockArchiveApi({ scenario = "success", delayMs = 0, now = 
   const albumServer = createMockAlbumServer({ getSession: () => session, getScenario: () => scenario,
     getMemories: () => memories, nextId, now, reply, failure });
   const timelineServer = createMockTimelineServer({ getSession: () => session, getScenario: () => scenario,
+    getMemories: () => memories, nextId, now, reply, failure });
+  const libraryServer = createMockLibraryServer({ getSession: () => session, getScenario: () => scenario,
     getMemories: () => memories, nextId, now, reply, failure });
 
   function rotateSession(fixture) {
@@ -105,6 +108,8 @@ export function createMockArchiveApi({ scenario = "success", delayMs = 0, now = 
     if (albumReply !== null) return albumReply;
     const timelineReply = timelineServer.handle(url, method, headers, body);
     if (timelineReply !== null) return timelineReply;
+    const libraryReply = await libraryServer.handle(url, method, headers, body);
+    if (libraryReply !== null) return libraryReply;
     const privateContribution = url.pathname === "/api/memories/contributions" || url.pathname.startsWith("/api/memories/contributions/");
     const contributionPath = privateContribution ? url.pathname.replace("/api/memories/contributions", "/api/contributions") : url.pathname;
     if (privateContribution) {
@@ -262,6 +267,7 @@ export function createMockArchiveApi({ scenario = "success", delayMs = 0, now = 
         memory.reviewStatus = body.reviewStatus;
         if (deleting) albumServer.detachMemory(memory.memoryId);
         if (deleting) timelineServer.detachMemory(memory.memoryId);
+        if (deleting) libraryServer.detachMemory(memory.memoryId);
         for (const entry of contributions.values()) {
           const receiptMemory = entry.receipt.memories.find(item => item.memoryId === memory.memoryId);
           if (receiptMemory) receiptMemory.reviewStatus = memory.reviewStatus;

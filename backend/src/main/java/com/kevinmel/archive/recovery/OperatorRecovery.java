@@ -164,7 +164,7 @@ public final class OperatorRecovery {
                 RecoverySchema.insert(db, prepared.tables(), schema.bundleVersion());
                 verifyImportedCounts(prepared.tables(), schema.bundleVersion());
                 var retention = new RetentionRepository(db, manager, schema.bundleVersion() >= 3,
-                        schema.bundleVersion() >= 4, schema.bundleVersion() >= 5);
+                        schema.bundleVersion() >= 4, schema.bundleVersion() >= 5, schema.bundleVersion() >= 6);
                 // All identities and staging paths must pass before the first external mutation.
                 for (var plan : ledger) { retention.validate(plan); retention.grants(plan); }
                 int published = 0;
@@ -312,6 +312,8 @@ public final class OperatorRecovery {
         if (version >= 4) expected.put("album_membership", tables.get("album_membership").stream()
                 .filter(row -> !erasedMemories.contains(uuid(row, "memory_id"))).count());
         if (version >= 5) expected.put("timeline_event_memory", tables.get("timeline_event_memory").stream()
+                .filter(row -> !erasedMemories.contains(uuid(row, "memory_id"))).count());
+        if (version >= 6) expected.put("memory_tag", tables.get("memory_tag").stream()
                 .filter(row -> !erasedMemories.contains(uuid(row, "memory_id"))).count());
         for (var count : expected.entrySet()) if (db.sql("SELECT COUNT(*) FROM " + count.getKey()).query(Long.class).single().longValue() != count.getValue().longValue()) {
             throw failure("REPLAY_COUNT_MISMATCH");

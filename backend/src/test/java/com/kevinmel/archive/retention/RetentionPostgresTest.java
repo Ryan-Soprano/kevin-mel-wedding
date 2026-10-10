@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.sql.DriverManager;
+import java.sql.SQLException;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.OffsetDateTime;
@@ -13,6 +14,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import com.kevinmel.archive.contribution.ContributionRepository;
 import com.kevinmel.archive.media.PhotoRepository;
@@ -24,6 +29,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import org.springframework.jdbc.datasource.DataSourceUtils;
 import org.springframework.jdbc.support.JdbcTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.testcontainers.junit.jupiter.Container;
@@ -314,6 +320,80 @@ class RetentionPostgresTest {
         assertThat(count(beforeEnvelope, "memory")).isZero();
     }
 
+    @Test void retentionLocksMemoryBeforeWaitingForTagAndResumesWithSiblingLinksIntact() throws Exception {
+        var batch = photos(2); UUID erased = batch.memories().getFirst(), sibling = batch.memories().get(1);
+        UUID shared = tag("Synthetic blocking tag"); tagMember(shared, erased); tagMember(shared, sibling);
+        UUID before = tagRevision(shared);
+        softDelete(fixture, erased, NOW.minusSeconds(THIRTY_DAYS));
+        var record = new DeletionRecord(erased, batch.contribution(), batch.assets().getFirst(), SubmissionKeyDigest.sha256(batch.key()), NOW, NOW);
+        AtomicReference<Future<Boolean>> finishing = new AtomicReference<>();
+        AtomicReference<Integer> workerPid = new AtomicReference<>();
+        try (var executor = Executors.newSingleThreadExecutor()) {
+            fixture.tx().execute(ignored -> {
+                fixture.db().sql("SELECT id FROM tag WHERE id=:id FOR UPDATE").param("id", shared).query(UUID.class).single();
+                int holder = fixture.db().sql("SELECT pg_backend_pid()").query(Integer.class).single();
+                finishing.set(executor.submit(() -> fixture.tx().execute(worker -> {
+                    workerPid.set(fixture.db().sql("SELECT pg_backend_pid()").query(Integer.class).single());
+                    return fixture.retention().finish(record, NOW);
+                })));
+                long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+                // Activity inventories may be cached for this holder transaction. The known
+                // worker PID lets pg_blocking_pids inspect the current lock graph directly.
+                while (workerPid.get() == null || !fixture.db().sql("SELECT :holder = ANY(pg_blocking_pids(:worker))")
+                        .param("holder", holder).param("worker", workerPid.get()).query(Boolean.class).single()) {
+                    if (finishing.get().isDone()) {
+                        try { throw new AssertionError("Retention completed before the owned tag-lock wait: " + finishing.get().get()); }
+                        catch (java.util.concurrent.ExecutionException failure) { throw new AssertionError("Retention failed before the owned tag-lock wait.", failure.getCause()); }
+                        catch (InterruptedException failure) { Thread.currentThread().interrupt(); throw new AssertionError(failure); }
+                    }
+                    if (System.nanoTime() > deadline) throw new AssertionError("Retention did not wait for the owned tag lock.");
+                    try { Thread.sleep(20); } catch (InterruptedException failure) { Thread.currentThread().interrupt(); throw new AssertionError(failure); }
+                }
+                // NOWAIT at a savepoint proves the worker already holds memory while queued behind our tag.
+                var connection = DataSourceUtils.getConnection(fixture.source());
+                try {
+                    var savepoint = connection.setSavepoint();
+                    try (var query = connection.prepareStatement("SELECT id FROM memory WHERE id=? FOR UPDATE NOWAIT")) {
+                        query.setObject(1, erased);
+                        SQLException blocked = null;
+                        try { query.executeQuery().close(); } catch (SQLException failure) { blocked = failure; }
+                        connection.rollback(savepoint); connection.releaseSavepoint(savepoint);
+                        assertThat((Throwable) blocked).isNotNull(); assertThat(blocked.getSQLState()).isEqualTo("55P03");
+                    }
+                } catch (SQLException failure) { throw new AssertionError("Owned row-lock proof failed.", failure); }
+                return null;
+            });
+            assertThat(finishing.get().get(10, TimeUnit.SECONDS)).isTrue();
+        }
+        assertThat(tagMembers(shared)).containsExactly(sibling); assertThat(tagRevision(shared)).isNotEqualTo(before);
+        assertThat(time(fixture.db(), "SELECT purged_at FROM memory WHERE id=:id", erased)).isEqualTo(NOW);
+        assertThat(string(fixture, "SELECT caption FROM memory WHERE id=:id", sibling)).isEqualTo("Synthetic caption 1");
+    }
+
+    @Test void purgeAndRepeatedAuthoritativeReplayDetachTagsPreservingSiblingsAndEmptyTags() {
+        var batch = photos(2); UUID erased = batch.memories().getFirst(), sibling = batch.memories().get(1);
+        UUID shared = tag("Synthetic shared tag"), emptied = tag("Synthetic emptied tag"), untouched = tag("Synthetic untouched tag");
+        tagMember(shared, erased); tagMember(shared, sibling); tagMember(emptied, erased); tagMember(untouched, sibling);
+        UUID sharedBefore = tagRevision(shared), emptyBefore = tagRevision(emptied), untouchedBefore = tagRevision(untouched);
+        softDelete(fixture, erased, NOW.minusSeconds(THIRTY_DAYS));
+        assertThat(service(fixture, NOW).purgeBatch(20)).isEqualTo(new RetentionService.Batch(1, 0));
+        assertThat(tagMembers(shared)).containsExactly(sibling); assertThat(tagMembers(emptied)).isEmpty(); assertThat(tagMembers(untouched)).containsExactly(sibling);
+        assertThat(count(fixture, "tag")).isEqualTo(3); assertThat(count(fixture, "memory_tag")).isEqualTo(2);
+        assertThat(tagRevision(shared)).isNotEqualTo(sharedBefore); assertThat(tagRevision(emptied)).isNotEqualTo(emptyBefore);
+        assertThat(tagRevision(untouched)).isEqualTo(untouchedBefore);
+        assertThat(string(fixture, "SELECT name FROM tag WHERE id=:id", emptied)).isEqualTo("Synthetic emptied tag");
+        UUID sharedAfter = tagRevision(shared), emptyAfter = tagRevision(emptied);
+        assertThat(service(fixture, NOW.plusSeconds(1)).replayLedger()).isEqualTo(1);
+        assertThat(tagRevision(shared)).isEqualTo(sharedAfter); assertThat(tagRevision(emptied)).isEqualTo(emptyAfter);
+        // A defensive replay must remove a stale association even when this memory was already purged.
+        tagMember(shared, erased);
+        assertThat(service(fixture, NOW.plusSeconds(2)).replayLedger()).isEqualTo(1);
+        assertThat(tagMembers(shared)).containsExactly(sibling); assertThat(tagRevision(shared)).isNotEqualTo(sharedAfter);
+        assertThat(tagRevision(emptied)).isEqualTo(emptyAfter); assertThat(tagRevision(untouched)).isEqualTo(untouchedBefore);
+        assertThat(storage.originals).containsExactly(batch.assets().get(1));
+        assertThat(string(fixture, "SELECT caption FROM memory WHERE id=:id", sibling)).isEqualTo("Synthetic caption 1");
+    }
+
     @Test void wrongIdentityOwnershipOrStoredScopeIsRejectedBeforeAnyRemoteObjectIo() {
         var batch = photos(2);
         UUID memory = batch.memories().getFirst();
@@ -349,6 +429,20 @@ class RetentionPostgresTest {
         assertThat(storage.operations).containsExactly("ledger");
     }
 
+    private UUID tag(String name) {
+        UUID id = UUID.randomUUID();
+        fixture.db().sql("INSERT INTO tag(id,name) VALUES(:id,:name)").param("id", id).param("name", name).update();
+        return id;
+    }
+    private void tagMember(UUID tag, UUID memory) {
+        fixture.db().sql("INSERT INTO memory_tag(tag_id,memory_id) VALUES(:tag,:memory)").param("tag", tag).param("memory", memory).update();
+    }
+    private List<UUID> tagMembers(UUID tag) {
+        return fixture.db().sql("SELECT memory_id FROM memory_tag WHERE tag_id=:id ORDER BY memory_id").param("id", tag).query(UUID.class).list();
+    }
+    private UUID tagRevision(UUID tag) {
+        return fixture.db().sql("SELECT revision FROM tag WHERE id=:id").param("id", tag).query(UUID.class).single();
+    }
     private Fixture newSchema() {
         String schema = "retention_" + UUID.randomUUID().toString().replace("-", "");
         schemas.add(schema);
@@ -358,7 +452,7 @@ class RetentionPostgresTest {
         var db = JdbcClient.create(source);
         var manager = new JdbcTransactionManager(source);
         var contributions = new ContributionRepository(db);
-        return new Fixture(db, new RetentionRepository(db, manager), contributions,
+        return new Fixture(source, db, new RetentionRepository(db, manager), contributions,
                 new PhotoRepository(db, contributions, Clock.fixed(NOW, ZoneOffset.UTC),
                         new com.kevinmel.archive.media.PhotoAdmissionPolicy(false, 7_500_000_000L, 7_500_000_000L)), new TransactionTemplate(manager));
     }
@@ -474,7 +568,7 @@ class RetentionPostgresTest {
         assertThat(string(target, "SELECT guest_name FROM contribution WHERE id = :id", batch.contribution())).isEqualTo("Synthetic Photo Guest");
     }
     private static long count(Fixture target, String table) {
-        if (!List.of("memory", "contribution", "media_asset", "upload_grant", "deletion_ledger", "erased_submission_key").contains(table))
+        if (!List.of("memory", "contribution", "media_asset", "upload_grant", "deletion_ledger", "erased_submission_key", "tag", "memory_tag").contains(table))
             throw new IllegalArgumentException("Unsafe fixture table.");
         return target.db().sql("SELECT count(*) FROM " + table).query(Long.class).single();
     }
@@ -492,7 +586,7 @@ class RetentionPostgresTest {
         return values.getFirst();
     }
     private static OffsetDateTime utc(Instant time) { return OffsetDateTime.ofInstant(time, ZoneOffset.UTC); }
-    private record Fixture(JdbcClient db, RetentionRepository retention, ContributionRepository contributions,
+    private record Fixture(DriverManagerDataSource source, JdbcClient db, RetentionRepository retention, ContributionRepository contributions,
             PhotoRepository photos, TransactionTemplate tx) { }
     private record Text(UUID contribution, UUID memory, String key, String message, String guest) { }
     private record PhotoBatch(UUID contribution, String key, PhotoRequest request, List<UUID> memories,

@@ -6,6 +6,8 @@ import { normalizeMemoryMetadata, metadataOf, sameMetadata } from "../memoryMeta
 import { createCoupleSubmissionApi } from "./coupleSubmissionApi.js";
 import { createAlbumActions, initialAlbums } from "../../albums/api/albumActions.js";
 import { createTimelineActions, initialTimeline } from "../../timeline/api/timelineActions.js";
+import { createLibraryActions, initialLibrary } from "../../library/api/libraryActions.js";
+import { createTagActions, initialTags } from "../../library/api/tagActions.js";
 
 const EMPTY_ITEMS = Object.freeze([]);
 const idlePhoto = () => Object.freeze({ phase: "idle", url: null, error: null });
@@ -55,12 +57,13 @@ export function createInboxController({
   createObjectURL = blob => URL.createObjectURL(blob), revokeObjectURL = url => URL.revokeObjectURL(url),
   now = Date.now, digest = sha256, apiTimeoutMs = 30_000, photoTimeoutMs = 60_000,
   setTimeoutImpl = globalThis.setTimeout, clearTimeoutImpl = globalThis.clearTimeout,
-  albumNameFingerprint, timelineFieldsFingerprint,
+  albumNameFingerprint, timelineFieldsFingerprint, tagNameFingerprint,
 } = {}) {
   let state = Object.freeze({ phase: "checking", session: null, busy: false, error: null,
     reviewStatus: "PENDING", items: EMPTY_ITEMS, nextCursor: null, detail: null,
     photo: idlePhoto(), review: idleReview(), metadata: idleMetadata(), albums: initialAlbums(), albumReturnId: null,
-    timeline: initialTimeline(), timelineReturnId: null, notice: null, pageResetVersion: 0, logoutUnconfirmed: false });
+    timeline: initialTimeline(), timelineReturnId: null, library: initialLibrary(), libraryReturn: false,
+    tags: initialTags(), tagReturnId: null, notice: null, pageResetVersion: 0, logoutUnconfirmed: false });
   let generation = 0, operation = null, disposed = false, objectUrl = null;
   let reviewIntent = null, reviewInFlight = null, reviewUncertain = false, inboxDirty = false;
   let metadataIntent = null, metadataInFlight = null, metadataUncertain = false, metadataHiddenId = null;
@@ -157,9 +160,10 @@ export function createInboxController({
     inboxDirty = false;
     albums.clear();
     timeline.clear();
+    library.clear(); tags.clear();
     publish({ session: null, items: EMPTY_ITEMS, nextCursor: null, detail: null, photo: idlePhoto(),
       review: idleReview(), metadata: idleMetadata(), albums: initialAlbums(), albumReturnId: null,
-      timeline: initialTimeline(), timelineReturnId: null, notice: null, ...patch });
+      timeline: initialTimeline(), timelineReturnId: null, library: initialLibrary(), libraryReturn: false, tags: initialTags(), tagReturnId: null, notice: null, ...patch });
   }
 
   function authFailure(failure) {
@@ -219,7 +223,17 @@ export function createInboxController({
     publish({ items: EMPTY_ITEMS, nextCursor: null, pageResetVersion: state.pageResetVersion + 1,
       detail: frozenCopy(memory), review: idleReview(), notice, error: null });
     assertCurrent(op);
+    tags.clearMemoryPresentation();
+    if (memory.reviewStatus !== "DELETE") await refreshMemoryTags(op, memory);
+    if (!current(op) || op.controller.signal.aborted || !state.detail) return;
     if (["PHOTO", "AUDIO"].includes(memory.memoryType) && memory.reviewStatus !== "DELETE") await photo(op, memory);
+  }
+  async function refreshMemoryTags(op, memory) {
+    try { await tags.readMemoryTags(op, memory.memoryId); }
+    catch (failure) {
+      if (!current(op)) throw failure;
+      if (!authFailure(failure)) tags.readFailure(failure);
+    }
   }
 
   function reviewFailure(failure) {
@@ -423,18 +437,38 @@ export function createInboxController({
   }
 
   const albums = createAlbumActions({ api, getState: () => state, publish,
-    start: patch => start({ ...patch, timeline: initialTimeline(), ...timeline.clearNavigation() }), bounded, run, assertCurrent, isCurrent: current,
+    start: patch => start({ ...patch, timeline: initialTimeline(), ...timeline.clearNavigation(), library: initialLibrary(), ...library.clearNavigation(), tags: initialTags(), ...tags.clearNavigation() }), bounded, run, assertCurrent, isCurrent: current,
     authFailure, freeze: frozenCopy,
-    canNavigate: () => !disposed && !suspended && Boolean(state.session?.authenticated) && state.phase !== "create" && !reviewIntent && !metadataIntent && !timeline.locked(),
+    canNavigate: () => !disposed && !suspended && Boolean(state.session?.authenticated) && state.phase !== "create" && !reviewIntent && !metadataIntent && !timeline.locked() && !tags.locked(),
     openMemory: (id, options) => controller.openMemory(id, options), nameFingerprint: albumNameFingerprint,
   });
   const timeline = createTimelineActions({ api, getState: () => state, publish,
-    start: patch => start({ ...patch, albums: initialAlbums(), ...albums.clearNavigation() }), bounded, run, assertCurrent, isCurrent: current,
+    start: patch => start({ ...patch, albums: initialAlbums(), ...albums.clearNavigation(), library: initialLibrary(), ...library.clearNavigation(), tags: initialTags(), ...tags.clearNavigation() }), bounded, run, assertCurrent, isCurrent: current,
     authFailure, freeze: frozenCopy,
-    canNavigate: () => !disposed && !suspended && Boolean(state.session?.authenticated) && state.phase !== "create" && !reviewIntent && !metadataIntent && !albums.locked(),
+    canNavigate: () => !disposed && !suspended && Boolean(state.session?.authenticated) && state.phase !== "create" && !reviewIntent && !metadataIntent && !albums.locked() && !tags.locked(),
     openMemory: (id, options) => controller.openMemory(id, options), fieldsFingerprint: timelineFieldsFingerprint,
   });
+  const library = createLibraryActions({ api, getState: () => state, publish,
+    start: patch => start({ ...patch, albums: initialAlbums(), ...albums.clearNavigation(), timeline: initialTimeline(), ...timeline.clearNavigation(), tags: initialTags(), ...tags.clearNavigation() }),
+    bounded, run, assertCurrent, authFailure, freeze: frozenCopy,
+    canNavigate: () => !disposed && !suspended && Boolean(state.session?.authenticated) && state.phase !== "create" && !reviewIntent && !metadataIntent && !albums.locked() && !timeline.locked() && !tags.locked(),
+    openMemory: (id, options) => controller.openMemory(id, options),
+  });
+  const tags = createTagActions({ api, getState: () => state, publish,
+    start: patch => start(patch.phase === "detail" ? patch : { ...patch, albums: initialAlbums(), ...albums.clearNavigation(), timeline: initialTimeline(), ...timeline.clearNavigation(), library: initialLibrary(), ...library.clearNavigation() }),
+    bounded, run, assertCurrent, isCurrent: current, authFailure, freeze: frozenCopy,
+    canNavigate: () => !disposed && !suspended && Boolean(state.session?.authenticated) && state.phase !== "create" && !reviewIntent && !metadataIntent && !albums.locked() && !timeline.locked(),
+    openMemory: (id, options) => controller.openMemory(id, options), nameFingerprint: tagNameFingerprint,
+  });
   const controller = {
+    loadLibrary: (...args) => library.loadLibrary(...args), openLibraryMemory: id => library.openLibraryMemory(id), libraryPage: next => library.libraryPage(next),
+    chooseLibraryTag: (...args) => library.chooseLibraryTag(...args), selectLibraryTag: tag => library.selectLibraryTag(tag),
+    loadTags: (...args) => tags.loadTags(...args), openTag: (...args) => tags.openTag(...args), beginTagCreation: () => tags.beginTagCreation(),
+    createTag: name => tags.createTag(name), renameTag: name => tags.renameTag(name), deleteTag: () => tags.deleteTag(),
+    addTagMember: id => tags.addTagMember(id), removeTagMember: id => tags.removeTagMember(id), showTagSelector: (...args) => tags.showTagSelector(...args),
+    openTagMemory: id => tags.openTagMemory(id), tagPage: next => tags.tagPage(next), reloadTagMutation: options => tags.reloadTagMutation(options), retryTagMutation: name => tags.retryTagMutation(name),
+    loadMemoryTags: (...args) => tags.loadMemoryTags(...args), chooseMemoryTag: (...args) => tags.chooseMemoryTag(...args),
+    changeMemoryTag: (...args) => tags.changeMemoryTag(...args), memoryTagPage: next => tags.memoryTagPage(next),
     loadTimeline: (...args) => timeline.loadTimeline(...args),
     openTimelineEvent: (...args) => timeline.openTimelineEvent(...args),
     beginTimelineCreation: () => timeline.beginTimelineCreation(),
@@ -469,7 +503,7 @@ export function createInboxController({
       return () => listeners.delete(listener);
     },
     beginCreation() {
-      if (disposed || suspended || state.busy || !state.session?.authenticated || reviewIntent || metadataIntent || albums.locked() || timeline.locked()) return state;
+      if (disposed || suspended || state.busy || !state.session?.authenticated || reviewIntent || metadataIntent || albums.locked() || timeline.locked() || tags.locked()) return state;
       cancel(); inboxDirty = true;
       publish({ phase: "create", detail: null, items: EMPTY_ITEMS, nextCursor: null, photo: idlePhoto(), notice: null, error: null });
       return state;
@@ -506,8 +540,10 @@ export function createInboxController({
         metadata: idleMetadata(),
         ...albums.suspend(),
         ...timeline.suspend(),
+        ...library.suspend(), ...tags.suspend(),
         albumReturnId: null,
         timelineReturnId: null,
+        tagReturnId: null,
         pageResetVersion: state.pageResetVersion + 1 });
       return state;
     },
@@ -526,15 +562,17 @@ export function createInboxController({
         publish({ session });
         if (reviewIntent) {
           const memory = await bounded(op, signal => api.getMemory(reviewIntent.memoryId, { signal }));
-          publish({ phase: "detail", albumReturnId: albums.returnId(), timelineReturnId: timeline.returnId() });
+          publish({ phase: "detail", albumReturnId: albums.returnId(), timelineReturnId: timeline.returnId(), tagReturnId: tags.returnId() });
           await reconcileReview(op, memory, "Current state reloaded after checking access. Review it before choosing another action; this does not identify who changed it.");
         } else if (metadataHiddenId) {
           const memory = await bounded(op, signal => api.getMemory(metadataHiddenId, { signal }));
           metadataHiddenId = null;
-          publish({ phase: "detail", albumReturnId: albums.returnId(), timelineReturnId: timeline.returnId() });
+          publish({ phase: "detail", albumReturnId: albums.returnId(), timelineReturnId: timeline.returnId(), tagReturnId: tags.returnId() });
           await acceptMetadata(op, memory, "Current memory loaded after checking access. The hidden edit was cleared; inspect the saved details before making a new edit.");
         } else if (albums.hasPending()) await albums.resume(op);
         else if (timeline.hasPending()) await timeline.resume(op);
+        else if (tags.hasPending()) await tags.resume(op);
+        else if (library.hasPending()) await library.resume(op);
         else await page(op, state.reviewStatus, null);
         assertCurrent(op);
         suspended = false;
@@ -546,7 +584,7 @@ export function createInboxController({
         // A failed recheck hides all content but keeps an uncertain action recoverable.
         revokePhoto();
         publish({ phase: "unavailable", session: null, items: EMPTY_ITEMS, nextCursor: null,
-          detail: null, photo: idlePhoto(), albums: initialAlbums(), timeline: initialTimeline(), notice: null,
+          detail: null, photo: idlePhoto(), albums: initialAlbums(), timeline: initialTimeline(), library: initialLibrary(), tags: initialTags(), notice: null,
           error: "Archive access could not be checked. Private content is hidden. Try checking access again." });
       }).finally(() => { if (resuming === completion) resuming = null; });
       resuming = completion;
@@ -554,7 +592,7 @@ export function createInboxController({
     },
     loadSession() {
       if (suspended) return controller.resume();
-      if (reviewIntent || metadataIntent || albums.locked() || timeline.locked()) return Promise.resolve(state);
+      if (reviewIntent || metadataIntent || albums.locked() || timeline.locked() || tags.locked()) return Promise.resolve(state);
       if (state.logoutUnconfirmed) return controller.logout();
       const op = start({ phase: "checking", session: null, items: EMPTY_ITEMS, nextCursor: null, detail: null, notice: null });
       return run(op, async () => {
@@ -566,7 +604,7 @@ export function createInboxController({
       });
     },
     login(credentials) {
-      if (reviewIntent || metadataIntent || albums.locked() || timeline.locked()) return Promise.resolve(state);
+      if (reviewIntent || metadataIntent || albums.locked() || timeline.locked() || tags.locked()) return Promise.resolve(state);
       const op = start({ phase: "login", session: null, items: EMPTY_ITEMS, nextCursor: null, detail: null, notice: null, logoutUnconfirmed: false });
       return run(op, async () => {
         const fresh = await bounded(op, signal => api.getSession({ signal }));
@@ -585,11 +623,12 @@ export function createInboxController({
       });
     },
     logout() {
-      if (reviewIntent || metadataIntent || albums.locked() || timeline.locked()) return Promise.resolve(state);
+      if (reviewIntent || metadataIntent || albums.locked() || timeline.locked() || tags.locked()) return Promise.resolve(state);
       albums.clear();
       timeline.clear();
+      library.clear(); tags.clear();
       const op = start({ phase: "checking", session: null, items: EMPTY_ITEMS, nextCursor: null, detail: null, albums: initialAlbums(), albumReturnId: null,
-        timeline: initialTimeline(), timelineReturnId: null, logoutUnconfirmed: false }, "logout");
+        timeline: initialTimeline(), timelineReturnId: null, library: initialLibrary(), libraryReturn: false, tags: initialTags(), tagReturnId: null, logoutUnconfirmed: false }, "logout");
       return run(op, async () => {
         const fresh = await bounded(op, signal => api.getSession({ signal }));
         if (fresh.authenticated) await bounded(op, signal => api.logout({ csrfToken: fresh.csrfToken, signal }));
@@ -598,27 +637,33 @@ export function createInboxController({
         error: "Sign-out could not be confirmed. Private content is hidden here. Retry signing out before leaving a shared device." }));
     },
     loadInbox(reviewStatus = "PENDING", cursor = null) {
-      if (!state.session?.authenticated || disposed || reviewIntent || metadataIntent || albums.locked() || timeline.locked()) return Promise.resolve(state);
+      if (!state.session?.authenticated || disposed || reviewIntent || metadataIntent || albums.locked() || timeline.locked() || tags.locked()) return Promise.resolve(state);
       const albumNavigation = albums.clearNavigation();
       const timelineNavigation = timeline.clearNavigation();
+      const libraryNavigation = library.clearNavigation(), tagNavigation = tags.clearNavigation();
       const changed = reviewStatus !== state.reviewStatus;
-      const op = start({ phase: "inbox", reviewStatus, detail: null, notice: null, albums: initialAlbums(), timeline: initialTimeline(), ...albumNavigation, ...timelineNavigation,
+      const op = start({ phase: "inbox", reviewStatus, detail: null, notice: null, albums: initialAlbums(), timeline: initialTimeline(), library: initialLibrary(), tags: initialTags(), ...albumNavigation, ...timelineNavigation, ...libraryNavigation, ...tagNavigation,
         ...(changed ? { items: EMPTY_ITEMS, nextCursor: null } : {}) });
       return run(op, () => page(op, reviewStatus, cursor), failure => {
         if (!authFailure(failure)) publish({ error: "Your inbox could not be loaded. Try loading it again." });
       });
     },
-    openMemory(id, { albumId = null, eventId = null } = {}) {
-      if (!state.session?.authenticated || disposed || reviewIntent || metadataIntent || albums.locked() || timeline.locked()) return Promise.resolve(state);
+    openMemory(id, { albumId = null, eventId = null, libraryReturn = false, tagId = null } = {}) {
+      if (!state.session?.authenticated || disposed || reviewIntent || metadataIntent || albums.locked() || timeline.locked() || tags.locked()) return Promise.resolve(state);
       albums.memoryContext(albumId);
       timeline.memoryContext(eventId);
+      library.memoryContext(libraryReturn); tags.memoryContext(tagId); tags.clearMemoryPresentation();
       if (!albumId) publish({ albums: initialAlbums(), ...albums.clearNavigation() });
       if (!eventId) publish({ timeline: initialTimeline(), ...timeline.clearNavigation() });
+      if (!libraryReturn) publish({ library: initialLibrary(), ...library.clearNavigation() });
+      if (!tagId) publish(tags.clearNavigation());
       const op = start({ phase: "detail", detail: null, notice: null });
       return run(op, async () => {
         const detail = frozenCopy(await bounded(op, signal => api.getMemory(id, { signal })));
         publish({ detail });
         assertCurrent(op);
+        if (detail.reviewStatus !== "DELETE") await refreshMemoryTags(op, detail);
+        if (!current(op) || op.controller.signal.aborted || !state.detail) return;
         if (["PHOTO", "AUDIO"].includes(detail.memoryType) && detail.reviewStatus !== "DELETE") await photo(op, detail);
       }, failure => {
         if (authFailure(failure)) return;
@@ -627,9 +672,11 @@ export function createInboxController({
       });
     },
     backToInbox() {
-      if (disposed || !state.session?.authenticated || reviewIntent || metadataIntent || albums.locked() || timeline.locked()) return state;
+      if (disposed || !state.session?.authenticated || reviewIntent || metadataIntent || albums.locked() || timeline.locked() || tags.locked()) return state;
       if (albums.hasReturn()) return albums.returnToAlbum();
       if (timeline.hasReturn()) return timeline.returnToEvent();
+      if (tags.hasReturn()) return tags.returnToTag();
+      if (library.hasReturn()) return library.returnToLibrary();
       if (inboxDirty) return controller.loadInbox(state.reviewStatus);
       cancel();
       publish({ phase: "inbox", busy: false, error: null, detail: null, photo: idlePhoto(), notice: null });
@@ -637,7 +684,7 @@ export function createInboxController({
     },
     retryPhoto() {
       if (state.phase !== "detail" || !["PHOTO", "AUDIO"].includes(state.detail?.memoryType) || state.detail.reviewStatus === "DELETE"
-        || !state.session?.authenticated || disposed || reviewIntent || metadataIntent || albums.locked() || timeline.locked()) return Promise.resolve(state);
+        || !state.session?.authenticated || disposed || reviewIntent || metadataIntent || albums.locked() || timeline.locked() || tags.locked()) return Promise.resolve(state);
       const detail = state.detail;
       const op = start({ phase: "detail", detail });
       return run(op, () => photo(op, detail), failure => {
@@ -648,7 +695,7 @@ export function createInboxController({
     reviewMemory(targetStatus) {
       if (!REVIEW_STATES.has(targetStatus)) throw new TypeError("Choose a supported private review state.");
       if (reviewInFlight) return reviewInFlight;
-      if (disposed || reviewIntent || metadataIntent || albums.locked() || timeline.locked() || state.busy || state.phase !== "detail"
+      if (disposed || reviewIntent || metadataIntent || albums.locked() || timeline.locked() || tags.locked() || state.busy || state.phase !== "detail"
         || !state.detail || !state.session?.authenticated) return Promise.resolve(state);
       reviewIntent = Object.freeze({ memoryId: state.detail.memoryId, fromStatus: state.detail.reviewStatus,
         targetStatus, expectedRevision: state.detail.revision });
@@ -697,7 +744,7 @@ export function createInboxController({
     },
     saveMetadata(raw) {
       if (metadataInFlight) return metadataInFlight;
-      if (disposed || suspended || reviewIntent || metadataIntent || albums.locked() || timeline.locked() || state.busy || state.phase !== "detail"
+      if (disposed || suspended || reviewIntent || metadataIntent || albums.locked() || timeline.locked() || tags.locked() || state.busy || state.phase !== "detail"
         || !state.detail || state.detail.reviewStatus === "DELETE" || !state.session?.authenticated) return Promise.resolve(state);
       const target = frozenCopy(normalizeMemoryMetadata(raw));
       metadataIntent = Object.freeze({ memoryId: state.detail.memoryId, target, before: frozenCopy(metadataOf(state.detail)),
@@ -741,9 +788,10 @@ export function createInboxController({
       inboxDirty = false;
       albums.clear();
       timeline.clear();
+      library.clear(); tags.clear();
       state = Object.freeze({ ...state, session: null, items: EMPTY_ITEMS, nextCursor: null,
         detail: null, photo: idlePhoto(), review: idleReview(), metadata: idleMetadata(), albums: initialAlbums(), albumReturnId: null,
-        timeline: initialTimeline(), timelineReturnId: null, notice: null, busy: false, error: null });
+        timeline: initialTimeline(), timelineReturnId: null, library: initialLibrary(), libraryReturn: false, tags: initialTags(), tagReturnId: null, notice: null, busy: false, error: null });
       suspended = true;
       resuming = null;
       disposed = true;

@@ -25,7 +25,7 @@ final class RecoveryMetadata {
     private final Map<UUID, Map<String, Object>> assetsByMemory = new HashMap<>();
 
     RecoveryMetadata(Map<String, List<Map<String, Object>>> tables, Instant at) {
-        this(tables, at, 5);
+        this(tables, at, 6);
     }
 
     RecoveryMetadata(Map<String, List<Map<String, Object>>> tables, Instant at, int version) {
@@ -138,6 +138,7 @@ final class RecoveryMetadata {
                 && !ownedAssets.contains(uuid(m, "id"))) throw invalid();
         if (version >= 4) validateAlbums();
         if (version >= 5) validateTimeline();
+        if (version >= 6) validateTags();
         var populated = new HashSet<UUID>(); for (var memory : memories.values()) populated.add(uuid(memory, "contribution_id"));
         if (!populated.equals(contributions.keySet())) throw invalid();
         var grants = new HashSet<UUID>();
@@ -193,6 +194,31 @@ final class RecoveryMetadata {
             long position = number(member, "position");
             if (album == null || album.get("deleted_at") != null || memory == null || position < 1
                     || !pairs.add(albumId + ":" + memoryId) || !positions.add(albumId + ":" + position)
+                    || !Set.of("PENDING", "KEEP", "ARCHIVED").contains(text(memory, "review_status"))
+                    || memory.get("purge_started_at") != null || memory.get("purged_at") != null) throw invalid();
+            if (!"TEXT".equals(memory.get("memory_type"))) {
+                var asset = assetsByMemory.get(memoryId);
+                if (asset == null || !"UPLOADED".equals(asset.get("upload_state"))) throw invalid();
+            }
+        }
+    }
+
+    private void validateTags() {
+        var tags = indexed("tag", "id");
+        for (var tag : tags.values()) {
+            Instant created = instant(tag, "created_at"), updated = instant(tag, "updated_at"), deleted = instant(tag, "deleted_at");
+            if (uuid(tag, "id").version() != 4 || uuid(tag, "id").variant() != 2
+                    || uuid(tag, "revision").version() != 4 || uuid(tag, "revision").variant() != 2
+                    || !"COUPLE_ONLY".equals(tag.get("visibility")) || updated.isBefore(created)
+                    || deleted != null && (deleted.isBefore(created) || updated.isBefore(deleted))) throw invalid();
+            if (deleted != null) { if (tag.get("name") != null) throw invalid(); }
+            else { if (tag.get("name") == null) throw invalid(); metadataText(tag, "name", 200); }
+        }
+        var pairs = new HashSet<String>();
+        for (var member : rows("memory_tag")) {
+            UUID tagId = uuid(member, "tag_id"), memoryId = uuid(member, "memory_id");
+            var tag = tags.get(tagId); var memory = memories.get(memoryId);
+            if (tag == null || tag.get("deleted_at") != null || memory == null || !pairs.add(tagId + ":" + memoryId)
                     || !Set.of("PENDING", "KEEP", "ARCHIVED").contains(text(memory, "review_status"))
                     || memory.get("purge_started_at") != null || memory.get("purged_at") != null) throw invalid();
             if (!"TEXT".equals(memory.get("memory_type"))) {
