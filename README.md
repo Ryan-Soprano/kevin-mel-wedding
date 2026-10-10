@@ -2,6 +2,8 @@
 
 A private home for preserving the couple's memories, beginning with contributions from their wedding guests.
 
+ARC-02 adds private albums and event collections with many-to-many membership, independent ordering and paginated browsing. Album deletion preserves original memories and files; recovery package v4 includes album relationships. See the [album contract](docs/api/v1/albums.md) and [local verification](docs/product/arc02-verification.md).
+
 ARC-01 adds **Add a memory** inside the signed-in archive and optional title, description and memory-date editing for both couple and guest memories. Notes, grouped photos and voice memories reuse the existing validation and retry flows; original content and upload times remain preserved. See the [private creation/editing contract](docs/api/v1/couple-memories.md) and [local verification](docs/product/arc01-verification.md). Hosting, real onboarding and remaining device/audio acceptance stay deferred.
 
 Kevin and Melanie already know about the project and help shape it. Include them in product decisions and synthetic guest/inbox usability testing before the wedding; the October 31 handoff milestone is not a secrecy constraint. See the [project scope](docs/project-plan.md#current-baseline-and-product-scope) and [account-access procedure](docs/runbooks/account-access.md) for deliberate account activation.

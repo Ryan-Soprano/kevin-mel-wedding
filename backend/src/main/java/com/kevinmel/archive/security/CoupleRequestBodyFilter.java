@@ -24,6 +24,12 @@ public final class CoupleRequestBodyFilter extends OncePerRequestFilter {
         chain.doFilter(new BoundedRequest(request, body), response);
     }
     static int bodyLimit(String method, String path) {
+        if (path.equals("/api/albums") || path.startsWith("/api/albums/")) {
+            if ("GET".equals(method) || "DELETE".equals(method)) return 0;
+            if ("PUT".equals(method) && path.matches("/api/albums/[^/]+/members/[^/]+")) return 0;
+            if ("POST".equals(method) && path.matches("/api/albums/[^/]+/members/[^/]+/move")) return 1_024;
+            if (("PUT".equals(method) || "PATCH".equals(method)) && path.matches("/api/albums/[^/]+")) return 16_384;
+        }
         if ("POST".equals(method) && "/api/memories/contributions".equals(path)) return 65_536;
         if ("GET".equals(method) && path.matches("/api/memories/contributions/[^/]+/receipt")) return 0;
         if ("POST".equals(method) && path.matches("/api/memories/contributions/[^/]+/memories/[^/]+/upload-grants")) return 0;

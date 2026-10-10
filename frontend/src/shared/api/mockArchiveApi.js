@@ -1,6 +1,7 @@
 import { createApiClient } from "./apiClient.js";
 import { createArchiveApi } from "./archiveApi.js";
 import { normalizeMemoryMetadata, sameMetadata } from "../../features/inbox/memoryMetadata.js";
+import { createMockAlbumServer } from "../../features/albums/api/mockAlbumServer.js";
 import {
   ANONYMOUS_SESSION, COUPLE_SESSION, CREATED_AT, IDS, INBOX_PAGE,
   MEDIA_DETAIL, MEMORY_DETAIL, PLAYBACK, SCENARIOS, UPLOAD_GRANT, VALIDATION_ERROR,
@@ -48,6 +49,8 @@ export function createMockArchiveApi({ scenario = "success", delayMs = 0, now = 
   let lostMetadataResponse = false;
   let failedTransfer = false;
   const nextId = () => "00000000-0000-4000-8000-" + String(next++).padStart(12, "0");
+  const albumServer = createMockAlbumServer({ getSession: () => session, getScenario: () => scenario,
+    getMemories: () => memories, nextId, now, reply, failure });
 
   function rotateSession(fixture) {
     // Deterministic preview tokens model rotation, not production token security.
@@ -95,6 +98,8 @@ export function createMockArchiveApi({ scenario = "success", delayMs = 0, now = 
       }
     }
 
+    const albumReply = albumServer.handle(url, method, headers, body);
+    if (albumReply !== null) return albumReply;
     const privateContribution = url.pathname === "/api/memories/contributions" || url.pathname.startsWith("/api/memories/contributions/");
     const contributionPath = privateContribution ? url.pathname.replace("/api/memories/contributions", "/api/contributions") : url.pathname;
     if (privateContribution) {
@@ -250,6 +255,7 @@ export function createMockArchiveApi({ scenario = "success", delayMs = 0, now = 
         if (memory.reviewStatus === body.reviewStatus) return reply(memory, 200, { ETag: '"' + memory.revision + '"' });
         const deleting = body.reviewStatus === "DELETE";
         memory.reviewStatus = body.reviewStatus;
+        if (deleting) albumServer.detachMemory(memory.memoryId);
         for (const entry of contributions.values()) {
           const receiptMemory = entry.receipt.memories.find(item => item.memoryId === memory.memoryId);
           if (receiptMemory) receiptMemory.reviewStatus = memory.reviewStatus;

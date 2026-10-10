@@ -20,7 +20,7 @@ import java.util.zip.CRC32;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import tools.jackson.databind.JsonNode;
 
-/** Strict V8/v1, V9/v2 and V10/v3 archive schemas; no account or application configuration material. */
+/** Strict reviewed archive schemas; no account or application configuration material. */
 final class RecoverySchema {
     static final int MAX_ROWS = 100_000;
     private static final String ASSET_COLUMNS = "id:u memory_id:u object_key:s original_filename:s detected_format:s byte_size:l checksum_sha256:s upload_state:s created_at:t updated_at:t declared_content_type:s? expected_byte_size:l? expected_checksum_sha256:s?";
@@ -35,16 +35,23 @@ final class RecoverySchema {
         table("erased_submission_key", "key_digest:s erased_at:t"));
     private static final List<Table> AUDIO_TABLES = LEGACY_TABLES.stream().map(table -> table.name().equals("media_asset")
         ? table("media_asset", ASSET_COLUMNS + " expected_duration_ms:l? audio_duration_ms:l? audio_codec:s? audio_container:s?") : table).toList();
-    static final List<Table> TABLES = AUDIO_TABLES.stream().map(table -> switch (table.name()) {
+    private static final List<Table> ARCHIVE_TABLES = AUDIO_TABLES.stream().map(table -> switch (table.name()) {
         case "contribution" -> table("contribution", table.definition() + " source:s author_account_id:u?");
         case "memory" -> table("memory", table.definition() + " title:s? description:s? memory_date:s? date_precision:s");
         default -> table;
     }).toList();
+    static final List<Table> TABLES;
+    static {
+        var tables = new ArrayList<>(ARCHIVE_TABLES);
+        tables.add(table("album", "id:u name:s? visibility:s revision:u created_at:t updated_at:t deleted_at:t?"));
+        tables.add(table("album_membership", "album_id:u memory_id:u position:l"));
+        TABLES = List.copyOf(tables);
+    }
     private static final List<String> MIGRATIONS = List.of(
         "V1__create_memory_archive_schema.sql", "V2__add_contribution_request_fingerprint.sql", "V3__add_photo_upload_lifecycle.sql",
         "V4__create_archive_accounts.sql", "V5__create_login_throttle.sql", "V6__add_inbox_revision.sql",
         "V7__add_private_review_retention.sql", "V8__anonymous_submission_protection.sql", "V9__add_verified_audio_lifecycle.sql",
-        "V10__add_couple_authored_memories.sql");
+        "V10__add_couple_authored_memories.sql", "V11__add_private_albums.sql");
 
     static Reviewed requireReviewed(JdbcClient db) {
         try {
@@ -113,7 +120,7 @@ final class RecoverySchema {
     }
 
     static Map<String, List<Map<String, Object>>> read(JdbcClient db) {
-        return read(db, 3);
+        return read(db, 4);
     }
 
     static Map<String, List<Map<String, Object>>> read(JdbcClient db, int version) {
@@ -124,7 +131,11 @@ final class RecoverySchema {
         for (Table table : tables(version)) {
             long count = db.sql("SELECT COUNT(*) FROM " + table.name()).query(Long.class).single();
             if ((total += count) > MAX_ROWS) throw new RecoveryException("METADATA_LIMIT");
-            String order = table.name().equals("review_audit") ? "memory_id, after_revision" : table.columns().getFirst().name();
+            String order = switch (table.name()) {
+                case "review_audit" -> "memory_id, after_revision";
+                case "album_membership" -> "album_id, position, memory_id";
+                default -> table.columns().getFirst().name();
+            };
             result.put(table.name(), db.sql("SELECT " + table.columnNames() + " FROM " + table.name() + " ORDER BY " + order)
                 .query((rs, position) -> {
                     var row = table.read(rs);
@@ -138,7 +149,7 @@ final class RecoverySchema {
     }
 
     static Map<String, List<Map<String, Object>>> decode(JsonNode node, int version) {
-        if (node == null || !node.isObject() || node.size() != TABLES.size()) throw invalid();
+        if (node == null || !node.isObject() || node.size() != tables(version).size()) throw invalid();
         var result = new LinkedHashMap<String, List<Map<String, Object>>>();
         int total = 0;
         for (Table table : tables(version)) {
@@ -158,6 +169,9 @@ final class RecoverySchema {
                 decoded.add(value);
             }
             result.put(table.name(), List.copyOf(decoded));
+        }
+        if (version < 4) {
+            result.put("album", List.of()); result.put("album_membership", List.of());
         }
         return result;
     }
@@ -183,10 +197,11 @@ final class RecoverySchema {
         return result;
     }
     static RecoveryException invalid() { return new RecoveryException("INVALID_METADATA"); }
-    private static List<Table> tables(int version) {
+    static List<Table> tables(int version) {
         if (version == 1) return LEGACY_TABLES;
         if (version == 2) return AUDIO_TABLES;
-        if (version == 3) return TABLES;
+        if (version == 3) return ARCHIVE_TABLES;
+        if (version == 4) return TABLES;
         throw invalid();
     }
     record Reviewed(int bundleVersion, String fingerprint, Map<Integer, String> fingerprints) {

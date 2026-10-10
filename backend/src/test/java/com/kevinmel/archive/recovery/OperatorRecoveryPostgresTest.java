@@ -67,7 +67,7 @@ class OperatorRecoveryPostgresTest {
     private static final Instant NOW = Instant.now().truncatedTo(ChronoUnit.MICROS);
     private static final JsonMapper JSON = JsonMapper.builder().build();
     private static final List<String> TABLES = List.of("contribution", "memory", "media_asset", "upload_grant",
-            "review_audit", "deletion_ledger", "erased_submission_key");
+            "review_audit", "deletion_ledger", "erased_submission_key", "album", "album_membership");
     @TempDir Path temporary;
     private final List<String> schemas = new ArrayList<>();
     private final MemoryStorage sourceStorage = new MemoryStorage();
@@ -258,7 +258,7 @@ class OperatorRecoveryPostgresTest {
     }
 
     @Test void exactVersionOneV8PackageRestoresIntoV10WithNullAudioAndArchiveFields() throws Exception {
-        source = schema("8");
+        source = schema("8"); target = schema("10");
         var note = legacyNote(source, "Synthetic legacy note");
         var batch = legacyPhotos(source, sourceStorage, "UPLOADED", "PENDING");
         Path bundle = temporary.resolve("legacy-v8");
@@ -310,6 +310,7 @@ class OperatorRecoveryPostgresTest {
     }
 
     @Test void versionThreePreservesHistoricalAuthorsAndAllDatePrecisionsWithoutRestoringAccounts() throws Exception {
+        source = schema("10");
         UUID author = UUID.randomUUID();
         var notes = new ArrayList<Text>();
         for (String[] date : List.of(new String[]{"UNKNOWN", null}, new String[]{"YEAR", "0001"},
@@ -338,7 +339,7 @@ class OperatorRecoveryPostgresTest {
     }
 
     @Test void versionTwoRestoresIntoV10WithArchiveDefaultsAndVerifiedAudioUnchanged() throws Exception {
-        source = schema("9");
+        source = schema("9"); target = schema("10");
         legacyNote(source, "Synthetic v2 note");
         var voice = audio(source, sourceStorage, "audio/mp4", "UPLOADED");
         Path bundle = temporary.resolve("v2-to-v10");
@@ -371,6 +372,7 @@ class OperatorRecoveryPostgresTest {
     }
 
     @Test void versionThreeCannotRestoreIntoOlderV8OrV9BeforeAnyOriginalMutation() {
+        source = schema("10");
         photos(source, sourceStorage, "UPLOADED");
         Path bundle = temporary.resolve("v3-requires-v10");
         assertThat(export(bundle).ready()).isTrue();
@@ -382,6 +384,7 @@ class OperatorRecoveryPostgresTest {
     }
 
     @Test void rehashedVersionThreeRejectsInvalidAttributionAndNoncanonicalMetadataBeforeAnyWrites() throws Exception {
+        source = schema("10");
         note(source, "Synthetic metadata validation note", null);
         photos(source, sourceStorage, "UPLOADED");
         Path bundle = temporary.resolve("v3-invalid-metadata");
@@ -421,6 +424,7 @@ class OperatorRecoveryPostgresTest {
     }
 
     @Test void rehashedVersionThreeAcceptsExactUtf16MetadataLimitsAndPreservesOriginals() throws Exception {
+        source = schema("10");
         var note = note(source, "Synthetic immutable note under metadata", null);
         var batch = photos(source, sourceStorage, "UPLOADED");
         Path bundle = temporary.resolve("v3-utf16-boundaries");
@@ -441,6 +445,150 @@ class OperatorRecoveryPostgresTest {
         assertThat(string(target, "SELECT text_content FROM memory WHERE id=:id", note.memory())).isEqualTo(note.message());
         assertThat(string(target, "SELECT caption FROM memory WHERE id=:id", batch.memories().getFirst())).isEqualTo("Synthetic caption 0");
         assertThat(targetStorage.objects.get("originals/" + batch.assets().getFirst())).isEqualTo(batch.bytes().getFirst());
+    }
+
+    @Test void versionFourRestoresOrderedManyToManyAlbumsEmptyAlbumsAndTerminalTombstones() throws Exception {
+        var note = note(source, "Synthetic shared album note", null);
+        coupleAttribution(source, note.contribution(), UUID.randomUUID());
+        var batch = photos(source, sourceStorage, "UPLOADED");
+        var voice = audio(source, sourceStorage, "audio/webm", "UPLOADED");
+        UUID first = album(source, "\uD83D\uDE03".repeat(100), false), second = album(source, "Synthetic event collection", false);
+        UUID empty = album(source, "Synthetic empty album", false), deleted = album(source, null, true);
+        member(source, first, batch.memories().getFirst(), 10); member(source, first, note.memory(), 90);
+        member(source, second, voice.memory(), 20); member(source, second, batch.memories().getFirst(), 300);
+        var before = snapshot(source);
+        Path bundle = temporary.resolve("v4-ordered-albums");
+        var exported = export(bundle); assertThat(exported.ready()).isTrue(); assertThat(exported.originals()).isEqualTo(2);
+        var manifest = JSON.readTree(Files.readAllBytes(bundle.resolve("manifest.json")));
+        assertThat(manifest.get("version").intValue()).isEqualTo(4);
+        var tables = JSON.readTree(Files.readAllBytes(bundle.resolve("metadata.json"))).get("tables");
+        assertThat(tables.get("album").size()).isEqualTo(4); assertThat(tables.get("album_membership").size()).isEqualTo(4);
+        var restored = restore(bundle); assertThat(restored.memories()).isEqualTo(3); assertThat(restored.originals()).isEqualTo(2);
+        assertThat(snapshot(target)).isEqualTo(before);
+        assertThat(members(target, first)).containsExactly(batch.memories().getFirst(), note.memory());
+        assertThat(members(target, second)).containsExactly(voice.memory(), batch.memories().getFirst());
+        assertThat(members(target, empty)).isEmpty(); assertThat(members(target, deleted)).isEmpty();
+        assertThat(string(target, "SELECT name FROM album WHERE id=:id", deleted)).isNull();
+        assertThat(targetStorage.objects.get("originals/" + batch.assets().getFirst())).isEqualTo(batch.bytes().getFirst());
+        assertThat(targetStorage.objects.get("originals/" + voice.asset())).isEqualTo(voice.bytes());
+        assertThat(target.db().sql("SELECT count(*) FROM archive_account").query(Long.class).single()).isZero();
+    }
+
+    @Test void everyLegacyVersionRestoresIntoEachReviewedCompatibleTargetWithEmptyAlbums() throws Exception {
+        for (int migration = 8; migration <= 10; migration++) {
+            source = schema(Integer.toString(migration));
+            var note = migration < 10 ? legacyNote(source, "Synthetic legacy compatible note") : note(source, "Synthetic legacy compatible note", null);
+            var batch = migration < 10 ? legacyPhotos(source, sourceStorage, "UPLOADED") : photos(source, sourceStorage, "UPLOADED");
+            Path bundle = temporary.resolve("legacy-compatibility-" + migration);
+            assertThat(export(bundle).ready()).isTrue();
+            assertThat(JSON.readTree(Files.readAllBytes(bundle.resolve("manifest.json"))).get("version").intValue()).isEqualTo(migration - 7);
+            var tables = JSON.readTree(Files.readAllBytes(bundle.resolve("metadata.json"))).get("tables");
+            assertThat(tables.has("album")).isFalse(); assertThat(tables.has("album_membership")).isFalse();
+            for (int destination = migration; destination <= 11; destination++) {
+                target = schema(Integer.toString(destination));
+                targetStorage.objects.clear(); targetStorage.records.clear(); targetStorage.publications.clear(); targetStorage.operations.clear();
+                var restored = restore(bundle);
+                assertThat(restored.memories()).isEqualTo(2); assertThat(restored.originals()).isEqualTo(1);
+                assertThat(string(target, "SELECT text_content FROM memory WHERE id=:id", note.memory())).isEqualTo(note.message());
+                assertThat(targetStorage.objects.get("originals/" + batch.assets().getFirst())).isEqualTo(batch.bytes().getFirst());
+                if (destination >= 10) assertArchiveDefaults(target);
+                if (destination == 11) { assertThat(count(target, "album")).isZero(); assertThat(count(target, "album_membership")).isZero(); }
+            }
+        }
+    }
+
+    @Test void versionFourRequiresV11AndRefusesPopulatedAlbumTargetsBeforeOriginalPublication() {
+        var batch = photos(source, sourceStorage, "UPLOADED");
+        UUID album = album(source, "Synthetic version-four album", false); member(source, album, batch.memories().getFirst(), 7);
+        Path bundle = temporary.resolve("v4-target-schema"); assertThat(export(bundle).ready()).isTrue();
+        for (String migration : List.of("8", "9", "10")) {
+            target = schema(migration);
+            assertThatThrownBy(() -> restore(bundle)).isInstanceOf(RecoveryException.class); assertEmptyTarget();
+        }
+        target = schema(); UUID existing = album(target, "Synthetic target organization", false);
+        var before = snapshot(target);
+        assertThatThrownBy(() -> restore(bundle)).isInstanceOf(RecoveryException.class);
+        assertThat(snapshot(target)).isEqualTo(before); assertThat(string(target, "SELECT name FROM album WHERE id=:id", existing)).isEqualTo("Synthetic target organization");
+        assertNoTargetMutations(); assertThat(targetStorage.objects).isEmpty();
+    }
+
+    @Test void rehashedVersionFourRejectsMalformedAlbumsAndMembershipGraphsBeforeAnyTargetWrites() throws Exception {
+        var note = note(source, "Synthetic album graph note", null);
+        var batch = photos(source, sourceStorage, "UPLOADED", "PENDING");
+        UUID album = album(source, "Synthetic graph album", false); member(source, album, batch.memories().getFirst(), 1);
+        Path bundle = temporary.resolve("v4-malformed-album-graphs"); assertThat(export(bundle).ready()).isTrue();
+        byte[] original = Files.readAllBytes(bundle.resolve("metadata.json"));
+        for (String invalid : List.of("DUPLICATE_ALBUM", "ALBUM_WRONG_VERSION", "ALBUM_WRONG_VARIANT", "REVISION_WRONG_VERSION", "REVISION_WRONG_VARIANT",
+                "NULL_ACTIVE_NAME", "EMPTY_ACTIVE_NAME", "PADDED_NAME", "NAME_TOO_LONG", "SUPPLEMENTARY_NAME_TOO_LONG", "PUBLIC_ALBUM", "UPDATED_BEFORE_CREATED",
+                "TOMBSTONE_WITH_NAME", "TOMBSTONE_WITH_MEMBERS", "DUPLICATE_MEMBERSHIP", "DUPLICATE_POSITION", "MISSING_ALBUM", "MISSING_MEMORY",
+                "ZERO_POSITION", "NEGATIVE_POSITION", "OVERFLOW_POSITION", "UNFINISHED_MEDIA", "DELETED_MEMORY", "UNKNOWN_ALBUM_FIELD", "UNKNOWN_MEMBERSHIP_FIELD")) {
+            ObjectNode metadata = (ObjectNode) JSON.readTree(original);
+            var tables = metadata.get("tables"); var albums = (tools.jackson.databind.node.ArrayNode) tables.get("album");
+            ObjectNode a = (ObjectNode) albums.get(0); var memberships = (tools.jackson.databind.node.ArrayNode) tables.get("album_membership");
+            ObjectNode edge = (ObjectNode) memberships.get(0);
+            switch (invalid) {
+                case "DUPLICATE_ALBUM" -> albums.add(a.deepCopy());
+                case "ALBUM_WRONG_VERSION" -> { String id = "00000000-0000-1000-8000-000000000001"; a.put("id", id); edge.put("album_id", id); }
+                case "ALBUM_WRONG_VARIANT" -> { String id = "00000000-0000-4000-0000-000000000001"; a.put("id", id); edge.put("album_id", id); }
+                case "REVISION_WRONG_VERSION" -> a.put("revision", "00000000-0000-1000-8000-000000000001");
+                case "REVISION_WRONG_VARIANT" -> a.put("revision", "00000000-0000-4000-0000-000000000001");
+                case "NULL_ACTIVE_NAME" -> a.putNull("name");
+                case "EMPTY_ACTIVE_NAME" -> a.put("name", "");
+                case "PADDED_NAME" -> a.put("name", "\u3000Synthetic album\u00a0");
+                case "NAME_TOO_LONG" -> a.put("name", "n".repeat(201));
+                case "SUPPLEMENTARY_NAME_TOO_LONG" -> a.put("name", "\uD83D\uDE03".repeat(101));
+                case "PUBLIC_ALBUM" -> a.put("visibility", "PUBLIC");
+                case "UPDATED_BEFORE_CREATED" -> a.put("updated_at", NOW.minusSeconds(7200).toString());
+                case "TOMBSTONE_WITH_NAME" -> {
+                    a.put("deleted_at", NOW.minusSeconds(60).toString()).put("updated_at", NOW.minusSeconds(60).toString()); memberships.removeAll();
+                }
+                case "TOMBSTONE_WITH_MEMBERS" -> a.putNull("name").put("deleted_at", NOW.minusSeconds(60).toString()).put("updated_at", NOW.minusSeconds(60).toString());
+                case "DUPLICATE_MEMBERSHIP" -> memberships.add(edge.deepCopy());
+                case "DUPLICATE_POSITION" -> memberships.add(edge.deepCopy().put("memory_id", note.memory().toString()));
+                case "MISSING_ALBUM" -> edge.put("album_id", UUID.randomUUID().toString());
+                case "MISSING_MEMORY" -> edge.put("memory_id", UUID.randomUUID().toString());
+                case "ZERO_POSITION" -> edge.put("position", 0);
+                case "NEGATIVE_POSITION" -> edge.put("position", -1);
+                case "OVERFLOW_POSITION" -> edge.put("position", new java.math.BigInteger("9223372036854775808"));
+                case "UNFINISHED_MEDIA" -> edge.put("memory_id", batch.memories().get(1).toString());
+                case "DELETED_MEMORY" -> {
+                    for (var memory : tables.get("memory")) if (memory.get("id").asString().equals(batch.memories().getFirst().toString())) {
+                        ((ObjectNode) memory).put("review_status", "DELETE").put("delete_after", NOW.plusSeconds(86400).toString());
+                    }
+                }
+                case "UNKNOWN_ALBUM_FIELD" -> a.put("unreviewed", "synthetic");
+                case "UNKNOWN_MEMBERSHIP_FIELD" -> edge.put("unreviewed", "synthetic");
+                default -> throw new IllegalArgumentException("Unreviewed fixture.");
+            }
+            rewriteMetadataDigest(bundle, metadata);
+            assertThatThrownBy(() -> restore(bundle)).as(invalid).isInstanceOf(RecoveryException.class); assertEmptyTarget();
+        }
+    }
+
+    @Test void newerIndependentMemoryErasureDetachesEveryAlbumLinkAndPreservesSparseSiblingsAndEmptyAlbums() {
+        var erasedNote = note(source, "Synthetic album note later erased", null);
+        var batch = photos(source, sourceStorage, "UPLOADED", "UPLOADED");
+        UUID first = album(source, "Synthetic collection A", false), second = album(source, "Synthetic collection B", false);
+        UUID emptyAfterReplay = album(source, "Synthetic empty-after-erasure collection", false);
+        member(source, first, erasedNote.memory(), 1); member(source, first, batch.memories().getFirst(), 40); member(source, first, batch.memories().get(1), 800);
+        member(source, second, batch.memories().getFirst(), 70); member(source, second, batch.memories().get(1), 300);
+        member(source, emptyAfterReplay, erasedNote.memory(), 9);
+        UUID firstRevision = albumRevision(source, first), secondRevision = albumRevision(source, second), emptyRevision = albumRevision(source, emptyAfterReplay);
+        Path bundle = temporary.resolve("v4-before-independent-erasure"); assertThat(export(bundle).ready()).isTrue();
+        sourceStorage.record(new DeletionRecord(erasedNote.memory(), erasedNote.contribution(), null,
+                SubmissionKeyDigest.sha256(erasedNote.key()), NOW.minusSeconds(1), NOW));
+        sourceStorage.record(new DeletionRecord(batch.memories().getFirst(), batch.contribution(), batch.assets().getFirst(),
+                SubmissionKeyDigest.sha256(batch.key()), NOW.minusSeconds(1), NOW));
+        var restored = restore(bundle); assertThat(restored.replayedDeletions()).isEqualTo(2); assertThat(restored.originals()).isEqualTo(1);
+        assertThat(members(target, first)).containsExactly(batch.memories().get(1)); assertThat(members(target, second)).containsExactly(batch.memories().get(1));
+        assertThat(members(target, emptyAfterReplay)).isEmpty(); assertThat(count(target, "album")).isEqualTo(3); assertThat(count(target, "album_membership")).isEqualTo(2);
+        assertThat(albumRevision(target, first)).isNotEqualTo(firstRevision); assertThat(albumRevision(target, second)).isNotEqualTo(secondRevision);
+        assertThat(albumRevision(target, emptyAfterReplay)).isNotEqualTo(emptyRevision);
+        assertThat(target.db().sql("SELECT position FROM album_membership WHERE album_id=:id").param("id", first).query(Long.class).single()).isEqualTo(800);
+        assertThat(target.db().sql("SELECT position FROM album_membership WHERE album_id=:id").param("id", second).query(Long.class).single()).isEqualTo(300);
+        assertThat(string(target, "SELECT text_content FROM memory WHERE id=:id", erasedNote.memory())).isNull();
+        assertThat(string(target, "SELECT caption FROM memory WHERE id=:id", batch.memories().get(1))).isEqualTo("Synthetic caption 1");
+        assertThat(targetStorage.objects).hasSize(1); assertThat(targetStorage.objects.get("originals/" + batch.assets().get(1))).isEqualTo(batch.bytes().get(1));
     }
 
     @Test void largerArchiveRestoresEveryContributionAndMemoryWithAccurateCounts() {
@@ -845,7 +993,7 @@ class OperatorRecoveryPostgresTest {
         return new OperatorRecovery(db.source(), objects, authority, destination, fixed(now));
     }
     private void assertEmptyTarget() {
-        for (String table : TABLES) assertThat(count(target, table)).as(table).isZero();
+        for (var table : RecoverySchema.tables(target.version())) assertThat(count(target, table.name())).as(table.name()).isZero();
         assertThat(targetStorage.objects).isEmpty();
         assertNoTargetMutations();
     }
@@ -867,9 +1015,10 @@ class OperatorRecoveryPostgresTest {
         var db = JdbcClient.create(data);
         var manager = new JdbcTransactionManager(data);
         var contributions = new ContributionRepository(db);
+        int version = migrationTarget == null ? 4 : Integer.parseInt(migrationTarget) - 7;
         return new Fixture(data, db, contributions, new PhotoRepository(db, contributions, fixed(NOW),
                 new PhotoAdmissionPolicy(false, 7_500_000_000L, 7_500_000_000L)),
-                new RetentionRepository(db, manager), new TransactionTemplate(manager));
+                new RetentionRepository(db, manager, version >= 3, version >= 4), new TransactionTemplate(manager), version);
     }
     private static Text note(Fixture fixture, String message, String guest) {
         String key = UUID.randomUUID().toString();
@@ -999,6 +1148,27 @@ class OperatorRecoveryPostgresTest {
                 .param("title", title).param("description", description).param("date", date).param("precision", precision)
                 .param("id", memory).update();
     }
+    private static UUID album(Fixture fixture, String name, boolean deleted) {
+        UUID id = UUID.randomUUID();
+        fixture.db().sql("""
+                INSERT INTO album(id,name,visibility,revision,created_at,updated_at,deleted_at)
+                VALUES(:id,:name,'COUPLE_ONLY',:revision,:created,:updated,:deleted)
+                """).param("id", id).param("name", name).param("revision", UUID.randomUUID())
+                .param("created", time(NOW.minusSeconds(3600))).param("updated", time(NOW.minusSeconds(deleted ? 60 : 3600)))
+                .param("deleted", deleted ? time(NOW.minusSeconds(60)) : null).update();
+        return id;
+    }
+    private static void member(Fixture fixture, UUID album, UUID memory, long position) {
+        fixture.db().sql("INSERT INTO album_membership(album_id,memory_id,position) VALUES(:album,:memory,:position)")
+                .param("album", album).param("memory", memory).param("position", position).update();
+    }
+    private static List<UUID> members(Fixture fixture, UUID album) {
+        return fixture.db().sql("SELECT memory_id FROM album_membership WHERE album_id=:id ORDER BY position,memory_id")
+                .param("id", album).query(UUID.class).list();
+    }
+    private static UUID albumRevision(Fixture fixture, UUID album) {
+        return fixture.db().sql("SELECT revision FROM album WHERE id=:id").param("id", album).query(UUID.class).single();
+    }
     private static void assertArchiveDefaults(Fixture fixture) {
         assertThat(fixture.db().sql("SELECT COUNT(*) FROM contribution WHERE source <> 'GUEST' OR author_account_id IS NOT NULL")
                 .query(Long.class).single()).isZero();
@@ -1033,8 +1203,10 @@ class OperatorRecoveryPostgresTest {
     }
     private static Map<String, List<String>> snapshot(Fixture fixture) {
         var tables = new LinkedHashMap<String, List<String>>();
-        for (String table : TABLES) tables.put(table, fixture.db().sql("SELECT row_to_json(t)::text FROM " + table + " t ORDER BY row_to_json(t)::text")
-                .query(String.class).list());
+        var installed = RecoverySchema.tables(fixture.version()).stream().map(RecoverySchema.Table::name).toList();
+        for (String table : TABLES) tables.put(table, installed.contains(table)
+                ? fixture.db().sql("SELECT row_to_json(t)::text FROM " + table + " t ORDER BY row_to_json(t)::text").query(String.class).list()
+                : List.of());
         return tables;
     }
     private static long count(Fixture fixture, String table) {
@@ -1062,7 +1234,7 @@ class OperatorRecoveryPostgresTest {
     private static OffsetDateTime time(Instant instant) { return OffsetDateTime.ofInstant(instant, ZoneOffset.UTC); }
     private static Clock fixed(Instant instant) { return Clock.fixed(instant, ZoneOffset.UTC); }
     private record Fixture(DataSource source, JdbcClient db, ContributionRepository contributions,
-            PhotoRepository photos, RetentionRepository retention, TransactionTemplate tx) { }
+            PhotoRepository photos, RetentionRepository retention, TransactionTemplate tx, int version) { }
     private record Text(UUID contribution, UUID memory, String key, String message, String guest) { }
     private record PhotoBatch(UUID contribution, String key, PhotoRequest request, List<UUID> memories,
             List<UUID> assets, List<byte[]> bytes) { }
