@@ -1,0 +1,9 @@
+.guest-gallery { margin-top: 40px; min-width: 0; overflow-wrap: anywhere; }
+.guest-gallery h2 { margin: 0 0 12px; }
+.guest-gallery h2:focus { outline: none; }
+.guest-gallery-link { display: inline-flex; align-items: center; min-height: 48px; color: var(--color-primary); font-weight: 600; max-width: 100%; }
+.guest-gallery-link:focus-visible { outline: 3px solid var(--color-primary); outline-offset: 3px; }
+.guest-gallery-photos { display: grid; gap: 28px; margin: 24px 0; }
+.guest-gallery-photo { margin: 0; min-width: 0; text-align: center; }
+.guest-gallery-photo img { display: block; width: 100%; height: auto; object-fit: contain; margin: 0 auto; border-radius: 8px; }
+.guest-gallery-photo figcaption { padding-top: 8px; color: var(--color-muted); font-size: 0.875rem; }

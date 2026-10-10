@@ -80,7 +80,7 @@ The accepted baseline separates the intended architecture from what is already i
 
 No microservices, Kubernetes, Redis, event bus, or second backend is justified by the current requirements. Revisit only for a documented need.
 
-The standalone [temporary landing page](runbooks/coming-soon.md) deployed on Render with domain HTTPS on October 4 and includes the single Grand Central selfie approved by Ryan. It does not deploy the React/Spring application or provide collection features. The separate wedding-day QR gallery may use all supplied image files, rather than the initial shortlist; Ryan will confirm Kevin's preference before that gallery is implemented. Deliberately chosen public gallery photos are separate from private guest contributions.
+The standalone [temporary landing page](runbooks/coming-soon.md) deployed on Render with domain HTTPS on October 4 and includes the single Grand Central selfie approved by Ryan. It does not deploy the React/Spring application or provide collection features. On October 10, Ryan selected all 52 standalone supplied photos for the full app's public wedding-day QR gallery, excluding the scanned PDF and scan-review extracts. The [gallery implementation and verification](product/guest-gallery-verification.md) uses optimized full-frame static copies, with private contributions kept separate. The live coming-soon page and final hosting/QR-release gates remain separate.
 
 ### Accepted decisions
 
