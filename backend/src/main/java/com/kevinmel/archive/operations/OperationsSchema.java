@@ -31,10 +31,10 @@ final class OperationsSchema {
             "V3__add_photo_upload_lifecycle.sql", "V4__create_archive_accounts.sql",
             "V5__create_login_throttle.sql", "V6__add_inbox_revision.sql",
             "V7__add_private_review_retention.sql", "V8__anonymous_submission_protection.sql",
-            "V9__add_verified_audio_lifecycle.sql");
+            "V9__add_verified_audio_lifecycle.sql", "V10__add_couple_authored_memories.sql");
     private static final Map<String, String> COLUMNS = Map.ofEntries(
-            Map.entry("contribution", "id:uuid event_key:varchar guest_name:varchar? idempotency_key:varchar created_at:timestamptz request_fingerprint:varchar?"),
-            Map.entry("memory", "id:uuid contribution_id:uuid memory_type:varchar text_content:text? review_status:varchar visibility:varchar created_at:timestamptz updated_at:timestamptz client_item_id:uuid? caption:varchar? item_position:int4? revision:int4 delete_after:timestamptz? purge_started_at:timestamptz? purged_at:timestamptz?"),
+            Map.entry("contribution", "id:uuid event_key:varchar guest_name:varchar? idempotency_key:varchar created_at:timestamptz request_fingerprint:varchar? source:varchar author_account_id:uuid?"),
+            Map.entry("memory", "id:uuid contribution_id:uuid memory_type:varchar text_content:text? review_status:varchar visibility:varchar created_at:timestamptz updated_at:timestamptz client_item_id:uuid? caption:varchar? item_position:int4? revision:int4 delete_after:timestamptz? purge_started_at:timestamptz? purged_at:timestamptz? title:varchar? description:varchar? memory_date:varchar? date_precision:varchar"),
             Map.entry("media_asset", "id:uuid memory_id:uuid object_key:varchar original_filename:varchar detected_format:varchar byte_size:int8 checksum_sha256:varchar upload_state:varchar created_at:timestamptz updated_at:timestamptz declared_content_type:varchar? expected_byte_size:int8? expected_checksum_sha256:varchar? expected_duration_ms:int8? audio_duration_ms:int8? audio_codec:varchar? audio_container:varchar?"),
             Map.entry("upload_grant", "id:uuid media_asset_id:uuid object_key:varchar created_at:timestamptz expires_at:timestamptz"),
             Map.entry("archive_account", "id:uuid username:varchar display_name:varchar password_hash:varchar role:varchar enabled:bool credentials_version:int8 created_at:timestamptz updated_at:timestamptz"),

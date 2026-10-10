@@ -97,11 +97,41 @@
 }
 
 .inbox-review,
+.inbox-metadata,
 .inbox-delete-confirmation {
   padding: 20px;
   border: 1px solid var(--color-border);
   border-radius: 8px;
   min-width: 0;
+}
+
+.inbox-metadata form {
+  display: grid;
+  gap: 8px;
+}
+
+.inbox-metadata label {
+  margin-top: 12px;
+}
+
+.inbox-metadata select {
+  width: 100%;
+  min-height: 48px;
+  padding: 12px;
+  font: inherit;
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+}
+
+.inbox-metadata select:focus-visible {
+  outline: 3px solid var(--color-primary);
+  outline-offset: 3px;
+}
+
+.inbox-metadata form > button {
+  justify-self: start;
 }
 
 .inbox-review-notice,

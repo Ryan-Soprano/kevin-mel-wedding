@@ -1,0 +1,49 @@
+package com.kevinmel.archive.security;
+
+import java.io.*;
+import java.nio.charset.StandardCharsets;
+import jakarta.servlet.*;
+import jakarta.servlet.http.*;
+import org.springframework.web.filter.OncePerRequestFilter;
+import org.springframework.web.util.UrlPathHelper;
+
+/** Bounds authenticated JSON before MVC; guest admission quotas do not apply here. */
+public final class CoupleRequestBodyFilter extends OncePerRequestFilter {
+    private final SecurityErrorWriter errors;
+    public CoupleRequestBodyFilter(SecurityErrorWriter errors) { this.errors = errors; }
+    @Override protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
+            throws ServletException, IOException {
+        int limit = bodyLimit(request.getMethod(), UrlPathHelper.defaultInstance.getPathWithinApplication(request));
+        if (limit < 0) { chain.doFilter(request, response); return; }
+        byte[] body = request.getContentLengthLong() > limit ? null : request.getInputStream().readNBytes(limit + 1);
+        if (body == null || body.length > limit) {
+            errors.write(request, response, limit == 0 ? 400 : 413, limit == 0 ? "VALIDATION_FAILED" : "PAYLOAD_TOO_LARGE",
+                limit == 0 ? "This request has no body." : "This private memory request is too large.");
+            return;
+        }
+        chain.doFilter(new BoundedRequest(request, body), response);
+    }
+    static int bodyLimit(String method, String path) {
+        if ("POST".equals(method) && "/api/memories/contributions".equals(path)) return 65_536;
+        if ("GET".equals(method) && path.matches("/api/memories/contributions/[^/]+/receipt")) return 0;
+        if ("POST".equals(method) && path.matches("/api/memories/contributions/[^/]+/memories/[^/]+/upload-grants")) return 0;
+        if ("POST".equals(method) && path.matches("/api/memories/contributions/[^/]+/memories/[^/]+/finalize")) return 1_024;
+        if ("PATCH".equals(method) && path.matches("/api/memories/[^/]+/metadata")) return 16_384;
+        return -1;
+    }
+    private static final class BoundedRequest extends HttpServletRequestWrapper {
+        private final byte[] body;
+        BoundedRequest(HttpServletRequest request, byte[] body) { super(request); this.body = body; }
+        @Override public ServletInputStream getInputStream() {
+            var stream = new ByteArrayInputStream(body);
+            return new ServletInputStream() {
+                @Override public int read() { return stream.read(); }
+                @Override public int read(byte[] bytes, int offset, int length) { return stream.read(bytes, offset, length); }
+                @Override public boolean isFinished() { return stream.available() == 0; }
+                @Override public boolean isReady() { return true; }
+                @Override public void setReadListener(ReadListener listener) { throw new IllegalStateException("Private JSON uses synchronous reads."); }
+            };
+        }
+        @Override public BufferedReader getReader() { return new BufferedReader(new InputStreamReader(getInputStream(), StandardCharsets.UTF_8)); }
+    }
+}

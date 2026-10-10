@@ -12,6 +12,7 @@ import java.util.UUID;
 import com.kevinmel.archive.retention.DeletionRecord;
 import com.kevinmel.archive.retention.SubmissionKeyDigest;
 import com.kevinmel.archive.media.MediaTypes;
+import com.kevinmel.archive.contribution.ContributionRequest;
 
 /** Validate the complete import graph before publishing any original or deletion evidence. */
 final class RecoveryMetadata {
@@ -24,7 +25,7 @@ final class RecoveryMetadata {
     private final Map<UUID, Map<String, Object>> assetsByMemory = new HashMap<>();
 
     RecoveryMetadata(Map<String, List<Map<String, Object>>> tables, Instant at) {
-        this(tables, at, 2);
+        this(tables, at, 3);
     }
 
     RecoveryMetadata(Map<String, List<Map<String, Object>>> tables, Instant at, int version) {
@@ -76,6 +77,9 @@ final class RecoveryMetadata {
             if (!"kevin-mel-wedding".equals(c.get("event_key")) || !keys.add(text(c, "idempotency_key"))) throw invalid();
             bounded(c, "event_key", 100, false); bounded(c, "guest_name", 100, true); bounded(c, "idempotency_key", 100, false);
             hash(c, "request_fingerprint", true);
+            if (version >= 3 && !("GUEST".equals(c.get("source")) && c.get("author_account_id") == null
+                    || "COUPLE".equals(c.get("source")) && c.get("author_account_id") instanceof UUID
+                        && c.get("guest_name") == null && text(c, "idempotency_key").matches("couple:[0-9a-f]{64}"))) throw invalid();
         }
         var clients = new HashSet<String>(); var positions = new HashSet<String>();
         var ownedAssets = new HashSet<UUID>();
@@ -92,6 +96,12 @@ final class RecoveryMetadata {
             } else if ("TEXT".equals(m.get("memory_type"))) bounded(m, "text_content", 5000, false);
             else if (m.get("text_content") != null) throw invalid();
             bounded(m, "caption", 500, true);
+            if (version >= 3) {
+                metadataText(m, "title", 200); metadataText(m, "description", 2000);
+                validateDate(m);
+                if (purged && (m.get("title") != null || m.get("description") != null || m.get("memory_date") != null
+                        || !"UNKNOWN".equals(m.get("date_precision")))) throw invalid();
+            }
             if (m.get("client_item_id") != null && !clients.add(contribution + ":" + m.get("client_item_id"))) throw invalid();
             if (m.get("item_position") != null && (number(m, "item_position") < 0
                     || number(m, "item_position") > 19 || !positions.add(contribution + ":" + m.get("item_position")))) throw invalid();
@@ -181,6 +191,28 @@ final class RecoveryMetadata {
         String value = text(row, field);
         if (value == null && nullable) return;
         if (value == null || !value.matches("[0-9a-f]{64}")) throw invalid();
+    }
+    private static void metadataText(Map<String, Object> row, String field, int max) {
+        String value = text(row, field);
+        if (value == null) return;
+        // New metadata follows the live UTF-16 API contract; legacy original fields retain their prior bounds.
+        if (value.isEmpty() || value.length() > max || !ContributionRequest.storable(value)
+                || !value.equals(ContributionRequest.trim(value))) throw invalid();
+    }
+    private static void validateDate(Map<String, Object> row) {
+        String date = text(row, "memory_date"), precision = text(row, "date_precision");
+        try {
+            boolean valid = switch (precision == null ? "" : precision) {
+                case "UNKNOWN" -> date == null;
+                case "YEAR" -> date != null && date.matches("[0-9]{4}") && Integer.parseInt(date) >= 1;
+                case "MONTH" -> date != null && date.matches("[0-9]{4}-[0-9]{2}")
+                        && java.time.YearMonth.parse(date).getYear() >= 1;
+                case "DAY" -> date != null && date.matches("[0-9]{4}-[0-9]{2}-[0-9]{2}")
+                        && java.time.LocalDate.parse(date).getYear() >= 1;
+                default -> false;
+            };
+            if (!valid) throw invalid();
+        } catch (RuntimeException failure) { throw invalid(); }
     }
     private static RecoveryException invalid() { return RecoverySchema.invalid(); }
     @Override public String toString() { return "RecoveryMetadata[contributions=" + contributions.size() + ", memories=" + memories.size() + "]"; }

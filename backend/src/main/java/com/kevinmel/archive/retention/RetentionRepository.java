@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.UUID;
 
 import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -16,9 +17,17 @@ import org.springframework.transaction.support.TransactionTemplate;
 public class RetentionRepository {
     private final JdbcClient db;
     private final TransactionTemplate tx;
+    private final boolean scrubArchiveMetadata;
 
+    @Autowired
     public RetentionRepository(JdbcClient db, PlatformTransactionManager manager) {
+        this(db, manager, true);
+    }
+
+    /** Offline recovery alone selects false for an exactly reviewed pre-archive schema. */
+    public RetentionRepository(JdbcClient db, PlatformTransactionManager manager, boolean scrubArchiveMetadata) {
         this.db = db; this.tx = new TransactionTemplate(manager);
+        this.scrubArchiveMetadata = scrubArchiveMetadata;
     }
 
     public List<DeletionRecord> claim(int limit, Instant now) {
@@ -126,10 +135,14 @@ public class RetentionRepository {
                 db.sql("DELETE FROM upload_grant WHERE media_asset_id = :id").param("id", record.assetId()).update();
                 db.sql("DELETE FROM media_asset WHERE id = :id").param("id", record.assetId()).update();
             }
+            String metadataScrub = scrubArchiveMetadata
+                    ? "title = NULL, description = NULL, memory_date = NULL, date_precision = 'UNKNOWN', " : "";
             int changed = db.sql("""
                     UPDATE memory SET review_status = 'DELETE', delete_after = :deadline,
                         purge_started_at = COALESCE(purge_started_at, :recorded), purged_at = :now,
-                        text_content = NULL, caption = NULL, revision = revision + 1,
+                        text_content = NULL, caption = NULL,
+                    """ + metadataScrub + """
+                        revision = revision + 1,
                         updated_at = GREATEST(updated_at, :now)
                     WHERE id = :id AND purged_at IS NULL
                     """).param("id", record.memoryId()).param("deadline", time(record.deleteAfter()))

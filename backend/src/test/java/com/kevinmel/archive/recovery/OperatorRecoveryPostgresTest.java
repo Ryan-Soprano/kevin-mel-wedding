@@ -169,8 +169,9 @@ class OperatorRecoveryPostgresTest {
     }
 
     @Test void versionTwoPreservesAudioOriginalsVerifiedMetadataAndUnfinishedAudioIntents() throws Exception {
-        note(source, "Synthetic note alongside audio", null);
-        photos(source, sourceStorage, "UPLOADED");
+        source = schema("9"); target = schema("9");
+        legacyNote(source, "Synthetic note alongside audio");
+        legacyPhotos(source, sourceStorage, "UPLOADED");
         var voices = List.of(audio(source, sourceStorage, "audio/webm", "UPLOADED"),
             audio(source, sourceStorage, "audio/ogg", "UPLOADED"), audio(source, sourceStorage, "audio/mp4", "UPLOADED"));
         var pending = audio(source, sourceStorage, "audio/webm", "PENDING");
@@ -256,7 +257,7 @@ class OperatorRecoveryPostgresTest {
             "kevin-mel-wedding", null, "Synthetic attempted erased-key reuse", absentKey))).isInstanceOf(RuntimeException.class);
     }
 
-    @Test void exactVersionOneV8PackageRestoresIntoV9WithNullAudioFields() throws Exception {
+    @Test void exactVersionOneV8PackageRestoresIntoV10WithNullAudioAndArchiveFields() throws Exception {
         source = schema("8");
         var note = legacyNote(source, "Synthetic legacy note");
         var batch = legacyPhotos(source, sourceStorage, "UPLOADED", "PENDING");
@@ -279,6 +280,7 @@ class OperatorRecoveryPostgresTest {
         assertThat(targetStorage.objects.get("originals/" + batch.assets().getFirst())).isEqualTo(batch.bytes().getFirst());
         assertThat(target.db().sql("SELECT COUNT(*) FROM media_asset WHERE expected_duration_ms IS NOT NULL OR audio_duration_ms IS NOT NULL OR audio_codec IS NOT NULL OR audio_container IS NOT NULL")
             .query(Long.class).single()).isZero();
+        assertArchiveDefaults(target);
         assertThat(target.db().sql("SELECT COUNT(*) FROM erased_submission_key WHERE key_digest = :digest")
             .param("digest", SubmissionKeyDigest.sha256(newerAudioKey)).query(Long.class).single()).isEqualTo(1);
         assertThatThrownBy(() -> target.tx().execute(ignored -> target.contributions().saveTextContribution(
@@ -298,12 +300,147 @@ class OperatorRecoveryPostgresTest {
     }
 
     @Test void versionTwoCannotRestoreIntoAnOlderV8Target() {
+        source = schema("9");
         audio(source, sourceStorage, "audio/mp4", "UPLOADED");
         Path bundle = temporary.resolve("v2-requires-v9");
         assertThat(export(bundle).ready()).isTrue();
         target = schema("8");
         assertThatThrownBy(() -> restore(bundle)).isInstanceOf(RecoveryException.class);
         assertEmptyTarget();
+    }
+
+    @Test void versionThreePreservesHistoricalAuthorsAndAllDatePrecisionsWithoutRestoringAccounts() throws Exception {
+        UUID author = UUID.randomUUID();
+        var notes = new ArrayList<Text>();
+        for (String[] date : List.of(new String[]{"UNKNOWN", null}, new String[]{"YEAR", "0001"},
+                new String[]{"MONTH", "2026-10"}, new String[]{"DAY", "2024-02-29"})) {
+            var note = note(source, "Synthetic authored note " + date[0], null); notes.add(note);
+            coupleAttribution(source, note.contribution(), author);
+            metadata(source, note.memory(), "Synthetic " + date[0] + " title", "Synthetic private description", date[1], date[0]);
+        }
+        var batch = photos(source, sourceStorage, "UPLOADED");
+        coupleAttribution(source, batch.contribution(), author);
+        metadata(source, batch.memories().getFirst(), "Synthetic photo title", "Synthetic original description", "9999-12-31", "DAY");
+        var before = snapshot(source);
+        Path bundle = temporary.resolve("authored-v3");
+        assertThat(export(bundle).ready()).isTrue();
+        var manifest = JSON.readTree(Files.readAllBytes(bundle.resolve("manifest.json")));
+        assertThat(manifest.get("version").intValue()).isEqualTo(3);
+        assertThat(manifest.get("originals").get(0).has("audioDurationMs")).isTrue();
+        assertThat(Files.readString(bundle.resolve("metadata.json"))).contains(author.toString(), "author_account_id", "0001", "2024-02-29")
+                .doesNotContain("password_hash", "archive_account");
+        assertThat(restore(bundle).originals()).isEqualTo(1);
+        assertThat(snapshot(target)).isEqualTo(before);
+        assertThat(target.db().sql("SELECT count(*) FROM archive_account").query(Long.class).single()).isZero();
+        assertThat(target.db().sql("SELECT author_account_id FROM contribution WHERE source='COUPLE'").query(UUID.class).list())
+                .hasSize(5).containsOnly(author);
+        assertThat(targetStorage.objects.get("originals/" + batch.assets().getFirst())).isEqualTo(batch.bytes().getFirst());
+    }
+
+    @Test void versionTwoRestoresIntoV10WithArchiveDefaultsAndVerifiedAudioUnchanged() throws Exception {
+        source = schema("9");
+        legacyNote(source, "Synthetic v2 note");
+        var voice = audio(source, sourceStorage, "audio/mp4", "UPLOADED");
+        Path bundle = temporary.resolve("v2-to-v10");
+        assertThat(export(bundle).ready()).isTrue();
+        assertThat(JSON.readTree(Files.readAllBytes(bundle.resolve("manifest.json"))).get("version").intValue()).isEqualTo(2);
+        assertThat(restore(bundle).originals()).isEqualTo(1);
+        assertArchiveDefaults(target);
+        assertThat(targetStorage.objects.get("originals/" + voice.asset())).isEqualTo(voice.bytes());
+        assertThat(target.db().sql("SELECT audio_duration_ms FROM media_asset WHERE id=:id").param("id", voice.asset())
+                .query(Long.class).single()).isEqualTo(voice.verified().durationMs());
+    }
+
+    @Test void legacyVersionOneStillRestoresIntoReviewedV8AndV9Targets() {
+        source = schema("8");
+        var retained = legacyNote(source, "Synthetic backwards-compatible note");
+        var erased = legacyNote(source, "Synthetic old-schema note later erased");
+        Path bundle = temporary.resolve("v1-compatible-targets");
+        assertThat(export(bundle).ready()).isTrue();
+        // Authoritative erasure happened after the backup: legacy targets must replay it without V10 columns.
+        sourceStorage.record(new DeletionRecord(erased.memory(), erased.contribution(), null,
+                SubmissionKeyDigest.sha256(erased.key()), NOW.minusSeconds(1), NOW));
+        for (String migration : List.of("8", "9")) {
+            target = schema(migration);
+            var result = restore(bundle);
+            assertThat(result.memories()).isEqualTo(2); assertThat(result.replayedDeletions()).isEqualTo(1);
+            assertThat(string(target, "SELECT text_content FROM memory WHERE id=:id", erased.memory())).isNull();
+            assertThat(string(target, "SELECT text_content FROM memory WHERE id=:id", retained.memory())).isEqualTo(retained.message());
+            assertThat(count(target, "erased_submission_key")).isEqualTo(1);
+        }
+    }
+
+    @Test void versionThreeCannotRestoreIntoOlderV8OrV9BeforeAnyOriginalMutation() {
+        photos(source, sourceStorage, "UPLOADED");
+        Path bundle = temporary.resolve("v3-requires-v10");
+        assertThat(export(bundle).ready()).isTrue();
+        for (String migration : List.of("8", "9")) {
+            target = schema(migration);
+            assertThatThrownBy(() -> restore(bundle)).isInstanceOf(RecoveryException.class);
+            assertEmptyTarget();
+        }
+    }
+
+    @Test void rehashedVersionThreeRejectsInvalidAttributionAndNoncanonicalMetadataBeforeAnyWrites() throws Exception {
+        note(source, "Synthetic metadata validation note", null);
+        photos(source, sourceStorage, "UPLOADED");
+        Path bundle = temporary.resolve("v3-invalid-metadata");
+        assertThat(export(bundle).ready()).isTrue();
+        byte[] originalMetadata = Files.readAllBytes(bundle.resolve("metadata.json"));
+        for (String invalid : List.of("GUEST_AUTHOR", "COUPLE_WITHOUT_AUTHOR", "COUPLE_GUEST_NAME", "COUPLE_BAD_KEY", "UNKNOWN_SOURCE", "TITLE_TOO_LONG",
+                "DESCRIPTION_TOO_LONG", "SUPPLEMENTARY_TITLE_TOO_LONG", "SUPPLEMENTARY_DESCRIPTION_TOO_LONG", "PADDED_TITLE", "PADDED_DESCRIPTION",
+                "UNKNOWN_WITH_DATE", "YEAR_ZERO", "MONTH_INVALID", "DAY_INVALID", "PRECISION_MISMATCH")) {
+            ObjectNode metadata = (ObjectNode) JSON.readTree(originalMetadata);
+            ObjectNode contribution = (ObjectNode) metadata.get("tables").get("contribution").get(0);
+            ObjectNode memory = (ObjectNode) metadata.get("tables").get("memory").get(0);
+            switch (invalid) {
+                case "GUEST_AUTHOR" -> contribution.put("author_account_id", UUID.randomUUID().toString());
+                case "COUPLE_WITHOUT_AUTHOR" -> contribution.put("source", "COUPLE");
+                case "COUPLE_GUEST_NAME" -> contribution.put("source", "COUPLE").put("author_account_id", UUID.randomUUID().toString())
+                        .put("idempotency_key", "couple:" + "a".repeat(64)).put("guest_name", "Synthetic invalid private attribution");
+                case "COUPLE_BAD_KEY" -> contribution.put("source", "COUPLE").put("author_account_id", UUID.randomUUID().toString())
+                        .putNull("guest_name").put("idempotency_key", UUID.randomUUID().toString());
+                case "UNKNOWN_SOURCE" -> contribution.put("source", "OTHER");
+                case "TITLE_TOO_LONG" -> memory.put("title", "t".repeat(201));
+                case "DESCRIPTION_TOO_LONG" -> memory.put("description", "d".repeat(2001));
+                case "SUPPLEMENTARY_TITLE_TOO_LONG" -> memory.put("title", "\uD83D\uDE03".repeat(101));
+                case "SUPPLEMENTARY_DESCRIPTION_TOO_LONG" -> memory.put("description", "\uD83D\uDE03".repeat(1001));
+                case "PADDED_TITLE" -> memory.put("title", " \u3000Synthetic padded title");
+                case "PADDED_DESCRIPTION" -> memory.put("description", "Synthetic padded description\u00a0");
+                case "UNKNOWN_WITH_DATE" -> memory.put("memory_date", "2026");
+                case "YEAR_ZERO" -> memory.put("memory_date", "0000").put("date_precision", "YEAR");
+                case "MONTH_INVALID" -> memory.put("memory_date", "2026-13").put("date_precision", "MONTH");
+                case "DAY_INVALID" -> memory.put("memory_date", "2025-02-29").put("date_precision", "DAY");
+                case "PRECISION_MISMATCH" -> memory.put("memory_date", "2026-10-09").put("date_precision", "MONTH");
+                default -> throw new IllegalArgumentException("Unreviewed fixture.");
+            }
+            rewriteMetadataDigest(bundle, metadata);
+            assertThatThrownBy(() -> restore(bundle)).as(invalid).isInstanceOf(RecoveryException.class);
+            assertEmptyTarget();
+        }
+    }
+
+    @Test void rehashedVersionThreeAcceptsExactUtf16MetadataLimitsAndPreservesOriginals() throws Exception {
+        var note = note(source, "Synthetic immutable note under metadata", null);
+        var batch = photos(source, sourceStorage, "UPLOADED");
+        Path bundle = temporary.resolve("v3-utf16-boundaries");
+        assertThat(export(bundle).ready()).isTrue();
+        ObjectNode metadata = (ObjectNode) JSON.readTree(Files.readAllBytes(bundle.resolve("metadata.json")));
+        String title = "\uD83D\uDE03".repeat(100), description = "\uD83D\uDE03".repeat(1000);
+        assertThat(title.length()).isEqualTo(200); assertThat(description.length()).isEqualTo(2000);
+        for (var row : metadata.get("tables").get("memory")) {
+            ((ObjectNode) row).put("title", title).put("description", description);
+        }
+        rewriteMetadataDigest(bundle, metadata);
+        var restored = restore(bundle);
+        assertThat(restored.memories()).isEqualTo(2); assertThat(restored.originals()).isEqualTo(1);
+        for (UUID memory : List.of(note.memory(), batch.memories().getFirst())) {
+            assertThat(string(target, "SELECT title FROM memory WHERE id=:id", memory)).isEqualTo(title);
+            assertThat(string(target, "SELECT description FROM memory WHERE id=:id", memory)).isEqualTo(description);
+        }
+        assertThat(string(target, "SELECT text_content FROM memory WHERE id=:id", note.memory())).isEqualTo(note.message());
+        assertThat(string(target, "SELECT caption FROM memory WHERE id=:id", batch.memories().getFirst())).isEqualTo("Synthetic caption 0");
+        assertThat(targetStorage.objects.get("originals/" + batch.assets().getFirst())).isEqualTo(batch.bytes().getFirst());
     }
 
     @Test void largerArchiveRestoresEveryContributionAndMemoryWithAccurateCounts() {
@@ -338,6 +475,11 @@ class OperatorRecoveryPostgresTest {
         var batch = photos(source, sourceStorage, "UPLOADED", "UPLOADED");
         var deletedNote = note(source, "Synthetic note later erased", "Later erased guest");
         var keptNote = note(source, "Synthetic retained note", "Retained guest");
+        UUID author = UUID.randomUUID();
+        coupleAttribution(source, deletedNote.contribution(), author);
+        metadata(source, batch.memories().getFirst(), "Synthetic erased photo title", "Synthetic erased photo description", "2026-10-09", "DAY");
+        metadata(source, batch.memories().get(1), "Synthetic retained photo title", "Synthetic retained photo description", "2026-10", "MONTH");
+        metadata(source, deletedNote.memory(), "Synthetic erased note title", "Synthetic erased note description", "2026", "YEAR");
         Path old = temporary.resolve("older-backup");
         assertThat(export(old).ready()).isTrue();
         var absentNote = note(source, "Created and deleted after backup", "Absent guest");
@@ -357,6 +499,20 @@ class OperatorRecoveryPostgresTest {
         assertThat(string(target, "SELECT guest_name FROM contribution WHERE id = :id", deletedNote.contribution())).isNull();
         assertThat(string(target, "SELECT caption FROM memory WHERE id = :id", batch.memories().get(1))).isEqualTo("Synthetic caption 1");
         assertThat(string(target, "SELECT text_content FROM memory WHERE id = :id", keptNote.memory())).isEqualTo(keptNote.message());
+        for (UUID memory : List.of(batch.memories().getFirst(), deletedNote.memory())) {
+            assertThat(string(target, "SELECT title FROM memory WHERE id=:id", memory)).isNull();
+            assertThat(string(target, "SELECT description FROM memory WHERE id=:id", memory)).isNull();
+            assertThat(string(target, "SELECT memory_date FROM memory WHERE id=:id", memory)).isNull();
+            assertThat(string(target, "SELECT date_precision FROM memory WHERE id=:id", memory)).isEqualTo("UNKNOWN");
+        }
+        assertThat(string(target, "SELECT title FROM memory WHERE id=:id", batch.memories().get(1))).isEqualTo("Synthetic retained photo title");
+        assertThat(string(target, "SELECT memory_date FROM memory WHERE id=:id", batch.memories().get(1))).isEqualTo("2026-10");
+        assertThat(string(target, "SELECT date_precision FROM memory WHERE id=:id", batch.memories().get(1))).isEqualTo("MONTH");
+        for (UUID contribution : List.of(deletedNote.contribution())) {
+            assertThat(string(target, "SELECT source FROM contribution WHERE id=:id", contribution)).isEqualTo("COUPLE");
+            assertThat(target.db().sql("SELECT author_account_id FROM contribution WHERE id=:id").param("id", contribution)
+                    .query(UUID.class).single()).isEqualTo(author);
+        }
         assertThat(count(target, "deletion_ledger")).isEqualTo(3);
         assertThat(count(target, "erased_submission_key")).isEqualTo(3);
         assertThat(count(target, "media_asset")).isEqualTo(1);
@@ -832,6 +988,22 @@ class OperatorRecoveryPostgresTest {
                 .param("at", time(NOW.minusSeconds(3600))).param("id", contribution).update();
         for (UUID memory : memories) fixture.db().sql("UPDATE memory SET created_at = :at, updated_at = :at WHERE id = :id")
                 .param("at", time(NOW.minusSeconds(3600))).param("id", memory).update();
+    }
+    private static void coupleAttribution(Fixture fixture, UUID contribution, UUID author) {
+        fixture.db().sql("UPDATE contribution SET source='COUPLE',author_account_id=:author,guest_name=NULL,idempotency_key=:key WHERE id=:id")
+                .param("author", author).param("key", "couple:" + SubmissionKeyDigest.sha256(author + ":" + UUID.randomUUID()))
+                .param("id", contribution).update();
+    }
+    private static void metadata(Fixture fixture, UUID memory, String title, String description, String date, String precision) {
+        fixture.db().sql("UPDATE memory SET title=:title,description=:description,memory_date=:date,date_precision=:precision WHERE id=:id")
+                .param("title", title).param("description", description).param("date", date).param("precision", precision)
+                .param("id", memory).update();
+    }
+    private static void assertArchiveDefaults(Fixture fixture) {
+        assertThat(fixture.db().sql("SELECT COUNT(*) FROM contribution WHERE source <> 'GUEST' OR author_account_id IS NOT NULL")
+                .query(Long.class).single()).isZero();
+        assertThat(fixture.db().sql("SELECT COUNT(*) FROM memory WHERE title IS NOT NULL OR description IS NOT NULL OR memory_date IS NOT NULL OR date_precision <> 'UNKNOWN'")
+                .query(Long.class).single()).isZero();
     }
     private static UUID grant(Fixture fixture, UUID asset, Instant created, Instant expires) {
         UUID id = UUID.randomUUID();

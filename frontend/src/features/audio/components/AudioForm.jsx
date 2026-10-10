@@ -22,7 +22,7 @@ const time = seconds => `${Math.floor(seconds / 60)}:${String(seconds % 60).padS
 
 export default function AudioForm({
   createCapture = createAudioCapture, createSubmission = createAudioSubmission,
-  active = true, onFlowStateChange, onDone, onShareAnother,
+  active = true, onFlowStateChange, onDone, onShareAnother, privateArchive = false, onDialogStateChange,
 } = {}) {
   const prefix = `audio-${useId()}`;
   const captureFactory = useRef(createCapture), submissionFactory = useRef(createSubmission);
@@ -86,7 +86,7 @@ export default function AudioForm({
     sending.current = true; setBusy(true); setError("");
     const current = submission.current;
     try {
-      await current.submit({ ...snapshot.clip, guestName, caption }, message => {
+      await current.submit({ ...snapshot.clip, guestName: privateArchive ? null : guestName, caption }, message => {
         if (mounted.current && submission.current === current) setProgress(message);
       });
       if (mounted.current && submission.current === current) setSaved(true);
@@ -112,9 +112,14 @@ export default function AudioForm({
     setGuestName(""); setCaption(""); setError(""); setProgress("");
     setBusy(false); setPending(false); setSaved(false); setFailed(false); setRetryAfter(0);
   }
-  function finish(callback) { reset(); callback?.(); }
+  function finish(callback) { const receipt = submission.current?.receipt; reset(); callback?.(receipt); }
+  async function startRecording() {
+    audio.current?.pause(); setError(""); onDialogStateChange?.(true);
+    try { await capture.current?.start(); } finally { onDialogStateChange?.(false); }
+  }
   function discard() { audio.current?.pause(); capture.current?.discard(); setError(""); startButton.current?.focus(); }
   function choose(event) {
+    onDialogStateChange?.(false);
     const file = event.target.files?.[0]; event.target.value = "";
     if (!file || locked || recordingBusy) return;
     audio.current?.pause(); setError(""); void capture.current?.useFile(file);
@@ -122,13 +127,13 @@ export default function AudioForm({
   const captureError = snapshot.errorCode ? CAPTURE_MESSAGES[snapshot.errorCode] ?? CAPTURE_MESSAGES.RECORDER_ERROR : null;
   return (
     <section className="audio-memory" aria-labelledby={`${prefix}-title`}>
-      <h2 id={`${prefix}-title`}>Share a voice memory</h2>
+      <h2 id={`${prefix}-title`}>{privateArchive ? "Add a voice memory" : "Share a voice memory"}</h2>
       <p>Record a message up to two minutes, or choose one WebM, Ogg, or M4A audio file up to 25 MB. It stays private for Kevin and Melanie.</p>
       <form onSubmit={submit} noValidate aria-label="Share a voice memory" aria-busy={busy || recordingBusy}>
         {!saved && (
           <div className="audio-memory-actions">
             {snapshot.supported && snapshot.phase !== "recording" && <button ref={startButton} type="button" disabled={locked || recordingBusy}
-              onClick={() => { audio.current?.pause(); setError(""); void capture.current?.start(); }}>{snapshot.clip ? "Re-record" : "Start recording"}</button>}
+              onClick={() => void startRecording()}>{snapshot.clip ? "Re-record" : "Start recording"}</button>}
             {snapshot.phase === "recording" && <button type="button" onClick={() => capture.current?.stop()}>Stop recording</button>}
             {snapshot.clip && !locked && <button type="button" className="button-secondary" onClick={discard}>Discard clip</button>}
           </div>
@@ -142,7 +147,8 @@ export default function AudioForm({
         {captureError && <p className="form-error" role="alert">{captureError} Nothing was uploaded.</p>}
         <div>
           <label htmlFor={`${prefix}-file`}>Choose an existing audio file</label>
-          <input id={`${prefix}-file`} type="file" accept={AUDIO_ACCEPT} disabled={locked || recordingBusy} onChange={choose} />
+          <input id={`${prefix}-file`} type="file" accept={AUDIO_ACCEPT} disabled={locked || recordingBusy} onChange={choose}
+            onClick={() => onDialogStateChange?.(true)} onCancel={() => onDialogStateChange?.(false)} />
           <p className="guest-help">WebM and Ogg must contain Opus audio; M4A/MP4 must contain AAC audio. Video and other formats are not accepted.</p>
         </div>
         {snapshot.clip && (
@@ -153,10 +159,10 @@ export default function AudioForm({
             <p className="guest-help">Make sure your message can be heard. You can discard or re-record before saving.</p>
           </div>
         )}
-        <div>
+        {!privateArchive && <div>
           <label htmlFor={`${prefix}-name`}>Your name for this clip (optional)</label>
           <input id={`${prefix}-name`} autoComplete="name" maxLength={100} disabled={locked || recordingBusy} value={guestName} onChange={event => setGuestName(event.target.value)} />
-        </div>
+        </div>}
         <div>
           <label htmlFor={`${prefix}-caption`}>Caption (optional)</label>
           <textarea id={`${prefix}-caption`} rows={2} maxLength={500} disabled={locked || recordingBusy} value={caption} onChange={event => setCaption(event.target.value)} />
@@ -165,9 +171,9 @@ export default function AudioForm({
         {error && <p ref={errorNotice} tabIndex={-1} className="form-error" role="alert">{error}</p>}
         {saved ? (
           <div>
-            <h3 ref={result} tabIndex={-1}>Your voice memory was saved privately for Kevin and Melanie.</h3>
+            <h3 ref={result} tabIndex={-1}>{privateArchive ? "Your voice memory was saved in your private archive." : "Your voice memory was saved privately for Kevin and Melanie."}</h3>
             <div className="audio-memory-actions">
-              <button type="button" onClick={() => finish(onDone)}>Done</button>
+              <button type="button" onClick={() => finish(onDone)}>{privateArchive ? "View added memory" : "Done"}</button>
               <button type="button" className="button-secondary" onClick={() => finish(onShareAnother)}>Share another memory</button>
             </div>
           </div>

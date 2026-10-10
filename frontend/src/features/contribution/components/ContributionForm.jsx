@@ -7,10 +7,11 @@ import { createTextSubmission } from "../api/textSubmission.js";
 const FIELD_NAMES = new Set(["guestName", "message"]);
 
 export default function ContributionForm({
-  active = true, onFlowStateChange, onDone, onShareAnother,
+  active = true, onFlowStateChange, onDone, onShareAnother, createSubmission = createTextSubmission, privateArchive = false,
 } = {}) {
   const submission = useRef(null);
-  if (submission.current === null) submission.current = createTextSubmission();
+  const factory = useRef(createSubmission);
+  const mounted = useRef(false);
   const nameInput = useRef(null);
   const messageInput = useRef(null);
   const reviewHeading = useRef(null);
@@ -31,6 +32,13 @@ export default function ContributionForm({
   const complete = step === "success" || step === "done";
   const hasDraft = !complete && (guestName.length > 0 || message.length > 0 || preview !== null);
   const reportFlow = useEffectEvent(state => onFlowStateChange?.(state));
+
+  useEffect(() => {
+    const current = factory.current();
+    submission.current = current;
+    mounted.current = true;
+    return () => { mounted.current = false; current.dispose?.(); if (submission.current === current) submission.current = null; };
+  }, []);
 
   useEffect(() => {
     reportFlow({ busy, pending, hasDraft, complete });
@@ -81,7 +89,7 @@ export default function ContributionForm({
     setError("");
     setFieldErrors({});
     try {
-      setPreview(normalizeTextContribution({ guestName, message }));
+      setPreview(normalizeTextContribution({ guestName: privateArchive ? null : guestName, message }));
       setStep("review");
     } catch (failure) {
       if (failure instanceof ApiError && failure.code === "VALIDATION_FAILED") showValidation(failure);
@@ -96,16 +104,19 @@ export default function ContributionForm({
   }
 
   async function send() {
-    if (sending.current || !preview) return;
+    const current = submission.current;
+    if (sending.current || !preview || !current) return;
     sending.current = true;
     setError("");
     setIsSubmitting(true);
     try {
-      await submission.current.submit({ guestName, message });
+      await current.submit({ guestName: privateArchive ? null : guestName, message });
+      if (!mounted.current || submission.current !== current) return;
       setPending(false);
       setStep("success");
     } catch (failure) {
-      setRetryAfter(submission.current.retryAfterSeconds);
+      if (!mounted.current || submission.current !== current) return;
+      setRetryAfter(current.retryAfterSeconds);
       if (failure instanceof ApiError && failure.code === "VALIDATION_FAILED" && !failure.unknownOutcome) {
         showValidation(failure);
       } else {
@@ -116,9 +127,9 @@ export default function ContributionForm({
           : "We could not confirm whether your note was saved. Keep this page open and try again.");
       }
     } finally {
-      setPending(submission.current.pending);
-      setIsSubmitting(false);
-      sending.current = false;
+      if (mounted.current && submission.current === current) {
+        setPending(current.pending); setIsSubmitting(false); sending.current = false;
+      }
     }
   }
 
@@ -137,8 +148,9 @@ export default function ContributionForm({
 
   function finish() {
     if (onDone) {
+      const receipt = submission.current.receipt;
       startAnother(false);
-      onDone();
+      onDone(receipt);
     } else {
       setStep("done");
     }
@@ -154,15 +166,15 @@ export default function ContributionForm({
       {step === "compose" && (
         <form onSubmit={review} noValidate aria-label="Write a note">
           <h2>Write a note</h2>
-          <p>Your note goes privately to Kevin and Melanie. Your name is optional.</p>
-          <div>
+          <p>{privateArchive ? "Add a written memory to your private archive. You can add a title, description and date after saving." : "Your note goes privately to Kevin and Melanie. Your name is optional."}</p>
+          {!privateArchive && <div>
             <label htmlFor="guestName">Your name (optional)</label>
             <input ref={nameInput} id="guestName" name="guestName" type="text" autoComplete="name"
               maxLength={100} value={guestName} aria-invalid={Boolean(fieldErrors.guestName)}
               aria-describedby={fieldErrors.guestName ? "guestName-error" : undefined}
               onChange={(event) => { setGuestName(event.target.value); setFieldErrors((old) => ({ ...old, guestName: "" })); }} />
             {fieldErrors.guestName && <p id="guestName-error" className="form-error" role="alert">{fieldErrors.guestName}</p>}
-          </div>
+          </div>}
           <div>
             <label htmlFor="message">Leave a message</label>
             <textarea ref={messageInput} id="message" name="message" rows="5" maxLength={5000} required
@@ -179,8 +191,8 @@ export default function ContributionForm({
 
       {step === "review" && (
         <section className="note-review" aria-labelledby="review-heading" aria-busy={isSubmitting}>
-          <h2 id="review-heading" ref={reviewHeading} tabIndex={-1}>Ready to send?</h2>
-          <p style={{ overflowWrap: "anywhere" }}>From: {preview.guestName ?? "Name not provided"}</p>
+          <h2 id="review-heading" ref={reviewHeading} tabIndex={-1}>{privateArchive ? "Ready to save privately?" : "Ready to send?"}</h2>
+          {!privateArchive && <p style={{ overflowWrap: "anywhere" }}>From: {preview.guestName ?? "Name not provided"}</p>}
           <p className="note-review__message">{preview.message}</p>
           <p>Only Kevin and Melanie can review this note. It will not appear publicly.</p>
           <p className="visually-hidden" role="status" aria-live="polite">{isSubmitting ? "Sending your note…" : ""}</p>
@@ -188,7 +200,7 @@ export default function ContributionForm({
           {pending && <p>Your note is locked until we confirm it. Trying again checks this same submission.</p>}
           <div className="note-actions">
             <button type="button" onClick={send} disabled={busy}>
-              {isSubmitting ? "Sending…" : retryAfter > 0 ? "Please wait before trying again" : pending ? "Try again" : "Send note"}
+              {isSubmitting ? "Saving…" : retryAfter > 0 ? "Please wait before trying again" : pending ? "Try again" : privateArchive ? "Save note privately" : "Send note"}
             </button>
             {!pending && <button type="button" className="button-secondary" onClick={edit} disabled={isSubmitting}>Edit note</button>}
           </div>
@@ -197,9 +209,9 @@ export default function ContributionForm({
 
       {step === "success" && (
         <section className="note-result" aria-labelledby="result-heading">
-          <h2 id="result-heading" ref={resultHeading} tabIndex={-1}>Thank you — your note was saved for Kevin and Melanie.</h2>
-          <p>They can review it privately when their archive is ready.</p>
-          <button type="button" className="button-secondary" onClick={finish}>Done</button>
+          <h2 id="result-heading" ref={resultHeading} tabIndex={-1}>{privateArchive ? "Your note is saved in your private archive." : "Thank you — your note was saved for Kevin and Melanie."}</h2>
+          <p>{privateArchive ? "New memories start in Kept. Open this memory to see its current status and add a title, description or date." : "They can review it privately when their archive is ready."}</p>
+          <button type="button" className="button-secondary" onClick={finish}>{privateArchive ? "View added memory" : "Done"}</button>
           <button type="button" onClick={shareAnother}>{onDone || onShareAnother ? "Share another memory" : "Write another note"}</button>
         </section>
       )}

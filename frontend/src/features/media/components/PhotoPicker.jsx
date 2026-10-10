@@ -6,7 +6,7 @@ import PhotoPreview from "./PhotoPreview.jsx";
 /** Controlled selection for the batch form, or a standalone local preview. */
 export default function PhotoPicker({
   photos: controlledPhotos, onPhotosChange, disabled = false, inputRef,
-  idPrefix, showHeading = true, renderPhoto,
+  idPrefix, showHeading = true, renderPhoto, onDialogStateChange,
   note = "Photo previews are available to try. Sending and saving photos is coming next.",
 }) {
   const generatedId = useId();
@@ -19,6 +19,7 @@ export default function PhotoPicker({
   const removalCount = photos.filter(photo => selectedForRemoval.has(photo.id)).length;
 
   function choose(event) {
+    onDialogStateChange?.(false);
     const files = Array.from(event.target.files ?? []);
     event.target.value = "";
     if (disabled || !files.length) return;
@@ -55,6 +56,7 @@ export default function PhotoPicker({
         Select up to {MAX_PHOTOS} photos ({ALLOWED_FILE_TYPE_LABELS}) no larger than {MAX_PHOTO_SIZE_MB} MB each.
       </p>
       <input ref={inputRef} type="file" id={prefix + "-input"} accept={ACCEPTED_FILE_TYPES} multiple
+        onClick={() => onDialogStateChange?.(true)} onCancel={() => onDialogStateChange?.(false)}
         disabled={disabled} onChange={choose} aria-invalid={photoError ? "true" : undefined}
         aria-describedby={`${prefix}-guidance ${prefix}-note ${prefix}-error`} />
       <p id={prefix + "-error"} className="form-error" role="alert">{photoError}</p>

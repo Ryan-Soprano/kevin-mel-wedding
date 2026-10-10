@@ -27,6 +27,7 @@ import org.springframework.security.web.csrf.HttpSessionCsrfTokenRepository;
 import org.springframework.security.web.csrf.InvalidCsrfTokenException;
 import org.springframework.security.web.csrf.MissingCsrfTokenException;
 import org.springframework.security.web.csrf.XorCsrfTokenRequestAttributeHandler;
+import org.springframework.security.web.access.intercept.AuthorizationFilter;
 
 @Configuration
 public class SecurityConfiguration {
@@ -102,6 +103,7 @@ public class SecurityConfiguration {
                     }))
             // Constructed here, rather than a servlet filter bean: this filter runs exactly once.
             .addFilterBefore(new SessionIdentityFilter(accounts, policy, errors, contexts), CsrfFilter.class)
+            .addFilterAfter(new CoupleRequestBodyFilter(errors), AuthorizationFilter.class)
             .formLogin(form -> form.disable())
             .httpBasic(basic -> basic.disable())
             .logout(logout -> logout.disable())

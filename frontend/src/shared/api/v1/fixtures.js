@@ -93,6 +93,7 @@ export const PARTIAL_RECEIPT = {
   ],
 };
 export const MEMORY_DETAIL = {
+  source: "GUEST", title: null, description: null, memoryDate: null, datePrecision: "UNKNOWN",
   memoryId: IDS.text,
   contributionId: IDS.contribution,
   guestName: null,

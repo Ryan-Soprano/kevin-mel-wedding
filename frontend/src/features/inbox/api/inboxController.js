@@ -2,10 +2,13 @@ import { createArchiveApi } from "../../../shared/api/archiveApi.js";
 import { ApiError, contractMismatch } from "../../../shared/api/apiClient.js";
 import { ALLOWED_FILE_TYPES, MAX_PHOTO_BYTES } from "../../media/mediaConstraints.js";
 import { AUDIO_CONTENT_TYPES, MAX_AUDIO_BYTES, MAX_AUDIO_SECONDS } from "../../audio/audioConstraints.js";
+import { normalizeMemoryMetadata, metadataOf, sameMetadata } from "../memoryMetadata.js";
+import { createCoupleSubmissionApi } from "./coupleSubmissionApi.js";
 
 const EMPTY_ITEMS = Object.freeze([]);
 const idlePhoto = () => Object.freeze({ phase: "idle", url: null, error: null });
 const idleReview = () => Object.freeze({ phase: "idle", targetStatus: null, error: null, canRetry: false });
+const idleMetadata = () => Object.freeze({ phase: "idle", error: null, canRetry: false });
 const REVIEW_STATES = new Set(["PENDING", "KEEP", "ARCHIVED", "DELETE"]);
 const interrupted = () => new ApiError("The request was cancelled.", { code: "REQUEST_ABORTED" });
 
@@ -53,9 +56,10 @@ export function createInboxController({
 } = {}) {
   let state = Object.freeze({ phase: "checking", session: null, busy: false, error: null,
     reviewStatus: "PENDING", items: EMPTY_ITEMS, nextCursor: null, detail: null,
-    photo: idlePhoto(), review: idleReview(), notice: null, pageResetVersion: 0, logoutUnconfirmed: false });
+    photo: idlePhoto(), review: idleReview(), metadata: idleMetadata(), notice: null, pageResetVersion: 0, logoutUnconfirmed: false });
   let generation = 0, operation = null, disposed = false, objectUrl = null;
   let reviewIntent = null, reviewInFlight = null, reviewUncertain = false, inboxDirty = false;
+  let metadataIntent = null, metadataInFlight = null, metadataUncertain = false, metadataHiddenId = null;
   let suspended = false, resuming = null;
   let notifying = false, notifyAgain = false;
   const listeners = new Set();
@@ -145,9 +149,10 @@ export function createInboxController({
     revokePhoto();
     reviewIntent = null;
     reviewUncertain = false;
+    metadataIntent = null; metadataUncertain = false; metadataHiddenId = null;
     inboxDirty = false;
     publish({ session: null, items: EMPTY_ITEMS, nextCursor: null, detail: null, photo: idlePhoto(),
-      review: idleReview(), notice: null, ...patch });
+      review: idleReview(), metadata: idleMetadata(), notice: null, ...patch });
   }
 
   function authFailure(failure) {
@@ -189,9 +194,10 @@ export function createInboxController({
   function unavailableReview() {
     reviewIntent = null;
     reviewUncertain = false;
+    metadataIntent = null; metadataUncertain = false; metadataHiddenId = null;
     inboxDirty = true;
     publish({ items: EMPTY_ITEMS, nextCursor: null, pageResetVersion: state.pageResetVersion + 1,
-      detail: null, review: idleReview(), error: "This memory is unavailable. Return to the inbox and reload it." });
+      detail: null, review: idleReview(), metadata: idleMetadata(), error: "This memory is unavailable. Return to the inbox and reload it." });
   }
 
   function reviewState(phase, error = null, canRetry = false) {
@@ -268,6 +274,70 @@ export function createInboxController({
       publish({ detail: frozenCopy(memory), review: reviewState("uncertain",
         "The current read still shows the earlier revision. The first request may still finish. Retry only this same change, or reload again.", true) });
     } else await acceptCurrentReview(op, memory, notice);
+  }
+
+  const metadataState = (phase, error = null, canRetry = false) => Object.freeze({ phase, error, canRetry });
+  const originalContext = memory => JSON.stringify([memory.contributionId, memory.memoryType, memory.source,
+    memory.guestName, memory.textContent, memory.caption, memory.createdAt, memory.media === null ? null
+      : [memory.media.originalFilename, memory.media.detectedContentType, memory.media.byteSize,
+        memory.media.checksumSha256, memory.media.durationSeconds, memory.media.uploadState]]);
+  async function acceptMetadata(op, memory, notice) {
+    assertCurrent(op);
+    metadataIntent = null; metadataUncertain = false;
+    inboxDirty = true;
+    publish({ items: EMPTY_ITEMS, nextCursor: null, pageResetVersion: state.pageResetVersion + 1,
+      detail: frozenCopy(memory), metadata: idleMetadata(), notice, error: null });
+    assertCurrent(op);
+    if (["PHOTO", "AUDIO"].includes(memory.memoryType) && memory.reviewStatus !== "DELETE") await photo(op, memory);
+  }
+  function metadataFailure(failure) {
+    if (failure?.status === 403 && failure.code === "CSRF_INVALID") {
+      publish({ metadata: metadataState("csrf", "Refresh your session and this memory before reconsidering the edit.") });
+    } else if (authFailure(failure)) {
+      // Access loss clears the editor, frozen draft and original previews.
+    } else if ([412, 428].includes(failure?.status)) {
+      publish({ metadata: metadataState("conflict", "This memory changed. Reload its current state before editing again. Your edit has not overwritten it.") });
+    } else if (failure?.status === 404) unavailableReview();
+    else if (metadataUncertain || failure?.unknownOutcome || !failure?.status || failure.status >= 500) {
+      metadataUncertain = true;
+      publish({ metadata: metadataState("uncertain", "We could not confirm this metadata edit. Reload the current state before choosing another action.") });
+    } else {
+      metadataIntent = null;
+      publish({ metadata: idleMetadata(), error: failure?.status === 429
+        ? "Please wait before saving metadata again. This request was not accepted."
+        : "The metadata edit was not accepted. Check the fields and try again." });
+    }
+  }
+  function metadataRun(op, task, onFailure = metadataFailure) {
+    const completion = run(op, task, onFailure).finally(() => { if (metadataInFlight === completion) metadataInFlight = null; });
+    metadataInFlight = completion;
+    return completion;
+  }
+  function sendMetadata() {
+    const intent = metadataIntent, token = state.session?.csrfToken;
+    const op = start({ phase: "detail", metadata: metadataState("saving"), notice: null });
+    return metadataRun(op, async () => {
+      const memory = await bounded(op, signal => api.updateMemoryMetadata(intent.memoryId, intent.target, {
+        revision: intent.expectedRevision, csrfToken: token, signal,
+      }), apiTimeoutMs, true);
+      if (memory.memoryId !== intent.memoryId || originalContext(memory) !== intent.original
+        || memory.reviewStatus !== intent.fromStatus || memory.deleteAfter !== intent.deleteAfter
+        || !sameMetadata(memory, intent.target)
+        || memory.revision !== intent.expectedRevision + (sameMetadata(intent.before, intent.target) ? 0 : 1)) throw contractMismatch();
+      await acceptMetadata(op, memory, "Memory details saved privately. Your original content is preserved.");
+    });
+  }
+  async function reconcileMetadata(op, memory) {
+    const intent = metadataIntent;
+    if (memory.memoryId !== intent.memoryId || memory.revision < intent.expectedRevision
+      || originalContext(memory) !== intent.original) throw contractMismatch();
+    if (metadataUncertain && memory.revision === intent.expectedRevision) {
+      if (!sameMetadata(memory, intent.before) || memory.reviewStatus !== intent.fromStatus
+        || memory.deleteAfter !== intent.deleteAfter) throw contractMismatch();
+      publish({ detail: frozenCopy(memory), metadata: metadataState("uncertain",
+        "The current read still shows the earlier revision. The first request may still finish. Retry only this same edit, or reload again.", true) });
+    } else await acceptMetadata(op, memory,
+      "Current memory details loaded. Review them before editing again; this does not identify who changed them.");
   }
 
   function cancelBody(response) {
@@ -352,10 +422,32 @@ export function createInboxController({
       if (!disposed) listeners.add(listener);
       return () => listeners.delete(listener);
     },
+    beginCreation() {
+      if (disposed || suspended || state.busy || !state.session?.authenticated || reviewIntent || metadataIntent) return state;
+      cancel(); inboxDirty = true;
+      publish({ phase: "create", detail: null, items: EMPTY_ITEMS, nextCursor: null, photo: idlePhoto(), notice: null, error: null });
+      return state;
+    },
+    getCreationApi() {
+      const owner = generation;
+      return createCoupleSubmissionApi({ api, getSession: () => state.session,
+        isCurrent: () => !disposed && !suspended && generation === owner && state.phase === "create",
+        onAccessFailure: failure => { cancel(); authFailure(failure); },
+      });
+    },
+    creationComplete(receipt) {
+      if (state.phase !== "create" || !state.session?.authenticated || !receipt?.memories?.length) return Promise.resolve(state);
+      inboxDirty = true;
+      return controller.openMemory(receipt.memories[0].memoryId);
+    },
     suspend() {
       if (disposed || (suspended && !resuming)) return state;
       // Preserve only the frozen action identity, never the displayed memory or token.
       if (reviewIntent && reviewInFlight) reviewUncertain = true;
+      // Editable metadata is private content: hiding drops it entirely. Retain
+      // only an ID so a fresh access check can read current state without retrying.
+      if (metadataIntent) metadataHiddenId = metadataIntent.memoryId;
+      metadataIntent = null; metadataUncertain = false; metadataInFlight = null;
       const logoutUnconfirmed = state.logoutUnconfirmed || operation?.purpose === "logout";
       suspended = true;
       resuming = null;
@@ -365,6 +457,7 @@ export function createInboxController({
       publish({ phase: "checking", session: null, items: EMPTY_ITEMS, nextCursor: null,
         detail: null, photo: idlePhoto(), notice: null, busy: false, error: null, logoutUnconfirmed,
         review: reviewIntent ? reviewState("uncertain") : idleReview(),
+        metadata: idleMetadata(),
         pageResetVersion: state.pageResetVersion + 1 });
       return state;
     },
@@ -385,12 +478,17 @@ export function createInboxController({
           const memory = await bounded(op, signal => api.getMemory(reviewIntent.memoryId, { signal }));
           publish({ phase: "detail" });
           await reconcileReview(op, memory, "Current state reloaded after checking access. Review it before choosing another action; this does not identify who changed it.");
+        } else if (metadataHiddenId) {
+          const memory = await bounded(op, signal => api.getMemory(metadataHiddenId, { signal }));
+          metadataHiddenId = null;
+          publish({ phase: "detail" });
+          await acceptMetadata(op, memory, "Current memory loaded after checking access. The hidden edit was cleared; inspect the saved details before making a new edit.");
         } else await page(op, state.reviewStatus, null);
         assertCurrent(op);
         suspended = false;
       }, failure => {
         if (authFailure(failure)) { suspended = false; return; }
-        if (failure?.status === 404 && reviewIntent) {
+        if (failure?.status === 404 && (reviewIntent || metadataHiddenId)) {
           unavailableReview(); suspended = false; return;
         }
         // A failed recheck hides all content but keeps an uncertain action recoverable.
@@ -404,7 +502,7 @@ export function createInboxController({
     },
     loadSession() {
       if (suspended) return controller.resume();
-      if (reviewIntent) return Promise.resolve(state);
+      if (reviewIntent || metadataIntent) return Promise.resolve(state);
       if (state.logoutUnconfirmed) return controller.logout();
       const op = start({ phase: "checking", session: null, items: EMPTY_ITEMS, nextCursor: null, detail: null, notice: null });
       return run(op, async () => {
@@ -416,7 +514,7 @@ export function createInboxController({
       });
     },
     login(credentials) {
-      if (reviewIntent) return Promise.resolve(state);
+      if (reviewIntent || metadataIntent) return Promise.resolve(state);
       const op = start({ phase: "login", session: null, items: EMPTY_ITEMS, nextCursor: null, detail: null, notice: null, logoutUnconfirmed: false });
       return run(op, async () => {
         const fresh = await bounded(op, signal => api.getSession({ signal }));
@@ -435,7 +533,7 @@ export function createInboxController({
       });
     },
     logout() {
-      if (reviewIntent) return Promise.resolve(state);
+      if (reviewIntent || metadataIntent) return Promise.resolve(state);
       const op = start({ phase: "checking", session: null, items: EMPTY_ITEMS, nextCursor: null, detail: null, logoutUnconfirmed: false }, "logout");
       return run(op, async () => {
         const fresh = await bounded(op, signal => api.getSession({ signal }));
@@ -445,7 +543,7 @@ export function createInboxController({
         error: "Sign-out could not be confirmed. Private content is hidden here. Retry signing out before leaving a shared device." }));
     },
     loadInbox(reviewStatus = "PENDING", cursor = null) {
-      if (!state.session?.authenticated || disposed || reviewIntent) return Promise.resolve(state);
+      if (!state.session?.authenticated || disposed || reviewIntent || metadataIntent) return Promise.resolve(state);
       const changed = reviewStatus !== state.reviewStatus;
       const op = start({ phase: "inbox", reviewStatus, detail: null, notice: null,
         ...(changed ? { items: EMPTY_ITEMS, nextCursor: null } : {}) });
@@ -454,7 +552,7 @@ export function createInboxController({
       });
     },
     openMemory(id) {
-      if (!state.session?.authenticated || disposed || reviewIntent) return Promise.resolve(state);
+      if (!state.session?.authenticated || disposed || reviewIntent || metadataIntent) return Promise.resolve(state);
       const op = start({ phase: "detail", detail: null, notice: null });
       return run(op, async () => {
         const detail = frozenCopy(await bounded(op, signal => api.getMemory(id, { signal })));
@@ -468,7 +566,7 @@ export function createInboxController({
       });
     },
     backToInbox() {
-      if (disposed || !state.session?.authenticated || reviewIntent) return state;
+      if (disposed || !state.session?.authenticated || reviewIntent || metadataIntent) return state;
       if (inboxDirty) return controller.loadInbox(state.reviewStatus);
       cancel();
       publish({ phase: "inbox", busy: false, error: null, detail: null, photo: idlePhoto(), notice: null });
@@ -476,7 +574,7 @@ export function createInboxController({
     },
     retryPhoto() {
       if (state.phase !== "detail" || !["PHOTO", "AUDIO"].includes(state.detail?.memoryType) || state.detail.reviewStatus === "DELETE"
-        || !state.session?.authenticated || disposed || reviewIntent) return Promise.resolve(state);
+        || !state.session?.authenticated || disposed || reviewIntent || metadataIntent) return Promise.resolve(state);
       const detail = state.detail;
       const op = start({ phase: "detail", detail });
       return run(op, () => photo(op, detail), failure => {
@@ -487,7 +585,7 @@ export function createInboxController({
     reviewMemory(targetStatus) {
       if (!REVIEW_STATES.has(targetStatus)) throw new TypeError("Choose a supported private review state.");
       if (reviewInFlight) return reviewInFlight;
-      if (disposed || reviewIntent || state.busy || state.phase !== "detail"
+      if (disposed || reviewIntent || metadataIntent || state.busy || state.phase !== "detail"
         || !state.detail || !state.session?.authenticated) return Promise.resolve(state);
       reviewIntent = Object.freeze({ memoryId: state.detail.memoryId, fromStatus: state.detail.reviewStatus,
         targetStatus, expectedRevision: state.detail.revision });
@@ -534,15 +632,52 @@ export function createInboxController({
         } else publish({ review: reviewState("csrf", "The session and current memory could not be refreshed. Try refreshing again.") });
       });
     },
+    saveMetadata(raw) {
+      if (metadataInFlight) return metadataInFlight;
+      if (disposed || suspended || reviewIntent || metadataIntent || state.busy || state.phase !== "detail"
+        || !state.detail || state.detail.reviewStatus === "DELETE" || !state.session?.authenticated) return Promise.resolve(state);
+      const target = frozenCopy(normalizeMemoryMetadata(raw));
+      metadataIntent = Object.freeze({ memoryId: state.detail.memoryId, target, before: frozenCopy(metadataOf(state.detail)),
+        expectedRevision: state.detail.revision, fromStatus: state.detail.reviewStatus,
+        deleteAfter: state.detail.deleteAfter, original: originalContext(state.detail) });
+      metadataUncertain = false;
+      return sendMetadata();
+    },
+    retryMetadata() {
+      if (metadataInFlight) return metadataInFlight;
+      if (disposed || suspended || !metadataIntent || state.busy || state.metadata.phase !== "uncertain"
+        || !state.metadata.canRetry || !state.session?.authenticated) return Promise.resolve(state);
+      return sendMetadata();
+    },
+    reloadMetadata({ refreshSession = false } = {}) {
+      if (metadataInFlight) return metadataInFlight;
+      if (disposed || suspended || !metadataIntent || state.busy
+        || !["uncertain", "conflict", "csrf"].includes(state.metadata.phase)) return Promise.resolve(state);
+      const intent = metadataIntent, previousPhase = state.metadata.phase;
+      const op = start({ phase: "detail", metadata: metadataState(refreshSession ? "refreshing" : "loading"), notice: null });
+      return metadataRun(op, async () => {
+        if (refreshSession) {
+          const session = sessionCopy(await bounded(op, signal => api.getSession({ signal })));
+          if (!session.authenticated) throw new ApiError("Sign in again.", { status: 401 });
+          publish({ session });
+        }
+        await reconcileMetadata(op, await bounded(op, signal => api.getMemory(intent.memoryId, { signal })));
+      }, failure => {
+        if (authFailure(failure)) return;
+        if (failure?.status === 404) unavailableReview();
+        else publish({ metadata: metadataState(previousPhase, "The current memory could not be loaded. Try again.") });
+      });
+    },
     dispose() {
       if (disposed) return;
       cancel();
       reviewIntent = null;
       reviewInFlight = null;
       reviewUncertain = false;
+      metadataIntent = null; metadataInFlight = null; metadataUncertain = false; metadataHiddenId = null;
       inboxDirty = false;
       state = Object.freeze({ ...state, session: null, items: EMPTY_ITEMS, nextCursor: null,
-        detail: null, photo: idlePhoto(), review: idleReview(), notice: null, busy: false, error: null });
+        detail: null, photo: idlePhoto(), review: idleReview(), metadata: idleMetadata(), notice: null, busy: false, error: null });
       suspended = true;
       resuming = null;
       disposed = true;

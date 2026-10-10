@@ -15,6 +15,8 @@ AUTH-01 implements GET/POST/DELETE `/api/session` with Spring Security server-si
 
 AUTH-02 implements private playback issuance, now extended to verified AUDIO by AUD-03. Every issuance rechecks current couple/reveal authority, authenticated private-object size/MIME and a single-object GET expiry of at most 300 seconds. The private inbox supports notes, verified photos and verified audio; conditional review and independent-ledger-backed retention remain private. Publication, production onboarding and hosted acceptance remain release work. See [authorization verification](authorization-verification.md) and the [audio runbook](../../runbooks/voice-memories.md).
 
+ARC-01 adds [private couple creation and editable details](couple-memories.md), including account-bound upload recovery, Kept defaults for couple-authored memories, optional precise/partial dates and conditional metadata updates. Original guest content and files remain preserved. Recovery package v3 carries these additive V10 fields.
+
 The [staging package](../../runbooks/staging-deployment.md) serves production frontend assets and `/api` through one Spring process. Its staging-only operator access gate is separate from the couple session API. Staging limits overlapping photo finalization to one: a busy request returns `503 MEDIA_UNAVAILABLE` before reading storage or changing item state; deliberate retry retains the same intent, item and capability key. File, dimension and batch limits are unchanged. Local package checks pass; hosted deployment and physical-phone acceptance remain pending.
 
 ## Shared conventions
@@ -40,7 +42,7 @@ New photo intents and temporary permissions have separate serialized 7.5 GB rese
   valid Unicode scalar sequences without U+0000, which PostgreSQL text cannot store.
 - Server assigns eventKey `kevin-mel-wedding`; guests cannot choose events,
   review state, visibility, IDs, or storage keys.
-- New memories are PENDING and COUPLE_ONLY. KEEP and ARCHIVED remain private.
+- New guest memories are PENDING and COUPLE_ONLY. Authenticated couple creation starts in KEEP and COUPLE_ONLY. KEEP and ARCHIVED remain private.
   Publication is a separate future operation.
 - Fixtures use synthetic content, tokens, and URLs. Their far-future expiries
   support reusable examples, not production TTLs.
@@ -62,6 +64,8 @@ AUTH-01 implements session routes. AUTH-02/AUD-03 provide verified PHOTO/AUDIO p
 | GET `/api/memories` | 200 | Couple-only paginated note/photo/audio inbox, including recoverable DELETE filter |
 | GET `/api/memories/{memoryId}` | 200 | Couple-only note/photo/audio detail, revision, and ETag |
 | PATCH `/api/memories/{memoryId}/review` | 200 | Implemented: conditional private Keep/Archive/Restore/Delete |
+| PATCH `/api/memories/{memoryId}/metadata` | 200 | Conditional title/description/date editing; original content preserved |
+| POST `/api/memories/contributions` | 201 new / 200 replay | Authenticated couple creation; account-bound receipt/grant/finalize routes in [ARC-01](couple-memories.md) |
 | GET `/api/memories/{memoryId}/playback` | 200 | Current couple/reveal authorization and short-lived GET for an eligible PHOTO/AUDIO original |
 
 ## Text creation and retry identity

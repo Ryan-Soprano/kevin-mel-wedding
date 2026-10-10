@@ -1,5 +1,6 @@
 import { createApiClient } from "./apiClient.js";
 import { createArchiveApi } from "./archiveApi.js";
+import { normalizeMemoryMetadata, sameMetadata } from "../../features/inbox/memoryMetadata.js";
 import {
   ANONYMOUS_SESSION, COUPLE_SESSION, CREATED_AT, IDS, INBOX_PAGE,
   MEDIA_DETAIL, MEMORY_DETAIL, PLAYBACK, SCENARIOS, UPLOAD_GRANT, VALIDATION_ERROR,
@@ -44,6 +45,7 @@ export function createMockArchiveApi({ scenario = "success", delayMs = 0, now = 
   let next = 1;
   let lostResponse = false;
   let lostReviewResponse = false;
+  let lostMetadataResponse = false;
   let failedTransfer = false;
   const nextId = () => "00000000-0000-4000-8000-" + String(next++).padStart(12, "0");
 
@@ -60,8 +62,8 @@ export function createMockArchiveApi({ scenario = "success", delayMs = 0, now = 
     return entry.receipt;
   }
 
-  function owned(contributionId, headers) {
-    const entry = contributions.get(headers.get("Idempotency-Key"));
+  function owned(contributionId, headers, privateContribution = false) {
+    const entry = contributions.get((privateContribution ? "couple:" : "guest:") + headers.get("Idempotency-Key"));
     return entry?.receipt.contributionId === contributionId ? entry : null;
   }
 
@@ -93,12 +95,21 @@ export function createMockArchiveApi({ scenario = "success", delayMs = 0, now = 
       }
     }
 
-    if (url.pathname === "/api/contributions" && method === "POST") {
+    const privateContribution = url.pathname === "/api/memories/contributions" || url.pathname.startsWith("/api/memories/contributions/");
+    const contributionPath = privateContribution ? url.pathname.replace("/api/memories/contributions", "/api/contributions") : url.pathname;
+    if (privateContribution) {
+      if (!session.authenticated || scenario === "unauthenticated") return failure("AUTH_REQUIRED", "Sign in again.", 401);
+      if (scenario === "forbidden") return failure("ARCHIVE_UNAVAILABLE", "Archive access is unavailable.", 403);
+      if (method !== "GET" && headers.get("X-CSRF-Token") !== session.csrfToken) return failure("CSRF_INVALID", "Refresh your session.", 403);
+      if (method === "POST" && contributionPath === "/api/contributions" && body.guestName !== null) return failure("VALIDATION_FAILED", "Private memories cannot have a guest name.", 400);
+    }
+    if (contributionPath === "/api/contributions" && method === "POST") {
       if (scenario === "validation") return reply(VALIDATION_ERROR, 400);
       const key = headers.get("Idempotency-Key");
       if (!key) return failure("VALIDATION_FAILED", "An idempotency key is required.", 400);
       const fingerprint = canonical(body);
-      const existing = contributions.get(key);
+      const scopedKey = (privateContribution ? "couple:" : "guest:") + key;
+      const existing = contributions.get(scopedKey);
       if (existing) {
         return existing.fingerprint === fingerprint ? reply(refreshReceipt(existing))
           : failure("IDEMPOTENCY_CONFLICT", "This retry key was already used for different content.", 409);
@@ -109,15 +120,15 @@ export function createMockArchiveApi({ scenario = "success", delayMs = 0, now = 
         memories: (body.items ?? [null]).map((item) => ({
           memoryId: nextId(), clientItemId: item?.clientItemId ?? null,
           memoryType: body.memoryType ?? "TEXT", uploadState: item ? "PENDING" : null,
-          reviewStatus: "PENDING", visibility: "COUPLE_ONLY",
+          reviewStatus: privateContribution ? "KEEP" : "PENDING", visibility: "COUPLE_ONLY",
         })),
       };
-      const entry = { receipt, fingerprint, payload: clone(body) };
-      contributions.set(key, entry);
+      const entry = { receipt, fingerprint, payload: clone(body), source: privateContribution ? "COUPLE" : "GUEST" };
+      contributions.set(scopedKey, entry);
       if (!body.memoryType) memories.push({
         ...clone(MEMORY_DETAIL), contributionId: receipt.contributionId,
         memoryId: receipt.memories[0].memoryId, guestName: body.guestName,
-        textContent: body.message,
+        textContent: body.message, source: entry.source, reviewStatus: receipt.memories[0].reviewStatus,
       });
       if (scenario === "uncertainSubmission" && !lostResponse) {
         lostResponse = true;
@@ -126,16 +137,16 @@ export function createMockArchiveApi({ scenario = "success", delayMs = 0, now = 
       return reply(receipt, 201);
     }
 
-    const receiptPath = url.pathname.match(/^\/api\/contributions\/([^/]+)\/receipt$/);
+    const receiptPath = contributionPath.match(/^\/api\/contributions\/([^/]+)\/receipt$/);
     if (receiptPath && method === "GET") {
-      const entry = owned(receiptPath[1], headers);
+      const entry = owned(receiptPath[1], headers, privateContribution);
       return entry ? reply(refreshReceipt(entry))
         : failure("NOT_FOUND", "That receipt is unavailable.", 404);
     }
 
-    const mediaPath = url.pathname.match(/^\/api\/contributions\/([^/]+)\/memories\/([^/]+)\/(upload-grants|finalize)$/);
+    const mediaPath = contributionPath.match(/^\/api\/contributions\/([^/]+)\/memories\/([^/]+)\/(upload-grants|finalize)$/);
     if (mediaPath && method === "POST") {
-      const entry = owned(mediaPath[1], headers);
+      const entry = owned(mediaPath[1], headers, privateContribution);
       const memory = entry?.receipt.memories.find((item) => item.memoryId === mediaPath[2]);
       if (!memory || memory.memoryType === "TEXT") return failure("NOT_FOUND", "That upload is unavailable.", 404);
       if (mediaPath[3] === "upload-grants") {
@@ -168,7 +179,7 @@ export function createMockArchiveApi({ scenario = "success", delayMs = 0, now = 
         memories.push({
           ...clone(MEDIA_DETAIL), memoryId: memory.memoryId,
           contributionId: entry.receipt.contributionId, memoryType: memory.memoryType,
-          guestName: entry.payload.guestName, caption: item.caption,
+          guestName: entry.payload.guestName, caption: item.caption, source: entry.source, reviewStatus: memory.reviewStatus,
           media: {
             originalFilename: item.originalFilename, detectedContentType: item.declaredContentType,
             byteSize: item.byteSize, checksumSha256: item.checksumSha256,
@@ -200,7 +211,7 @@ export function createMockArchiveApi({ scenario = "success", delayMs = 0, now = 
           nextCursor: offset + limit < filtered.length ? "offset:" + (offset + limit) : null,
         });
       }
-      const detailPath = url.pathname.match(/^\/api\/memories\/([^/]+)(?:\/(review|playback))?$/);
+      const detailPath = url.pathname.match(/^\/api\/memories\/([^/]+)(?:\/(review|playback|metadata))?$/);
       const memory = memories.find((item) => item.memoryId === detailPath?.[1]);
       if (!memory || !available(memory)) return failure("NOT_FOUND", "That memory is unavailable.", 404);
       if (!detailPath[2] && method === "GET") return reply(memory, 200, { ETag: '"' + memory.revision + '"' });
@@ -210,6 +221,22 @@ export function createMockArchiveApi({ scenario = "success", delayMs = 0, now = 
         }
         if (scenario === "playbackUnavailable") return failure("MEDIA_UNAVAILABLE", "The original is temporarily unavailable.", 503);
         return reply(PLAYBACK);
+      }
+      if (detailPath[2] === "metadata" && method === "PATCH") {
+        if (headers.get("X-CSRF-Token") !== session.csrfToken) return failure("CSRF_INVALID", "Refresh your session.", 403);
+        if (memory.reviewStatus === "DELETE") return failure("NOT_FOUND", "That memory cannot be edited.", 404);
+        if (!headers.get("If-Match")) return failure("PRECONDITION_REQUIRED", "Reload before editing.", 428);
+        if (headers.get("If-Match") !== '"' + memory.revision + '"') return failure("METADATA_CONFLICT", "This memory changed.", 412);
+        let metadata;
+        try { metadata = normalizeMemoryMetadata(body); } catch { return failure("VALIDATION_FAILED", "Check the metadata fields.", 400); }
+        if (!sameMetadata(memory, metadata)) {
+          Object.assign(memory, metadata); memory.revision++;
+          memory.updatedAt = new Date(Math.max(serverTime, Date.parse(memory.createdAt))).toISOString();
+          if (scenario === "uncertainSubmission" && !lostMetadataResponse) {
+            lostMetadataResponse = true; throw new TypeError("Synthetic lost response after metadata commit.");
+          }
+        }
+        return reply(memory, 200, { ETag: '"' + memory.revision + '"' });
       }
       if (detailPath[2] === "review" && method === "PATCH") {
         if (headers.get("X-CSRF-Token") !== session.csrfToken) return failure("CSRF_INVALID", "Refresh your session.", 403);
@@ -223,6 +250,10 @@ export function createMockArchiveApi({ scenario = "success", delayMs = 0, now = 
         if (memory.reviewStatus === body.reviewStatus) return reply(memory, 200, { ETag: '"' + memory.revision + '"' });
         const deleting = body.reviewStatus === "DELETE";
         memory.reviewStatus = body.reviewStatus;
+        for (const entry of contributions.values()) {
+          const receiptMemory = entry.receipt.memories.find(item => item.memoryId === memory.memoryId);
+          if (receiptMemory) receiptMemory.reviewStatus = memory.reviewStatus;
+        }
         memory.revision += 1;
         memory.updatedAt = new Date(serverTime).toISOString();
         // Fixtures describe a future wedding; keep the mock clock ordered.

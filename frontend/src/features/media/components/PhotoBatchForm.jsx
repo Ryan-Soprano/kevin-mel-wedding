@@ -28,7 +28,7 @@ function safeError(error) {
 }
 
 export default function PhotoBatchForm({
-  createSubmission = createPhotoBatchSubmission, active = true, onFlowStateChange, onDone, onShareAnother,
+  createSubmission = createPhotoBatchSubmission, active = true, onFlowStateChange, onDone, onShareAnother, privateArchive = false, onDialogStateChange,
 } = {}) {
   const generatedId = useId();
   const prefix = `photo-batch-${generatedId}`;
@@ -186,7 +186,7 @@ export default function PhotoBatchForm({
     try {
       // Preview validation creates no server intent, hashes or new selection identity.
       const normalized = normalizeMediaContribution({
-        guestName, memoryType: "PHOTO", items: photos.map(photo => ({
+        guestName: privateArchive ? null : guestName, memoryType: "PHOTO", items: photos.map(photo => ({
           clientItemId: photo.id, originalFilename: photo.file.name,
           declaredContentType: photo.file.type, byteSize: photo.file.size,
           checksumSha256: "0".repeat(64), caption: photo.caption,
@@ -212,7 +212,7 @@ export default function PhotoBatchForm({
 
   function sendPhotos() {
     if (sending.current || retained || busy || globalWait || !reviewData || step !== "review") return;
-    void run((current, update) => current.submit({ guestName, photos }, update));
+    void run((current, update) => current.submit({ guestName: privateArchive ? null : guestName, photos }, update));
   }
 
   function retry() {
@@ -239,8 +239,9 @@ export default function PhotoBatchForm({
   }
 
   function finish() {
+    const receipt = coordinator.current?.receipt;
     if (!complete || !resetBatch(false)) return;
-    if (onDone) onDone();
+    if (onDone) onDone(receipt);
     else {
       focusRequest.current = "result";
       setStep("done");
@@ -273,8 +274,8 @@ export default function PhotoBatchForm({
   if (step === "review" && !retained && reviewData) {
     return (
       <section className="photo-submission photo-batch note-review" aria-labelledby={prefix + "-review"} aria-busy={busy}>
-        <h2 ref={reviewHeading} id={prefix + "-review"} tabIndex={-1}>Ready to send your photos?</h2>
-        <p>From: {reviewData.guestName ?? "Name not provided"}</p>
+        <h2 ref={reviewHeading} id={prefix + "-review"} tabIndex={-1}>{privateArchive ? "Ready to save your photos privately?" : "Ready to send your photos?"}</h2>
+        {!privateArchive && <p>From: {reviewData.guestName ?? "Name not provided"}</p>}
         <ul className="photo-grid photo-grid--batch">
           {photos.map((photo, index) => (
             <li key={photo.id} className="photo-card">
@@ -286,12 +287,12 @@ export default function PhotoBatchForm({
             </li>
           ))}
         </ul>
-        <p>Only Kevin and Melanie can review these photos when their archive is ready. They will not appear publicly.</p>
+        <p>{privateArchive ? "These originals will be kept in your private archive. Add a title, description and date to each after saving." : "Only Kevin and Melanie can review these photos when their archive is ready. They will not appear publicly."}</p>
         <p role="status" aria-live="polite" aria-atomic="true">{busy ? "Preparing your original photos…" : ""}</p>
         {error && <p ref={errorNotice} className="form-error" role="alert" tabIndex={-1}>{error}</p>}
         <div className="photo-batch-actions">
           <button type="button" onClick={sendPhotos} disabled={busy || globalWait > 0}>
-            {busy ? "Sending photos…" : globalWait ? `Wait ${globalWait} seconds before sending` : "Send photos"}
+            {busy ? "Saving photos…" : globalWait ? `Wait ${globalWait} seconds before sending` : privateArchive ? "Save photos privately" : "Send photos"}
           </button>
           <button type="button" className="button-secondary" onClick={editPhotos} disabled={busy}>Edit photos</button>
         </div>
@@ -301,10 +302,10 @@ export default function PhotoBatchForm({
 
   return (
     <section className="photo-submission photo-batch" aria-labelledby={prefix + "-title"}>
-      <h2 id={prefix + "-title"}>Share photos</h2>
-      <p>Send up to five original JPEG, PNG, or WebP photos, up to 10 MB each. They stay private for Kevin and Melanie.</p>
+      <h2 id={prefix + "-title"}>{privateArchive ? "Add photos" : "Share photos"}</h2>
+      <p>{privateArchive ? "Add up to five original JPEG, PNG, or WebP photos, up to 10 MB each, to your private archive." : "Send up to five original JPEG, PNG, or WebP photos, up to 10 MB each. They stay private for Kevin and Melanie."}</p>
       <form onSubmit={review} noValidate aria-label="Share photos" aria-busy={busy}>
-        <div>
+        {!privateArchive && <div>
           <label htmlFor={prefix + "-name"}>Your name for this batch (optional)</label>
           <input ref={nameInput} id={prefix + "-name"} autoComplete="name" maxLength={100}
             value={guestName} disabled={locked}
@@ -312,8 +313,9 @@ export default function PhotoBatchForm({
             aria-describedby={fields.name ? prefix + "-name-error" : undefined}
             onChange={event => { if (locked || sending.current || step !== "compose") return; setGuestName(event.target.value); setFields(current => ({ ...current, name: undefined })); setError(""); }} />
           {fields.name && <p id={prefix + "-name-error"} className="form-error">{fields.name}</p>}
-        </div>
+        </div>}
         <PhotoPicker key={batchNumber} photos={photos} onPhotosChange={updateSelection} inputRef={picker}
+          onDialogStateChange={onDialogStateChange}
           disabled={locked} idPrefix={prefix + "-picker"} showHeading={false}
           note="Keep this page open until every photo is confirmed. HEIC photos are not supported."
           renderPhoto={(photo, index) => {
@@ -364,7 +366,7 @@ export default function PhotoBatchForm({
           )}
           {complete && shellActions && !busy && (
             <>
-              <button type="button" className="button-secondary" onClick={finish}>Done</button>
+              <button type="button" className="button-secondary" onClick={finish}>{privateArchive ? "View added memory" : "Done"}</button>
               <button type="button" onClick={shareAnother}>Share another memory</button>
             </>
           )}
