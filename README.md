@@ -14,6 +14,8 @@ This is a learning project. Explain and agree on infrastructure, dependencies, a
 
 ## Local development
 
+OPS-03 adds a private read-only database/schema/capacity report and a disposable local application rollback rehearsal. See the [operations runbook](docs/runbooks/operations-and-rollback.md) for commands and incident/pause/reopen steps. Provider health, backup/alert delivery and hosted recovery targets remain acceptance work; hosting and spending stay deferred.
+
 AUD-02/AUD-03 add gated voice recording/file upload, independently verified audio
 originals, private playback/download and audio review/export/restore. Guest build
 and server admission default off until the deferred phone/browser and real-R2

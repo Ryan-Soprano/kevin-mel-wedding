@@ -10,6 +10,8 @@ After reviewing the cause and available capacity, remove the pause (`false`) and
 
 ## Read-only capacity report
 
+The [offline readiness console](operations-and-rollback.md#read-only-operator-report) now provides schema-checked aggregate capacity and maintenance evidence with bounded read-only queries. It makes no provider requests. The SQL below remains useful for privately reconciling its reservations; neither path measures provider usage or confirms cleanup.
+
 Run against the intended authorized database using private connection settings. These queries return counts/bytes only. On the wedding day, inspect at collection opening, after a large burst, and at least every 15 minutes while active. Inspect actual private provider storage separately, including any objects outside current database reservations. Alert delivery/automation remains OPS work.
 
 ```sql
