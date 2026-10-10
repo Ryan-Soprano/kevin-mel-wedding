@@ -534,6 +534,8 @@ test("real adapter sends the session contract and rotates CSRF before decoded in
       payload = { items: [MEMORY_DETAIL, photo], nextCursor: "opaque-page-two" };
     } else if (path === "/api/memories/" + IDS.photo) {
       payload = photo;
+    } else if (path === "/api/library/memories/" + IDS.photo + "/tags?limit=20") {
+      payload = { memoryId: IDS.photo, items: [], nextCursor: null };
     } else if (path === "/api/memories/" + IDS.photo + "/playback") {
       assert.equal(authenticated, true);
       payload = PLAYBACK;
@@ -552,7 +554,8 @@ test("real adapter sends the session contract and rotates CSRF before decoded in
   assert.deepEqual(requests.map(request => [request.path, request.options.method]), [
     ["/api/session", "GET"], ["/api/session", "POST"],
     ["/api/memories?reviewStatus=PENDING&limit=20", "GET"],
-    ["/api/memories/" + IDS.photo, "GET"], ["/api/memories/" + IDS.photo + "/playback", "GET"],
+    ["/api/memories/" + IDS.photo, "GET"], ["/api/library/memories/" + IDS.photo + "/tags?limit=20", "GET"],
+    ["/api/memories/" + IDS.photo + "/playback", "GET"],
   ]);
   for (const { options } of requests) {
     assert.equal(options.credentials, "same-origin");
@@ -574,6 +577,7 @@ test("real adapter sends the session contract and rotates CSRF before decoded in
   assert.equal(mediaRequests[0].options.redirect, "error");
   assert.equal(mediaRequests[0].options.referrerPolicy, "no-referrer");
   assert.equal(f.controller.getSnapshot().photo.phase, "ready");
+  assert.equal(f.controller.getSnapshot().tags.error, null);
   assert.deepEqual(Buffer.from(await f.created[0].blob.arrayBuffer()), bytes);
   assert.equal(JSON.stringify(f.controller.getSnapshot()).includes(PLAYBACK.url), false);
   f.controller.dispose();

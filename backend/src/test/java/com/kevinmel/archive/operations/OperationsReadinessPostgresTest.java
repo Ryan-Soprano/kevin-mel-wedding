@@ -149,7 +149,7 @@ class OperationsReadinessPostgresTest {
                 new String[]{"UPDATE flyway_schema_history SET checksum=checksum+1 WHERE version='1'", "UPDATE flyway_schema_history SET checksum=checksum-1 WHERE version='1'"},
                 new String[]{"UPDATE flyway_schema_history SET success=false WHERE version='1'", "UPDATE flyway_schema_history SET success=true WHERE version='1'"},
                 new String[]{"UPDATE flyway_schema_history SET script='synthetic-unreviewed.sql' WHERE version='1'", "UPDATE flyway_schema_history SET script='V1__create_memory_archive_schema.sql' WHERE version='1'"},
-                new String[]{"UPDATE flyway_schema_history SET version='999999' WHERE version='12'", "UPDATE flyway_schema_history SET version='12' WHERE version='999999'"},
+                new String[]{"UPDATE flyway_schema_history SET version='999999' WHERE version='13'", "UPDATE flyway_schema_history SET version='13' WHERE version='999999'"},
                 new String[]{"ALTER TABLE memory ADD COLUMN synthetic_unreviewed TEXT", "ALTER TABLE memory DROP COLUMN synthetic_unreviewed"},
                 new String[]{"ALTER TABLE memory ALTER COLUMN memory_date TYPE TEXT", "ALTER TABLE memory ALTER COLUMN memory_date TYPE VARCHAR(10)"},
                 new String[]{"ALTER TABLE memory ALTER COLUMN date_precision DROP NOT NULL", "ALTER TABLE memory ALTER COLUMN date_precision SET NOT NULL"},
@@ -158,6 +158,9 @@ class OperationsReadinessPostgresTest {
                 new String[]{"ALTER TABLE timeline_state ALTER COLUMN id TYPE BIGINT", "ALTER TABLE timeline_state ALTER COLUMN id TYPE INTEGER"},
                 new String[]{"ALTER TABLE timeline_event ALTER COLUMN title TYPE TEXT", "ALTER TABLE timeline_event ALTER COLUMN title TYPE VARCHAR(200)"},
                 new String[]{"ALTER TABLE timeline_event_memory ADD COLUMN synthetic_unreviewed TEXT", "ALTER TABLE timeline_event_memory DROP COLUMN synthetic_unreviewed"},
+                new String[]{"ALTER TABLE tag ALTER COLUMN name TYPE TEXT", "ALTER TABLE tag ALTER COLUMN name TYPE VARCHAR(200)"},
+                new String[]{"ALTER TABLE tag ALTER COLUMN visibility DROP NOT NULL", "ALTER TABLE tag ALTER COLUMN visibility SET NOT NULL"},
+                new String[]{"ALTER TABLE memory_tag ADD COLUMN synthetic_unreviewed TEXT", "ALTER TABLE memory_tag DROP COLUMN synthetic_unreviewed"},
                 new String[]{"ALTER TABLE contribution ALTER COLUMN event_key DROP NOT NULL", "ALTER TABLE contribution ALTER COLUMN event_key SET NOT NULL"})) {
             db.sql(change[0]).update();
             try { assertUnreviewed(); } finally { db.sql(change[1]).update(); }
@@ -168,7 +171,7 @@ class OperationsReadinessPostgresTest {
                 VALUES(999999,'999999','synthetic','SQL','V999999__synthetic.sql',0,'synthetic',0,true)
                 """).update();
         try { assertUnreviewed(); } finally { db.sql("DELETE FROM flyway_schema_history WHERE installed_rank=999999").update(); }
-        db.sql("DELETE FROM flyway_schema_history WHERE version='12'").update();
+        db.sql("DELETE FROM flyway_schema_history WHERE version='13'").update();
         assertUnreviewed();
     }
 

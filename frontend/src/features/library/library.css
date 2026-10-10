@@ -1,0 +1,8 @@
+.library, .tags, .memory-tags { min-width: 0; overflow-wrap: anywhere; }
+.library-filters, .library-tag-search, .tag-name-form, .tag-search, .memory-tag-search, .tag-recovery { display: grid; gap: 12px; min-width: 0; margin: 20px 0; }
+.library-filters > div { min-width: 0; }
+.library input, .library select, .tags input, .tag-recovery input, .memory-tags input { display: block; min-width: 0; width: 100%; max-width: 100%; }
+.library button, .tags button, .memory-tags button { max-width: 100%; white-space: normal; }
+.tag-name-form > button, .tag-search > button, .library-tag-search > button, .memory-tag-search > button { justify-self: start; }
+.tag-recovery, .tag-tombstone, .memory-tags { padding: 16px; border: 1px solid var(--color-border); border-radius: 8px; }
+.memory-tags { margin: 24px 0; }

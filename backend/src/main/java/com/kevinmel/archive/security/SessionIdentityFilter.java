@@ -77,6 +77,7 @@ public class SessionIdentityFilter extends OncePerRequestFilter {
         return servletPath.isEmpty() ? request.getRequestURI().substring(request.getContextPath().length()) : servletPath;
     }
     private static boolean privatePath(String path) {
-        return path.startsWith("/api/memories") || path.startsWith("/api/albums") || path.startsWith("/api/timeline");
+        return path.startsWith("/api/memories") || path.startsWith("/api/albums") || path.startsWith("/api/timeline")
+                || path.startsWith("/api/library") || path.startsWith("/api/tags");
     }
 }

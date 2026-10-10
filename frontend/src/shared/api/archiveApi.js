@@ -4,6 +4,7 @@ import { AUDIO_CONTENT_TYPES, MAX_AUDIO_BYTES, MAX_AUDIO_SECONDS } from "../../f
 import { normalizeMemoryMetadata, metadataOf, sameMetadata } from "../../features/inbox/memoryMetadata.js";
 import { createAlbumApi } from "../../features/albums/api/albumApi.js";
 import { createTimelineApi } from "../../features/timeline/api/timelineApi.js";
+import { createLibraryApi } from "../../features/library/api/libraryApi.js";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const KEY = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -235,6 +236,7 @@ export function createArchiveApi({
   return {
     ...createAlbumApi({ client, decodeMemory, csrf }),
     ...createTimelineApi({ client, decodeMemory, csrf }),
+    ...createLibraryApi({ client, decodeMemory, csrf }),
     createCoupleTextContribution(payload, { idempotencyKey, csrfToken, signal } = {}) {
       const body = normalizeTextContribution(payload);
       if (body.guestName !== null) throw new TypeError("Private memories do not have a guest name.");

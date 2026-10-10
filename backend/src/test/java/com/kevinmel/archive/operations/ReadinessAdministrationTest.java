@@ -122,7 +122,7 @@ class ReadinessAdministrationTest {
             assertThatThrownBy(() -> OperationsSchema.bundled(loader)).isInstanceOf(RuntimeException.class);
         }
         Files.delete(complete.resolve("db/migration/.gitkeep"));
-        Files.writeString(complete.resolve("db/migration/V13__synthetic_unknown.sql"), "SELECT 1;");
+        Files.writeString(complete.resolve("db/migration/V14__synthetic_unknown.sql"), "SELECT 1;");
         try (var loader = new URLClassLoader(new java.net.URL[]{complete.toUri().toURL()}, null)) {
             assertThatThrownBy(() -> OperationsSchema.bundled(loader)).isInstanceOf(RuntimeException.class);
         }
@@ -140,7 +140,7 @@ class ReadinessAdministrationTest {
             assertThat(OperationsSchema.bundled(loader)).isEqualTo(current);
         }
         // Deliberately omit nested-directory ZIP entries: a nonrecursive scan would overlook these files.
-        for (String extra : List.of("nested/V13__synthetic_unknown.sql", "nested/" + current.getFirst().script(), "nested/.gitkeep")) {
+        for (String extra : List.of("nested/V14__synthetic_unknown.sql", "nested/" + current.getFirst().script(), "nested/.gitkeep")) {
             Path nestedJar = runtimeJar("nested-" + Integer.toUnsignedString(extra.hashCode()), extra);
             try (var loader = new URLClassLoader(new java.net.URL[]{nestedJar.toUri().toURL()}, null)) {
                 assertThatThrownBy(() -> OperationsSchema.bundled(loader)).isInstanceOf(RuntimeException.class);
@@ -173,13 +173,13 @@ class ReadinessAdministrationTest {
         Path changed = jar("changed", "-- synthetic changed migration\n", false);
         assertThat(OperationsSchema.priorJar(changed)).isNotEqualTo(OperationsSchema.bundled());
         assertThatThrownBy(() -> OperationsSchema.priorJar(jar("unknown", null, true))).isInstanceOf(RuntimeException.class);
-        Path olderV11 = jar("older-v11", null, false, true);
-        assertThatThrownBy(() -> OperationsSchema.priorJar(olderV11)).isInstanceOf(RuntimeException.class);
+        Path olderV12 = jar("older-v12", null, false, true);
+        assertThatThrownBy(() -> OperationsSchema.priorJar(olderV12)).isInstanceOf(RuntimeException.class);
         Path malformed = temporary.resolve(SECRET); Files.writeString(malformed, SECRET);
         assertThatThrownBy(() -> OperationsSchema.priorJar(malformed)).isInstanceOf(Exception.class);
         var explicit = Map.<String, Object>of("spring.datasource.url", "jdbc:postgresql://localhost/synthetic",
                 "spring.datasource.username", SECRET, "spring.datasource.password", SECRET);
-        for (Path path : List.of(changed, malformed, olderV11)) {
+        for (Path path : List.of(changed, malformed, olderV12)) {
             var result = run(new String[]{"--expect-environment", "local", "schema-check", "--prior-jar", path.toString()}, explicit);
             assertThat(result.exit()).isEqualTo(1); assertThat(result.calls()).isZero();
             assertThat(result.err()).contains("ROLLBACK_SCHEMA_UNCONFIRMED").doesNotContain(SECRET, path.toString());
@@ -202,12 +202,12 @@ class ReadinessAdministrationTest {
             entry(zip, "META-INF/MANIFEST.MF", "Manifest-Version: 1.0\nMain-Class: org.springframework.boot.loader.launch.JarLauncher\nStart-Class: com.kevinmel.archive.MemoryArchiveApplication\n\n".getBytes(StandardCharsets.UTF_8));
             entry(zip, "BOOT-INF/classes/com/kevinmel/archive/MemoryArchiveApplication.class", new byte[]{(byte) 0xca, (byte) 0xfe, (byte) 0xba, (byte) 0xbe});
             for (var migration : OperationsSchema.bundled()) try (var input = OperationsSchema.class.getResourceAsStream("/db/migration/" + migration.script())) {
-                if (omitLatest && migration.version().equals("12")) continue;
+                if (omitLatest && migration.version().equals("13")) continue;
                 byte[] bytes = input.readAllBytes();
-                if (change != null && migration.version().equals("12")) bytes = (new String(bytes, StandardCharsets.UTF_8) + change).getBytes(StandardCharsets.UTF_8);
+                if (change != null && migration.version().equals("13")) bytes = (new String(bytes, StandardCharsets.UTF_8) + change).getBytes(StandardCharsets.UTF_8);
                 entry(zip, "BOOT-INF/classes/db/migration/" + migration.script(), bytes);
             }
-            if (unknown) entry(zip, "BOOT-INF/classes/db/migration/V13__synthetic_unknown.sql", "SELECT 1;".getBytes(StandardCharsets.UTF_8));
+            if (unknown) entry(zip, "BOOT-INF/classes/db/migration/V14__synthetic_unknown.sql", "SELECT 1;".getBytes(StandardCharsets.UTF_8));
         }
         return path;
     }

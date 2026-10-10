@@ -41,6 +41,7 @@ final class RecoverySchema {
         default -> table;
     }).toList();
     private static final List<Table> ALBUM_TABLES;
+    private static final List<Table> TIMELINE_TABLES;
     static final List<Table> TABLES;
     static {
         var tables = new ArrayList<>(ARCHIVE_TABLES);
@@ -50,13 +51,16 @@ final class RecoverySchema {
         tables.add(table("timeline_state", "id:i revision:u updated_at:t"));
         tables.add(table("timeline_event", "id:u title:s? description:s? event_date:s? date_precision:s visibility:s revision:u created_at:t updated_at:t deleted_at:t?"));
         tables.add(table("timeline_event_memory", "event_id:u memory_id:u"));
+        TIMELINE_TABLES = List.copyOf(tables);
+        tables.add(table("tag", "id:u name:s? visibility:s revision:u created_at:t updated_at:t deleted_at:t?"));
+        tables.add(table("memory_tag", "tag_id:u memory_id:u"));
         TABLES = List.copyOf(tables);
     }
     private static final List<String> MIGRATIONS = List.of(
         "V1__create_memory_archive_schema.sql", "V2__add_contribution_request_fingerprint.sql", "V3__add_photo_upload_lifecycle.sql",
         "V4__create_archive_accounts.sql", "V5__create_login_throttle.sql", "V6__add_inbox_revision.sql",
         "V7__add_private_review_retention.sql", "V8__anonymous_submission_protection.sql", "V9__add_verified_audio_lifecycle.sql",
-        "V10__add_couple_authored_memories.sql", "V11__add_private_albums.sql", "V12__add_private_timeline.sql");
+        "V10__add_couple_authored_memories.sql", "V11__add_private_albums.sql", "V12__add_private_timeline.sql", "V13__add_private_library_tags.sql");
 
     static Reviewed requireReviewed(JdbcClient db) {
         try {
@@ -125,7 +129,7 @@ final class RecoverySchema {
     }
 
     static Map<String, List<Map<String, Object>>> read(JdbcClient db) {
-        return read(db, 5);
+        return read(db, 6);
     }
 
     static Map<String, List<Map<String, Object>>> read(JdbcClient db, int version) {
@@ -140,6 +144,7 @@ final class RecoverySchema {
                 case "review_audit" -> "memory_id, after_revision";
                 case "album_membership" -> "album_id, position, memory_id";
                 case "timeline_event_memory" -> "event_id, memory_id";
+                case "memory_tag" -> "tag_id, memory_id";
                 default -> table.columns().getFirst().name();
             };
             result.put(table.name(), db.sql("SELECT " + table.columnNames() + " FROM " + table.name() + " ORDER BY " + order)
@@ -182,6 +187,9 @@ final class RecoverySchema {
         if (version < 5) {
             result.put("timeline_state", List.of()); result.put("timeline_event", List.of()); result.put("timeline_event_memory", List.of());
         }
+        if (version < 6) {
+            result.put("tag", List.of()); result.put("memory_tag", List.of());
+        }
         return result;
     }
 
@@ -211,7 +219,8 @@ final class RecoverySchema {
         if (version == 2) return AUDIO_TABLES;
         if (version == 3) return ARCHIVE_TABLES;
         if (version == 4) return ALBUM_TABLES;
-        if (version == 5) return TABLES;
+        if (version == 5) return TIMELINE_TABLES;
+        if (version == 6) return TABLES;
         throw invalid();
     }
     record Reviewed(int bundleVersion, String fingerprint, Map<Integer, String> fingerprints) {

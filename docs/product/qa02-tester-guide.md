@@ -2,7 +2,7 @@
 
 Prepared October 9, 2026. **Scenarios prepared; tester results pending.**
 
-Updated October 10 with the approved public photo gallery and private timeline scenarios. These additions remain prepared checks until tried in the intended test environment.
+Updated October 10 with the approved public photo gallery, private timeline and library/tag scenarios. These additions remain prepared checks until tried in the intended test environment.
 
 We would like your help making the archive easy to use and useful to you. Try it first as a wedding guest, then as someone reviewing the private inbox. Tell Ryan what feels confusing, awkward or missing, as well as what works.
 
@@ -45,6 +45,8 @@ Use a personal test session. A shared or signed-out browser must not retain a vi
 | I5 — Sign out and return | Sign out, then use Back/Forward, refresh and switch away/back to the tab. Return to the guest page. For an interrupted sign-out, use only the supplied scenario and complete its recovery. | Private rows, details and previews clear. Access is checked before private content returns. A failed sign-out stays visibly unconfirmed; do not assume the device is safe until recovery succeeds. Record exactly which browser actions you tried. |
 | I6 — Events and partial dates | Open **Timeline** and create synthetic events with an exact day, month only, year only and unknown date. Edit one date, then try the inclusive year and precision filters. | Events appear oldest first with truthful date precision; unknown dates appear separately. A year range excludes unknown dates. No memory's own date or original changes. Record which ordering or label feels unclear. |
 | I7 — Link and preserve memories | Link a synthetic note to two events. Open it from an event and return. Unlink it once; then delete and restore the note. Delete one event after reading its confirmation. | Links can be shared across events. **Memory date** and **Saved on** are distinct from the event date. Unlinking or deleting an event preserves originals. Deleting a memory removes all its links; restoring returns it to the inbox without silently relinking. |
+| I8 — Search your library | Open **Library**. Search a synthetic title, note, caption or guest name, then combine memory type, review status, memory-date year/precision and one tag. Try an empty result and clear the filters. Open a result from a later page and return. | Matching is literal and ignores letter case. Results stay newest-saved first; year bounds use the memory's date and exclude unknown dates. Applied filters and page context survive normal detail navigation, with a useful reload if results changed. Clearing filters restores the library. Hiding or signing out clears private search text and results. |
+| I9 — Manage private tags | Create a synthetic tag, attach several test memories and rename it. Add a second tag to one memory from its detail view. Find those labels using the library tag chooser. Remove a label, then delete and restore the memory. Cancel a tag deletion, then delete the label. | Labels and their members remain private. Tag searches and pages are clear as the collection grows. Removing or deleting a label preserves originals. Memory Delete removes all labels; Restore requires deliberate reattachment. Conflicting or unconfirmed changes pause other actions until reconciled. |
 
 ## Comfort and access checks
 
