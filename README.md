@@ -88,6 +88,12 @@ npm run dev
 
 Open the Local URL Vite prints, normally [localhost:5173](http://localhost:5173/). The [Vite configuration](frontend/vite.config.js) forwards `/api` requests to Spring at [localhost:8080](http://localhost:8080). This proxy is for development. The combined application package serves built frontend assets and `/api` through Spring on one origin; local packaging/access checks pass, and hosted staging still awaits approval and setup. Stop each local process with Ctrl+C.
 
+### Review the current archive locally
+
+For a guided review with Kevin and Melanie, the [disposable local review session](docs/runbooks/local-couple-review.md) starts an existing reviewed application image with its own temporary synthetic database. It includes test sign-ins, guest and couple notes, albums, timeline events and tags; the real UI also supports exporting this synthetic archive. Run `node scripts/local-review.mjs --help` for the bounded session and cleanup commands. It never builds or pulls images, uses an existing database, or provisions hosting. Photo storage and audio stay off. The loopback link works on this computer; a remotely usable test link remains deferred.
+
+Use the [tester guide](docs/product/qa02-tester-guide.md) to record feedback. Synthetic fixture accounts are separate from the [real account-access procedure](docs/runbooks/account-access.md).
+
 ### Prepare the full application for staging
 
 Ryan retained Render for Spring/PostgreSQL and Cloudflare R2. `bash scripts/build-app.sh` packages the frontend into the executable Spring JAR. The Docker image and Linux JPEG/PNG/WebP codecs are locally verified. `node scripts/smoke-container.mjs` checks staging access, packaged assets, committed private text, concurrency, discarded-response recovery and restart against its own disposable PostgreSQL 17 database, then removes its resources. R2 is disabled during that smoke. The [staging runbook](docs/runbooks/staging-deployment.md) owns exact commands, private settings, capacity/budget approval, provider setup and phone/redeployment proof. The integrated AUTH baseline passes 98 backend tests; the review/audio follow-up passes 88 frontend tests, lint and build. Five 50 MP/10 MB synthetic photo cases pass locally in a 2 GB container with a 1536 MiB Java heap, peaking at 1.680 GiB. The former 1 GB heap fails on lossy WebP. This measured staging candidate still requires budget approval and hosted HTTPS/R2 memory, session and device checks. The coming-soon domain stays on its static service.

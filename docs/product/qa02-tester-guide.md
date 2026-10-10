@@ -8,7 +8,7 @@ We would like your help making the archive easy to use and useful to you. Try it
 
 ## Before you begin
 
-Ryan will supply the intended test link, synthetic sample files and, when private inbox testing is ready, confidential test sign-in details. A local demo is not a published wedding site. Real account activation and a hosted test link remain later steps; this guide does not create or authorize them.
+Ryan will supply the intended test link, synthetic sample files and, when private inbox testing is ready, test sign-in details. A local demo is not a published wedding site. The [disposable local review session](../runbooks/local-couple-review.md) gives Ryan a loopback link, published synthetic fixture credentials and sample notes/organization to explore together on his computer. Its temporary data is erased when the session is cleaned up; deliberately downloaded files remain on the computer. Real account activation and a hosted test link remain later steps; this guide does not create or authorize them.
 
 Use made-up names such as **Test guest A**, short test messages, generated sample photos and a clip saying only **“This is a test.”** Use no real guest messages, personal photos or other people's voices. Test data stays within the supplied test environment until its owner clears it; do not assume a saved local submission disappears when you close the page.
 
