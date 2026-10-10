@@ -1,0 +1,9 @@
+.albums { min-width: 0; }
+.album-name-form, .album-recovery { display: grid; gap: 12px; min-width: 0; margin: 20px 0; }
+.album-name-form button, .album-recovery button { justify-self: start; }
+.album-name-form input, .album-recovery input { min-width: 0; max-width: 100%; width: 100%; }
+.album-members { counter-reset: album-member; }
+.album-member { counter-increment: album-member; }
+.album-member h3::before { content: counter(album-member) ". "; }
+.album-member h3, .album-title { overflow-wrap: anywhere; }
+.album-recovery, .album-tombstone { padding: 16px; border: 1px solid var(--color-border); border-radius: 8px; }

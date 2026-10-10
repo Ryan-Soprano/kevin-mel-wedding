@@ -155,14 +155,15 @@ public final class OperatorRecovery {
             transaction.setIsolationLevel(TransactionDefinition.ISOLATION_SERIALIZABLE);
             return Objects.requireNonNull(transaction.execute(ignored -> {
                 // Lock every archive table together. Accounts are deliberately not replaced or exported.
-                db.sql("LOCK TABLE " + String.join(",", RecoverySchema.TABLES.stream().map(RecoverySchema.Table::name).toList())
+                var targetTables = RecoverySchema.tables(schema.bundleVersion());
+                db.sql("LOCK TABLE " + String.join(",", targetTables.stream().map(RecoverySchema.Table::name).toList())
                     + " IN ACCESS EXCLUSIVE MODE").update();
-                for (var table : RecoverySchema.TABLES) if (db.sql("SELECT COUNT(*) FROM " + table.name()).query(Long.class).single() != 0) {
+                for (var table : targetTables) if (db.sql("SELECT COUNT(*) FROM " + table.name()).query(Long.class).single() != 0) {
                     throw failure("TARGET_NOT_EMPTY");
                 }
                 RecoverySchema.insert(db, prepared.tables(), schema.bundleVersion());
-                verifyImportedCounts(prepared.tables());
-                var retention = new RetentionRepository(db, manager, schema.bundleVersion() >= 3);
+                verifyImportedCounts(prepared.tables(), schema.bundleVersion());
+                var retention = new RetentionRepository(db, manager, schema.bundleVersion() >= 3, schema.bundleVersion() >= 4);
                 // All identities and staging paths must pass before the first external mutation.
                 for (var plan : ledger) { retention.validate(plan); retention.grants(plan); }
                 int published = 0;
@@ -291,21 +292,24 @@ public final class OperatorRecovery {
     private static Set<UUID> erasedAssets(List<DeletionRecord> ledger) {
         var ids = new HashSet<UUID>(); for (var record : ledger) if (record.assetId() != null) ids.add(record.assetId()); return ids;
     }
-    private void verifyImportedCounts(Map<String, List<Map<String, Object>>> tables) {
-        for (var table : RecoverySchema.TABLES) if (db.sql("SELECT COUNT(*) FROM " + table.name()).query(Long.class).single() != tables.get(table.name()).size()) {
+    private void verifyImportedCounts(Map<String, List<Map<String, Object>>> tables, int version) {
+        for (var table : RecoverySchema.tables(version)) if (db.sql("SELECT COUNT(*) FROM " + table.name()).query(Long.class).single() != tables.get(table.name()).size()) {
             throw failure("IMPORT_COUNT_MISMATCH");
         }
     }
     private void verifyAfterReplay(Map<String, List<Map<String, Object>>> tables, List<DeletionRecord> ledger, int version) {
         var erased = erasedAssets(ledger);
+        var erasedMemories = new HashSet<UUID>(); for (var plan : ledger) erasedMemories.add(plan.memoryId());
         var ledgerIds = new HashSet<UUID>(); for (var row : tables.get("deletion_ledger")) ledgerIds.add(uuid(row, "memory_id"));
         var keyDigests = new HashSet<String>(); for (var row : tables.get("erased_submission_key")) keyDigests.add(text(row, "key_digest"));
         for (var plan : ledger) { ledgerIds.add(plan.memoryId()); keyDigests.add(plan.submissionKeyDigest()); }
         var expected = new HashMap<String, Long>();
-        for (var table : RecoverySchema.TABLES) expected.put(table.name(), (long) tables.get(table.name()).size());
+        for (var table : RecoverySchema.tables(version)) expected.put(table.name(), (long) tables.get(table.name()).size());
         expected.put("media_asset", tables.get("media_asset").stream().filter(a -> !erased.contains(uuid(a, "id"))).count());
         expected.put("upload_grant", tables.get("upload_grant").stream().filter(g -> !erased.contains(uuid(g, "media_asset_id"))).count());
         expected.put("deletion_ledger", (long) ledgerIds.size()); expected.put("erased_submission_key", (long) keyDigests.size());
+        if (version >= 4) expected.put("album_membership", tables.get("album_membership").stream()
+                .filter(row -> !erasedMemories.contains(uuid(row, "memory_id"))).count());
         for (var count : expected.entrySet()) if (db.sql("SELECT COUNT(*) FROM " + count.getKey()).query(Long.class).single().longValue() != count.getValue().longValue()) {
             throw failure("REPLAY_COUNT_MISMATCH");
         }

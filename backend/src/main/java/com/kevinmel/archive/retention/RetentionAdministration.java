@@ -25,7 +25,7 @@ public final class RetentionAdministration {
     static int run(String[] args) {
         if (args.length == 1 && "--help".equals(args[0])) {
             System.out.println("""
-                    Offline retention maintenance (reviewed V7 migration must already be applied):
+                    Offline retention maintenance (reviewed V11 migration must already be applied):
                       --expect-environment <local|staging|production> purge-expired
                       --expect-environment <local|staging|production> replay-ledger
                     An interactive console and exact confirmation are required. Configure the database and

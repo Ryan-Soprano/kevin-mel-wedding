@@ -8,12 +8,14 @@ import java.util.Map;
 import java.util.UUID;
 
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.kevinmel.archive.security.ArchiveAuthorization;
 import com.kevinmel.archive.security.ArchivePrincipal;
 import com.kevinmel.archive.web.ApiException;
+import com.kevinmel.archive.album.AlbumMemberships;
 
 @Service
 public class ReviewService {
@@ -21,11 +23,17 @@ public class ReviewService {
     private final ArchiveAuthorization authorization;
     private final InboxRepository repository;
     private final Clock clock;
+    private final AlbumMemberships albums;
 
     public ReviewService(ArchiveAuthorization authorization, InboxRepository repository, Clock clock) {
+        this(authorization,repository,clock,null);
+    }
+    @Autowired
+    public ReviewService(ArchiveAuthorization authorization, InboxRepository repository, Clock clock, AlbumMemberships albums) {
         this.authorization = authorization;
         this.repository = repository;
         this.clock = clock;
+        this.albums = albums;
     }
 
     @Transactional
@@ -46,6 +54,10 @@ public class ReviewService {
         Instant actedAt = now.isBefore(current.updatedAt()) ? current.updatedAt() : now;
         Instant deleteAfter = "DELETE".equals(request.reviewStatus()) ? now.plus(RETENTION) : null;
         var changed = repository.changeReview(current, request.reviewStatus(), deleteAfter, actedAt);
+        if ("DELETE".equals(request.reviewStatus()) && albums != null) {
+            albums.detach(memoryId,actedAt);
+            authorization.requireCoupleAccess();
+        }
         var principal = (ArchivePrincipal) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
         repository.auditReview(current, changed, principal.getAccountId(), actedAt);
         return changed;

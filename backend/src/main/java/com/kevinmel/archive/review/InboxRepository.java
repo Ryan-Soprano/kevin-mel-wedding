@@ -18,15 +18,18 @@ import com.kevinmel.archive.web.ApiException;
 
 @Repository
 public class InboxRepository {
-    private static final String SELECT = """
-            SELECT m.id AS memory_id, c.id AS contribution_id, c.guest_name, m.memory_type,
+    public static final String MEMORY_COLUMNS = """
+            m.id AS memory_id, c.id AS contribution_id, c.guest_name, m.memory_type,
                 m.text_content, m.caption, m.review_status, m.visibility, m.revision,
                 m.created_at, m.updated_at, m.delete_after, c.source, m.title, m.description, m.memory_date, m.date_precision,
                 a.original_filename, a.detected_format, a.byte_size, a.checksum_sha256, a.upload_state, a.audio_duration_ms
-            FROM memory m
+            """;
+    public static final String MEMORY_JOINS = """
             JOIN contribution c ON c.id = m.contribution_id
             LEFT JOIN media_asset a ON a.memory_id = m.id
-            WHERE c.event_key = 'kevin-mel-wedding' AND m.visibility = 'COUPLE_ONLY'
+            """;
+    public static final String AVAILABLE = """
+            c.event_key = 'kevin-mel-wedding' AND m.visibility = 'COUPLE_ONLY'
                 AND m.review_status IN ('PENDING', 'KEEP', 'ARCHIVED', 'DELETE')
                 AND m.purge_started_at IS NULL AND m.purged_at IS NULL
                 AND (m.review_status <> 'DELETE' OR m.delete_after > :now)
@@ -45,6 +48,7 @@ public class InboxRepository {
                     AND a.declared_content_type = a.detected_format
                     AND a.object_key = 'originals/' || a.id::text))
             """;
+    private static final String SELECT = "SELECT " + MEMORY_COLUMNS + " FROM memory m " + MEMORY_JOINS + " WHERE " + AVAILABLE;
     private final JdbcClient db;
     private final Clock clock;
 
@@ -124,7 +128,7 @@ public class InboxRepository {
         return instant == null ? null : OffsetDateTime.ofInstant(instant, ZoneOffset.UTC);
     }
 
-    private static MemoryDetail map(ResultSet rs, int row) throws SQLException {
+    public static MemoryDetail map(ResultSet rs, int row) throws SQLException {
         String type = rs.getString("memory_type");
         var durationMs = rs.getObject("audio_duration_ms", Long.class);
         var media = "PHOTO".equals(type) || "AUDIO".equals(type) ? new MemoryDetail.PhotoMedia(

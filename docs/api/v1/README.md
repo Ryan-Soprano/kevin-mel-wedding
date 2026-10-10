@@ -17,6 +17,8 @@ AUTH-02 implements private playback issuance, now extended to verified AUDIO by 
 
 ARC-01 adds [private couple creation and editable details](couple-memories.md), including account-bound upload recovery, Kept defaults for couple-authored memories, optional precise/partial dates and conditional metadata updates. Original guest content and files remain preserved. Recovery package v3 carries these additive V10 fields.
 
+ARC-02 adds [private albums and event collections](albums.md): named many-to-many collections, independent order, bounded member pages and conditional UUID revision tokens. Album deletion preserves original memories/files; memory deletion removes relationships. Recovery package v4 carries additive V11 organization data.
+
 The [staging package](../../runbooks/staging-deployment.md) serves production frontend assets and `/api` through one Spring process. Its staging-only operator access gate is separate from the couple session API. Staging limits overlapping photo finalization to one: a busy request returns `503 MEDIA_UNAVAILABLE` before reading storage or changing item state; deliberate retry retains the same intent, item and capability key. File, dimension and batch limits are unchanged. Local package checks pass; hosted deployment and physical-phone acceptance remain pending.
 
 ## Shared conventions
@@ -67,6 +69,7 @@ AUTH-01 implements session routes. AUTH-02/AUD-03 provide verified PHOTO/AUDIO p
 | PATCH `/api/memories/{memoryId}/metadata` | 200 | Conditional title/description/date editing; original content preserved |
 | POST `/api/memories/contributions` | 201 new / 200 replay | Authenticated couple creation; account-bound receipt/grant/finalize routes in [ARC-01](couple-memories.md) |
 | GET `/api/memories/{memoryId}/playback` | 200 | Current couple/reveal authorization and short-lived GET for an eligible PHOTO/AUDIO original |
+| GET/PUT/PATCH/DELETE `/api/albums…` | 200 / 201 first creation | Private collection browsing and conditional organization; see [ARC-02 routes](albums.md) |
 
 ## Text creation and retry identity
 

@@ -30,7 +30,7 @@ public class SessionIdentityFilter extends OncePerRequestFilter {
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = path(request);
-        return !path.equals("/api/session") && !path.startsWith("/api/memories");
+        return !path.equals("/api/session") && !privatePath(path);
     }
 
     @Override
@@ -38,7 +38,7 @@ public class SessionIdentityFilter extends OncePerRequestFilter {
             throws ServletException, IOException {
         String path = path(request);
         var authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (path.startsWith("/api/memories") && authentication != null && authentication.isAuthenticated()
+        if (privatePath(path) && authentication != null && authentication.isAuthenticated()
                 && !(authentication.getPrincipal() instanceof ArchivePrincipal)) {
             errors.write(request, response, 403, "ARCHIVE_UNAVAILABLE", "Archive access is unavailable.");
             return;
@@ -60,7 +60,7 @@ public class SessionIdentityFilter extends OncePerRequestFilter {
                         errors.write(request, response, 401, "AUTH_REQUIRED", "Please sign in to access the archive.");
                         return;
                     }
-                } else if (path.startsWith("/api/memories") && !policy.allows(principal)) {
+                } else if (privatePath(path) && !policy.allows(principal)) {
                     errors.write(request, response, 403, "ARCHIVE_UNAVAILABLE", "Archive access is unavailable.");
                     return;
                 }
@@ -76,4 +76,5 @@ public class SessionIdentityFilter extends OncePerRequestFilter {
         String servletPath = request.getServletPath();
         return servletPath.isEmpty() ? request.getRequestURI().substring(request.getContextPath().length()) : servletPath;
     }
+    private static boolean privatePath(String path) { return path.startsWith("/api/memories") || path.startsWith("/api/albums"); }
 }

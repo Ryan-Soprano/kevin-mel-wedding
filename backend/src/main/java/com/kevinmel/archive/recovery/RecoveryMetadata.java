@@ -25,7 +25,7 @@ final class RecoveryMetadata {
     private final Map<UUID, Map<String, Object>> assetsByMemory = new HashMap<>();
 
     RecoveryMetadata(Map<String, List<Map<String, Object>>> tables, Instant at) {
-        this(tables, at, 3);
+        this(tables, at, 4);
     }
 
     RecoveryMetadata(Map<String, List<Map<String, Object>>> tables, Instant at, int version) {
@@ -136,6 +136,7 @@ final class RecoveryMetadata {
         }
         for (var m : memories.values()) if (Set.of("PHOTO", "AUDIO").contains(text(m, "memory_type")) && m.get("purged_at") == null
                 && !ownedAssets.contains(uuid(m, "id"))) throw invalid();
+        if (version >= 4) validateAlbums();
         var populated = new HashSet<UUID>(); for (var memory : memories.values()) populated.add(uuid(memory, "contribution_id"));
         if (!populated.equals(contributions.keySet())) throw invalid();
         var grants = new HashSet<UUID>();
@@ -171,6 +172,33 @@ final class RecoveryMetadata {
         }
         var erased = new HashSet<String>();
         for (var row : rows("erased_submission_key")) { hash(row, "key_digest", false); if (!erased.add(text(row, "key_digest"))) throw invalid(); }
+    }
+
+    private void validateAlbums() {
+        var albums = indexed("album", "id");
+        for (var album : albums.values()) {
+            Instant created = instant(album, "created_at"), updated = instant(album, "updated_at"), deleted = instant(album, "deleted_at");
+            if (uuid(album, "id").version() != 4 || uuid(album, "id").variant() != 2
+                    || uuid(album, "revision").version() != 4 || uuid(album, "revision").variant() != 2
+                    || !"COUPLE_ONLY".equals(album.get("visibility")) || updated.isBefore(created)
+                    || deleted != null && (deleted.isBefore(created) || updated.isBefore(deleted))) throw invalid();
+            if (deleted != null) { if (album.get("name") != null) throw invalid(); }
+            else { if (album.get("name") == null) throw invalid(); metadataText(album, "name", 200); }
+        }
+        var pairs = new HashSet<String>(); var positions = new HashSet<String>();
+        for (var member : rows("album_membership")) {
+            UUID albumId = uuid(member, "album_id"), memoryId = uuid(member, "memory_id");
+            var album = albums.get(albumId); var memory = memories.get(memoryId);
+            long position = number(member, "position");
+            if (album == null || album.get("deleted_at") != null || memory == null || position < 1
+                    || !pairs.add(albumId + ":" + memoryId) || !positions.add(albumId + ":" + position)
+                    || !Set.of("PENDING", "KEEP", "ARCHIVED").contains(text(memory, "review_status"))
+                    || memory.get("purge_started_at") != null || memory.get("purged_at") != null) throw invalid();
+            if (!"TEXT".equals(memory.get("memory_type"))) {
+                var asset = assetsByMemory.get(memoryId);
+                if (asset == null || !"UPLOADED".equals(asset.get("upload_state"))) throw invalid();
+            }
+        }
     }
 
     private Map<UUID, Map<String, Object>> indexed(String table, String field) {
