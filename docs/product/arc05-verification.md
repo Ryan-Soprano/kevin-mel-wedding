@@ -1,0 +1,37 @@
+# Portable couple archive — local verification
+
+ARC-05 adds temporary self-service export jobs and a separate portable format. The archive captures eligible memories, grouping, useful metadata, ordered albums, timeline events and tags. Original ZIP parts verify persisted size and SHA-256; a final index includes the complete human-readable archive, documented JSON and a static offline reader. See the [export contract](../api/v1/exports.md).
+
+The feature branch is `feature/portable-export`, based on main `05a0878` (ARC-04 PR #35). Final-head CI and merge identities belong in the ARC-05 tracker and pull request. Ignored `logs/arc05-local/` contains only synthetic local fixtures, reports, ZIPs and screenshots.
+
+## Automated verification
+
+The final frozen backend passes all 433 tests with zero failures, errors or skips in disposable Linux Java 25/Maven/FFmpeg and PostgreSQL 17. The final frontend passes all 376 tests, ESLint and the production Vite build after the save-link privacy correction. Seven existing rehearsal-helper tests pass. Independent source, API, frontend, lifecycle and documentation review has no remaining blocker.
+
+The 37 added backend cases cover consistent bounded capture, fresh validation across transaction boundaries and original reads, exact-byte ZIP outcomes, metadata and graph limits, organization chronology/order, real session/CSRF HTTP streaming, role/reveal/current-account authority, cancellation/replay, cached-generation leases, expiry/restart, cleanup failure and retry capacity. Linux runs the symlink case that is deliberately skipped on Windows. The 18 added frontend cases cover the actual rendered view, bounded transport/header/size/digest validation, owned Blob lifetime, private-state clearing, shared action fences, exact-identity reconciliation and deliberate retry.
+
+Meaningful checks cover current session/reveal/role authority, request bounds and control identities; capture eligibility and allowlisted fields; exact partial dates, contribution grouping and organization order; part splitting, exact bytes, missing/incorrect originals and truthful completeness; cancellation, inactivity/hard expiry, application restart, bounded admission and temporary-file cleanup; fresh source checks after storage reads and before delivery; deliberate reconciliation of interrupted responses; browser size/hash verification and owned Blob cleanup; and opening extracted artifacts without application cookies or API access.
+
+The portable format deliberately excludes operator capabilities, account identities and deletion authority. It cannot restore the application database. Existing operator recovery v6/V13, independent memory-erasure replay and retention remain unchanged and are checked with the full backend suite. No new migration, dependency or provider/runtime/CI configuration is included.
+
+Private ZIPs use POSIX current-user ownership with directory/file modes 700/600. Windows follows the existing operator-recovery policy: the token's actual creation owner is verified and is the sole allowed ACL principal, which may be the owner group in an elevated process. A lifetime lock prevents reclamation of another live instance's directory. Only a bounded, exact-name, owner/permission/marker/file-validated abandoned directory can be reclaimed; links or unexpected entries are preserved. Unconfirmed cleanup blocks further preparation. Startup cleanup failure remains isolated from guest/app startup. Shutdown stops the worker even when deletion fails and retains ownership while a worker or download still uses the file.
+
+## Packaged browser rehearsal
+
+The final combined production JAR passes 84 rendered states: 25 desktop at 1280 × 900, 25 narrow at 320 × 720, and 34 at actual 200% Chrome zoom. Chrome 155.0.8059.39 and bundled Playwright 1.62.1 use loopback-only application requests. The zoomed app reports 629 CSS px width, DPR 2 and visual viewport scale 1; its separate offline context reports 640 CSS px, DPR 2 and scale 1. Native CDP viewport captures include scrolled recovery, prepare, save and cancellation controls plus the offline memory, album, timeline and tag sections. All checked states have no horizontal overflow or JavaScript page errors. Independent final visual review has no blocker.
+
+The real UI/HTTP rehearsal covers an interrupted pre-send creation response, same-identity read and deliberate retry; captured counts, exclusions and warnings; original/index preparation; browser header, length and checksum verification; actual Playwright-saved ZIP filename, length and independently calculated SHA-256; safe extraction into a fresh snapshot folder; exact text, partial dates, album order, event/tag links and deleted-memory exclusion; active-job discovery after refresh and a new sign-in; visibility clearing, cancellation and stale-source rejection. Separate synthetic accounts per layout respect the existing sign-in throttle without modifying its policy.
+
+The extracted HTML reader opens in a fresh context with no application cookies, all HTTP requests blocked and zero attempted remote requests. Literal markup remains inert text. The complete text archive preserves the full content. Verified-descriptor fixtures deliberately lack provider objects while storage is off, and therefore produce truthful `READ_FAILED` outcomes and an incomplete manifest. Controlled storage tests separately prove byte-for-byte PHOTO/AUDIO preservation and missing/incorrect/read-failed originals; these fixtures exercise the existing verified-storage contract and are not fresh decoder or live-provider acceptance.
+
+A packaged regression immediately follows automatic Save with inbox navigation and ordinary window blur, verifies that private DOM clears, then requires fresh focus/session reconciliation before export content returns. It detects the old save-dialog exception and passes with the corrected save link. No chooser exception is retained for export downloads; existing memory-download privacy behavior applies.
+
+The nonroot, read-only application and tmpfs PostgreSQL use synthetic data only; storage, audio admission and retention remain off. Owned Java/package runners, browser profiles, containers and network are removed and their absence verified. Synthetic visibility/blur and automated browser saves do not establish native dialog, physical-device or real network behavior.
+
+Final compilation image: `sha256:55135aedd859ae75cb0cbf6e25b25d381489fa92bbe0343ac57297cf52118600`. Packaged runtime image: `sha256:201ed8ebd94ae5dbb2b4c913a298c1cdcf871eeedb6e9cba1d9b0829cb306649`. JAR SHA-256: `912234dcab46ffcb69f481682f8194bbb87e376103977c17a15d1047f7c540aa`.
+
+## Retained acceptance
+
+Kevin and Melanie's real onboarding, export usability and feedback remain open. Physical-device save/extraction, actual screen-reader/native-dialog and hidden-tab/BFCache behavior remain separate acceptance checks. Controlled storage proves exact-byte handling locally; it does not prove current provider latency, hosted capacity or reception-network behavior. Both audio release gates remain off.
+
+No paid resources, hosting, deployment, real account activation, invitation or tester message is included. Export jobs expire after 30 minutes without activity and at 24 hours absolutely; restarting the application loses jobs. A recipient's downloaded copies cannot be erased by sign-out, cancellation, expiry or later archive deletion. Download admission is the release boundary; bytes admitted before a deletion or authority change may already be delivered.

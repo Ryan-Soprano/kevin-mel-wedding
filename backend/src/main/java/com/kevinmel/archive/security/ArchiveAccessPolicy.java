@@ -55,6 +55,12 @@ public class ArchiveAccessPolicy {
                 && (!production || Set.of("kevin", "melanie").contains(principal.getUsername()));
     }
 
+    /** Fresh background authority uses the current account, without retaining a principal. */
+    public boolean allows(ArchiveAccount account) {
+        return revealed && "COUPLE".equals(account.role())
+                && (!production || Set.of("kevin", "melanie").contains(account.username()));
+    }
+
     public boolean secureCookie() { return secureCookie; }
     public boolean production() { return production; }
 

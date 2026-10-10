@@ -23,6 +23,8 @@ The [staging package](../../runbooks/staging-deployment.md) serves production fr
 
 ## Shared conventions
 
+ARC-05 adds [portable couple exports](exports.md): temporary session-authorized jobs, bounded ZIP parts, exact original verification, unavailable-original reports and a separate offline reader. All export control routes use the shared contract, CSRF and privacy boundary; the authenticated binary route also requires contract version 1. This delivery format contains no operator recovery capabilities or database import state.
+
 SEC-01 protects note/photo creation, receipt, grant and finalize before body parsing with durable global/shared-connection/retry-key limits. Quota failures return `429 RATE_LIMITED` with a remaining-window `Retry-After`; database admission failures return safe `503 SERVICE_UNAVAILABLE`. Creation accepts at most 65,536 JSON bytes, finalize 1,024 bytes, and receipt/grant routes reject bodies. Oversized JSON returns `413 PAYLOAD_TOO_LARGE`; retain the intent and report the boundary instead of silently resending the same oversized request. See [quota and verification details](anonymous-protection-verification.md).
 
 New photo intents and temporary permissions have separate serialized 7.5 GB reservation budgets. Pausing/capacity failures return `503 MEDIA_UNAVAILABLE` with `Retry-After: 60`; busy finalization returns the same code with `Retry-After: 5`. Honor valid 429/503 delays, retain original input/key and saved siblings, and retry deliberately. A pause preserves equivalent intent replay, existing unexpired permission recovery and finalization. Expired staging reservations require confirmed cleanup before release. See the [operator runbook](../../runbooks/guest-protection.md).

@@ -1,0 +1,7 @@
+.archive-export { min-width: 0; overflow-wrap: anywhere; }
+.archive-export > * + * { margin-top: 16px; }
+.archive-export button, .archive-export a { white-space: normal; }
+.export-status, .export-prepared, .export-recovery, .export-cancel-confirmation { padding: 16px; border: 1px solid var(--color-accent, #967052); border-radius: 8px; min-width: 0; }
+.export-status > * + *, .export-prepared > * + *, .export-cancel-confirmation > * + * { margin-top: 12px; }
+.export-filename { overflow-wrap: anywhere; }
+.archive-export progress { display: block; width: 100%; max-width: 100%; }

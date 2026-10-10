@@ -24,6 +24,7 @@ public final class CoupleRequestBodyFilter extends OncePerRequestFilter {
         chain.doFilter(new BoundedRequest(request, body), response);
     }
     static int bodyLimit(String method, String path) {
+        if (path.equals("/api/exports") || path.startsWith("/api/exports/")) return 0;
         if (path.equals("/api/library") || path.startsWith("/api/library/")) {
             if ("GET".equals(method)) return 0;
         }

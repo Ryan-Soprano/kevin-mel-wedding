@@ -5,6 +5,7 @@ import { normalizeMemoryMetadata, metadataOf, sameMetadata } from "../../feature
 import { createAlbumApi } from "../../features/albums/api/albumApi.js";
 import { createTimelineApi } from "../../features/timeline/api/timelineApi.js";
 import { createLibraryApi } from "../../features/library/api/libraryApi.js";
+import { createExportApi } from "../../features/export/api/exportApi.js";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const KEY = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -215,7 +216,7 @@ function decodeGrant(value) {
 
 /** Durable v1 adapter for guest memories, sessions, and private review/playback. */
 export function createArchiveApi({
-  client = createApiClient(), uploadFetch = globalThis.fetch,
+  client = createApiClient(), uploadFetch = globalThis.fetch, exportFetch = globalThis.fetch,
 } = {}) {
   const receiptRequest = (path, options, expectedId) => client.request(path, {
     ...options,
@@ -237,6 +238,7 @@ export function createArchiveApi({
     ...createAlbumApi({ client, decodeMemory, csrf }),
     ...createTimelineApi({ client, decodeMemory, csrf }),
     ...createLibraryApi({ client, decodeMemory, csrf }),
+    ...createExportApi({ client, csrf, exportFetch }),
     createCoupleTextContribution(payload, { idempotencyKey, csrfToken, signal } = {}) {
       const body = normalizeTextContribution(payload);
       if (body.guestName !== null) throw new TypeError("Private memories do not have a guest name.");
