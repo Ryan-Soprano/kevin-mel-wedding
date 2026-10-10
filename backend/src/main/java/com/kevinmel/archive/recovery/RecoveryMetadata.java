@@ -25,7 +25,7 @@ final class RecoveryMetadata {
     private final Map<UUID, Map<String, Object>> assetsByMemory = new HashMap<>();
 
     RecoveryMetadata(Map<String, List<Map<String, Object>>> tables, Instant at) {
-        this(tables, at, 4);
+        this(tables, at, 5);
     }
 
     RecoveryMetadata(Map<String, List<Map<String, Object>>> tables, Instant at, int version) {
@@ -137,6 +137,7 @@ final class RecoveryMetadata {
         for (var m : memories.values()) if (Set.of("PHOTO", "AUDIO").contains(text(m, "memory_type")) && m.get("purged_at") == null
                 && !ownedAssets.contains(uuid(m, "id"))) throw invalid();
         if (version >= 4) validateAlbums();
+        if (version >= 5) validateTimeline();
         var populated = new HashSet<UUID>(); for (var memory : memories.values()) populated.add(uuid(memory, "contribution_id"));
         if (!populated.equals(contributions.keySet())) throw invalid();
         var grants = new HashSet<UUID>();
@@ -201,6 +202,46 @@ final class RecoveryMetadata {
         }
     }
 
+    private void validateTimeline() {
+        var events = indexed("timeline_event", "id");
+        var states = rows("timeline_state");
+        if (events.isEmpty()) {
+            if (!states.isEmpty() || !rows("timeline_event_memory").isEmpty()) throw invalid();
+            return;
+        }
+        if (states.size() != 1) throw invalid();
+        var state = states.getFirst();
+        if (number(state, "id") != 1 || uuid(state, "revision").version() != 4 || uuid(state, "revision").variant() != 2) throw invalid();
+        Instant listUpdated = instant(state, "updated_at");
+        for (var event : events.values()) {
+            Instant created = instant(event, "created_at"), updated = instant(event, "updated_at"), deleted = instant(event, "deleted_at");
+            if (uuid(event, "id").version() != 4 || uuid(event, "id").variant() != 2
+                    || uuid(event, "revision").version() != 4 || uuid(event, "revision").variant() != 2
+                    || !"COUPLE_ONLY".equals(event.get("visibility")) || updated.isBefore(created) || listUpdated.isBefore(updated)
+                    || deleted != null && (deleted.isBefore(created) || updated.isBefore(deleted))) throw invalid();
+            if (deleted != null) {
+                if (event.get("title") != null || event.get("description") != null || event.get("event_date") != null
+                        || !"UNKNOWN".equals(event.get("date_precision"))) throw invalid();
+            } else {
+                if (event.get("title") == null) throw invalid();
+                metadataText(event, "title", 200); metadataText(event, "description", 2000);
+            }
+            validateDate(event, "event_date");
+        }
+        var pairs = new HashSet<String>();
+        for (var member : rows("timeline_event_memory")) {
+            UUID eventId = uuid(member, "event_id"), memoryId = uuid(member, "memory_id");
+            var event = events.get(eventId); var memory = memories.get(memoryId);
+            if (event == null || event.get("deleted_at") != null || memory == null || !pairs.add(eventId + ":" + memoryId)
+                    || !Set.of("PENDING", "KEEP", "ARCHIVED").contains(text(memory, "review_status"))
+                    || memory.get("purge_started_at") != null || memory.get("purged_at") != null) throw invalid();
+            if (!"TEXT".equals(memory.get("memory_type"))) {
+                var asset = assetsByMemory.get(memoryId);
+                if (asset == null || !"UPLOADED".equals(asset.get("upload_state"))) throw invalid();
+            }
+        }
+    }
+
     private Map<UUID, Map<String, Object>> indexed(String table, String field) {
         var result = new HashMap<UUID, Map<String, Object>>();
         for (var row : rows(table)) if (result.put(uuid(row, field), row) != null) throw invalid();
@@ -228,7 +269,10 @@ final class RecoveryMetadata {
                 || !value.equals(ContributionRequest.trim(value))) throw invalid();
     }
     private static void validateDate(Map<String, Object> row) {
-        String date = text(row, "memory_date"), precision = text(row, "date_precision");
+        validateDate(row, "memory_date");
+    }
+    private static void validateDate(Map<String, Object> row, String dateField) {
+        String date = text(row, dateField), precision = text(row, "date_precision");
         try {
             boolean valid = switch (precision == null ? "" : precision) {
                 case "UNKNOWN" -> date == null;

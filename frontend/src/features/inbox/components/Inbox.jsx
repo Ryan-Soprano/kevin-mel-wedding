@@ -9,6 +9,8 @@ import MemoryMetadataEditor from "./MemoryMetadataEditor.jsx";
 import { audioCollectionEnabled } from "../../audio/audioConstraints.js";
 import Albums from "../../albums/components/Albums.jsx";
 import { initialAlbums } from "../../albums/api/albumActions.js";
+import Timeline from "../../timeline/components/Timeline.jsx";
+import { initialTimeline } from "../../timeline/api/timelineActions.js";
 import "../inbox.css";
 
 const INITIAL = {
@@ -19,6 +21,7 @@ const INITIAL = {
   metadata: { phase: "idle", error: null, canRetry: false },
   notice: null, pageResetVersion: 0, logoutUnconfirmed: false,
   albums: initialAlbums(), albumReturnId: null,
+  timeline: initialTimeline(), timelineReturnId: null,
 };
 const LABELS = { PENDING: "Pending", KEEP: "Kept", ARCHIVED: "Archived", DELETE: "Recently deleted" };
 const REVIEW_LABELS = { PENDING: "Restore to inbox", KEEP: "Keep privately", ARCHIVED: "Archive", DELETE: "Delete" };
@@ -52,6 +55,22 @@ export default function Inbox({ createController = createInboxController, audioE
     page: useCallback(next => controller.current?.albumPage(next), []),
     reload: useCallback(refreshSession => controller.current?.reloadAlbumMutation({ refreshSession }), []),
     retry: useCallback(name => controller.current?.retryAlbumMutation(name), []),
+  };
+  const timelineActions = {
+    inbox: useCallback(() => controller.current?.loadInbox("PENDING"), []),
+    list: useCallback(filters => controller.current?.loadTimeline(filters), []),
+    open: useCallback(id => controller.current?.openTimelineEvent(id), []),
+    beginCreate: useCallback(() => controller.current?.beginTimelineCreation(), []),
+    create: useCallback(fields => controller.current?.createTimelineEvent(fields), []),
+    edit: useCallback(fields => controller.current?.updateTimelineEvent(fields), []),
+    delete: useCallback(() => controller.current?.deleteTimelineEvent(), []),
+    link: useCallback(id => controller.current?.linkTimelineMemory(id), []),
+    unlink: useCallback(id => controller.current?.unlinkTimelineMemory(id), []),
+    select: useCallback(status => controller.current?.showTimelineSelector(status), []),
+    openMemory: useCallback(id => controller.current?.openTimelineMemory(id), []),
+    page: useCallback(next => controller.current?.timelinePage(next), []),
+    reload: useCallback(refreshSession => controller.current?.reloadTimelineMutation({ refreshSession }), []),
+    retry: useCallback(fields => controller.current?.retryTimelineMutation(fields), []),
   };
   const audioPlayback = useRef(null);
   const clearPlayback = useCallback(() => stopAudioPlayback(audioPlayback.current), []);
@@ -104,9 +123,9 @@ export default function Inbox({ createController = createInboxController, audioE
 
   useEffect(() => {
     heading.current?.focus();
-  }, [snapshot.phase, snapshot.detail?.memoryId, snapshot.albums?.view, snapshot.albums?.album?.albumId]);
+  }, [snapshot.phase, snapshot.detail?.memoryId, snapshot.albums?.view, snapshot.albums?.album?.albumId, snapshot.timeline?.view, snapshot.timeline?.event?.eventId]);
 
-  const reviewLocked = snapshot.review.phase !== "idle" || snapshot.metadata.phase !== "idle" || snapshot.albums.mutation.phase !== "idle";
+  const reviewLocked = snapshot.review.phase !== "idle" || snapshot.metadata.phase !== "idle" || snapshot.albums.mutation.phase !== "idle" || snapshot.timeline.mutation.phase !== "idle";
   const detail = snapshot.detail;
   const confirmingDelete = !reviewLocked && deleteConfirmation !== null
     && detail?.memoryId === deleteConfirmation.memoryId && detail?.revision === deleteConfirmation.revision;
@@ -178,8 +197,8 @@ export default function Inbox({ createController = createInboxController, audioE
   }
 
   const authenticated = snapshot.session?.authenticated
-    && ["inbox", "detail", "create", "albums"].includes(snapshot.phase);
-  const title = snapshot.phase === "albums" ? "Your albums" : snapshot.phase === "detail" ? "Your memory"
+    && ["inbox", "detail", "create", "albums", "timeline"].includes(snapshot.phase);
+  const title = snapshot.phase === "timeline" ? "Your life timeline" : snapshot.phase === "albums" ? "Your albums" : snapshot.phase === "detail" ? "Your memory"
     : snapshot.phase === "create" ? "Add a memory" : snapshot.phase === "login" ? "Sign in to your archive"
       : snapshot.phase === "unavailable" ? "Archive access unavailable" : "Memory inbox";
 
@@ -239,6 +258,7 @@ export default function Inbox({ createController = createInboxController, audioE
         <section aria-label="Private memories" aria-busy={snapshot.busy}>
           <button type="button" disabled={snapshot.busy} onClick={() => controller.current?.beginCreation()}>Add a memory</button>
           <button type="button" className="button-secondary" disabled={snapshot.busy} onClick={albumActions.list}>Albums</button>
+          <button type="button" className="button-secondary" disabled={snapshot.busy} onClick={() => timelineActions.list()}>Timeline</button>
           <nav className="inbox-filters" aria-label="Review status">
             {Object.entries(LABELS).map(([status, label]) => (
               <button key={status} type="button" className="button-secondary" aria-pressed={snapshot.reviewStatus === status}
@@ -275,10 +295,12 @@ export default function Inbox({ createController = createInboxController, audioE
       {snapshot.phase === "create" && authenticated && <AddMemory getApi={creationApi} onDone={creationDone} onBack={backToInbox} onDialogStateChange={setDialogState} audioEnabled={audioEnabled} />}
       {snapshot.phase === "albums" && authenticated && <Albums key={`${snapshot.albums.view}:${snapshot.albums.album?.albumId ?? "new"}:${snapshot.albums.album?.revision ?? "new"}`}
         state={snapshot.albums} busy={snapshot.busy} locked={reviewLocked} actions={albumActions} />}
+      {snapshot.phase === "timeline" && authenticated && <Timeline key={`${snapshot.timeline.view}:${snapshot.timeline.event?.eventId ?? "new"}:${snapshot.timeline.event?.revision ?? "new"}:${JSON.stringify(snapshot.timeline.filters)}`}
+        state={snapshot.timeline} busy={snapshot.busy} locked={reviewLocked} actions={timelineActions} />}
 
       {snapshot.phase === "detail" && authenticated && (
         <section className="inbox-detail" aria-label="Memory detail" aria-busy={snapshot.busy}>
-          <button type="button" className="button-secondary" disabled={reviewLocked} onClick={() => controller.current?.backToInbox()}>{snapshot.albumReturnId ? "Back to album" : "Back to inbox"}</button>
+          <button type="button" className="button-secondary" disabled={reviewLocked} onClick={() => controller.current?.backToInbox()}>{snapshot.timelineReturnId ? "Back to timeline event" : snapshot.albumReturnId ? "Back to album" : "Back to inbox"}</button>
           {snapshot.busy && !detail && <p role="status">Loading memory…</p>}
           {!snapshot.busy && !detail && snapshot.error && (
             <p>This memory could not be loaded. Return to the inbox and try opening it again.</p>
@@ -289,7 +311,7 @@ export default function Inbox({ createController = createInboxController, audioE
               <p>{detail.source === "COUPLE" ? "Couple memory" : `Guest contribution · From ${detail.guestName ?? "Name not provided"}`}</p>
               {detail.description && <p className="inbox-note">{detail.description}</p>}
               {detail.memoryDate && <p>Memory date: {detail.memoryDate} ({detail.datePrecision.toLowerCase()} precision)</p>}
-              <p><time dateTime={detail.createdAt}>{memoryTime(detail.createdAt)}</time> · Chicago</p>
+              <p>Saved on: <time dateTime={detail.createdAt}>{memoryTime(detail.createdAt)}</time> · Chicago</p>
               <p>Status: {LABELS[detail.reviewStatus]} · Couple only</p>
               {detail.reviewStatus === "DELETE" && (
                 <p className="inbox-deletion-window">This individual memory is in Recently deleted. Restore it before <time dateTime={detail.deleteAfter}>{memoryTime(detail.deleteAfter)}</time> (Chicago), when its 30-day recovery window ends. Deleted photos and audio cannot be opened or downloaded.</p>
@@ -348,7 +370,7 @@ export default function Inbox({ createController = createInboxController, audioE
                 {confirmingDelete && (
                   <div className="inbox-delete-confirmation" role="group" aria-labelledby="inbox-delete-title" aria-describedby="inbox-delete-copy">
                     <h3 id="inbox-delete-title">Delete this memory?</h3>
-                    <p id="inbox-delete-copy">Only this memory will move to Recently deleted and be removed from every album. You can restore it to your inbox for 30 days after its first deletion, then add it to albums again yourself. It will no longer be available after that recovery window, and deleted photos and audio cannot be opened or downloaded.</p>
+                    <p id="inbox-delete-copy">Only this memory will move to Recently deleted and be removed from every album and timeline event. You can restore it to your inbox for 30 days after its first deletion, then add it to albums or link it to events again yourself. It will no longer be available after that recovery window, and deleted photos and audio cannot be opened or downloaded.</p>
                     <div className="inbox-actions">
                       <button ref={cancelDelete} type="button" className="button-secondary" disabled={snapshot.busy} onClick={cancelConfirmation}>Cancel</button>
                       <button type="button" disabled={snapshot.busy} onClick={() => changeReview("DELETE")}>Confirm delete</button>

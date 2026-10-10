@@ -85,7 +85,7 @@ public class SecurityConfiguration {
                         "/api/contributions/*/memories/*/upload-grants", "/api/contributions/*/memories/*/finalize").permitAll()
                 .requestMatchers(HttpMethod.DELETE, "/api/session").permitAll()
                 .requestMatchers(HttpMethod.GET, "/", "/index.html", "/assets/**", "/favicon.ico").permitAll()
-                .requestMatchers("/api/memories", "/api/memories/**", "/api/albums", "/api/albums/**").hasRole("COUPLE")
+                .requestMatchers("/api/memories", "/api/memories/**", "/api/albums", "/api/albums/**", "/api/timeline", "/api/timeline/**").hasRole("COUPLE")
                 .anyRequest().denyAll();
         })
             .securityContext(context -> context.requireExplicitSave(true).securityContextRepository(contexts))

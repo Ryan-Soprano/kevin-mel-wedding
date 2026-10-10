@@ -67,7 +67,8 @@ class OperatorRecoveryPostgresTest {
     private static final Instant NOW = Instant.now().truncatedTo(ChronoUnit.MICROS);
     private static final JsonMapper JSON = JsonMapper.builder().build();
     private static final List<String> TABLES = List.of("contribution", "memory", "media_asset", "upload_grant",
-            "review_audit", "deletion_ledger", "erased_submission_key", "album", "album_membership");
+            "review_audit", "deletion_ledger", "erased_submission_key", "album", "album_membership",
+            "timeline_state", "timeline_event", "timeline_event_memory");
     @TempDir Path temporary;
     private final List<String> schemas = new ArrayList<>();
     private final MemoryStorage sourceStorage = new MemoryStorage();
@@ -448,6 +449,7 @@ class OperatorRecoveryPostgresTest {
     }
 
     @Test void versionFourRestoresOrderedManyToManyAlbumsEmptyAlbumsAndTerminalTombstones() throws Exception {
+        source = schema("11");
         var note = note(source, "Synthetic shared album note", null);
         coupleAttribution(source, note.contribution(), UUID.randomUUID());
         var batch = photos(source, sourceStorage, "UPLOADED");
@@ -474,17 +476,20 @@ class OperatorRecoveryPostgresTest {
         assertThat(target.db().sql("SELECT count(*) FROM archive_account").query(Long.class).single()).isZero();
     }
 
-    @Test void everyLegacyVersionRestoresIntoEachReviewedCompatibleTargetWithEmptyAlbums() throws Exception {
-        for (int migration = 8; migration <= 10; migration++) {
+    @Test void everyLegacyVersionRestoresIntoEachReviewedCompatibleTargetWithEmptyNewOrganization() throws Exception {
+        for (int migration = 8; migration <= 11; migration++) {
             source = schema(Integer.toString(migration));
             var note = migration < 10 ? legacyNote(source, "Synthetic legacy compatible note") : note(source, "Synthetic legacy compatible note", null);
             var batch = migration < 10 ? legacyPhotos(source, sourceStorage, "UPLOADED") : photos(source, sourceStorage, "UPLOADED");
+            UUID album = migration == 11 ? album(source, "Synthetic legacy album", false) : null;
+            if (album != null) member(source, album, note.memory(), 17);
             Path bundle = temporary.resolve("legacy-compatibility-" + migration);
             assertThat(export(bundle).ready()).isTrue();
             assertThat(JSON.readTree(Files.readAllBytes(bundle.resolve("manifest.json"))).get("version").intValue()).isEqualTo(migration - 7);
             var tables = JSON.readTree(Files.readAllBytes(bundle.resolve("metadata.json"))).get("tables");
-            assertThat(tables.has("album")).isFalse(); assertThat(tables.has("album_membership")).isFalse();
-            for (int destination = migration; destination <= 11; destination++) {
+            assertThat(tables.has("album")).isEqualTo(migration == 11); assertThat(tables.has("album_membership")).isEqualTo(migration == 11);
+            assertThat(tables.has("timeline_state")).isFalse(); assertThat(tables.has("timeline_event")).isFalse(); assertThat(tables.has("timeline_event_memory")).isFalse();
+            for (int destination = migration; destination <= 12; destination++) {
                 target = schema(Integer.toString(destination));
                 targetStorage.objects.clear(); targetStorage.records.clear(); targetStorage.publications.clear(); targetStorage.operations.clear();
                 var restored = restore(bundle);
@@ -492,12 +497,21 @@ class OperatorRecoveryPostgresTest {
                 assertThat(string(target, "SELECT text_content FROM memory WHERE id=:id", note.memory())).isEqualTo(note.message());
                 assertThat(targetStorage.objects.get("originals/" + batch.assets().getFirst())).isEqualTo(batch.bytes().getFirst());
                 if (destination >= 10) assertArchiveDefaults(target);
-                if (destination == 11) { assertThat(count(target, "album")).isZero(); assertThat(count(target, "album_membership")).isZero(); }
+                if (destination >= 11) {
+                    assertThat(count(target, "album")).isEqualTo(album == null ? 0 : 1);
+                    assertThat(count(target, "album_membership")).isEqualTo(album == null ? 0 : 1);
+                    if (album != null) assertThat(members(target, album)).containsExactly(note.memory());
+                }
+                if (destination == 12) {
+                    assertThat(count(target, "timeline_state")).isZero(); assertThat(count(target, "timeline_event")).isZero();
+                    assertThat(count(target, "timeline_event_memory")).isZero();
+                }
             }
         }
     }
 
     @Test void versionFourRequiresV11AndRefusesPopulatedAlbumTargetsBeforeOriginalPublication() {
+        source = schema("11");
         var batch = photos(source, sourceStorage, "UPLOADED");
         UUID album = album(source, "Synthetic version-four album", false); member(source, album, batch.memories().getFirst(), 7);
         Path bundle = temporary.resolve("v4-target-schema"); assertThat(export(bundle).ready()).isTrue();
@@ -513,6 +527,7 @@ class OperatorRecoveryPostgresTest {
     }
 
     @Test void rehashedVersionFourRejectsMalformedAlbumsAndMembershipGraphsBeforeAnyTargetWrites() throws Exception {
+        source = schema("11");
         var note = note(source, "Synthetic album graph note", null);
         var batch = photos(source, sourceStorage, "UPLOADED", "PENDING");
         UUID album = album(source, "Synthetic graph album", false); member(source, album, batch.memories().getFirst(), 1);
@@ -566,6 +581,7 @@ class OperatorRecoveryPostgresTest {
     }
 
     @Test void newerIndependentMemoryErasureDetachesEveryAlbumLinkAndPreservesSparseSiblingsAndEmptyAlbums() {
+        source = schema("11");
         var erasedNote = note(source, "Synthetic album note later erased", null);
         var batch = photos(source, sourceStorage, "UPLOADED", "UPLOADED");
         UUID first = album(source, "Synthetic collection A", false), second = album(source, "Synthetic collection B", false);
@@ -588,6 +604,195 @@ class OperatorRecoveryPostgresTest {
         assertThat(target.db().sql("SELECT position FROM album_membership WHERE album_id=:id").param("id", second).query(Long.class).single()).isEqualTo(300);
         assertThat(string(target, "SELECT text_content FROM memory WHERE id=:id", erasedNote.memory())).isNull();
         assertThat(string(target, "SELECT caption FROM memory WHERE id=:id", batch.memories().get(1))).isEqualTo("Synthetic caption 1");
+        assertThat(targetStorage.objects).hasSize(1); assertThat(targetStorage.objects.get("originals/" + batch.assets().get(1))).isEqualTo(batch.bytes().get(1));
+    }
+
+    @Test void versionFiveRestoresLifeEventsAllDatePrecisionsUnicodeBoundsAndMixedMemoryLinks() throws Exception {
+        var note = note(source, "Synthetic life-event note", null);
+        var batch = photos(source, sourceStorage, "UPLOADED");
+        var voice = audio(source, sourceStorage, "audio/webm", "UPLOADED");
+        UUID year = timelineEvent(source, "\uD83D\uDE03".repeat(100), "\uD83D\uDE03".repeat(1000), "0001", "YEAR", false);
+        UUID month = timelineEvent(source, "Synthetic month event", null, "9999-12", "MONTH", false);
+        UUID day = timelineEvent(source, "Synthetic leap-day event", "Preserve this context", "2000-02-29", "DAY", false);
+        UUID anotherDay = timelineEvent(source, "Synthetic second leap-day event", null, "2024-02-29", "DAY", false);
+        UUID undated = timelineEvent(source, "Synthetic undated event", null, null, "UNKNOWN", false);
+        UUID deleted = timelineEvent(source, null, null, null, "UNKNOWN", true);
+        timelineMember(source, year, note.memory()); timelineMember(source, year, batch.memories().getFirst());
+        timelineMember(source, month, voice.memory()); timelineMember(source, day, batch.memories().getFirst());
+        timelineMember(source, day, voice.memory());
+        UUID album = album(source, "Synthetic parallel album", false); member(source, album, voice.memory(), 700);
+        var before = snapshot(source);
+        Path bundle = temporary.resolve("v5-life-timeline"); assertThat(export(bundle).ready()).isTrue();
+        var manifest = JSON.readTree(Files.readAllBytes(bundle.resolve("manifest.json")));
+        assertThat(manifest.get("version").intValue()).isEqualTo(5);
+        var tables = JSON.readTree(Files.readAllBytes(bundle.resolve("metadata.json"))).get("tables");
+        assertThat(tables.get("timeline_state").size()).isEqualTo(1); assertThat(tables.get("timeline_event").size()).isEqualTo(6);
+        assertThat(tables.get("timeline_event_memory").size()).isEqualTo(5);
+        var restored = restore(bundle); assertThat(restored.memories()).isEqualTo(3); assertThat(restored.originals()).isEqualTo(2);
+        assertThat(snapshot(target)).isEqualTo(before);
+        assertThat(timelineMembers(target, year)).containsExactlyInAnyOrder(note.memory(), batch.memories().getFirst());
+        assertThat(timelineMembers(target, month)).containsExactly(voice.memory());
+        assertThat(timelineMembers(target, day)).containsExactlyInAnyOrder(batch.memories().getFirst(), voice.memory());
+        for (UUID event : List.of(anotherDay, undated, deleted)) assertThat(timelineMembers(target, event)).isEmpty();
+        assertThat(string(target, "SELECT title FROM timeline_event WHERE id=:id", deleted)).isNull();
+        assertThat(targetStorage.objects.get("originals/" + batch.assets().getFirst())).isEqualTo(batch.bytes().getFirst());
+        assertThat(targetStorage.objects.get("originals/" + voice.asset())).isEqualTo(voice.bytes());
+        assertThat(target.db().sql("SELECT count(*) FROM archive_account").query(Long.class).single()).isZero();
+    }
+
+    @Test void freshVersionFiveArchiveExportsAndRestoresWithNoSeededTimelineState() throws Exception {
+        Path bundle = temporary.resolve("v5-empty-lazy-timeline"); assertThat(export(bundle).ready()).isTrue();
+        var tables = JSON.readTree(Files.readAllBytes(bundle.resolve("metadata.json"))).get("tables");
+        for (String table : List.of("timeline_state", "timeline_event", "timeline_event_memory")) assertThat(tables.get(table).size()).isZero();
+        var restored = restore(bundle); assertThat(restored.memories()).isZero(); assertThat(restored.originals()).isZero();
+        assertEmptyTarget();
+    }
+
+    @Test void versionFiveRequiresV12AndRejectsTimelineOnlyPopulatedTargetsBeforeAnyOriginalPublication() {
+        var batch = photos(source, sourceStorage, "UPLOADED");
+        UUID event = timelineEvent(source, "Synthetic source timeline", null, "2026", "YEAR", false);
+        timelineMember(source, event, batch.memories().getFirst());
+        Path bundle = temporary.resolve("v5-target-schema"); assertThat(export(bundle).ready()).isTrue();
+        for (String migration : List.of("8", "9", "10", "11")) {
+            target = schema(migration);
+            assertThatThrownBy(() -> restore(bundle)).isInstanceOf(RecoveryException.class); assertEmptyTarget();
+        }
+        for (boolean stateOnly : List.of(false, true)) {
+            target = schema();
+            if (stateOnly) target.db().sql("INSERT INTO timeline_state(id,revision,updated_at) VALUES(1,:revision,:at)")
+                    .param("revision", UUID.randomUUID()).param("at", time(NOW.minusSeconds(60))).update();
+            else timelineEvent(target, "Synthetic target-only organization", null, null, "UNKNOWN", false);
+            var before = snapshot(target);
+            assertThatThrownBy(() -> restore(bundle)).isInstanceOf(RecoveryException.class);
+            assertThat(snapshot(target)).isEqualTo(before); assertNoTargetMutations(); assertThat(targetStorage.objects).isEmpty();
+        }
+    }
+
+    @Test void rehashedVersionFiveRejectsForgedTimelineStateDatesTombstonesAndMemoryGraphBeforeAnyWrites() throws Exception {
+        var batch = photos(source, sourceStorage, "UPLOADED", "PENDING");
+        UUID event = timelineEvent(source, "Synthetic graph event", "Synthetic description", "2024-02-29", "DAY", false);
+        timelineMember(source, event, batch.memories().getFirst());
+        Path bundle = temporary.resolve("v5-malformed-timeline-graphs"); assertThat(export(bundle).ready()).isTrue();
+        byte[] original = Files.readAllBytes(bundle.resolve("metadata.json"));
+        for (String invalid : List.of("DUPLICATE_EVENT", "EVENT_WRONG_VERSION", "EVENT_WRONG_VARIANT", "NONCANONICAL_EVENT_UUID",
+                "REVISION_WRONG_VERSION", "REVISION_WRONG_VARIANT", "MISSING_STATE", "DUPLICATE_STATE", "WRONG_STATE_ID",
+                "STATE_WRONG_VERSION", "STATE_WRONG_VARIANT", "STATE_BEFORE_EVENT", "STATE_WITHOUT_EVENTS",
+                "NULL_ACTIVE_TITLE", "EMPTY_TITLE", "PADDED_TITLE", "TITLE_TOO_LONG", "SUPPLEMENTARY_TITLE_TOO_LONG", "NUL_TITLE", "UNPAIRED_TITLE",
+                "EMPTY_DESCRIPTION", "PADDED_DESCRIPTION", "DESCRIPTION_TOO_LONG", "SUPPLEMENTARY_DESCRIPTION_TOO_LONG", "NUL_DESCRIPTION", "UNPAIRED_DESCRIPTION",
+                "UNKNOWN_WITH_DATE", "YEAR_WITHOUT_DATE", "ZERO_YEAR", "SHORT_YEAR", "BAD_MONTH", "NONCANONICAL_MONTH", "BAD_LEAP_DAY", "BAD_CENTURY_LEAP_DAY", "BAD_DAY", "NONCANONICAL_DAY", "UNSUPPORTED_PRECISION",
+                "PUBLIC_EVENT", "UPDATED_BEFORE_CREATED", "DELETED_BEFORE_CREATED", "DELETED_AFTER_UPDATED", "TOMBSTONE_TITLE", "TOMBSTONE_DESCRIPTION", "TOMBSTONE_DATE", "TOMBSTONE_PRECISION", "TOMBSTONE_WITH_MEMBERS",
+                "DUPLICATE_LINK", "MISSING_EVENT", "MISSING_MEMORY", "UNFINISHED_MEDIA", "DELETED_MEMORY", "UNKNOWN_STATE_FIELD", "UNKNOWN_EVENT_FIELD", "UNKNOWN_LINK_FIELD")) {
+            ObjectNode metadata = (ObjectNode) JSON.readTree(original); var tables = metadata.get("tables");
+            var events = (tools.jackson.databind.node.ArrayNode) tables.get("timeline_event"); ObjectNode e = (ObjectNode) events.get(0);
+            var states = (tools.jackson.databind.node.ArrayNode) tables.get("timeline_state"); ObjectNode state = (ObjectNode) states.get(0);
+            var links = (tools.jackson.databind.node.ArrayNode) tables.get("timeline_event_memory"); ObjectNode edge = (ObjectNode) links.get(0);
+            if (invalid.startsWith("TOMBSTONE_") || invalid.startsWith("DELETED_")) {
+                e.putNull("title").putNull("description").putNull("event_date").put("date_precision", "UNKNOWN")
+                        .put("deleted_at", NOW.minusSeconds(60).toString()).put("updated_at", NOW.minusSeconds(60).toString());
+                if (!invalid.equals("TOMBSTONE_WITH_MEMBERS") && !invalid.equals("DELETED_MEMORY")) links.removeAll();
+            }
+            switch (invalid) {
+                case "DUPLICATE_EVENT" -> events.add(e.deepCopy());
+                case "EVENT_WRONG_VERSION" -> { String id = "00000000-0000-1000-8000-000000000001"; e.put("id", id); edge.put("event_id", id); }
+                case "EVENT_WRONG_VARIANT" -> { String id = "00000000-0000-4000-0000-000000000001"; e.put("id", id); edge.put("event_id", id); }
+                case "NONCANONICAL_EVENT_UUID" -> { String id = "AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA"; e.put("id", id); edge.put("event_id", id); }
+                case "REVISION_WRONG_VERSION" -> e.put("revision", "00000000-0000-1000-8000-000000000001");
+                case "REVISION_WRONG_VARIANT" -> e.put("revision", "00000000-0000-4000-0000-000000000001");
+                case "MISSING_STATE" -> states.removeAll();
+                case "DUPLICATE_STATE" -> states.add(state.deepCopy());
+                case "WRONG_STATE_ID" -> state.put("id", 2);
+                case "STATE_WRONG_VERSION" -> state.put("revision", "00000000-0000-1000-8000-000000000001");
+                case "STATE_WRONG_VARIANT" -> state.put("revision", "00000000-0000-4000-0000-000000000001");
+                case "STATE_BEFORE_EVENT" -> state.put("updated_at", NOW.minusSeconds(7200).toString());
+                case "STATE_WITHOUT_EVENTS" -> { events.removeAll(); links.removeAll(); }
+                case "NULL_ACTIVE_TITLE" -> e.putNull("title");
+                case "EMPTY_TITLE" -> e.put("title", "");
+                case "PADDED_TITLE" -> e.put("title", "\u3000Synthetic title\u00a0");
+                case "TITLE_TOO_LONG" -> e.put("title", "t".repeat(201));
+                case "SUPPLEMENTARY_TITLE_TOO_LONG" -> e.put("title", "\uD83D\uDE03".repeat(100) + "x");
+                case "NUL_TITLE" -> e.put("title", "a\0b");
+                case "UNPAIRED_TITLE" -> e.put("title", "\uD800");
+                case "EMPTY_DESCRIPTION" -> e.put("description", "");
+                case "PADDED_DESCRIPTION" -> e.put("description", "\uFEFFSynthetic description ");
+                case "DESCRIPTION_TOO_LONG" -> e.put("description", "d".repeat(2001));
+                case "SUPPLEMENTARY_DESCRIPTION_TOO_LONG" -> e.put("description", "\uD83D\uDE03".repeat(1000) + "x");
+                case "NUL_DESCRIPTION" -> e.put("description", "a\0b");
+                case "UNPAIRED_DESCRIPTION" -> e.put("description", "\uDC00");
+                case "UNKNOWN_WITH_DATE" -> e.put("date_precision", "UNKNOWN");
+                case "YEAR_WITHOUT_DATE" -> e.put("date_precision", "YEAR").putNull("event_date");
+                case "ZERO_YEAR" -> e.put("date_precision", "YEAR").put("event_date", "0000");
+                case "SHORT_YEAR" -> e.put("date_precision", "YEAR").put("event_date", "123");
+                case "BAD_MONTH" -> e.put("date_precision", "MONTH").put("event_date", "2024-13");
+                case "NONCANONICAL_MONTH" -> e.put("date_precision", "MONTH").put("event_date", "2024-2");
+                case "BAD_LEAP_DAY" -> e.put("event_date", "2023-02-29");
+                case "BAD_CENTURY_LEAP_DAY" -> e.put("event_date", "1900-02-29");
+                case "BAD_DAY" -> e.put("event_date", "2024-02-30");
+                case "NONCANONICAL_DAY" -> e.put("event_date", "2024-2-29");
+                case "UNSUPPORTED_PRECISION" -> e.put("date_precision", "HOUR");
+                case "PUBLIC_EVENT" -> e.put("visibility", "PUBLIC");
+                case "UPDATED_BEFORE_CREATED" -> e.put("updated_at", NOW.minusSeconds(7200).toString());
+                case "DELETED_BEFORE_CREATED" -> e.put("deleted_at", NOW.minusSeconds(7200).toString());
+                case "DELETED_AFTER_UPDATED" -> e.put("deleted_at", NOW.minusSeconds(30).toString());
+                case "TOMBSTONE_TITLE" -> e.put("title", "Should have been scrubbed");
+                case "TOMBSTONE_DESCRIPTION" -> e.put("description", "Should have been scrubbed");
+                case "TOMBSTONE_DATE" -> e.put("event_date", "2026").put("date_precision", "YEAR");
+                case "TOMBSTONE_PRECISION" -> e.put("date_precision", "YEAR");
+                case "TOMBSTONE_WITH_MEMBERS" -> { }
+                case "DUPLICATE_LINK" -> links.add(edge.deepCopy());
+                case "MISSING_EVENT" -> edge.put("event_id", UUID.randomUUID().toString());
+                case "MISSING_MEMORY" -> edge.put("memory_id", UUID.randomUUID().toString());
+                case "UNFINISHED_MEDIA" -> edge.put("memory_id", batch.memories().get(1).toString());
+                case "DELETED_MEMORY" -> {
+                    // Leave the event active: the only invalid relationship is the DELETE member.
+                    e.put("title", "Synthetic graph event").put("description", "Synthetic description").put("event_date", "2024-02-29")
+                            .put("date_precision", "DAY").putNull("deleted_at").put("updated_at", NOW.minusSeconds(3600).toString());
+                    for (var memory : tables.get("memory")) if (memory.get("id").asString().equals(batch.memories().getFirst().toString()))
+                        ((ObjectNode) memory).put("review_status", "DELETE").put("delete_after", NOW.plusSeconds(86400).toString());
+                }
+                case "UNKNOWN_STATE_FIELD" -> state.put("unreviewed", true);
+                case "UNKNOWN_EVENT_FIELD" -> e.put("unreviewed", true);
+                case "UNKNOWN_LINK_FIELD" -> edge.put("unreviewed", true);
+                default -> throw new IllegalArgumentException("Unreviewed timeline fixture.");
+            }
+            rewriteMetadataDigest(bundle, metadata);
+            assertThatThrownBy(() -> restore(bundle)).as(invalid).isInstanceOf(RecoveryException.class); assertEmptyTarget();
+        }
+    }
+
+    @Test void independentMemoryErasureReplayDetachesMixedTimelineAndAlbumLinksButPreservesOtherLifeEvents() {
+        var erasedNote = note(source, "Synthetic timeline note later erased", null);
+        var batch = photos(source, sourceStorage, "UPLOADED", "UPLOADED");
+        var voice = audio(source, sourceStorage, "audio/webm", "UPLOADED");
+        UUID first = timelineEvent(source, "Synthetic event A", "Context remains", "2026-10", "MONTH", false);
+        UUID second = timelineEvent(source, "Synthetic event B", null, "2026", "YEAR", false);
+        UUID emptied = timelineEvent(source, "Synthetic emptied event", null, null, "UNKNOWN", false);
+        UUID untouched = timelineEvent(source, "Synthetic untouched event", null, "2024-02-29", "DAY", false);
+        for (UUID memory : List.of(erasedNote.memory(), batch.memories().getFirst(), voice.memory(), batch.memories().get(1))) timelineMember(source, first, memory);
+        timelineMember(source, second, voice.memory()); timelineMember(source, second, batch.memories().get(1));
+        timelineMember(source, emptied, erasedNote.memory()); timelineMember(source, untouched, batch.memories().get(1));
+        UUID album = album(source, "Synthetic parallel erasure album", false);
+        member(source, album, voice.memory(), 17); member(source, album, batch.memories().get(1), 900);
+        UUID firstRevision = timelineRevision(source, first), secondRevision = timelineRevision(source, second), emptyRevision = timelineRevision(source, emptied);
+        UUID untouchedRevision = timelineRevision(source, untouched), listRevision = timelineListRevision(source), albumRevision = albumRevision(source, album);
+        Path bundle = temporary.resolve("v5-before-independent-erasure"); assertThat(export(bundle).ready()).isTrue();
+        sourceStorage.record(new DeletionRecord(erasedNote.memory(), erasedNote.contribution(), null,
+                SubmissionKeyDigest.sha256(erasedNote.key()), NOW.minusSeconds(1), NOW));
+        sourceStorage.record(new DeletionRecord(batch.memories().getFirst(), batch.contribution(), batch.assets().getFirst(),
+                SubmissionKeyDigest.sha256(batch.key()), NOW.minusSeconds(1), NOW));
+        sourceStorage.record(new DeletionRecord(voice.memory(), voice.contribution(), voice.asset(),
+                SubmissionKeyDigest.sha256(voice.key()), NOW.minusSeconds(1), NOW));
+        var restored = restore(bundle); assertThat(restored.replayedDeletions()).isEqualTo(3); assertThat(restored.originals()).isEqualTo(1);
+        for (UUID event : List.of(first, second, untouched)) assertThat(timelineMembers(target, event)).containsExactly(batch.memories().get(1));
+        assertThat(timelineMembers(target, emptied)).isEmpty(); assertThat(count(target, "timeline_event")).isEqualTo(4);
+        assertThat(count(target, "timeline_event_memory")).isEqualTo(3); assertThat(count(target, "timeline_state")).isEqualTo(1);
+        assertThat(timelineRevision(target, first)).isNotEqualTo(firstRevision); assertThat(timelineRevision(target, second)).isNotEqualTo(secondRevision);
+        assertThat(timelineRevision(target, emptied)).isNotEqualTo(emptyRevision); assertThat(timelineRevision(target, untouched)).isEqualTo(untouchedRevision);
+        assertThat(timelineListRevision(target)).isNotEqualTo(listRevision); assertThat(albumRevision(target, album)).isNotEqualTo(albumRevision);
+        assertThat(members(target, album)).containsExactly(batch.memories().get(1));
+        assertThat(target.db().sql("SELECT position FROM album_membership WHERE album_id=:id").param("id", album).query(Long.class).single()).isEqualTo(900);
+        assertThat(string(target, "SELECT description FROM timeline_event WHERE id=:id", first)).isEqualTo("Context remains");
+        assertThat(string(target, "SELECT event_date FROM timeline_event WHERE id=:id", first)).isEqualTo("2026-10");
+        assertThat(string(target, "SELECT text_content FROM memory WHERE id=:id", erasedNote.memory())).isNull();
         assertThat(targetStorage.objects).hasSize(1); assertThat(targetStorage.objects.get("originals/" + batch.assets().get(1))).isEqualTo(batch.bytes().get(1));
     }
 
@@ -1015,10 +1220,10 @@ class OperatorRecoveryPostgresTest {
         var db = JdbcClient.create(data);
         var manager = new JdbcTransactionManager(data);
         var contributions = new ContributionRepository(db);
-        int version = migrationTarget == null ? 4 : Integer.parseInt(migrationTarget) - 7;
+        int version = migrationTarget == null ? 5 : Integer.parseInt(migrationTarget) - 7;
         return new Fixture(data, db, contributions, new PhotoRepository(db, contributions, fixed(NOW),
                 new PhotoAdmissionPolicy(false, 7_500_000_000L, 7_500_000_000L)),
-                new RetentionRepository(db, manager, version >= 3, version >= 4), new TransactionTemplate(manager), version);
+                new RetentionRepository(db, manager, version >= 3, version >= 4, version >= 5), new TransactionTemplate(manager), version);
     }
     private static Text note(Fixture fixture, String message, String guest) {
         String key = UUID.randomUUID().toString();
@@ -1168,6 +1373,32 @@ class OperatorRecoveryPostgresTest {
     }
     private static UUID albumRevision(Fixture fixture, UUID album) {
         return fixture.db().sql("SELECT revision FROM album WHERE id=:id").param("id", album).query(UUID.class).single();
+    }
+    private static UUID timelineEvent(Fixture fixture, String title, String description, String date, String precision, boolean deleted) {
+        fixture.db().sql("INSERT INTO timeline_state(id,revision,updated_at) VALUES(1,:revision,:at) ON CONFLICT(id) DO NOTHING")
+                .param("revision", UUID.randomUUID()).param("at", time(NOW.minusSeconds(1))).update();
+        UUID id = UUID.randomUUID();
+        fixture.db().sql("""
+                INSERT INTO timeline_event(id,title,description,event_date,date_precision,visibility,revision,created_at,updated_at,deleted_at)
+                VALUES(:id,:title,:description,:date,:precision,'COUPLE_ONLY',:revision,:created,:updated,:deleted)
+                """).param("id", id).param("title", title).param("description", description).param("date", date).param("precision", precision)
+                .param("revision", UUID.randomUUID()).param("created", time(NOW.minusSeconds(3600)))
+                .param("updated", time(NOW.minusSeconds(deleted ? 60 : 3600))).param("deleted", deleted ? time(NOW.minusSeconds(60)) : null).update();
+        return id;
+    }
+    private static void timelineMember(Fixture fixture, UUID event, UUID memory) {
+        fixture.db().sql("INSERT INTO timeline_event_memory(event_id,memory_id) VALUES(:event,:memory)")
+                .param("event", event).param("memory", memory).update();
+    }
+    private static List<UUID> timelineMembers(Fixture fixture, UUID event) {
+        return fixture.db().sql("SELECT memory_id FROM timeline_event_memory WHERE event_id=:id ORDER BY memory_id")
+                .param("id", event).query(UUID.class).list();
+    }
+    private static UUID timelineRevision(Fixture fixture, UUID event) {
+        return fixture.db().sql("SELECT revision FROM timeline_event WHERE id=:id").param("id", event).query(UUID.class).single();
+    }
+    private static UUID timelineListRevision(Fixture fixture) {
+        return fixture.db().sql("SELECT revision FROM timeline_state WHERE id=1").query(UUID.class).single();
     }
     private static void assertArchiveDefaults(Fixture fixture) {
         assertThat(fixture.db().sql("SELECT COUNT(*) FROM contribution WHERE source <> 'GUEST' OR author_account_id IS NOT NULL")
