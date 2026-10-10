@@ -139,6 +139,16 @@ A signed playback URL is a reusable bearer permission: anyone who obtains it can
 
 ### Checks
 
+For pre-wedding local rehearsal, use the [QA-02 browser/load evidence](docs/product/qa02-verification.md), [Kevin/Melanie tester guide](docs/product/qa02-tester-guide.md) and [release checklist](docs/product/wedding-release-checklist.md). The [QR-card layout](docs/product/wedding-qr-card-draft.html) remains a draft until the stable collection address and actual printed scans are verified. The bounded text load helper uses existing immutable local images and exclusively owned disposable databases:
+
+```sh
+node --test scripts/reception-helpers.test.mjs scripts/rollback-helpers.test.mjs
+node scripts/smoke-reception.mjs
+node scripts/smoke-reception.mjs --probe-failure-cleanup
+```
+
+Local synthetic checks prepare QA-02; physical phones, screen readers, real network/provider acceptance and hosted release gates remain open. Test photo storage may be disabled; verify the environment before expecting saved originals.
+
 The [AUD-01 feasibility probe](docs/product/aud01-verification.md) is available at `/staging/audio` only with the staging profile and its temporary admission gate. It keeps recordings local, checks actual bytes/duration, and exports technical results or an explicitly selected synthetic clip for manual cross-device replay. It performs no audio upload and is absent from the normal Vite guest build. [D-03/D-04](docs/decisions/contribution-and-audio-limits.md) retain their actual-device, final-format/server-validation and shared-network rate-policy gates. Ryan deferred further device/audio checks on October 9 while keeping physical Android acceptance pending.
 
 ```sh
