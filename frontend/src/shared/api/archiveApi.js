@@ -1,6 +1,7 @@
 import { ApiError, contractMismatch, createApiClient, parseRetryAfter } from "./apiClient.js";
 import { ALLOWED_FILE_TYPES, MAX_PHOTO_BYTES, MAX_PHOTOS } from "../../features/media/mediaConstraints.js";
 import { AUDIO_CONTENT_TYPES, MAX_AUDIO_BYTES, MAX_AUDIO_SECONDS } from "../../features/audio/audioConstraints.js";
+import { normalizeMemoryMetadata, metadataOf, sameMetadata } from "../../features/inbox/memoryMetadata.js";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const KEY = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -156,7 +157,11 @@ function decodeSession(value) {
 }
 
 function decodeMemory(value) {
+  let metadata;
+  try { metadata = normalizeMemoryMetadata(metadataOf(value ?? {})); } catch { throw contractMismatch(); }
   if (!isId(value?.memoryId) || !isId(value.contributionId) || !TYPES.includes(value.memoryType)
+    || !["GUEST", "COUPLE"].includes(value.source) || !sameMetadata(value, metadata)
+    || (value.source === "COUPLE" && value.guestName !== null)
     || !STATES.includes(value.reviewStatus) || value.visibility !== "COUPLE_ONLY"
     || !positiveInteger(value.revision) || !isTime(value.createdAt) || !isTime(value.updatedAt)
     || Date.parse(value.updatedAt) < Date.parse(value.createdAt)
@@ -226,6 +231,46 @@ export function createArchiveApi({
     },
   });
   return {
+    createCoupleTextContribution(payload, { idempotencyKey, csrfToken, signal } = {}) {
+      const body = normalizeTextContribution(payload);
+      if (body.guestName !== null) throw new TypeError("Private memories do not have a guest name.");
+      return client.request("/api/memories/contributions", {
+        method: "POST", body, headers: { ...csrf(csrfToken), "Idempotency-Key": key(idempotencyKey) }, statuses: [200, 201], signal,
+        decode(value) {
+          const receipt = decodeReceipt(value);
+          if (receipt.memories[0].memoryType !== "TEXT") throw contractMismatch();
+          return receipt;
+        },
+      });
+    },
+    createCoupleMediaContribution(payload, { idempotencyKey, csrfToken, signal } = {}) {
+      const body = normalizeMediaContribution(payload);
+      if (body.guestName !== null) throw new TypeError("Private memories do not have a guest name.");
+      return client.request("/api/memories/contributions", {
+        method: "POST", body, headers: { ...csrf(csrfToken), "Idempotency-Key": key(idempotencyKey) }, statuses: [200, 201], signal,
+        decode(value) {
+          const receipt = decodeReceipt(value);
+          if (receipt.memories.length !== body.items.length || receipt.memories.some(memory => memory.memoryType !== body.memoryType
+            || !body.items.some(item => item.clientItemId === memory.clientItemId))) throw contractMismatch();
+          return receipt;
+        },
+      });
+    },
+    getCoupleReceipt(contributionId, { idempotencyKey, signal } = {}) {
+      return receiptRequest("/api/memories/contributions/" + id(contributionId) + "/receipt", {
+        headers: { "Idempotency-Key": key(idempotencyKey) }, signal,
+      }, contributionId);
+    },
+    authorizeCoupleUpload(contributionId, memoryId, { idempotencyKey, csrfToken, signal } = {}) {
+      return client.request("/api/memories/contributions/" + id(contributionId) + "/memories/" + id(memoryId) + "/upload-grants", {
+        method: "POST", headers: { ...csrf(csrfToken), "Idempotency-Key": key(idempotencyKey) }, statuses: [201], decode: decodeGrant, signal,
+      });
+    },
+    finalizeCoupleUpload(contributionId, memoryId, grantId, { idempotencyKey, csrfToken, signal } = {}) {
+      return receiptRequest("/api/memories/contributions/" + id(contributionId) + "/memories/" + id(memoryId) + "/finalize", {
+        method: "POST", body: { grantId: id(grantId) }, headers: { ...csrf(csrfToken), "Idempotency-Key": key(idempotencyKey) }, signal,
+      }, contributionId);
+    },
     createTextContribution(payload, { idempotencyKey, signal } = {}) {
       return client.request("/api/contributions", {
         method: "POST", body: normalizeTextContribution(payload),
@@ -320,6 +365,19 @@ export function createArchiveApi({
     },
     getMemory(memoryId, { signal } = {}) {
       return memoryRequest("/api/memories/" + id(memoryId), { signal }, memoryId);
+    },
+    updateMemoryMetadata(memoryId, metadata, { revision, csrfToken, signal } = {}) {
+      if (!positiveInteger(revision)) throw new TypeError("Supply the latest memory revision.");
+      const body = normalizeMemoryMetadata(metadata);
+      return client.request("/api/memories/" + id(memoryId) + "/metadata", {
+        method: "PATCH", body, headers: { ...csrf(csrfToken), "If-Match": '"' + revision + '"' }, signal,
+        decode(value, response) {
+          const memory = decodeMemory(value);
+          if (memory.memoryId !== memoryId || !sameMetadata(memory, body) || ![revision, revision + 1].includes(memory.revision)
+            || response.headers.get("ETag") !== '"' + memory.revision + '"') throw contractMismatch();
+          return memory;
+        },
+      });
     },
     reviewMemory(memoryId, { reviewStatus, revision }, { csrfToken, signal } = {}) {
       if (!STATES.includes(reviewStatus) || !positiveInteger(revision)) {

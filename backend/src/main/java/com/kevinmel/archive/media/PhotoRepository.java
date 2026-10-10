@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.kevinmel.archive.contribution.ContributionReceipt;
 import com.kevinmel.archive.contribution.ContributionRepository;
+import com.kevinmel.archive.contribution.ContributionScope;
 import com.kevinmel.archive.web.ApiException;
 import com.kevinmel.archive.retention.SubmissionKeyDigest;
 
@@ -31,22 +32,33 @@ public class PhotoRepository {
 
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public Saved create(PhotoRequest request, String key) {
-        return create("PHOTO", request.guestName(), request.items(), request.fingerprint(), null, key, true);
+        return create("PHOTO", request.guestName(), request.items(), request.fingerprint(), null, ContributionScope.guest(key), true);
     }
 
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public Saved create(AudioRequest request, String key, boolean audioEnabled) {
         return create("AUDIO", request.guestName(), List.of(request.item()), request.fingerprint(),
-                request.expectedDurationMs(), key, audioEnabled);
+                request.expectedDurationMs(), ContributionScope.guest(key), audioEnabled);
+    }
+
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public Saved create(PhotoRequest request, ContributionScope scope) {
+        return create("PHOTO", request.guestName(), request.items(), request.fingerprint(), null, scope, true);
+    }
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public Saved create(AudioRequest request, ContributionScope scope, boolean enabled) {
+        return create("AUDIO", request.guestName(), List.of(request.item()), request.fingerprint(), request.expectedDurationMs(), scope, enabled);
     }
 
     private Saved create(String memoryType, String guestName, List<PhotoRequest.Item> items,
-            String fingerprint, Long expectedDurationMs, String key, boolean enabled) {
+            String fingerprint, Long expectedDurationMs, ContributionScope scope, boolean enabled) {
+        String key = scope.key();
         // Serialize all media reservations across processes, not only within one JVM.
         // Read committed sees the previous holder's committed intent after obtaining this lock.
         db.sql("SELECT pg_advisory_xact_lock(1263350093, 1)").query((rs, row) -> true).single();
-        var replay = db.sql("SELECT id, request_fingerprint FROM contribution WHERE idempotency_key = :key")
-                .param("key", key).query((rs, row) -> new Existing(rs.getObject("id", UUID.class), rs.getString("request_fingerprint")))
+        var replay = db.sql("SELECT id, request_fingerprint FROM contribution WHERE idempotency_key = :key AND source = :source AND author_account_id IS NOT DISTINCT FROM :author")
+                .param("key", key).param("source", scope.source()).param("author", scope.authorId())
+                .query((rs, row) -> new Existing(rs.getObject("id", UUID.class), rs.getString("request_fingerprint")))
                 .optional();
         if (replay.isPresent()) {
             if (!fingerprint.equals(replay.get().fingerprint())) throw ApiException.conflict();
@@ -62,11 +74,12 @@ public class PhotoRepository {
         long requested = items.stream().mapToLong(PhotoRequest.Item::byteSize).sum();
         admission.requireCapacity(reserved, requested);
         var inserted = db.sql("""
-                INSERT INTO contribution(event_key, guest_name, idempotency_key, request_fingerprint)
-                SELECT 'kevin-mel-wedding', :name, :key, :fingerprint
+                INSERT INTO contribution(event_key, guest_name, idempotency_key, request_fingerprint, source, author_account_id)
+                SELECT 'kevin-mel-wedding', :name, :key, :fingerprint, :source, :author
                 WHERE NOT EXISTS (SELECT 1 FROM erased_submission_key WHERE key_digest = :digest)
                 ON CONFLICT (idempotency_key) DO NOTHING RETURNING id
                 """).param("name", guestName).param("key", key).param("fingerprint", fingerprint)
+                .param("source", scope.source()).param("author", scope.authorId())
                 .param("digest", SubmissionKeyDigest.sha256(key)).query(UUID.class).optional();
         UUID id;
         if (inserted.isPresent()) {
@@ -74,10 +87,10 @@ public class PhotoRepository {
             int position = 0;
             for (PhotoRequest.Item item : items) {
                 UUID memoryId = db.sql("""
-                        INSERT INTO memory(contribution_id, memory_type, client_item_id, caption, item_position)
-                        VALUES (:id, :type, :client, :caption, :position) RETURNING id
+                        INSERT INTO memory(contribution_id, memory_type, client_item_id, caption, item_position, review_status)
+                        VALUES (:id, :type, :client, :caption, :position, :review) RETURNING id
                         """).param("id", id).param("type", memoryType).param("client", item.clientItemId()).param("caption", item.caption())
-                        .param("position", position++).query(UUID.class).single();
+                        .param("position", position++).param("review", scope.initialReview()).query(UUID.class).single();
                 UUID assetId = UUID.randomUUID();
                 db.sql("""
                         INSERT INTO media_asset(id, memory_id, object_key, original_filename, detected_format,
@@ -91,8 +104,9 @@ public class PhotoRepository {
                         .param("type", item.declaredContentType()).param("duration", expectedDurationMs).update();
             }
         } else {
-            var existing = db.sql("SELECT id, request_fingerprint FROM contribution WHERE idempotency_key = :key")
-                    .param("key", key).query((rs, row) -> new Existing(rs.getObject("id", UUID.class), rs.getString("request_fingerprint")))
+            var existing = db.sql("SELECT id, request_fingerprint FROM contribution WHERE idempotency_key = :key AND source = :source AND author_account_id IS NOT DISTINCT FROM :author")
+                    .param("key", key).param("source", scope.source()).param("author", scope.authorId())
+                    .query((rs, row) -> new Existing(rs.getObject("id", UUID.class), rs.getString("request_fingerprint")))
                     .optional().orElseThrow(ApiException::notFound);
             if (!fingerprint.equals(existing.fingerprint())) throw ApiException.conflict();
             id = existing.id();
@@ -129,15 +143,21 @@ public class PhotoRepository {
 
     // Called inside the service/finalizer transaction. Locking serializes grants/finalization for an item.
     public Asset lock(UUID contributionId, UUID memoryId, String key) {
+        return lock(contributionId, memoryId, ContributionScope.guest(key));
+    }
+    public Asset lock(UUID contributionId, UUID memoryId, ContributionScope scope) {
+        String key = scope.key();
         // All lifecycle and upload work takes the memory lock first, then the asset lock.
         var memory = db.sql("""
                 SELECT m.review_status, m.delete_after
                 FROM contribution c JOIN memory m ON m.contribution_id = c.id
                 WHERE c.id = :contribution AND m.id = :memory AND c.idempotency_key = :key
+                    AND c.source = :source AND c.author_account_id IS NOT DISTINCT FROM :author
                     AND c.event_key = 'kevin-mel-wedding' AND m.memory_type IN ('PHOTO', 'AUDIO')
                     AND m.purge_started_at IS NULL AND m.purged_at IS NULL
                 FOR UPDATE OF m
                 """).param("contribution", contributionId).param("memory", memoryId).param("key", key)
+                .param("source", scope.source()).param("author", scope.authorId())
                 .query((rs, row) -> new GuestMemory(rs.getString("review_status"),
                         rs.getObject("delete_after", OffsetDateTime.class)))
                 .optional().orElseThrow(ApiException::notFound);

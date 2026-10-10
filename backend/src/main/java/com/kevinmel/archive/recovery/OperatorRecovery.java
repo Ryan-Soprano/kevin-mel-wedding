@@ -162,7 +162,7 @@ public final class OperatorRecovery {
                 }
                 RecoverySchema.insert(db, prepared.tables(), schema.bundleVersion());
                 verifyImportedCounts(prepared.tables());
-                var retention = new RetentionRepository(db, manager);
+                var retention = new RetentionRepository(db, manager, schema.bundleVersion() >= 3);
                 // All identities and staging paths must pass before the first external mutation.
                 for (var plan : ledger) { retention.validate(plan); retention.grants(plan); }
                 int published = 0;
@@ -425,7 +425,7 @@ public final class OperatorRecovery {
         Original available(boolean value) { return new Original(assetId, memoryId, byteSize, sha256, contentType, value, audioDurationMs, audioCodec, audioContainer, expectedDurationMs); }
         Map<String, Object> json(int version) {
             var result = new LinkedHashMap<String, Object>(Map.of("assetId", assetId.toString(), "memoryId", memoryId.toString(), "byteSize", byteSize, "sha256", sha256, "contentType", contentType, "available", available));
-            if (version == 2) { result.put("audioDurationMs", audioDurationMs); result.put("audioCodec", audioCodec); result.put("audioContainer", audioContainer); }
+            if (version >= 2) { result.put("audioDurationMs", audioDurationMs); result.put("audioCodec", audioCodec); result.put("audioContainer", audioContainer); }
             return result;
         }
         @Override public String toString() { return "RecoveryOriginal[redacted]"; }

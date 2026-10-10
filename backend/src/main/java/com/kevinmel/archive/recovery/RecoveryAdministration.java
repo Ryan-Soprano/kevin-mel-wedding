@@ -30,7 +30,7 @@ public final class RecoveryAdministration {
     static int run(String[] args) {
         if (args.length == 1 && "--help".equals(args[0])) {
             System.out.println("""
-                    Offline note/photo/audio archive-data export and restore (reviewed V8 or V9 migrations required):
+                    Offline note/photo/audio archive-data export and restore (reviewed V8, V9 or V10 migrations required):
                       --expect-environment <local|staging|production> export <new-private-directory>
                       --expect-environment <local|staging|production> restore <private-backup-directory>
                     An interactive console and exact confirmation are required. Stop source/target traffic,

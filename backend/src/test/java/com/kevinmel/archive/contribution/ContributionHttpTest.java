@@ -149,6 +149,11 @@ class ContributionHttpTest {
         try (var connection = java.sql.DriverManager.getConnection(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
              var executor = Executors.newSingleThreadExecutor()) {
             connection.setAutoCommit(false);
+            int holderPid;
+            try (var query = connection.createStatement(); var result = query.executeQuery("SELECT pg_backend_pid()")) {
+                assertThat(result.next()).isTrue();
+                holderPid = result.getInt(1);
+            }
             try (var insert = connection.prepareStatement("INSERT INTO contribution(event_key, idempotency_key) VALUES ('kevin-mel-wedding', ?)")) {
                 insert.setString(1, key);
                 insert.executeUpdate();
@@ -161,13 +166,23 @@ class ContributionHttpTest {
             assertThat(started.await(5, TimeUnit.SECONDS)).isTrue();
             long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
             boolean waiting = false;
-            while (System.nanoTime() < deadline && !waiting) {
-                waiting = jdbc.sql("SELECT count(*) FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND query LIKE '%INSERT INTO contribution (event_key, guest_name, idempotency_key, request_fingerprint)%'")
-                        .query(Long.class).single() > 0;
-                if (!waiting) Thread.sleep(25);
+            try {
+                while (System.nanoTime() < deadline && !waiting) {
+                    // Observe this fixture's actual blocker, independent of the INSERT column list.
+                    waiting = jdbc.sql("""
+                            SELECT count(*) FROM pg_stat_activity
+                            WHERE datname = current_database() AND wait_event_type = 'Lock'
+                                AND :holder = ANY(pg_blocking_pids(pid))
+                                AND query LIKE '%INSERT INTO contribution%'
+                            """).param("holder", holderPid).query(Long.class).single() > 0;
+                    if (!waiting) Thread.sleep(25);
+                }
+                assertThat(waiting).as("Contender waits for the uncommitted key held by this fixture").isTrue();
+                assertThat(contender.isDone()).as("The blocked HTTP request has not completed").isFalse();
+            } finally {
+                // Release our lock even when the observation fails, before executor close waits for the request.
+                connection.rollback();
             }
-            assertThat(waiting).as("Contender waits for the uncommitted key").isTrue();
-            connection.rollback();
             assertThat(contender.get(20, TimeUnit.SECONDS).statusCode()).isEqualTo(201);
             assertThat(count(key)).isEqualTo(1);
         }

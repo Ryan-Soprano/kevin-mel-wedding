@@ -46,31 +46,41 @@ public class ContributionRepository {
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public SavedTextContribution saveTextContribution(
             String eventKey, String guestName, String message, String idempotencyKey) {
+        return saveTextContribution(eventKey, guestName, message, ContributionScope.guest(idempotencyKey));
+    }
+
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public SavedTextContribution saveTextContribution(String eventKey, String guestName, String message, ContributionScope scope) {
+        String idempotencyKey = scope.key();
         var inserted = jdbcClient.sql("""
-                INSERT INTO contribution (event_key, guest_name, idempotency_key, request_fingerprint)
+                INSERT INTO contribution (event_key, guest_name, idempotency_key, request_fingerprint, source, author_account_id)
                 SELECT :eventKey, :guestName, :idempotencyKey,
                 """ + FINGERPRINT + """
+                , :source, :author
                 WHERE NOT EXISTS (SELECT 1 FROM erased_submission_key WHERE key_digest = :digest)
                 ON CONFLICT (idempotency_key) DO NOTHING RETURNING id
                 """)
                 .param("eventKey", eventKey).param("guestName", guestName)
                 .param("message", message).param("idempotencyKey", idempotencyKey)
+                .param("source", scope.source()).param("author", scope.authorId())
                 .param("digest", SubmissionKeyDigest.sha256(idempotencyKey))
                 .query(UUID.class).optional();
         UUID contributionId;
         if (inserted.isPresent()) {
             contributionId = inserted.get();
             jdbcClient.sql("""
-                    INSERT INTO memory (contribution_id, memory_type, text_content)
-                    VALUES (:contributionId, 'TEXT', :message)
+                    INSERT INTO memory (contribution_id, memory_type, text_content, review_status)
+                    VALUES (:contributionId, 'TEXT', :message, :review)
                     """)
-                    .param("contributionId", contributionId).param("message", message).update();
+                    .param("contributionId", contributionId).param("message", message).param("review", scope.initialReview()).update();
         } else {
             var existing = jdbcClient.sql("SELECT id, request_fingerprint = " + FINGERPRINT + """
                      AS equivalent FROM contribution WHERE idempotency_key = :idempotencyKey
+                         AND source = :source AND author_account_id IS NOT DISTINCT FROM :author
                     """)
                     .param("eventKey", eventKey).param("guestName", guestName)
                     .param("message", message).param("idempotencyKey", idempotencyKey)
+                    .param("source", scope.source()).param("author", scope.authorId())
                     .query((rs, row) -> new Existing(rs.getObject("id", UUID.class), rs.getBoolean("equivalent")))
                     .optional().orElseThrow(ApiException::notFound);
             // Unbackfillable legacy keys stay reserved, never silently recycled.
@@ -78,6 +88,21 @@ public class ContributionRepository {
             contributionId = existing.id();
         }
         return load(contributionId, idempotencyKey, inserted.isPresent());
+    }
+
+    @Transactional(readOnly = true)
+    public ContributionReceipt getGuestReceipt(UUID id, String key) {
+        requireScope(id, ContributionScope.guest(key));
+        return getReceipt(id, key);
+    }
+
+    public void requireScope(UUID id, ContributionScope scope) {
+        boolean present = jdbcClient.sql("""
+                SELECT EXISTS (SELECT 1 FROM contribution WHERE id = :id AND idempotency_key = :key
+                    AND source = :source AND author_account_id IS NOT DISTINCT FROM :author)
+                """).param("id", id).param("key", scope.key()).param("source", scope.source()).param("author", scope.authorId())
+                .query(Boolean.class).single();
+        if (!present) throw ApiException.notFound();
     }
 
     @Transactional(readOnly = true)

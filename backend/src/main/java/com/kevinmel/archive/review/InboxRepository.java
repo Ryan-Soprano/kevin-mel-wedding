@@ -21,7 +21,7 @@ public class InboxRepository {
     private static final String SELECT = """
             SELECT m.id AS memory_id, c.id AS contribution_id, c.guest_name, m.memory_type,
                 m.text_content, m.caption, m.review_status, m.visibility, m.revision,
-                m.created_at, m.updated_at, m.delete_after,
+                m.created_at, m.updated_at, m.delete_after, c.source, m.title, m.description, m.memory_date, m.date_precision,
                 a.original_filename, a.detected_format, a.byte_size, a.checksum_sha256, a.upload_state, a.audio_duration_ms
             FROM memory m
             JOIN contribution c ON c.id = m.contribution_id
@@ -89,7 +89,24 @@ public class InboxRepository {
         if (changed != 1) throw new ApiException(412, "REVIEW_CONFLICT", "This memory changed. Reload it before reviewing it again.");
         return new MemoryDetail(current.memoryId(), current.contributionId(), current.guestName(), current.memoryType(),
                 current.textContent(), current.caption(), status, current.visibility(), current.revision() + 1,
-                current.createdAt(), actedAt, deleteAfter, current.media());
+                current.createdAt(), actedAt, deleteAfter, current.media(), current.source(), current.title(),
+                current.description(), current.memoryDate(), current.datePrecision());
+    }
+
+    public MemoryDetail changeMetadata(MemoryDetail current, MemoryMetadataRequest request, Instant actedAt) {
+        int changed = db.sql("""
+                UPDATE memory SET title = :title, description = :description, memory_date = :date,
+                    date_precision = :precision, revision = revision + 1, updated_at = :acted
+                WHERE id = :id AND revision = :revision AND review_status <> 'DELETE'
+                    AND purge_started_at IS NULL AND purged_at IS NULL
+                """).param("title", request.title()).param("description", request.description()).param("date", request.memoryDate())
+                .param("precision", request.datePrecision()).param("acted", timestamp(actedAt))
+                .param("id", current.memoryId()).param("revision", current.revision()).update();
+        if (changed != 1) throw MemoryMetadataService.conflict();
+        return new MemoryDetail(current.memoryId(), current.contributionId(), current.guestName(), current.memoryType(),
+                current.textContent(), current.caption(), current.reviewStatus(), current.visibility(), current.revision() + 1,
+                current.createdAt(), actedAt, current.deleteAfter(), current.media(), current.source(), request.title(),
+                request.description(), request.memoryDate(), request.datePrecision());
     }
 
     public void auditReview(MemoryDetail before, MemoryDetail after, UUID actorId, Instant actedAt) {
@@ -119,6 +136,7 @@ public class InboxRepository {
                 rs.getString("review_status"), rs.getString("visibility"), rs.getInt("revision"),
                 rs.getObject("created_at", OffsetDateTime.class).toInstant(),
                 rs.getObject("updated_at", OffsetDateTime.class).toInstant(),
-                deleteAfter == null ? null : deleteAfter.toInstant(), media);
+                deleteAfter == null ? null : deleteAfter.toInstant(), media, rs.getString("source"), rs.getString("title"),
+                rs.getString("description"), rs.getString("memory_date"), rs.getString("date_precision"));
     }
 }

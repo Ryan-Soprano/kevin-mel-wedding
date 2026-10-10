@@ -21,7 +21,7 @@ public class ContributionService {
     }
 
     public ContributionReceipt receipt(UUID id, String key) {
-        return repository.getReceipt(id, key);
+        return repository.getGuestReceipt(id, key);
     }
 
     public static String validateHeaders(String version, String key) {

@@ -4,6 +4,9 @@ import { attachInboxPrivacyLifecycle } from "../api/inboxPrivacyLifecycle.js";
 import { createInboxController } from "../api/inboxController.js";
 import { memoryTime } from "../memoryDisplay.js";
 import { stopAudioPlayback } from "../audioPlayback.js";
+import AddMemory from "./AddMemory.jsx";
+import MemoryMetadataEditor from "./MemoryMetadataEditor.jsx";
+import { audioCollectionEnabled } from "../../audio/audioConstraints.js";
 import "../inbox.css";
 
 const INITIAL = {
@@ -11,6 +14,7 @@ const INITIAL = {
   reviewStatus: "PENDING", items: [], nextCursor: null, detail: null,
   photo: { phase: "idle", url: null, error: null },
   review: { phase: "idle", targetStatus: null, error: null, canRetry: false },
+  metadata: { phase: "idle", error: null, canRetry: false },
   notice: null, pageResetVersion: 0, logoutUnconfirmed: false,
 };
 const LABELS = { PENDING: "Pending", KEEP: "Kept", ARCHIVED: "Archived", DELETE: "Recently deleted" };
@@ -18,9 +22,17 @@ const REVIEW_LABELS = { PENDING: "Restore to inbox", KEEP: "Keep privately", ARC
 const MEMORY_LABELS = { TEXT: "Written note", PHOTO: "Photo", AUDIO: "Voice memory" };
 const MEMORY_SHORT_LABELS = { TEXT: "note", PHOTO: "photo", AUDIO: "voice memory" };
 
-export default function Inbox({ createController = createInboxController } = {}) {
+export default function Inbox({ createController = createInboxController, audioEnabled = audioCollectionEnabled(import.meta.env.VITE_AUDIO_ENABLED) } = {}) {
   const factory = useRef(createController);
   const controller = useRef(null);
+  const intentionalDialog = useRef(false);
+  const setDialogState = useCallback(value => { intentionalDialog.current = value; }, []);
+  const creationApi = useCallback(() => controller.current?.getCreationApi(), []);
+  const creationDone = useCallback(receipt => controller.current?.creationComplete(receipt), []);
+  const backToInbox = useCallback(() => controller.current?.backToInbox(), []);
+  const saveMetadata = useCallback(metadata => controller.current?.saveMetadata(metadata), []);
+  const reloadMetadata = useCallback(refreshSession => controller.current?.reloadMetadata({ refreshSession }), []);
+  const retryMetadata = useCallback(() => controller.current?.retryMetadata(), []);
   const audioPlayback = useRef(null);
   const clearPlayback = useCallback(() => stopAudioPlayback(audioPlayback.current), []);
   const heading = useRef(null);
@@ -50,7 +62,9 @@ export default function Inbox({ createController = createInboxController } = {})
       if (next.phase !== "detail" || !next.detail) setDeleteConfirmation(null);
       setSnapshot(next);
     });
-    const detachLifecycle = attachInboxPrivacyLifecycle({ controller: current, flush: flushSync, onHide: () => {
+    const detachLifecycle = attachInboxPrivacyLifecycle({ controller: current, flush: flushSync,
+      isIntentionalDialog: () => intentionalDialog.current, onDialogEnd: () => { intentionalDialog.current = false; }, onHide: () => {
+      intentionalDialog.current = false;
       clearPlayback();
       setUsername("");
       setPassword("");
@@ -72,7 +86,7 @@ export default function Inbox({ createController = createInboxController } = {})
     heading.current?.focus();
   }, [snapshot.phase, snapshot.detail?.memoryId]);
 
-  const reviewLocked = snapshot.review.phase !== "idle";
+  const reviewLocked = snapshot.review.phase !== "idle" || snapshot.metadata.phase !== "idle";
   const detail = snapshot.detail;
   const confirmingDelete = !reviewLocked && deleteConfirmation !== null
     && detail?.memoryId === deleteConfirmation.memoryId && detail?.revision === deleteConfirmation.revision;
@@ -144,9 +158,9 @@ export default function Inbox({ createController = createInboxController } = {})
   }
 
   const authenticated = snapshot.session?.authenticated
-    && ["inbox", "detail"].includes(snapshot.phase);
+    && ["inbox", "detail", "create"].includes(snapshot.phase);
   const title = snapshot.phase === "detail" ? "Your memory"
-    : snapshot.phase === "login" ? "Sign in to your archive"
+    : snapshot.phase === "create" ? "Add a memory" : snapshot.phase === "login" ? "Sign in to your archive"
       : snapshot.phase === "unavailable" ? "Archive access unavailable" : "Memory inbox";
 
   return (
@@ -203,6 +217,7 @@ export default function Inbox({ createController = createInboxController } = {})
 
       {snapshot.phase === "inbox" && authenticated && (
         <section aria-label="Private memories" aria-busy={snapshot.busy}>
+          <button type="button" disabled={snapshot.busy} onClick={() => controller.current?.beginCreation()}>Add a memory</button>
           <nav className="inbox-filters" aria-label="Review status">
             {Object.entries(LABELS).map(([status, label]) => (
               <button key={status} type="button" className="button-secondary" aria-pressed={snapshot.reviewStatus === status}
@@ -218,10 +233,11 @@ export default function Inbox({ createController = createInboxController } = {})
                     <ul className="inbox-list">
                       {snapshot.items.map(memory => (
                         <li key={memory.memoryId} className="inbox-card">
-                          <h2>{memory.guestName ?? "Name not provided"}</h2>
+                          <h2>{memory.title ?? (memory.source === "COUPLE" ? "Couple memory" : memory.guestName ?? "Name not provided")}</h2>
+                          <p>{memory.source === "COUPLE" ? "Couple memory" : `Guest contribution · From ${memory.guestName ?? "Name not provided"}`}{memory.memoryDate ? ` · Memory date: ${memory.memoryDate}` : ""}</p>
                           <p>{MEMORY_LABELS[memory.memoryType]} · <time dateTime={memory.createdAt}>{memoryTime(memory.createdAt)}</time></p>
                           <p className="inbox-excerpt">{memory.memoryType === "TEXT" ? memory.textContent.slice(0, 180) : memory.caption ?? memory.media.originalFilename}</p>
-                          <button type="button" onClick={() => controller.current?.openMemory(memory.memoryId)} aria-label={`Open ${MEMORY_SHORT_LABELS[memory.memoryType]} from ${memory.guestName ?? "Name not provided"}`}>Open memory</button>
+                          <button type="button" onClick={() => controller.current?.openMemory(memory.memoryId)} aria-label={`Open ${memory.title ?? (memory.source === "COUPLE" ? `couple ${MEMORY_SHORT_LABELS[memory.memoryType]}` : `${MEMORY_SHORT_LABELS[memory.memoryType]} from ${memory.guestName ?? "Name not provided"}`)}`}>Open memory</button>
                         </li>
                       ))}
                     </ul>
@@ -235,6 +251,8 @@ export default function Inbox({ createController = createInboxController } = {})
         </section>
       )}
 
+      {snapshot.phase === "create" && authenticated && <AddMemory getApi={creationApi} onDone={creationDone} onBack={backToInbox} onDialogStateChange={setDialogState} audioEnabled={audioEnabled} />}
+
       {snapshot.phase === "detail" && authenticated && (
         <section className="inbox-detail" aria-label="Memory detail" aria-busy={snapshot.busy}>
           <button type="button" className="button-secondary" disabled={reviewLocked} onClick={() => controller.current?.backToInbox()}>Back to inbox</button>
@@ -244,7 +262,10 @@ export default function Inbox({ createController = createInboxController } = {})
           )}
           {detail && (
             <>
-              <h2>From {detail.guestName ?? "Name not provided"}</h2>
+              <h2>{detail.title ?? (detail.source === "COUPLE" ? "Couple memory" : `From ${detail.guestName ?? "Name not provided"}`)}</h2>
+              <p>{detail.source === "COUPLE" ? "Couple memory" : `Guest contribution · From ${detail.guestName ?? "Name not provided"}`}</p>
+              {detail.description && <p className="inbox-note">{detail.description}</p>}
+              {detail.memoryDate && <p>Memory date: {detail.memoryDate} ({detail.datePrecision.toLowerCase()} precision)</p>}
               <p><time dateTime={detail.createdAt}>{memoryTime(detail.createdAt)}</time> · Chicago</p>
               <p>Status: {LABELS[detail.reviewStatus]} · Couple only</p>
               {detail.reviewStatus === "DELETE" && (
@@ -267,8 +288,8 @@ export default function Inbox({ createController = createInboxController } = {})
                     {detail.reviewStatus !== "DELETE" && !reviewLocked && snapshot.photo.phase === "ready" && snapshot.photo.url && (
                       <>
                         {detail.memoryType === "AUDIO"
-                          ? <audio ref={audioPlayback} className="inbox-audio" controls preload="metadata" src={snapshot.photo.url} aria-label={`Voice memory from ${detail.guestName ?? "an unnamed guest"}`} />
-                          : <img className="inbox-original" src={snapshot.photo.url} alt={detail.caption ?? `Photo shared by ${detail.guestName ?? "an unnamed guest"}`} />}
+                          ? <audio ref={audioPlayback} className="inbox-audio" controls preload="metadata" src={snapshot.photo.url} aria-label={detail.title ?? (detail.source === "COUPLE" ? "Couple voice memory" : `Voice memory from ${detail.guestName ?? "an unnamed guest"}`)} />
+                          : <img className="inbox-original" src={snapshot.photo.url} alt={detail.caption ?? detail.title ?? (detail.source === "COUPLE" ? "Couple photo" : `Photo shared by ${detail.guestName ?? "an unnamed guest"}`)} />}
                         <a className="inbox-download" href={snapshot.photo.url} download={detail.media.originalFilename}>Download original {detail.memoryType === "AUDIO" ? "audio" : "photo"}</a>
                         {detail.memoryType === "AUDIO" && <p className="guest-help">If this browser cannot play the clip, download the original audio to listen in a supported player.</p>}
                       </>
@@ -276,6 +297,8 @@ export default function Inbox({ createController = createInboxController } = {})
                   </>
                 )}
               {snapshot.notice && <p ref={reviewFeedback} tabIndex={-1} className="inbox-review-notice" role="status">{snapshot.notice}</p>}
+              {detail.reviewStatus !== "DELETE" && <MemoryMetadataEditor key={`${detail.memoryId}:${detail.revision}`} memory={detail}
+                state={snapshot.metadata} busy={snapshot.busy} locked={reviewLocked} onSave={saveMetadata} onReload={reloadMetadata} onRetry={retryMetadata} />}
               <section className="inbox-review" aria-label="Private review actions">
                 <p className="guest-help">These actions affect this individual memory. Keeping or archiving it does not publish it or change other memories.</p>
                 {["saving", "loading", "refreshing"].includes(snapshot.review.phase) && (

@@ -20,7 +20,7 @@ import java.util.zip.CRC32;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import tools.jackson.databind.JsonNode;
 
-/** Strict V8/v1 and V9/v2 archive schemas; no account or application configuration material. */
+/** Strict V8/v1, V9/v2 and V10/v3 archive schemas; no account or application configuration material. */
 final class RecoverySchema {
     static final int MAX_ROWS = 100_000;
     private static final String ASSET_COLUMNS = "id:u memory_id:u object_key:s original_filename:s detected_format:s byte_size:l checksum_sha256:s upload_state:s created_at:t updated_at:t declared_content_type:s? expected_byte_size:l? expected_checksum_sha256:s?";
@@ -33,12 +33,18 @@ final class RecoverySchema {
         table("review_audit", "memory_id:u actor_account_id:u from_status:s to_status:s before_revision:i after_revision:i acted_at:t"),
         table("deletion_ledger", "memory_id:u contribution_id:u asset_id:u? submission_key_digest:s delete_after:t recorded_at:t purged_at:t?"),
         table("erased_submission_key", "key_digest:s erased_at:t"));
-    static final List<Table> TABLES = LEGACY_TABLES.stream().map(table -> table.name().equals("media_asset")
+    private static final List<Table> AUDIO_TABLES = LEGACY_TABLES.stream().map(table -> table.name().equals("media_asset")
         ? table("media_asset", ASSET_COLUMNS + " expected_duration_ms:l? audio_duration_ms:l? audio_codec:s? audio_container:s?") : table).toList();
+    static final List<Table> TABLES = AUDIO_TABLES.stream().map(table -> switch (table.name()) {
+        case "contribution" -> table("contribution", table.definition() + " source:s author_account_id:u?");
+        case "memory" -> table("memory", table.definition() + " title:s? description:s? memory_date:s? date_precision:s");
+        default -> table;
+    }).toList();
     private static final List<String> MIGRATIONS = List.of(
         "V1__create_memory_archive_schema.sql", "V2__add_contribution_request_fingerprint.sql", "V3__add_photo_upload_lifecycle.sql",
         "V4__create_archive_accounts.sql", "V5__create_login_throttle.sql", "V6__add_inbox_revision.sql",
-        "V7__add_private_review_retention.sql", "V8__anonymous_submission_protection.sql", "V9__add_verified_audio_lifecycle.sql");
+        "V7__add_private_review_retention.sql", "V8__anonymous_submission_protection.sql", "V9__add_verified_audio_lifecycle.sql",
+        "V10__add_couple_authored_memories.sql");
 
     static Reviewed requireReviewed(JdbcClient db) {
         try {
@@ -54,9 +60,9 @@ final class RecoverySchema {
                     schemaMarker = true;
                 } else history.add(migration);
             }
-            if (history.size() != 8 && history.size() != 9) throw invalid();
+            if (history.size() < 8 || history.size() > MIGRATIONS.size()) throw invalid();
             var digest = MessageDigest.getInstance("SHA-256");
-            var legacyDigest = MessageDigest.getInstance("SHA-256");
+            var fingerprints = new LinkedHashMap<Integer, String>();
             for (int i = 0; i < history.size(); i++) {
                 Migration migration = history.get(i);
                 if (!Integer.toString(i + 1).equals(migration.version()) || !migration.success()
@@ -78,14 +84,11 @@ final class RecoverySchema {
                 if ((int) crc.getValue() != migration.checksum()) throw invalid();
                 digest.update(migration.script().getBytes(StandardCharsets.UTF_8)); digest.update((byte) 0);
                 digest.update(canonical.toString().getBytes(StandardCharsets.UTF_8)); digest.update((byte) 0);
-                if (i < 8) {
-                    legacyDigest.update(migration.script().getBytes(StandardCharsets.UTF_8)); legacyDigest.update((byte) 0);
-                    legacyDigest.update(canonical.toString().getBytes(StandardCharsets.UTF_8)); legacyDigest.update((byte) 0);
-                }
+                if (i >= 7) fingerprints.put(i - 6, HexFormat.of().formatHex(((MessageDigest) digest.clone()).digest()));
             }
-            int bundleVersion = history.size() == 8 ? 1 : 2;
+            int bundleVersion = history.size() - 7;
             requireColumns(db, tables(bundleVersion));
-            return new Reviewed(bundleVersion, HexFormat.of().formatHex(digest.digest()), HexFormat.of().formatHex(legacyDigest.digest()));
+            return new Reviewed(bundleVersion, fingerprints.get(bundleVersion), Map.copyOf(fingerprints));
         } catch (RecoveryException failure) { throw failure; }
         catch (Exception failure) { throw invalid(); }
     }
@@ -110,7 +113,7 @@ final class RecoverySchema {
     }
 
     static Map<String, List<Map<String, Object>>> read(JdbcClient db) {
-        return read(db, 2);
+        return read(db, 3);
     }
 
     static Map<String, List<Map<String, Object>>> read(JdbcClient db, int version) {
@@ -145,6 +148,13 @@ final class RecoverySchema {
             for (JsonNode row : rows) {
                 var value = table.decode(row);
                 if (version == 1 && table.name().equals("media_asset")) AUDIO_COLUMNS.forEach(name -> value.put(name, null));
+                if (version < 3 && table.name().equals("contribution")) {
+                    value.put("source", "GUEST"); value.put("author_account_id", null);
+                }
+                if (version < 3 && table.name().equals("memory")) {
+                    value.put("title", null); value.put("description", null); value.put("memory_date", null);
+                    value.put("date_precision", "UNKNOWN");
+                }
                 decoded.add(value);
             }
             result.put(table.name(), List.copyOf(decoded));
@@ -175,13 +185,13 @@ final class RecoverySchema {
     static RecoveryException invalid() { return new RecoveryException("INVALID_METADATA"); }
     private static List<Table> tables(int version) {
         if (version == 1) return LEGACY_TABLES;
-        if (version == 2) return TABLES;
+        if (version == 2) return AUDIO_TABLES;
+        if (version == 3) return TABLES;
         throw invalid();
     }
-    record Reviewed(int bundleVersion, String fingerprint, String legacyFingerprint) {
+    record Reviewed(int bundleVersion, String fingerprint, Map<Integer, String> fingerprints) {
         boolean accepts(int version, String suppliedFingerprint) {
-            return version == bundleVersion && fingerprint.equals(suppliedFingerprint)
-                || bundleVersion == 2 && version == 1 && legacyFingerprint.equals(suppliedFingerprint);
+            return version >= 1 && version <= bundleVersion && suppliedFingerprint.equals(fingerprints.get(version));
         }
     }
     private static Table table(String name, String definition) {
@@ -193,6 +203,7 @@ final class RecoverySchema {
         return new Table(name, List.copyOf(columns));
     }
     record Table(String name, List<Column> columns) {
+        String definition() { return String.join(" ", columns.stream().map(c -> c.name() + ":" + c.type() + (c.nullable() ? "?" : "")).toList()); }
         String columnNames() { return String.join(",", columns.stream().map(Column::name).toList()); }
         Map<String, Object> read(ResultSet rs) throws SQLException {
             var row = new LinkedHashMap<String, Object>();
