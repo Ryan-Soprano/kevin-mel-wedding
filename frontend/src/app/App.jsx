@@ -3,6 +3,7 @@ import ContributionForm from "../features/contribution/components/ContributionFo
 import PhotoBatchForm from "../features/media/components/PhotoBatchForm.jsx";
 import { audioCollectionEnabled } from "../features/audio/audioConstraints.js";
 import { createGuestFlow, guestFlowReducer, hasUnfinishedWork, navigationLocked } from "./guestFlow.js";
+import GuestGallery from "../features/guestGallery/GuestGallery.jsx";
 
 const AudioForm = lazy(() => import("../features/audio/components/AudioForm.jsx"));
 
@@ -56,10 +57,12 @@ export default function App({ audioEnabled = audioCollectionEnabled(import.meta.
         <section className="guest-welcome" aria-label="Share a wedding memory">
           <p>{flow.audioEnabled ? "Share a note, your favourite photos, or a voice memory from the day." : "Share a note or your favourite photos from the day."}</p>
           <p>Your contribution goes to Kevin and Melanie. It is not posted publicly.</p>
-          <button type="button" onClick={() => dispatch({ type: "CHOOSE" })}>Share a memory</button>
+          <button id="share-wedding-memory" type="button" onClick={() => dispatch({ type: "CHOOSE" })}>Share a memory</button>
           <p className="guest-help">No account needed. Your name is optional.</p>
+          <a className="guest-gallery-link" href="#couple-gallery">Browse Kevin and Melanie’s photos</a>
         </section>
       )}
+      {flow.screen === "welcome" && <GuestGallery />}
 
       {flow.screen === "choose" && (
         <section className="guest-choices" aria-label="Choose your memory type">

@@ -32,15 +32,15 @@ Browser checks at 320, 390, 768, and 1280 CSS-pixel widths found no horizontal s
 
 After adding Ryan's selected photo, repeat browser checks at those widths confirmed the image loaded with its complete original proportions and no horizontal scrolling. The JPEG route returned HTTP 200 as `image/jpeg`; a request for the raw source folder returned 404. The photo is exposed to assistive technology through its alternative text, rather than hidden with decorative elements.
 
-## Proposed QR-page photo gallery
+## Approved QR-page photo gallery
 
 Ryan supplied Kevin's photo ZIP on October 4 and requested a selection for guests to browse. The originals were reviewed without alteration, including the 52-page scanned-photo PDF. A 14-image shortlist and review contact sheet were prepared outside the deployable folder. Ryan subsequently chose only #1 for the temporary coming-soon page. That single image is the only photo included in the deployable folder; the raw source collection is excluded.
 
-For the separate wedding-day QR landing page, Ryan believes Kevin wants all image files in the supplied folder, rather than the 14-photo shortlist, and will confirm with him. Treat the complete-gallery scope as provisional. Confirm whether it includes the scanned PDF's photos as well as the 52 standalone images, remove accidental duplicates only with agreement, and do not build or publish the full gallery on the basis of this tentative preference.
+On October 10, 2026, Ryan explicitly selected **all 52 standalone photos** for the separate wedding-day QR landing page. The scanned PDF and the 30 `image_page*.jpg` scan-review extracts are excluded. Keep all 52 selected files, including similar or repeated scenes; no deduplication was requested. This supersedes the earlier tentative preference and 14-photo shortlist for the QR gallery. The temporary coming-soon page keeps its single approved image.
 
-The proposed gallery should preserve full image framing, use a simple vertical scroll on phones, and load below-the-fold images lazily. Before inclusion, confirm the final selection and any names/captions with Ryan, create appropriately sized web copies without location metadata, and keep the supplied originals separately. Photos deliberately selected for a public guest gallery are distinct from future private guest contributions; the private inbox must never supply public gallery content automatically.
+The full app's guest welcome includes a simple vertical gallery, beginning with the Grand Central photo, with full framing, intrinsic dimensions, descriptive alternative text and lazy loading after the first image. The Share a memory action remains before the gallery, with keyboard links between the two. Profile-aware, metadata-free WebP copies and responsive smaller variants live under `frontend/src/features/guestGallery/assets`; Vite emits them through the existing public `/assets/` boundary. Original files remain untouched in the ignored source folder. Photos deliberately selected for this public gallery are separate from private contributions, albums and the inbox; no private archive API supplies the gallery. See [gallery verification](../product/guest-gallery-verification.md).
 
-Do not stage the raw `melkev/` extraction or the ZIP with a blanket `git add`. Stage only explicitly reviewed web assets after the selection is agreed. The supplied photos and PDF remain the sources of truth, not the review thumbnails.
+Do not stage the raw `melkev/` extraction, the PDF, scan-review extracts or the ZIP with a blanket `git add`. Stage only reviewed web assets from the agreed standalone selection. The supplied originals remain the sources of truth, not the review thumbnails. This build work does not change the live coming-soon service or establish that the final QR points at the full application; hosting, final destination and printed scans remain release gates.
 
 ## Render Static Site deployment
 

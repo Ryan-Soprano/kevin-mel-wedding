@@ -143,6 +143,8 @@ A signed playback URL is a reusable bearer permission: anyone who obtains it can
 
 ### Checks
 
+The public guest welcome includes [all 52 selected standalone couple/family photos](docs/product/guest-gallery-verification.md), using full-frame optimized static copies and lazy loading. These selected public photos are separate from private contributions and albums. The live coming-soon page still contains only its single approved photo; full-app hosting and final QR destination/scan checks remain deferred.
+
 For pre-wedding local rehearsal, use the [QA-02 browser/load evidence](docs/product/qa02-verification.md), [Kevin/Melanie tester guide](docs/product/qa02-tester-guide.md) and [release checklist](docs/product/wedding-release-checklist.md). The [QR-card layout](docs/product/wedding-qr-card-draft.html) remains a draft until the stable collection address and actual printed scans are verified. The bounded text load helper uses existing immutable local images and exclusively owned disposable databases:
 
 ```sh
