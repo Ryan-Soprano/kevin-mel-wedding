@@ -2,7 +2,7 @@
 
 Prepared October 9, 2026. **Scenarios prepared; tester results pending.**
 
-Updated October 10 with the approved public photo gallery, private timeline and library/tag scenarios. These additions remain prepared checks until tried in the intended test environment.
+Updated October 10 with the approved public photo gallery, private timeline, library/tag and portable-export scenarios. These additions remain prepared checks until tried in the intended test environment.
 
 We would like your help making the archive easy to use and useful to you. Try it first as a wedding guest, then as someone reviewing the private inbox. Tell Ryan what feels confusing, awkward or missing, as well as what works.
 
@@ -47,6 +47,8 @@ Use a personal test session. A shared or signed-out browser must not retain a vi
 | I7 — Link and preserve memories | Link a synthetic note to two events. Open it from an event and return. Unlink it once; then delete and restore the note. Delete one event after reading its confirmation. | Links can be shared across events. **Memory date** and **Saved on** are distinct from the event date. Unlinking or deleting an event preserves originals. Deleting a memory removes all its links; restoring returns it to the inbox without silently relinking. |
 | I8 — Search your library | Open **Library**. Search a synthetic title, note, caption or guest name, then combine memory type, review status, memory-date year/precision and one tag. Try an empty result and clear the filters. Open a result from a later page and return. | Matching is literal and ignores letter case. Results stay newest-saved first; year bounds use the memory's date and exclude unknown dates. Applied filters and page context survive normal detail navigation, with a useful reload if results changed. Clearing filters restores the library. Hiding or signing out clears private search text and results. |
 | I9 — Manage private tags | Create a synthetic tag, attach several test memories and rename it. Add a second tag to one memory from its detail view. Find those labels using the library tag chooser. Remove a label, then delete and restore the memory. Cancel a tag deletion, then delete the label. | Labels and their members remain private. Tag searches and pages are clear as the collection grows. Removing or deleting a label preserves originals. Memory Delete removes all labels; Restore requires deliberate reattachment. Conflicting or unconfirmed changes pause other actions until reconciled. |
+
+For **I10 — Portable archive**, use only Ryan's synthetic archive. Open **Export archive**, prepare an export, check progress and prepare/download each original part followed by the index part. Extract every part into one private folder and open the offline reader while disconnected from the application. Check written memories, truthful dates, album order, events, tags and supplied original files. A missing-original scenario should show a clear incomplete report. Record whether the instructions and retry actions make sense; a “Download started” notice does not prove the browser saved the file. Ryan supplies expiry, interrupted-response or application-restart scenarios when available. Remove the deliberately downloaded test copies afterwards; signing out cannot remove them.
 
 ## Comfort and access checks
 

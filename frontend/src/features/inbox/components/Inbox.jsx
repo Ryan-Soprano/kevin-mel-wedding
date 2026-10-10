@@ -16,6 +16,8 @@ import Tags from "../../library/components/Tags.jsx";
 import MemoryTags from "../../library/components/MemoryTags.jsx";
 import { initialLibrary } from "../../library/api/libraryActions.js";
 import { initialTags } from "../../library/api/tagActions.js";
+import ExportArchive from "../../export/components/ExportArchive.jsx";
+import { initialExport } from "../../export/api/exportActions.js";
 import "../inbox.css";
 
 const INITIAL = {
@@ -28,6 +30,7 @@ const INITIAL = {
   albums: initialAlbums(), albumReturnId: null,
   timeline: initialTimeline(), timelineReturnId: null,
   library: initialLibrary(), libraryReturn: false, tags: initialTags(), tagReturnId: null,
+  export: initialExport(),
 };
 const LABELS = { PENDING: "Pending", KEEP: "Kept", ARCHIVED: "Archived", DELETE: "Recently deleted" };
 const REVIEW_LABELS = { PENDING: "Restore to inbox", KEEP: "Keep privately", ARCHIVED: "Archive", DELETE: "Delete" };
@@ -94,6 +97,12 @@ export default function Inbox({ createController = createInboxController, audioE
     attached: useCallback(() => controller.current?.loadMemoryTags(), []), choose: useCallback(q => controller.current?.chooseMemoryTag(q), []), change: useCallback((id, remove) => controller.current?.changeMemoryTag(id, remove), []),
     page: useCallback(next => controller.current?.memoryTagPage(next), []), reload: tagActions.reload, retry: tagActions.retry,
   };
+  const exportActions = {
+    inbox: useCallback(() => controller.current?.loadInbox("PENDING"), []), create: useCallback(() => controller.current?.createExport(), []),
+    check: useCallback(refreshSession => controller.current?.checkExport({ refreshSession }), []), prepare: useCallback(number => controller.current?.prepareExportPart(number), []),
+    cancel: useCallback(() => controller.current?.cancelExport(), []), retry: useCallback(() => controller.current?.retryExportAction(), []),
+    page: useCallback((kind, next) => controller.current?.exportPage(kind, next), []), download: useCallback(() => controller.current?.downloadExportPart(), []), started: useCallback(() => controller.current?.exportDownloadStarted(), []),
+  };
   const audioPlayback = useRef(null);
   const clearPlayback = useCallback(() => stopAudioPlayback(audioPlayback.current), []);
   const heading = useRef(null);
@@ -147,7 +156,7 @@ export default function Inbox({ createController = createInboxController, audioE
     heading.current?.focus();
   }, [snapshot.phase, snapshot.detail?.memoryId, snapshot.albums?.view, snapshot.albums?.album?.albumId, snapshot.timeline?.view, snapshot.timeline?.event?.eventId, snapshot.library?.view, snapshot.tags?.view, snapshot.tags?.tag?.tagId]);
 
-  const reviewLocked = snapshot.review.phase !== "idle" || snapshot.metadata.phase !== "idle" || snapshot.albums.mutation.phase !== "idle" || snapshot.timeline.mutation.phase !== "idle" || snapshot.tags.mutation.phase !== "idle";
+  const reviewLocked = snapshot.review.phase !== "idle" || snapshot.metadata.phase !== "idle" || snapshot.albums.mutation.phase !== "idle" || snapshot.timeline.mutation.phase !== "idle" || snapshot.tags.mutation.phase !== "idle" || snapshot.export.mutation.phase !== "idle";
   const detail = snapshot.detail;
   const confirmingDelete = !reviewLocked && deleteConfirmation !== null
     && detail?.memoryId === deleteConfirmation.memoryId && detail?.revision === deleteConfirmation.revision;
@@ -219,8 +228,8 @@ export default function Inbox({ createController = createInboxController, audioE
   }
 
   const authenticated = snapshot.session?.authenticated
-    && ["inbox", "detail", "create", "albums", "timeline", "library", "tags"].includes(snapshot.phase);
-  const title = snapshot.phase === "library" ? "Your memory library" : snapshot.phase === "tags" ? "Your tags" : snapshot.phase === "timeline" ? "Your life timeline" : snapshot.phase === "albums" ? "Your albums" : snapshot.phase === "detail" ? "Your memory"
+    && ["inbox", "detail", "create", "albums", "timeline", "library", "tags", "export"].includes(snapshot.phase);
+  const title = snapshot.phase === "export" ? "Export your private archive" : snapshot.phase === "library" ? "Your memory library" : snapshot.phase === "tags" ? "Your tags" : snapshot.phase === "timeline" ? "Your life timeline" : snapshot.phase === "albums" ? "Your albums" : snapshot.phase === "detail" ? "Your memory"
     : snapshot.phase === "create" ? "Add a memory" : snapshot.phase === "login" ? "Sign in to your archive"
       : snapshot.phase === "unavailable" ? "Archive access unavailable" : "Memory inbox";
 
@@ -283,6 +292,7 @@ export default function Inbox({ createController = createInboxController, audioE
           <button type="button" className="button-secondary" disabled={snapshot.busy} onClick={() => timelineActions.list()}>Timeline</button>
           <button type="button" className="button-secondary" disabled={snapshot.busy} onClick={() => libraryActions.list()}>Library</button>
           <button type="button" className="button-secondary" disabled={snapshot.busy} onClick={() => tagActions.list()}>Tags</button>
+          <button type="button" className="button-secondary" disabled={snapshot.busy} onClick={() => controller.current?.loadExport()}>Export archive</button>
           <nav className="inbox-filters" aria-label="Review status">
             {Object.entries(LABELS).map(([status, label]) => (
               <button key={status} type="button" className="button-secondary" aria-pressed={snapshot.reviewStatus === status}
@@ -325,6 +335,7 @@ export default function Inbox({ createController = createInboxController, audioE
         state={snapshot.library} busy={snapshot.busy} locked={reviewLocked} actions={libraryActions} />}
       {snapshot.phase === "tags" && authenticated && <Tags key={`${snapshot.tags.view}:${snapshot.tags.tag?.tagId ?? "new"}:${snapshot.tags.tag?.revision ?? "new"}:${snapshot.tags.q}`}
         state={snapshot.tags} busy={snapshot.busy} locked={reviewLocked} actions={tagActions} />}
+      {snapshot.phase === "export" && authenticated && <ExportArchive state={snapshot.export} busy={snapshot.busy} locked={reviewLocked} actions={exportActions} />}
 
       {snapshot.phase === "detail" && authenticated && (
         <section className="inbox-detail" aria-label="Memory detail" aria-busy={snapshot.busy}>

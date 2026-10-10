@@ -4,6 +4,7 @@ import { normalizeMemoryMetadata, sameMetadata } from "../../features/inbox/memo
 import { createMockAlbumServer } from "../../features/albums/api/mockAlbumServer.js";
 import { createMockTimelineServer } from "../../features/timeline/api/mockTimelineServer.js";
 import { createMockLibraryServer } from "../../features/library/api/mockLibraryServer.js";
+import { createMockExportServer } from "../../features/export/api/mockExportServer.js";
 import {
   ANONYMOUS_SESSION, COUPLE_SESSION, CREATED_AT, IDS, INBOX_PAGE,
   MEDIA_DETAIL, MEMORY_DETAIL, PLAYBACK, SCENARIOS, UPLOAD_GRANT, VALIDATION_ERROR,
@@ -57,6 +58,7 @@ export function createMockArchiveApi({ scenario = "success", delayMs = 0, now = 
     getMemories: () => memories, nextId, now, reply, failure });
   const libraryServer = createMockLibraryServer({ getSession: () => session, getScenario: () => scenario,
     getMemories: () => memories, nextId, now, reply, failure });
+  const exportServer = createMockExportServer({ getSession: () => session, getScenario: () => scenario, getMemories: () => memories, nextId, now, reply, failure });
 
   function rotateSession(fixture) {
     // Deterministic preview tokens model rotation, not production token security.
@@ -110,6 +112,8 @@ export function createMockArchiveApi({ scenario = "success", delayMs = 0, now = 
     if (timelineReply !== null) return timelineReply;
     const libraryReply = await libraryServer.handle(url, method, headers, body);
     if (libraryReply !== null) return libraryReply;
+    const exportReply = await exportServer.handle(url, method, headers, body);
+    if (exportReply !== null) return exportReply;
     const privateContribution = url.pathname === "/api/memories/contributions" || url.pathname.startsWith("/api/memories/contributions/");
     const contributionPath = privateContribution ? url.pathname.replace("/api/memories/contributions", "/api/contributions") : url.pathname;
     if (privateContribution) {
@@ -302,7 +306,7 @@ export function createMockArchiveApi({ scenario = "success", delayMs = 0, now = 
     return reply(null, 200);
   }
 
-  const api = createArchiveApi({ client: createApiClient({ fetchImpl: mockFetch }), uploadFetch });
+  const api = createArchiveApi({ client: createApiClient({ fetchImpl: mockFetch }), uploadFetch, exportFetch: mockFetch });
   return Object.assign(api, {
     setScenario(value) {
       if (!SCENARIOS.includes(value)) throw new TypeError("Unknown mock scenario.");

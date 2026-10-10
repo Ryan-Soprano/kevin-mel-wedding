@@ -8,6 +8,7 @@ import { createAlbumActions, initialAlbums } from "../../albums/api/albumActions
 import { createTimelineActions, initialTimeline } from "../../timeline/api/timelineActions.js";
 import { createLibraryActions, initialLibrary } from "../../library/api/libraryActions.js";
 import { createTagActions, initialTags } from "../../library/api/tagActions.js";
+import { createExportActions, initialExport } from "../../export/api/exportActions.js";
 
 const EMPTY_ITEMS = Object.freeze([]);
 const idlePhoto = () => Object.freeze({ phase: "idle", url: null, error: null });
@@ -63,7 +64,7 @@ export function createInboxController({
     reviewStatus: "PENDING", items: EMPTY_ITEMS, nextCursor: null, detail: null,
     photo: idlePhoto(), review: idleReview(), metadata: idleMetadata(), albums: initialAlbums(), albumReturnId: null,
     timeline: initialTimeline(), timelineReturnId: null, library: initialLibrary(), libraryReturn: false,
-    tags: initialTags(), tagReturnId: null, notice: null, pageResetVersion: 0, logoutUnconfirmed: false });
+    tags: initialTags(), tagReturnId: null, export: initialExport(), notice: null, pageResetVersion: 0, logoutUnconfirmed: false });
   let generation = 0, operation = null, disposed = false, objectUrl = null;
   let reviewIntent = null, reviewInFlight = null, reviewUncertain = false, inboxDirty = false;
   let metadataIntent = null, metadataInFlight = null, metadataUncertain = false, metadataHiddenId = null;
@@ -110,6 +111,7 @@ export function createInboxController({
     operation?.controller.abort(interrupted());
     operation = null;
     revokePhoto();
+    exports.revokeDownload();
   }
 
   function start(patch, purpose = null) {
@@ -117,7 +119,7 @@ export function createInboxController({
     cancel();
     const current = { generation, controller: new AbortController(), purpose };
     operation = current;
-    publish({ busy: true, error: null, photo: idlePhoto(), ...patch });
+    publish({ busy: true, error: null, photo: idlePhoto(), ...(patch.phase === "export" ? {} : exports.leave()), ...patch });
     return current;
   }
 
@@ -160,10 +162,10 @@ export function createInboxController({
     inboxDirty = false;
     albums.clear();
     timeline.clear();
-    library.clear(); tags.clear();
+    library.clear(); tags.clear(); exports.clear();
     publish({ session: null, items: EMPTY_ITEMS, nextCursor: null, detail: null, photo: idlePhoto(),
       review: idleReview(), metadata: idleMetadata(), albums: initialAlbums(), albumReturnId: null,
-      timeline: initialTimeline(), timelineReturnId: null, library: initialLibrary(), libraryReturn: false, tags: initialTags(), tagReturnId: null, notice: null, ...patch });
+      timeline: initialTimeline(), timelineReturnId: null, library: initialLibrary(), libraryReturn: false, tags: initialTags(), tagReturnId: null, export: initialExport(), notice: null, ...patch });
   }
 
   function authFailure(failure) {
@@ -439,28 +441,36 @@ export function createInboxController({
   const albums = createAlbumActions({ api, getState: () => state, publish,
     start: patch => start({ ...patch, timeline: initialTimeline(), ...timeline.clearNavigation(), library: initialLibrary(), ...library.clearNavigation(), tags: initialTags(), ...tags.clearNavigation() }), bounded, run, assertCurrent, isCurrent: current,
     authFailure, freeze: frozenCopy,
-    canNavigate: () => !disposed && !suspended && Boolean(state.session?.authenticated) && state.phase !== "create" && !reviewIntent && !metadataIntent && !timeline.locked() && !tags.locked(),
+    canNavigate: () => !disposed && !suspended && Boolean(state.session?.authenticated) && state.phase !== "create" && !reviewIntent && !metadataIntent && !timeline.locked() && !tags.locked() && !exports.locked(),
     openMemory: (id, options) => controller.openMemory(id, options), nameFingerprint: albumNameFingerprint,
   });
   const timeline = createTimelineActions({ api, getState: () => state, publish,
     start: patch => start({ ...patch, albums: initialAlbums(), ...albums.clearNavigation(), library: initialLibrary(), ...library.clearNavigation(), tags: initialTags(), ...tags.clearNavigation() }), bounded, run, assertCurrent, isCurrent: current,
     authFailure, freeze: frozenCopy,
-    canNavigate: () => !disposed && !suspended && Boolean(state.session?.authenticated) && state.phase !== "create" && !reviewIntent && !metadataIntent && !albums.locked() && !tags.locked(),
+    canNavigate: () => !disposed && !suspended && Boolean(state.session?.authenticated) && state.phase !== "create" && !reviewIntent && !metadataIntent && !albums.locked() && !tags.locked() && !exports.locked(),
     openMemory: (id, options) => controller.openMemory(id, options), fieldsFingerprint: timelineFieldsFingerprint,
   });
   const library = createLibraryActions({ api, getState: () => state, publish,
     start: patch => start({ ...patch, albums: initialAlbums(), ...albums.clearNavigation(), timeline: initialTimeline(), ...timeline.clearNavigation(), tags: initialTags(), ...tags.clearNavigation() }),
     bounded, run, assertCurrent, authFailure, freeze: frozenCopy,
-    canNavigate: () => !disposed && !suspended && Boolean(state.session?.authenticated) && state.phase !== "create" && !reviewIntent && !metadataIntent && !albums.locked() && !timeline.locked() && !tags.locked(),
+    canNavigate: () => !disposed && !suspended && Boolean(state.session?.authenticated) && state.phase !== "create" && !reviewIntent && !metadataIntent && !albums.locked() && !timeline.locked() && !tags.locked() && !exports.locked(),
     openMemory: (id, options) => controller.openMemory(id, options),
   });
   const tags = createTagActions({ api, getState: () => state, publish,
     start: patch => start(patch.phase === "detail" ? patch : { ...patch, albums: initialAlbums(), ...albums.clearNavigation(), timeline: initialTimeline(), ...timeline.clearNavigation(), library: initialLibrary(), ...library.clearNavigation() }),
     bounded, run, assertCurrent, isCurrent: current, authFailure, freeze: frozenCopy,
-    canNavigate: () => !disposed && !suspended && Boolean(state.session?.authenticated) && state.phase !== "create" && !reviewIntent && !metadataIntent && !albums.locked() && !timeline.locked(),
+    canNavigate: () => !disposed && !suspended && Boolean(state.session?.authenticated) && state.phase !== "create" && !reviewIntent && !metadataIntent && !albums.locked() && !timeline.locked() && !exports.locked(),
     openMemory: (id, options) => controller.openMemory(id, options), nameFingerprint: tagNameFingerprint,
   });
+  const exports = createExportActions({ api, getState: () => state, publish,
+    start: patch => start({ ...patch, albums: initialAlbums(), ...albums.clearNavigation(), timeline: initialTimeline(), ...timeline.clearNavigation(), library: initialLibrary(), ...library.clearNavigation(), tags: initialTags(), ...tags.clearNavigation() }),
+    bounded, run, assertCurrent, isCurrent: current, authFailure, freeze: frozenCopy, createObjectURL, revokeObjectURL, now,
+    canNavigate: () => !disposed && !suspended && Boolean(state.session?.authenticated) && state.phase !== "create" && !reviewIntent && !metadataIntent && !albums.locked() && !timeline.locked() && !tags.locked(),
+  });
   const controller = {
+    loadExport: () => exports.loadExport(), createExport: () => exports.createExport(), checkExport: options => exports.checkExport(options),
+    prepareExportPart: number => exports.prepareExportPart(number), cancelExport: () => exports.cancelExport(), retryExportAction: () => exports.retryExportAction(),
+    exportPage: (kind, next) => exports.exportPage(kind, next), downloadExportPart: () => exports.downloadExportPart(), exportDownloadStarted: () => exports.downloadStarted(),
     loadLibrary: (...args) => library.loadLibrary(...args), openLibraryMemory: id => library.openLibraryMemory(id), libraryPage: next => library.libraryPage(next),
     chooseLibraryTag: (...args) => library.chooseLibraryTag(...args), selectLibraryTag: tag => library.selectLibraryTag(tag),
     loadTags: (...args) => tags.loadTags(...args), openTag: (...args) => tags.openTag(...args), beginTagCreation: () => tags.beginTagCreation(),
@@ -503,7 +513,7 @@ export function createInboxController({
       return () => listeners.delete(listener);
     },
     beginCreation() {
-      if (disposed || suspended || state.busy || !state.session?.authenticated || reviewIntent || metadataIntent || albums.locked() || timeline.locked() || tags.locked()) return state;
+      if (disposed || suspended || state.busy || !state.session?.authenticated || reviewIntent || metadataIntent || albums.locked() || timeline.locked() || tags.locked() || exports.locked()) return state;
       cancel(); inboxDirty = true;
       publish({ phase: "create", detail: null, items: EMPTY_ITEMS, nextCursor: null, photo: idlePhoto(), notice: null, error: null });
       return state;
@@ -540,7 +550,7 @@ export function createInboxController({
         metadata: idleMetadata(),
         ...albums.suspend(),
         ...timeline.suspend(),
-        ...library.suspend(), ...tags.suspend(),
+        ...library.suspend(), ...tags.suspend(), ...exports.suspend(),
         albumReturnId: null,
         timelineReturnId: null,
         tagReturnId: null,
@@ -573,6 +583,7 @@ export function createInboxController({
         else if (timeline.hasPending()) await timeline.resume(op);
         else if (tags.hasPending()) await tags.resume(op);
         else if (library.hasPending()) await library.resume(op);
+        else if (exports.hasPending()) await exports.resume(op);
         else await page(op, state.reviewStatus, null);
         assertCurrent(op);
         suspended = false;
@@ -592,7 +603,7 @@ export function createInboxController({
     },
     loadSession() {
       if (suspended) return controller.resume();
-      if (reviewIntent || metadataIntent || albums.locked() || timeline.locked() || tags.locked()) return Promise.resolve(state);
+      if (reviewIntent || metadataIntent || albums.locked() || timeline.locked() || tags.locked() || exports.locked()) return Promise.resolve(state);
       if (state.logoutUnconfirmed) return controller.logout();
       const op = start({ phase: "checking", session: null, items: EMPTY_ITEMS, nextCursor: null, detail: null, notice: null });
       return run(op, async () => {
@@ -604,7 +615,7 @@ export function createInboxController({
       });
     },
     login(credentials) {
-      if (reviewIntent || metadataIntent || albums.locked() || timeline.locked() || tags.locked()) return Promise.resolve(state);
+      if (reviewIntent || metadataIntent || albums.locked() || timeline.locked() || tags.locked() || exports.locked()) return Promise.resolve(state);
       const op = start({ phase: "login", session: null, items: EMPTY_ITEMS, nextCursor: null, detail: null, notice: null, logoutUnconfirmed: false });
       return run(op, async () => {
         const fresh = await bounded(op, signal => api.getSession({ signal }));
@@ -623,10 +634,10 @@ export function createInboxController({
       });
     },
     logout() {
-      if (reviewIntent || metadataIntent || albums.locked() || timeline.locked() || tags.locked()) return Promise.resolve(state);
+      if (reviewIntent || metadataIntent || albums.locked() || timeline.locked() || tags.locked() || exports.locked()) return Promise.resolve(state);
       albums.clear();
       timeline.clear();
-      library.clear(); tags.clear();
+      library.clear(); tags.clear(); exports.clear();
       const op = start({ phase: "checking", session: null, items: EMPTY_ITEMS, nextCursor: null, detail: null, albums: initialAlbums(), albumReturnId: null,
         timeline: initialTimeline(), timelineReturnId: null, library: initialLibrary(), libraryReturn: false, tags: initialTags(), tagReturnId: null, logoutUnconfirmed: false }, "logout");
       return run(op, async () => {
@@ -637,7 +648,7 @@ export function createInboxController({
         error: "Sign-out could not be confirmed. Private content is hidden here. Retry signing out before leaving a shared device." }));
     },
     loadInbox(reviewStatus = "PENDING", cursor = null) {
-      if (!state.session?.authenticated || disposed || reviewIntent || metadataIntent || albums.locked() || timeline.locked() || tags.locked()) return Promise.resolve(state);
+      if (!state.session?.authenticated || disposed || reviewIntent || metadataIntent || albums.locked() || timeline.locked() || tags.locked() || exports.locked()) return Promise.resolve(state);
       const albumNavigation = albums.clearNavigation();
       const timelineNavigation = timeline.clearNavigation();
       const libraryNavigation = library.clearNavigation(), tagNavigation = tags.clearNavigation();
@@ -649,7 +660,7 @@ export function createInboxController({
       });
     },
     openMemory(id, { albumId = null, eventId = null, libraryReturn = false, tagId = null } = {}) {
-      if (!state.session?.authenticated || disposed || reviewIntent || metadataIntent || albums.locked() || timeline.locked() || tags.locked()) return Promise.resolve(state);
+      if (!state.session?.authenticated || disposed || reviewIntent || metadataIntent || albums.locked() || timeline.locked() || tags.locked() || exports.locked()) return Promise.resolve(state);
       albums.memoryContext(albumId);
       timeline.memoryContext(eventId);
       library.memoryContext(libraryReturn); tags.memoryContext(tagId); tags.clearMemoryPresentation();
@@ -672,7 +683,7 @@ export function createInboxController({
       });
     },
     backToInbox() {
-      if (disposed || !state.session?.authenticated || reviewIntent || metadataIntent || albums.locked() || timeline.locked() || tags.locked()) return state;
+      if (disposed || !state.session?.authenticated || reviewIntent || metadataIntent || albums.locked() || timeline.locked() || tags.locked() || exports.locked()) return state;
       if (albums.hasReturn()) return albums.returnToAlbum();
       if (timeline.hasReturn()) return timeline.returnToEvent();
       if (tags.hasReturn()) return tags.returnToTag();
@@ -684,7 +695,7 @@ export function createInboxController({
     },
     retryPhoto() {
       if (state.phase !== "detail" || !["PHOTO", "AUDIO"].includes(state.detail?.memoryType) || state.detail.reviewStatus === "DELETE"
-        || !state.session?.authenticated || disposed || reviewIntent || metadataIntent || albums.locked() || timeline.locked() || tags.locked()) return Promise.resolve(state);
+        || !state.session?.authenticated || disposed || reviewIntent || metadataIntent || albums.locked() || timeline.locked() || tags.locked() || exports.locked()) return Promise.resolve(state);
       const detail = state.detail;
       const op = start({ phase: "detail", detail });
       return run(op, () => photo(op, detail), failure => {
@@ -695,7 +706,7 @@ export function createInboxController({
     reviewMemory(targetStatus) {
       if (!REVIEW_STATES.has(targetStatus)) throw new TypeError("Choose a supported private review state.");
       if (reviewInFlight) return reviewInFlight;
-      if (disposed || reviewIntent || metadataIntent || albums.locked() || timeline.locked() || tags.locked() || state.busy || state.phase !== "detail"
+      if (disposed || reviewIntent || metadataIntent || albums.locked() || timeline.locked() || tags.locked() || exports.locked() || state.busy || state.phase !== "detail"
         || !state.detail || !state.session?.authenticated) return Promise.resolve(state);
       reviewIntent = Object.freeze({ memoryId: state.detail.memoryId, fromStatus: state.detail.reviewStatus,
         targetStatus, expectedRevision: state.detail.revision });
@@ -744,7 +755,7 @@ export function createInboxController({
     },
     saveMetadata(raw) {
       if (metadataInFlight) return metadataInFlight;
-      if (disposed || suspended || reviewIntent || metadataIntent || albums.locked() || timeline.locked() || tags.locked() || state.busy || state.phase !== "detail"
+      if (disposed || suspended || reviewIntent || metadataIntent || albums.locked() || timeline.locked() || tags.locked() || exports.locked() || state.busy || state.phase !== "detail"
         || !state.detail || state.detail.reviewStatus === "DELETE" || !state.session?.authenticated) return Promise.resolve(state);
       const target = frozenCopy(normalizeMemoryMetadata(raw));
       metadataIntent = Object.freeze({ memoryId: state.detail.memoryId, target, before: frozenCopy(metadataOf(state.detail)),
@@ -788,10 +799,10 @@ export function createInboxController({
       inboxDirty = false;
       albums.clear();
       timeline.clear();
-      library.clear(); tags.clear();
+      library.clear(); tags.clear(); exports.clear();
       state = Object.freeze({ ...state, session: null, items: EMPTY_ITEMS, nextCursor: null,
         detail: null, photo: idlePhoto(), review: idleReview(), metadata: idleMetadata(), albums: initialAlbums(), albumReturnId: null,
-        timeline: initialTimeline(), timelineReturnId: null, library: initialLibrary(), libraryReturn: false, tags: initialTags(), tagReturnId: null, notice: null, busy: false, error: null });
+        timeline: initialTimeline(), timelineReturnId: null, library: initialLibrary(), libraryReturn: false, tags: initialTags(), tagReturnId: null, export: initialExport(), notice: null, busy: false, error: null });
       suspended = true;
       resuming = null;
       disposed = true;
