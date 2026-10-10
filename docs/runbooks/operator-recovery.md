@@ -12,7 +12,11 @@ Reviewed V10 databases export **version 3**, preserving couple/guest source, his
 
 Reviewed V11 databases export **version 4**, also preserving private albums, UUID organization revisions, content-free deleted album identities and ordered many-to-many memberships. Exact reviewed v1/v2/v3 packages restore into V11 with empty album tables. Version 4 requires V11 and cannot restore into V8–V10; legacy targets are inspected and locked using their own reviewed table lists. The full album/membership graph is validated before destination writes. See the [ARC-02 contract](../api/v1/albums.md).
 
+Reviewed V12 databases export **version 5**, preserving private timeline events, exact/partial/unknown dates, event and list revisions, scrubbed tombstones and many-to-many memory links. Exact reviewed v1–v4 packages restore into V12 with empty timeline tables; version 5 requires V12 and cannot restore into an older target. Timeline state is created lazily, so a freshly migrated V12 archive remains empty. The entire event/state/member graph is validated before destination writes. See the [ARC-03 contract](../api/v1/timeline.md).
+
 Memory Delete removes album links; Restore does not silently rejoin collections. Current independent memory tombstones also remove restored links, leaving siblings, order and empty albums intact. Album-only deletion preserves memories and has no independent deletion ledger: an older valid package can restore earlier album organization or names. Do not claim that memory erasure evidence permanently erases album-only organization across older backups.
+
+The same memory-erasure authority removes timeline links and refreshes affected event/list revisions. Restore does not relink a memory to events. Event-only deletion preserves originals and has no independent event-deletion ledger; an older valid package can restore earlier event metadata or organization while current memory erasure remains authoritative.
 
 Metadata includes contribution/memory/asset IDs, names, notes, captions, original filenames, grouping/order, creation fingerprints, **raw guest retry capabilities**, review revisions, deletion deadlines/tombstones, upload-grant reservations, review audit and erased-key reservations. Keep packages outside the repository, web roots, shared downloads, sync folders and screenshots. Use an operator-owned private parent on an encrypted volume and a reviewed encrypted independent recovery copy. Never paste package content, credentials, JDBC errors or signed URLs into logs, Git, Notion or this chat.
 
@@ -22,7 +26,7 @@ Accounts/password hashes, sessions, throttle buckets, application settings, prov
 
 Stop source collection and private traffic, scheduled retention and finalization before export. An upload pause alone does not stop notes, existing grants or finalization. Stop the application, wait at least five minutes for every issued PUT permission to expire, and verify no other writer or maintenance process is running. The exporter rejects unexpired grant metadata. Its repeatable-read database snapshot cannot enforce quiescence on a separately running application or object store.
 
-The manifest links each verified original to its memory/asset IDs, exact byte length, MIME and SHA-256. Versions 2–4 also link audio duration, container and codec to the metadata. Files use server-owned asset IDs, never untrusted original filenames. It reports unfinished/failed photo and audio intents explicitly and preserves their metadata and expired grant reservations; staging objects are not durable saved originals and are not exported. These memories remain unfinished after restore. Authors need their original files and matching retry identity to deliberately resume/reupload; recovery cannot recreate bytes never confirmed saved.
+The manifest links each verified original to its memory/asset IDs, exact byte length, MIME and SHA-256. Versions 2–5 also link audio duration, container and codec to the metadata. Files use server-owned asset IDs, never untrusted original filenames. It reports unfinished/failed photo and audio intents explicitly and preserves their metadata and expired grant reservations; staging objects are not durable saved originals and are not exported. These memories remain unfinished after restore. Authors need their original files and matching retry identity to deliberately resume/reupload; recovery cannot recreate bytes never confirmed saved.
 
 A missing, wrong-size, wrong-checksum, invalid or unavailable verified original makes the export unready. Audio bytes are decoded again and must match the stored verified duration, container and codec. Inspect the private manifest and fix the source, then create a **new** export directory. Never interpret a successful metadata copy or pending intent as a saved memory. A current, validated independent deletion record may exempt that erased original during restoration; unrelated missing originals still block recovery.
 
@@ -51,7 +55,7 @@ Type `export quiescent archive in local` when prompted. Substitute the configure
 ## Restore with current deletion evidence
 
 1. Keep source and destination traffic/maintenance stopped. Preserve the **current independent** `deletions/v1/` authority and recovery copy. Never replace that ledger with an older package. If it is lost or its freshness cannot be established, keep recovery closed and resolve the authority first.
-2. Prepare a separate isolated database and private storage bucket through the approved infrastructure process. Apply the reviewed migrations recorded by the package, or reviewed V9/V10/V11 through the supported upward compatibility paths above. The tool does not migrate or clear a target. Archive content tables must be empty; explicit DB settings are required even for `local`. Source and target provider endpoint/bucket must differ.
+2. Prepare a separate isolated database and private storage bucket through the approved infrastructure process. Apply the reviewed migrations recorded by the package, or reviewed V9/V10/V11/V12 through the supported upward compatibility paths above. The tool does not migrate or clear a target. Archive content tables must be empty; explicit DB settings are required even for `local`. Source and target provider endpoint/bucket must differ.
 3. Configure the **destination** using the standard `MEMORY_ARCHIVE_DB_*` and `MEMORY_ARCHIVE_R2_*` settings. Configure separate `MEMORY_ARCHIVE_RECOVERY_SOURCE_R2_ENDPOINT`, `MEMORY_ARCHIVE_RECOVERY_SOURCE_R2_BUCKET`, `MEMORY_ARCHIVE_RECOVERY_SOURCE_R2_ACCESS_KEY_ID` and `MEMORY_ARCHIVE_RECOVERY_SOURCE_R2_SECRET_ACCESS_KEY` for authenticated read access to the current source ledger. Use read-only source credentials where available. The console mechanically rejects source ledger writes/deletes and binds the authority endpoint/bucket digest to the originating package. This version requires that original authoritative source identity to remain available or be reconstructed with complete current evidence. A ledger copy relocated to a different bucket cannot substitute directly; total source-bucket loss and independent-copy recovery still need reviewed operational acceptance.
 4. Verify both real targets and quiescence privately, set `MEMORY_ARCHIVE_RECOVERY_QUIESCED=true`, and invoke the reviewed console:
 
@@ -62,7 +66,7 @@ MSYS2_ARG_CONV_EXCL='*' java -cp "$archive_account_classpath" com.kevinmel.archi
 5. Type `restore quiescent archive in local`. The tool verifies bounded package structure, hashes, schema, row counts, original integrity and authoritative deletion identities before committing archive rows. Current authority must preserve every packaged tombstone. It copies allowed originals to the isolated target, preserves independent deletion evidence there and reuses the reviewed retention replay before commit. Records newer than the package scrub restored content; records for contributions absent from the package still reserve erased retry keys.
 6. Verify record counts with expected deletion effects, relationships, revisions, unfinished states and retained reservation accounting. Check every restored original's size/MIME/hash through authenticated provider IO. Confirm erased originals are absent, erased notes/captions/titles/descriptions/dates are scrubbed, erased retry identities cannot create new content and unrelated siblings remain intact. Reconcile export time against the desired recovery point. Prepare reviewed current accounts/settings/session behavior with reveal closed. Reopening traffic is a separate operational readiness decision after every check succeeds.
 
-For current V11 targets, safe SQL reports aggregate counts without dumping content or capabilities. Omit album rows when inspecting a reviewed older target:
+For current V12 targets, safe SQL reports aggregate counts without dumping content or capabilities. Omit timeline or album rows when inspecting a reviewed older target:
 
 ```sql
 SELECT 'contribution' AS entity, COUNT(*) FROM contribution
@@ -73,7 +77,10 @@ UNION ALL SELECT 'review_audit', COUNT(*) FROM review_audit
 UNION ALL SELECT 'deletion_ledger', COUNT(*) FROM deletion_ledger
 UNION ALL SELECT 'erased_submission_key', COUNT(*) FROM erased_submission_key
 UNION ALL SELECT 'album', COUNT(*) FROM album
-UNION ALL SELECT 'album_membership', COUNT(*) FROM album_membership;
+UNION ALL SELECT 'album_membership', COUNT(*) FROM album_membership
+UNION ALL SELECT 'timeline_event', COUNT(*) FROM timeline_event
+UNION ALL SELECT 'timeline_event_memory', COUNT(*) FROM timeline_event_memory
+UNION ALL SELECT 'timeline_state', COUNT(*) FROM timeline_state;
 
 SELECT memory_type, review_status, purged_at IS NOT NULL AS purged, COUNT(*)
 FROM memory GROUP BY memory_type, review_status, purged_at IS NOT NULL;

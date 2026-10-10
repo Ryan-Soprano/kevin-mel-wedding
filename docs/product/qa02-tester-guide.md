@@ -2,6 +2,8 @@
 
 Prepared October 9, 2026. **Scenarios prepared; tester results pending.**
 
+Updated October 10 with the approved public photo gallery and private timeline scenarios. These additions remain prepared checks until tried in the intended test environment.
+
 We would like your help making the archive easy to use and useful to you. Try it first as a wedding guest, then as someone reviewing the private inbox. Tell Ryan what feels confusing, awkward or missing, as well as what works.
 
 ## Before you begin
@@ -22,6 +24,7 @@ Keep the page open while sending or recovering an uncertain result. Refreshing, 
 
 | ID | Try this | What to look for |
 |---|---|---|
+| G0 — Couple gallery | On the guest welcome, browse Kevin and Melanie's approved photos, then use the link back to sharing a memory. | All 52 selected photos are available without sign-in, with full framing and readable descriptions. Sharing stays easy to reach. Viewing the couple gallery does not reveal private guest submissions. Use only the separate synthetic files Ryan supplies for upload tests. |
 | G1 — Named note | Choose **Write a note**. Try an empty message, then enter a made-up name and a short test note. Review it, edit it, review again and send. Tap Send twice quickly. | Clear validation keeps your work. Review shows the intended name/message. Sending produces one saved note and a clear confirmation. **Done** and **Share another memory** have distinct, understandable results. |
 | G2 — Unnamed note and draft | Start a note with the name blank. Before sending, go back to the memory choices and return. Send it, then choose another memory. | The draft survives in-page navigation. Leaving the name blank works. The inbox later says **Name not provided**. Returning to a saved result does not silently send again. |
 | G3 — Five photos | Select five supplied JPEG, PNG or WebP photos, each under 10 MB. Add a made-up name and different test captions. Review, edit, then send. | All five previews, filenames and captions stay associated with the correct photos. Progress distinguishes sending from saving. Only the confirmed saved count is celebrated. All five photos later appear in the private inbox with their matching captions. |
@@ -40,6 +43,8 @@ Use a personal test session. A shared or signed-out browser must not retain a vi
 | I3 — Cancel, Delete and Restore | Open **Delete…**, read the explanation and choose **Cancel**. Repeat and choose **Confirm delete**. Find it in **Recently deleted**, then **Restore to inbox**. | Cancel changes nothing. The confirmation explains the 30-day recovery window. The deleted item cannot be played or downloaded. Restoring makes the item available again within that window. Other photos in the batch are unaffected. |
 | I4 — A pending or conflicting change | Use the supplied slow/conflict scenario, if available. Read the feedback and use **Reload current state** or the offered same-change retry. | The interface distinguishes saved, pending and unconfirmed changes. Conflicting actions are paused. Reload shows the current state rather than claiming the old change succeeded. Do not leave a pending review unresolved on a shared device. |
 | I5 — Sign out and return | Sign out, then use Back/Forward, refresh and switch away/back to the tab. Return to the guest page. For an interrupted sign-out, use only the supplied scenario and complete its recovery. | Private rows, details and previews clear. Access is checked before private content returns. A failed sign-out stays visibly unconfirmed; do not assume the device is safe until recovery succeeds. Record exactly which browser actions you tried. |
+| I6 — Events and partial dates | Open **Timeline** and create synthetic events with an exact day, month only, year only and unknown date. Edit one date, then try the inclusive year and precision filters. | Events appear oldest first with truthful date precision; unknown dates appear separately. A year range excludes unknown dates. No memory's own date or original changes. Record which ordering or label feels unclear. |
+| I7 — Link and preserve memories | Link a synthetic note to two events. Open it from an event and return. Unlink it once; then delete and restore the note. Delete one event after reading its confirmation. | Links can be shared across events. **Memory date** and **Saved on** are distinct from the event date. Unlinking or deleting an event preserves originals. Deleting a memory removes all its links; restoring returns it to the inbox without silently relinking. |
 
 ## Comfort and access checks
 

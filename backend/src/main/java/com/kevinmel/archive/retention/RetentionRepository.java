@@ -6,6 +6,7 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
 import com.kevinmel.archive.album.AlbumMemberships;
+import com.kevinmel.archive.timeline.TimelineMemberships;
 
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,10 +21,11 @@ public class RetentionRepository {
     private final TransactionTemplate tx;
     private final boolean scrubArchiveMetadata;
     private final boolean detachAlbumMemberships;
+    private final boolean detachTimelineMemberships;
 
     @Autowired
     public RetentionRepository(JdbcClient db, PlatformTransactionManager manager) {
-        this(db, manager, true, true);
+        this(db, manager, true, true, true);
     }
 
     /** Offline recovery alone selects false for an exactly reviewed pre-archive schema. */
@@ -32,9 +34,14 @@ public class RetentionRepository {
     }
     /** Offline recovery passes capabilities of an exactly reviewed target schema, never ambient configuration. */
     public RetentionRepository(JdbcClient db, PlatformTransactionManager manager, boolean scrubArchiveMetadata, boolean detachAlbumMemberships) {
+        this(db,manager,scrubArchiveMetadata,detachAlbumMemberships,false);
+    }
+    /** Timeline cleanup is enabled only for the normal current schema or an exactly reviewed V12 recovery target. */
+    public RetentionRepository(JdbcClient db, PlatformTransactionManager manager, boolean scrubArchiveMetadata, boolean detachAlbumMemberships, boolean detachTimelineMemberships) {
         this.db = db; this.tx = new TransactionTemplate(manager);
         this.scrubArchiveMetadata = scrubArchiveMetadata;
         this.detachAlbumMemberships = detachAlbumMemberships;
+        this.detachTimelineMemberships = detachTimelineMemberships;
     }
 
     public List<DeletionRecord> claim(int limit, Instant now) {
@@ -134,6 +141,7 @@ public class RetentionRepository {
         return Boolean.TRUE.equals(tx.execute(ignored -> {
             validate(record, true);
             if (detachAlbumMemberships) AlbumMemberships.detach(db,record.memoryId(),now);
+            if (detachTimelineMemberships) TimelineMemberships.detach(db,record.memoryId(),now);
             insertPlan(record, true);
             db.sql("""
                     INSERT INTO erased_submission_key (key_digest, erased_at) VALUES (:digest, :now)

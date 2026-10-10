@@ -31,7 +31,7 @@ class RetentionAdministrationTest {
         } finally {
             System.setOut(previousOut); System.setErr(previousErr);
         }
-        assertThat(out.toString(StandardCharsets.UTF_8)).contains("reviewed V11", "replay-ledger", "purge-expired", "interactive console", "traffic stopped");
+        assertThat(out.toString(StandardCharsets.UTF_8)).contains("reviewed V12", "replay-ledger", "purge-expired", "interactive console", "traffic stopped");
         assertThat(err.toString(StandardCharsets.UTF_8)).contains("supported maintenance command", "--help");
     }
 
