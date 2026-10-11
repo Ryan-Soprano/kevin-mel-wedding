@@ -1,6 +1,6 @@
 # Disposable local guest and couple review
 
-Prepared October 10, 2026. **Local technical preparation is verified; human walkthrough feedback remains pending.** See the [verification record](../product/local-couple-review-verification.md) for the exact exercised scope.
+Prepared October 10, 2026; package updated October 11. **Local technical preparation is verified; human walkthrough feedback remains pending.** See the [original verification record](../product/local-couple-review-verification.md) for the lifecycle/browser scope and the [pre-walkthrough review](../product/pre-walkthrough-review.md) for the fresh package containing the authorization/privacy fixes.
 
 This runner gives Ryan a short interactive session in the actual packaged application, with synthetic archive data already present. It uses an existing local application image and the pinned PostgreSQL 17 image. It does not build or pull images, install dependencies, contact providers, deploy a site or use the existing Compose database.
 
@@ -12,8 +12,8 @@ From the repository root, use the existing Node runtime and a running local Dock
 
 ```powershell
 node scripts/local-review.mjs --help
-# Existing combined ARC-05 package used by the recorded local checks.
-$reviewImage = 'sha256:201ed8ebd94ae5dbb2b4c913a298c1cdcf871eeedb6e9cba1d9b0829cb306649'
+# Fresh combined package containing the October 11 authorization/privacy fixes.
+$reviewImage = 'sha256:262b120db02b462aa6f893551b8fc9d46cf3658f31b436b94b2f5b8f16f60cee'
 node scripts/local-review.mjs --image $reviewImage --minutes 30
 ```
 

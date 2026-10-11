@@ -9,6 +9,7 @@ import { createMockArchiveApi } from "../../../shared/api/mockArchiveApi.js";
 import { COUPLE_SESSION, MEMORY_DETAIL } from "../../../shared/api/v1/fixtures.js";
 import { createInboxController } from "../../inbox/api/inboxController.js";
 import { decodeExportStatus } from "./exportApi.js";
+import { initialExport } from "./exportActions.js";
 import { fetchExportPart, MAX_EXPORT_DOWNLOAD_BYTES } from "./exportDownload.js";
 
 // Synthetic transport/controller fixtures. Actual production ZIP structure,
@@ -121,6 +122,30 @@ test("known-job restart/expiry requires explicit fresh job, including resume; cr
   f.c.suspend(); await f.c.resume(); assert.equal(f.c.getSnapshot().phase, "export"); assert.equal(f.c.getSnapshot().export.unavailable, true); assert.equal(f.c.getSnapshot().export.job, null); api.getExport = real; await f.c.createExport(); assert.notEqual(f.c.getSnapshot().export.job.exportId, previous.exportId);
   await f.c.loadInbox(); f.c.beginCreation(); const creator = f.c.getSnapshot(); await f.c.loadExport(); await f.c.checkExport(); await f.c.createExport(); assert.equal(f.c.getSnapshot(), creator);
   await f.c.loadInbox(); await f.c.openMemory(MEMORY_DETAIL.memoryId); api.reviewMemory = async () => { throw new ApiError("synthetic", { unknownOutcome: true }); }; await f.c.reviewMemory("DELETE"); const review = f.c.getSnapshot(); await f.c.loadExport(); await f.c.checkExport(); await f.c.prepareExportPart(1); await f.c.cancelExport(); assert.equal(f.c.getSnapshot(), review); f.c.dispose();
+});
+
+test("timed-out export resume clears private progress and keeps only the identity for a fresh access check", async () => {
+  for (const reconcileControl of [false, true]) {
+    const api = await signedMock(), timers = new Map(); let next = 0;
+    const f = await entered(api, { setTimeoutImpl(callback) { const key = ++next; timers.set(key, callback); return key; }, clearTimeoutImpl(key) { timers.delete(key); } });
+    const job = await ready(f.c), realParts = api.listExportParts, pending = deferred(), reading = deferred();
+    if (reconcileControl) { api.setScenario("uncertainSubmission"); await f.c.prepareExportPart(1); assert.equal(f.c.getSnapshot().export.mutation.phase, "uncertain"); }
+    f.c.suspend();
+    api.listExportParts = () => { reading.resolve(); return pending.promise; };
+    const resuming = f.c.resume(); await reading.promise;
+    assert.equal(f.c.getSnapshot().export.job.exportId, job.exportId);
+    [...timers.values()][0](); await resuming;
+    assert.equal(f.c.getSnapshot().phase, "unavailable");
+    assert.equal(f.c.getSnapshot().session, null);
+    assert.deepEqual(f.c.getSnapshot().export, initialExport());
+    api.listExportParts = realParts;
+    await f.c.resume();
+    assert.equal(f.c.getSnapshot().phase, "export");
+    assert.equal(f.c.getSnapshot().export.job.exportId, job.exportId);
+    const latest = f.c.getSnapshot();
+    pending.resolve({ exportId: job.exportId, items: [], nextCursor: null }); await turn();
+    assert.equal(f.c.getSnapshot(), latest); assert.equal(timers.size, 0); f.c.dispose();
+  }
 });
 test("safe Retry-After blocks premature requests and CSRF refresh reads current status without replaying", async () => {
   let clock = Date.now(); const api = await signedMock(), f = await entered(api, { now: () => clock }); await ready(f.c); let attempts = 0; const real = api.prepareExportPart;

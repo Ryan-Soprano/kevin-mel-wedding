@@ -30,7 +30,10 @@ public class MemoryMetadataService {
                 && Objects.equals(current.memoryDate(), request.memoryDate()) && current.datePrecision().equals(request.datePrecision())) return current;
         if (current.revision() == Integer.MAX_VALUE) throw conflict();
         var now = clock.instant().truncatedTo(ChronoUnit.MICROS);
-        return repository.changeMetadata(current, request, now.isBefore(current.updatedAt()) ? current.updatedAt() : now);
+        var changed = repository.changeMetadata(current, request, now.isBefore(current.updatedAt()) ? current.updatedAt() : now);
+        // Revocation while the write waits must roll back before returning private detail.
+        authorization.requireCoupleAccess();
+        return changed;
     }
     public static ApiException conflict() { return new ApiException(412, "METADATA_CONFLICT", "This memory changed. Reload it before editing again."); }
 }

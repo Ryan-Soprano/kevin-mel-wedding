@@ -125,12 +125,14 @@ class ExportJobServiceTest {
         when(repository.originalStillCurrent(any(),any())).thenReturn(true);
         when(storage.read(anyString(),anyInt())).thenAnswer(call->{current.set(false);return Optional.of(bytes);});
         try {
-            UUID id=create();jobs.prepare(id,1,UUID.randomUUID().toString());assertThat(deniedDelete.await(10,TimeUnit.SECONDS)).isTrue();
+            UUID id=create();prepareWhenIdle(id,1,UUID.randomUUID().toString());assertThat(deniedDelete.await(10,TimeUnit.SECONDS)).isTrue();
             assertThat(terminal(id).state()).isEqualTo("STALE");
             current.set(true);snapshot=snapshot(List.of());UUID fresh=create();
-            assertStatus(()->jobs.prepare(fresh,1,UUID.randomUUID().toString()),503);assertThat(owned).isNotEmpty();
+            UUID recoveryAttempt=UUID.randomUUID();
+            assertStatus(()->prepareWhenIdle(fresh,1,recoveryAttempt.toString()),503);assertThat(owned).isNotEmpty();
+            assertStatus(()->jobs.attempt(fresh,recoveryAttempt),404);
             assertThat(owned).anyMatch(Files::exists);
-            denyCleanup.set(false);jobs.prepare(fresh,1,UUID.randomUUID().toString());assertThat(prepared(fresh).preparedPart()).isNotNull();
+            denyCleanup.set(false);prepareWhenIdle(fresh,1,recoveryAttempt.toString());assertThat(prepared(fresh).preparedPart()).isNotNull();
             jobs.cancel(fresh,UUID.randomUUID().toString());jobs.close();assertThat(owned).allMatch(path->!Files.exists(path));
         } finally { denyCleanup.set(false); }
     }
@@ -173,6 +175,18 @@ class ExportJobServiceTest {
         assertThat(jobs.cancel(id,cancel.toString()).state()).isEqualTo("CANCELLED");UUID fresh=create();assertThat(jobs.current().exportId()).isEqualTo(fresh);
     }
 
+    /** READY can precede release of the worker admission counter. Only that busy result permits a same-attempt retry. */
+    private ExportJobService.Mutation prepareWhenIdle(UUID id,int part,String attempt)throws Exception {
+        var result=new AtomicReference<ExportJobService.Mutation>();
+        await(()->{
+            try { result.set(jobs.prepare(id,part,attempt));return true; }
+            catch(ApiException failure) {
+                if(failure.status()==409&&"EXPORT_BUSY".equals(failure.code()))return false;
+                throw failure;
+            }
+        });
+        return result.get();
+    }
     private UUID create() throws Exception {UUID id=UUID.randomUUID();jobs.create(id,"*");ready(id);return id;}
     private ExportStatus ready(UUID id)throws Exception {await(()->!"CAPTURING".equals(jobs.get(id).state()));return jobs.get(id);}
     private ExportStatus prepared(UUID id)throws Exception {await(()->{var status=jobs.get(id);assertThat(status.state()).as(status.errorCode()).isNotIn("FAILED","STALE","EXPIRED","CANCELLED");return status.preparedPart()!=null;});return jobs.get(id);}

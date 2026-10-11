@@ -595,7 +595,7 @@ export function createInboxController({
         // A failed recheck hides all content but keeps an uncertain action recoverable.
         revokePhoto();
         publish({ phase: "unavailable", session: null, items: EMPTY_ITEMS, nextCursor: null,
-          detail: null, photo: idlePhoto(), albums: initialAlbums(), timeline: initialTimeline(), library: initialLibrary(), tags: initialTags(), notice: null,
+          detail: null, photo: idlePhoto(), albums: initialAlbums(), timeline: initialTimeline(), library: initialLibrary(), tags: initialTags(), export: initialExport(), notice: null,
           error: "Archive access could not be checked. Private content is hidden. Try checking access again." });
       }).finally(() => { if (resuming === completion) resuming = null; });
       resuming = completion;
