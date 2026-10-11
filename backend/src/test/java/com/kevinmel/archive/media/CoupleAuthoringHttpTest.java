@@ -284,6 +284,51 @@ class CoupleAuthoringHttpTest {
         assertThat(value(result, "$.textContent")).isEqualTo("Guest-safe original");
     }
 
+    @Test void revokedAccountDuringMetadataUpdateRollsBackContentAndRevision() throws Exception {
+        var created = create(Map.of("message", "Original note before revoked edit"));
+        String id = memory(created, 0), revision = etag(get(couple, "/api/memories/" + id));
+        db.sql("""
+                CREATE FUNCTION hold_synthetic_metadata_update() RETURNS trigger LANGUAGE plpgsql AS $$
+                BEGIN
+                    PERFORM pg_advisory_xact_lock(1263350093, 21);
+                    RETURN NEW;
+                END $$
+                """).update();
+        try {
+            db.sql("""
+                    CREATE TRIGGER hold_synthetic_metadata_update AFTER UPDATE OF title,description,memory_date,date_precision ON memory
+                    FOR EACH ROW EXECUTE FUNCTION hold_synthetic_metadata_update()
+                    """).update();
+            try (var connection = dataSource.getConnection(); var workers = Executors.newSingleThreadExecutor()) {
+                connection.setAutoCommit(false);
+                int blocker;
+                try (var statement = connection.createStatement()) {
+                    statement.execute("SELECT pg_advisory_xact_lock(1263350093, 21)");
+                    try (var result = statement.executeQuery("SELECT pg_backend_pid()")) {
+                        result.next(); blocker = result.getInt(1);
+                    }
+                }
+                var future = workers.submit(() -> edit(id, metadata("Revoked title", "Revoked context", "2024", "YEAR"), revision));
+                try {
+                    awaitMetadataUpdateWait(blocker);
+                    db.sql("UPDATE archive_account SET enabled=false WHERE id=:id").param("id", couple.id()).update();
+                } finally { connection.rollback(); }
+                var rejected = future.get(30, TimeUnit.SECONDS);
+                assertThat(rejected.statusCode()).isEqualTo(401);
+                assertThat(value(rejected, "$.error.code")).isEqualTo("AUTH_REQUIRED");
+                assertThat(rejected.body()).doesNotContain("Revoked title", "Revoked context", "Original note before revoked edit");
+            }
+            var persisted = db.sql("SELECT title,description,memory_date,date_precision,revision,text_content FROM memory WHERE id=:id")
+                    .param("id", UUID.fromString(id)).query((rs, row) -> {
+                        var values = new ArrayList<Object>(); for (int column = 1; column <= 6; column++) values.add(rs.getObject(column)); return values;
+                    }).single();
+            assertThat(persisted).containsExactly(null, null, null, "UNKNOWN", 1, "Original note before revoked edit");
+        } finally {
+            db.sql("DROP TRIGGER IF EXISTS hold_synthetic_metadata_update ON memory").update();
+            db.sql("DROP FUNCTION hold_synthetic_metadata_update()").update();
+        }
+    }
+
     @Test void revokedAccountWaitingForStagingCapacityGetsNoGrant() throws Exception {
         var created = create(mediaBody("PHOTO", photo, 1));
         try (var connection = dataSource.getConnection(); var workers = Executors.newSingleThreadExecutor()) {
@@ -441,6 +486,17 @@ class CoupleAuthoringHttpTest {
             Thread.sleep(20);
         }
         throw new AssertionError("Private request did not reach the held staging advisory lock.");
+    }
+    private void awaitMetadataUpdateWait(int blocker) throws Exception {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+        while (System.nanoTime() < deadline) {
+            if (db.sql("""
+                    SELECT EXISTS(SELECT 1 FROM pg_stat_activity
+                        WHERE :blocker=ANY(pg_blocking_pids(pid)) AND query LIKE '%UPDATE memory SET title%')
+                    """).param("blocker", blocker).query(Boolean.class).single()) return;
+            Thread.sleep(20);
+        }
+        throw new AssertionError("Metadata update did not reach the exact held synthetic advisory lock.");
     }
     private static void await(CountDownLatch latch) {
         try { if (!latch.await(15, TimeUnit.SECONDS)) throw new AssertionError("Synthetic IO wait timed out."); }

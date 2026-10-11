@@ -40,7 +40,7 @@ export function createExportActions({ api, getState, publish, start, bounded, ru
   }
   async function accepted(op, job, notice) {
     assertCurrent(op); if (job.exportId !== jobId) throw contractMismatch();
-    intent = null; uncertain = false; hidden = false;
+    intent = null; uncertain = false;
     set({ job, mutation: idle(), parts: EMPTY, issues: EMPTY, partsNextCursor: null, issuesNextCursor: null, notice, error: null, unavailable: false });
     await pages(op);
   }
@@ -102,7 +102,7 @@ export function createExportActions({ api, getState, publish, start, bounded, ru
     clear() { actions.revokeDownload(); jobId = null; intent = null; inFlight = null; uncertain = false; hidden = false; retryAt = 0; },
     suspend() { hidden = Boolean(jobId && (getState().phase === "export" || intent)); actions.revokeDownload(); inFlight = null; if (intent) uncertain = true; return { export: freeze({ ...initialExport(), mutation: intent ? mutation("uncertain") : idle() }) }; },
     async resume(op) { publish({ phase: "export" }); try { if (intent) await reconcile(op); else if (jobId) await actions.read(op); }
-      catch (failure) { if ([404, 410].includes(failure?.status)) readFailure(failure); else throw failure; } hidden = false; },
+      catch (failure) { if ([404, 410].includes(failure?.status)) readFailure(failure); else throw failure; } assertCurrent(op); hidden = false; },
     async read(op) { const job = await bounded(op, signal => api.getExport(jobId, { signal })); assertCurrent(op); set({ job, error: null, unavailable: false }); await pages(op); },
     loadExport() {
       if (!visible()) return Promise.resolve(getState()); const op = start(base({ ...initialExport() }));
