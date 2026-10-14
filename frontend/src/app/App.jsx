@@ -7,6 +7,12 @@ import GuestGallery from "../features/guestGallery/GuestGallery.jsx";
 
 const AudioForm = lazy(() => import("../features/audio/components/AudioForm.jsx"));
 
+function getChoiceLabel(form, savedLabel, draftLabel, emptyLabel) {
+  if (form.complete) return savedLabel;
+  if (form.hasDraft) return draftLabel;
+  return emptyLabel;
+}
+
 export default function App({ audioEnabled = audioCollectionEnabled(import.meta.env.VITE_AUDIO_ENABLED) } = {}) {
   const [flow, dispatch] = useReducer(guestFlowReducer, { audioEnabled }, createGuestFlow);
   const heading = useRef(null);
@@ -46,6 +52,10 @@ export default function App({ audioEnabled = audioCollectionEnabled(import.meta.
     done: "You’re all set.",
   }[flow.screen];
 
+  const noteChoiceLabel = getChoiceLabel(flow.forms.note, "View your saved note", "Continue your note", "Write a note");
+  const photosChoiceLabel = getChoiceLabel(flow.forms.photos, "View your saved photos", "Continue your photos", "Add photos");
+  const audioChoiceLabel = getChoiceLabel(flow.forms.audio, "View your saved voice memory", "Continue your voice memory", "Record a voice memory");
+
   return (
     <main className="guest-page">
       <header className="guest-header">
@@ -55,7 +65,7 @@ export default function App({ audioEnabled = audioCollectionEnabled(import.meta.
 
       {flow.screen === "welcome" && (
         <section className="guest-welcome" aria-label="Share a wedding memory">
-          <p>{flow.audioEnabled ? "Share a note, your favourite photos, or a voice memory from the day." : "Share a note or your favourite photos from the day."}</p>
+          <p>{flow.audioEnabled ? "Share a note, your favorite photos, or a voice memory from the day." : "Share a note or your favorite photos from the day."}</p>
           <p>Your contribution goes to Kevin and Melanie. It is not posted publicly.</p>
           <button id="share-wedding-memory" type="button" onClick={() => dispatch({ type: "CHOOSE" })}>Share a memory</button>
           <p className="guest-help">No account needed. Your name is optional.</p>
@@ -68,15 +78,15 @@ export default function App({ audioEnabled = audioCollectionEnabled(import.meta.
         <section className="guest-choices" aria-label="Choose your memory type">
           <p>Choose one type at a time. You can share another memory after it is saved.</p>
           <button type="button" className="guest-choice" onClick={() => dispatch({ type: "SELECT", kind: "note" })}>
-            <span className="guest-choice__title">{flow.forms.note.complete ? "View your saved note" : flow.forms.note.hasDraft ? "Continue your note" : "Write a note"}</span>
+            <span className="guest-choice__title">{noteChoiceLabel}</span>
             <span>A message up to 5,000 characters</span>
           </button>
           <button type="button" className="guest-choice" onClick={() => dispatch({ type: "SELECT", kind: "photos" })}>
-            <span className="guest-choice__title">{flow.forms.photos.complete ? "View your saved photos" : flow.forms.photos.hasDraft ? "Continue your photos" : "Add photos"}</span>
+            <span className="guest-choice__title">{photosChoiceLabel}</span>
             <span>Up to 5 original JPEG, PNG or WebP photos · 10 MB each</span>
           </button>
           {flow.audioEnabled && <button type="button" className="guest-choice" onClick={() => dispatch({ type: "SELECT", kind: "audio" })}>
-            <span className="guest-choice__title">{flow.forms.audio.complete ? "View your saved voice memory" : flow.forms.audio.hasDraft ? "Continue your voice memory" : "Record a voice memory"}</span>
+            <span className="guest-choice__title">{audioChoiceLabel}</span>
             <span>Record or choose one audio clip · up to two minutes and 25 MB</span>
           </button>}
           <p className="guest-help">Your memories stay private. No account needed.</p>
@@ -109,7 +119,7 @@ export default function App({ audioEnabled = audioCollectionEnabled(import.meta.
       )}
       {started.has("audio") && (
         <div hidden={flow.screen !== "audio"}>
-          <Suspense fallback={<p role="status">Loading voice memory controls…</p>}>
+          <Suspense fallback={<output>Loading voice memory controls…</output>}>
             <AudioForm active={flow.screen === "audio"} onFlowStateChange={reportAudio} onDone={audioDone} onShareAnother={anotherAudio} />
           </Suspense>
         </div>

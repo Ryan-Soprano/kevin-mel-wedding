@@ -23,6 +23,8 @@ lerna-debug.log*
 .env.*
 !.env.example
 /Cloudflare R2 Bucket.txt
+/Render.txt
+/kevin-mel-render-setup/
 
 # Editors and operating systems
 .idea/
