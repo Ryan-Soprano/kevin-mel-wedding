@@ -13,6 +13,10 @@ For prerequisites, install/run/check commands, the development proxy, and curren
 | [src/features/media/](src/features/media/) | Active batch photo form/coordinator, shared controlled picker, constraints/previews and the retained MED-01 singleton coordinator |
 | [src/features/media/components/PhotoBatchForm.jsx](src/features/media/components/PhotoBatchForm.jsx) | Photo batch shell and compose/review/card/action views; the form hook owns editable state, focus and coordinator wiring while the upload lifecycle stays in api/photoBatchSubmission.js |
 | [src/features/inbox/components/Inbox.jsx](src/features/inbox/components/Inbox.jsx) | Private archive shell and feature routing; smaller access, list, detail, media and review views live beside it |
+| [src/features/inbox/api/inboxController.js](src/features/inbox/api/inboxController.js) | Private state publication, access checks, cancellation, lifecycle and navigation; composes feature actions |
+| [src/features/inbox/api/memoryMutationActions.js](src/features/inbox/api/memoryMutationActions.js) | Memory review, audiences, private links and metadata edits, including revision checks and unconfirmed-action recovery |
+| [src/features/inbox/api/inboxMedia.js](src/features/inbox/api/inboxMedia.js) | Original photo/audio loading, integrity checks and owned preview URL cleanup |
+| [src/features/inbox/api/inboxState.js](src/features/inbox/api/inboxState.js) | Shared immutable state helpers and safe session copies |
 | [src/features/inbox/hooks/](src/features/inbox/hooks/) | Single controller lifetime, privacy clearing, focus/pagination state and stable action adapters |
 | [src/features/inbox/inboxDisplay.js](src/features/inbox/inboxDisplay.js) / [memoryDisplay.js](src/features/inbox/memoryDisplay.js) | Private view labels/guards and Eastern display times; API timestamps remain UTC |
 | [src/features/archive/](src/features/archive/) | Reserved for the private archive and review experience |
