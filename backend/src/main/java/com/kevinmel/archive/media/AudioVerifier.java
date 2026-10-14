@@ -103,8 +103,8 @@ public class AudioVerifier {
             JsonNode streams = metadata.path("streams");
             if (!streams.isArray() || streams.size() != 1) throw invalid();
             JsonNode stream = streams.get(0);
-            String codec = stream.path("codec_name").asText();
-            if (!"audio".equals(stream.path("codec_type").asText())
+            String codec = stream.path("codec_name").asString();
+            if (!"audio".equals(stream.path("codec_type").asString())
                     || stream.path("channels").asInt() < 1 || stream.path("channels").asInt() > 2
                     || stream.path("sample_rate").asInt() < 8_000 || stream.path("sample_rate").asInt() > 96_000)
                 throw invalid();
@@ -246,7 +246,7 @@ public class AudioVerifier {
     }
 
     private static void checkHeaderDuration(JsonNode value) {
-        if (value.isMissingNode() || value.isNull() || value.asText().equals("N/A")) return;
+        if (value.isMissingNode() || value.isNull() || (value.isString() && "N/A".equals(value.textValue()))) return;
         try {
             double seconds = Double.parseDouble(value.asText());
             // Codec padding is removed during decoding. The exact cap is checked on decoded PCM below.

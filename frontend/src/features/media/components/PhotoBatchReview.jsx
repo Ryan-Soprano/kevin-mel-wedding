@@ -13,9 +13,8 @@ export default function PhotoBatchReview({ view, privateArchive, reviewHeading, 
       <ul className="photo-grid photo-grid--batch">
         {photos.map((photo, index) => (
           <li key={photo.id} className="photo-card">
-            <PhotoPreview file={photo.file} />
+            <PhotoPreview file={photo.file} alt={`Photo ${index + 1}`} />
             <div className="photo-batch-card">
-              <p className="photo-card__filename">Photo {index + 1}: {photo.file.name}</p>
               <p className="note-review__message">{reviewData.items[index].caption ?? "No caption provided"}</p>
             </div>
           </li>

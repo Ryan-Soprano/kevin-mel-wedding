@@ -161,6 +161,11 @@ public final class OperatorRecovery {
                 for (var table : targetTables) if (db.sql("SELECT COUNT(*) FROM " + table.name()).query(Long.class).single() != 0) {
                     throw failure("TARGET_NOT_EMPTY");
                 }
+                // Link capabilities never travel in backups and must be freshly issued after recovery.
+                if (schema.bundleVersion() >= 7) {
+                    db.sql("LOCK TABLE memory_share_link IN ACCESS EXCLUSIVE MODE").update();
+                    if (db.sql("SELECT COUNT(*) FROM memory_share_link").query(Long.class).single() != 0) throw failure("TARGET_NOT_EMPTY");
+                }
                 RecoverySchema.insert(db, prepared.tables(), schema.bundleVersion());
                 verifyImportedCounts(prepared.tables(), schema.bundleVersion());
                 var retention = new RetentionRepository(db, manager, schema.bundleVersion() >= 3,

@@ -2,7 +2,7 @@
 
 ARC-03 adds explicit private events and milestones with exact, partial or unknown dates and many-to-many links to existing memories. Chronological pages and year/precision filters are bounded. Event editing, unlinking and event-only deletion preserve originals, memory dates and saved timestamps. See the [timeline contract](../api/v1/timeline.md).
 
-The feature branch is `feature/life-timeline`, based on main `be45aac`. Final-head CI and merge identities belong in the ARC-03 tracker and pull request. Ignored `logs/arc03-local/` holds synthetic fixtures, packages, logs and screenshots.
+The feature branch is `feature/life-timeline`, based on main `be45aac`. Final-head CI and merge identities belong in the ARC-03 tracker and pull request.
 
 ## Automated verification
 

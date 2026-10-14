@@ -22,7 +22,7 @@ public class PlaybackRepository {
                 JOIN contribution c ON c.id = m.contribution_id
                 JOIN media_asset a ON a.memory_id = m.id
                 WHERE m.id = :memory AND c.event_key = 'kevin-mel-wedding'
-                    AND m.visibility = 'COUPLE_ONLY' AND m.memory_type IN ('PHOTO', 'AUDIO')
+                    AND m.visibility IN ('COUPLE_ONLY', 'FRIENDS_FAMILY', 'PUBLIC') AND m.memory_type IN ('PHOTO', 'AUDIO')
                     AND m.review_status IN ('PENDING', 'KEEP', 'ARCHIVED')
                     AND m.purge_started_at IS NULL AND m.purged_at IS NULL
                     AND a.upload_state = 'UPLOADED'

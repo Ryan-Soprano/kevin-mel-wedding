@@ -25,6 +25,12 @@ public class PlaybackService {
     public ObjectStorage.ReadGrant playback(UUID memoryId) {
         authorization.requireCoupleAccess();
         var asset = media.findPlayable(memoryId).orElseThrow(PlaybackService::notFound);
+        requireVerifiedOriginal(asset);
+        return storage.authorizeRead(asset.objectKey(), asset.contentType(), asset.byteSize(), clock.instant().plus(LINK_LIFETIME));
+    }
+
+    /** Shared playback uses the same verified-original boundary as the couple's private viewer. */
+    public static void requireVerifiedOriginal(PlaybackRepository.PlayableMedia asset) {
         // Recheck the key/type boundary here so an alternate repository cannot broaden storage scope.
         if (asset.assetId() == null || !("originals/" + asset.assetId()).equals(asset.objectKey())
                 || !MediaTypes.validTypeAndSize(asset.contentType(), asset.byteSize())
@@ -32,7 +38,6 @@ public class PlaybackService {
                     && asset.durationMs() == null && asset.container() == null && asset.codec() == null
                     || "AUDIO".equals(asset.memoryType()) && asset.durationMs() != null
                         && MediaTypes.audioMetadataMatches(asset.contentType(), asset.container(), asset.codec(), asset.durationMs()))) throw notFound();
-        return storage.authorizeRead(asset.objectKey(), asset.contentType(), asset.byteSize(), clock.instant().plus(LINK_LIFETIME));
     }
 
     private static ApiException notFound() {

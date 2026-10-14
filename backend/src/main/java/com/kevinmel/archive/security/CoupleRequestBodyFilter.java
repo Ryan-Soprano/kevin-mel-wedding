@@ -24,6 +24,9 @@ public final class CoupleRequestBodyFilter extends OncePerRequestFilter {
         chain.doFilter(new BoundedRequest(request, body), response);
     }
     static int bodyLimit(String method, String path) {
+        if ("GET".equals(method) && (path.equals("/api/shared-memories") || path.startsWith("/api/shared-memories/"))) return 0;
+        if ("POST".equals(method) && path.matches("/api/memories/[^/]+/share-link")) return 0;
+        if ("PATCH".equals(method) && path.matches("/api/memories/[^/]+/review")) return 1_024;
         if (path.equals("/api/exports") || path.startsWith("/api/exports/")) return 0;
         if (path.equals("/api/library") || path.startsWith("/api/library/")) {
             if ("GET".equals(method)) return 0;

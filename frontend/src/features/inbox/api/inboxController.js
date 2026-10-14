@@ -14,6 +14,7 @@ const EMPTY_ITEMS = Object.freeze([]);
 const idlePhoto = () => Object.freeze({ phase: "idle", url: null, error: null });
 const idleReview = () => Object.freeze({ phase: "idle", targetStatus: null, error: null, canRetry: false });
 const idleMetadata = () => Object.freeze({ phase: "idle", error: null, canRetry: false });
+const idleShareLink = () => Object.freeze({ url: null, error: null });
 const REVIEW_STATES = new Set(["PENDING", "KEEP", "ARCHIVED", "DELETE"]);
 const interrupted = () => new ApiError("The request was cancelled.", { code: "REQUEST_ABORTED" });
 
@@ -62,13 +63,13 @@ export function createInboxController({
 } = {}) {
   let state = Object.freeze({ phase: "checking", session: null, busy: false, error: null,
     reviewStatus: "PENDING", items: EMPTY_ITEMS, nextCursor: null, detail: null,
-    photo: idlePhoto(), review: idleReview(), metadata: idleMetadata(), albums: initialAlbums(), albumReturnId: null,
+    photo: idlePhoto(), review: idleReview(), shareLink: idleShareLink(), metadata: idleMetadata(), albums: initialAlbums(), albumReturnId: null,
     timeline: initialTimeline(), timelineReturnId: null, library: initialLibrary(), libraryReturn: false,
     tags: initialTags(), tagReturnId: null, export: initialExport(), notice: null, pageResetVersion: 0, logoutUnconfirmed: false });
   let generation = 0, operation = null, disposed = false, objectUrl = null;
   let reviewIntent = null, reviewInFlight = null, reviewUncertain = false, inboxDirty = false;
   let metadataIntent = null, metadataInFlight = null, metadataUncertain = false, metadataHiddenId = null;
-  let suspended = false, resuming = null;
+  let suspended = false, resuming = null, rechecking = null;
   let notifying = false, notifyAgain = false;
   const listeners = new Set();
 
@@ -93,6 +94,8 @@ export function createInboxController({
   function publish(patch) {
     if (disposed) return;
     const next = { ...state, ...patch };
+    if (next.shareLink.url && (next.detail?.memoryId !== next.shareLink.memoryId
+      || next.detail?.revision !== next.shareLink.revision || next.detail?.visibility !== "FRIENDS_FAMILY")) next.shareLink = idleShareLink();
     if (Object.keys(next).every(key => next[key] === state[key])) return;
     state = Object.freeze(next);
     notify();
@@ -110,6 +113,8 @@ export function createInboxController({
     generation++;
     operation?.controller.abort(interrupted());
     operation = null;
+    rechecking?.op.controller.abort(interrupted());
+    rechecking = null;
     revokePhoto();
     exports.revokeDownload();
   }
@@ -119,7 +124,7 @@ export function createInboxController({
     cancel();
     const current = { generation, controller: new AbortController(), purpose };
     operation = current;
-    publish({ busy: true, error: null, photo: idlePhoto(), ...(patch.phase === "export" ? {} : exports.leave()), ...patch });
+    publish({ busy: true, error: null, photo: idlePhoto(), shareLink: idleShareLink(), ...(patch.phase === "export" ? {} : exports.leave()), ...patch });
     return current;
   }
 
@@ -214,7 +219,8 @@ export function createInboxController({
   }
 
   function reviewState(phase, error = null, canRetry = false) {
-    return Object.freeze({ phase, targetStatus: reviewIntent?.targetStatus ?? null, error, canRetry });
+    return Object.freeze({ phase, targetStatus: reviewIntent?.targetStatus ?? null,
+      targetVisibility: reviewIntent?.targetVisibility ?? null, error, canRetry });
   }
 
   async function acceptCurrentReview(op, memory, notice) {
@@ -276,12 +282,17 @@ export function createInboxController({
     return rememberReviewRun(op, async () => {
       const memory = await bounded(op, signal => api.reviewMemory(intent.memoryId, {
         reviewStatus: intent.targetStatus, revision: intent.expectedRevision,
+        ...(intent.explicitVisibility ? { visibility: intent.targetVisibility } : {}),
       }, { csrfToken: token, signal }), apiTimeoutMs, true);
       if (memory.memoryId !== intent.memoryId || memory.reviewStatus !== intent.targetStatus
-        || memory.revision !== intent.expectedRevision + (intent.fromStatus === intent.targetStatus ? 0 : 1)) throw contractMismatch();
+        || memory.visibility !== intent.targetVisibility
+        || memory.revision !== intent.expectedRevision + (intent.fromStatus === intent.targetStatus
+          && intent.fromVisibility === intent.targetVisibility ? 0 : 1)) throw contractMismatch();
       await acceptCurrentReview(op, memory, {
         PENDING: "Restored to your pending inbox. This memory stays private.",
-        KEEP: "Kept privately. This memory has not been published.",
+        KEEP: { COUPLE_ONLY: "Kept privately. Shared access has been removed.",
+          FRIENDS_FAMILY: "Shared with friends and family. Create a private link below to send to them.",
+          PUBLIC: "Shared with the public. This memory is now visible on the guest site." }[memory.visibility],
         ARCHIVED: "Archived privately. You can restore it to your inbox.",
         DELETE: "Moved to Recently deleted. You can restore it during its 30-day recovery window.",
       }[memory.reviewStatus]);
@@ -293,7 +304,7 @@ export function createInboxController({
     if (memory.memoryId !== intent.memoryId || memory.revision < intent.expectedRevision) throw contractMismatch();
     if (reviewUncertain && memory.revision === intent.expectedRevision) {
       // A read can precede a late commit, including after a known rejection of a retry.
-      if (memory.reviewStatus !== intent.fromStatus) throw contractMismatch();
+      if (memory.reviewStatus !== intent.fromStatus || memory.visibility !== intent.fromVisibility) throw contractMismatch();
       publish({ detail: frozenCopy(memory), review: reviewState("uncertain",
         "The current read still shows the earlier revision. The first request may still finish. Retry only this same change, or reload again.", true) });
     } else await acceptCurrentReview(op, memory, notice);
@@ -347,7 +358,7 @@ export function createInboxController({
         || memory.reviewStatus !== intent.fromStatus || memory.deleteAfter !== intent.deleteAfter
         || !sameMetadata(memory, intent.target)
         || memory.revision !== intent.expectedRevision + (sameMetadata(intent.before, intent.target) ? 0 : 1)) throw contractMismatch();
-      await acceptMetadata(op, memory, "Memory details saved privately. Your original content is preserved.");
+      await acceptMetadata(op, memory, "Memory details saved. Your original content is preserved.");
     });
   }
   async function reconcileMetadata(op, memory) {
@@ -601,6 +612,35 @@ export function createInboxController({
       resuming = completion;
       return completion;
     },
+    recheckSession() {
+      // A foreground access check must not replace the view, revoke a loaded
+      // photo, or interrupt a save. Saves already validate access on the server.
+      if (disposed || suspended || !state.session?.authenticated || state.busy
+        || reviewIntent || metadataIntent || albums.locked() || timeline.locked() || tags.locked() || exports.locked()) {
+        return Promise.resolve(state);
+      }
+      if (rechecking) return rechecking.completion;
+      const op = { generation, controller: new AbortController() };
+      const completion = (async () => {
+        try {
+          const session = sessionCopy(await bounded(op, signal => api.getSession({ signal })));
+          if (!session.authenticated) {
+            cancel();
+            clearPrivate({ phase: "login", busy: false, error: "Your session has expired. Sign in again to view the archive." });
+          } else publish({ session });
+        } catch (failure) {
+          if (!current(op)) return state;
+          cancel();
+          if (!authFailure(failure)) clearPrivate({ phase: "unavailable", busy: false,
+            error: "Archive access could not be checked. Try checking access again." });
+        } finally {
+          if (rechecking?.op === op) rechecking = null;
+        }
+        return state;
+      })();
+      rechecking = { op, completion };
+      return completion;
+    },
     loadSession() {
       if (suspended) return controller.resume();
       if (reviewIntent || metadataIntent || albums.locked() || timeline.locked() || tags.locked() || exports.locked()) return Promise.resolve(state);
@@ -703,13 +743,35 @@ export function createInboxController({
       });
     },
     retryMedia() { return controller.retryPhoto(); },
-    reviewMemory(targetStatus) {
+    createShareLink() {
+      if (disposed || suspended || state.busy || reviewIntent || metadataIntent || albums.locked() || timeline.locked()
+        || tags.locked() || exports.locked() || state.phase !== "detail" || state.detail?.visibility !== "FRIENDS_FAMILY"
+        || state.detail.reviewStatus !== "KEEP" || !state.session?.authenticated) return Promise.resolve(state);
+      const memory = state.detail, csrfToken = state.session.csrfToken;
+      const op = start({ phase: "detail", detail: memory, notice: null });
+      return run(op, async () => {
+        const result = await bounded(op, signal => api.createShareLink(memory.memoryId, { revision: memory.revision, csrfToken, signal }), apiTimeoutMs, true);
+        if (result.memoryId !== memory.memoryId || result.revision !== memory.revision + 1) throw contractMismatch();
+        publish({ detail: frozenCopy({ ...memory, revision: result.revision }), shareLink: frozenCopy(result),
+          items: EMPTY_ITEMS, nextCursor: null, pageResetVersion: state.pageResetVersion + 1 });
+        inboxDirty = true;
+        if (["PHOTO", "AUDIO"].includes(memory.memoryType)) await photo(op, memory);
+      }, failure => {
+        if (!authFailure(failure)) publish({ shareLink: Object.freeze({ url: null,
+          error: "The private link could not be confirmed. Reload this memory before creating a new link." }) });
+      });
+    },
+    reviewMemory(targetStatus, visibility) {
       if (!REVIEW_STATES.has(targetStatus)) throw new TypeError("Choose a supported private review state.");
+      if (visibility !== undefined && (!["COUPLE_ONLY", "FRIENDS_FAMILY", "PUBLIC"].includes(visibility)
+        || (targetStatus !== "KEEP" && visibility !== "COUPLE_ONLY"))) throw new TypeError("Choose a supported memory audience.");
       if (reviewInFlight) return reviewInFlight;
       if (disposed || reviewIntent || metadataIntent || albums.locked() || timeline.locked() || tags.locked() || exports.locked() || state.busy || state.phase !== "detail"
         || !state.detail || !state.session?.authenticated) return Promise.resolve(state);
       reviewIntent = Object.freeze({ memoryId: state.detail.memoryId, fromStatus: state.detail.reviewStatus,
-        targetStatus, expectedRevision: state.detail.revision });
+        fromVisibility: state.detail.visibility, targetStatus,
+        targetVisibility: targetStatus === "KEEP" ? (visibility ?? state.detail.visibility) : "COUPLE_ONLY",
+        explicitVisibility: visibility !== undefined, expectedRevision: state.detail.revision });
       reviewUncertain = false;
       return sendReview();
     },
@@ -801,7 +863,7 @@ export function createInboxController({
       timeline.clear();
       library.clear(); tags.clear(); exports.clear();
       state = Object.freeze({ ...state, session: null, items: EMPTY_ITEMS, nextCursor: null,
-        detail: null, photo: idlePhoto(), review: idleReview(), metadata: idleMetadata(), albums: initialAlbums(), albumReturnId: null,
+        detail: null, photo: idlePhoto(), review: idleReview(), shareLink: idleShareLink(), metadata: idleMetadata(), albums: initialAlbums(), albumReturnId: null,
         timeline: initialTimeline(), timelineReturnId: null, library: initialLibrary(), libraryReturn: false, tags: initialTags(), tagReturnId: null, export: initialExport(), notice: null, busy: false, error: null });
       suspended = true;
       resuming = null;

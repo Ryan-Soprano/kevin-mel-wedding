@@ -100,6 +100,10 @@ test("extracted private inbox views preserve loading precedence, memory attribut
     assert.match(detail, /Memory date: 2024-06 \(month precision\)/);
     assert.match(detail, /Eastern time/);
     assert.match(detail, /From Name not provided/);
+    assert.match(detail, />Keep Private</);
+    assert.match(detail, />Share with Friends &amp; Family</);
+    assert.match(detail, />Share with Public</);
+    assert.match(detail, />Delete</);
     const photoState = { ...state, detail: MEDIA_DETAIL, photo: { phase: "ready", url: "blob:verified-original", error: null } };
     const photo = render(MemoryDetail, { ...detailProps, state: photoState });
     assert.match(photo, /<img[^>]*src="blob:verified-original"[^>]*alt="A happy moment"/);
@@ -108,7 +112,7 @@ test("extracted private inbox views preserve loading precedence, memory attribut
     assert.match(locked, /disabled="">Back to inbox/);
     assert.match(locked, /Reload current state/);
     assert.match(locked, /Retry this same change/);
-    assert.doesNotMatch(locked, /blob:verified-original|>Keep privately<|>Delete…</);
+    assert.doesNotMatch(locked, /blob:verified-original|>Keep Private<|>Share with Public<|>Delete</);
     const noRetry = render(MemoryDetail, { ...detailProps, state: { ...state, review: { ...state.review, phase: "uncertain" } }, locked: true });
     assert.match(noRetry, /Reload current state/);
     assert.doesNotMatch(noRetry, /Retry this same change/);
@@ -120,11 +124,11 @@ test("extracted private inbox views preserve loading precedence, memory attribut
     assert.match(confirming, /<legend id="inbox-delete-title">Delete this memory\?<\/legend>/);
     assert.match(confirming, />Cancel</);
     assert.match(confirming, />Confirm delete</);
-    assert.doesNotMatch(confirming, />Delete…</);
+    assert.doesNotMatch(confirming, />Delete</);
     const deleted = render(MemoryDetail, { ...detailProps, state: { ...photoState, detail: { ...MEDIA_DETAIL, reviewStatus: "DELETE", deleteAfter: "2026-11-08T12:00:00Z" } } });
     assert.match(deleted, /30-day recovery window ends/);
     assert.match(deleted, /Restore to inbox/);
-    assert.doesNotMatch(deleted, /blob:verified-original|Editable memory details|Tags attached to this memory|>Delete…</);
+    assert.doesNotMatch(deleted, /blob:verified-original|Editable memory details|Tags attached to this memory|>Delete</);
 
     const audio = { ...MEDIA_DETAIL, memoryType: "AUDIO", source: "COUPLE", caption: null, media: { ...MEDIA_DETAIL.media, originalFilename: "voice.webm", durationSeconds: 12.2 } };
     const voice = render(MemoryDetail, { ...detailProps, state: { ...photoState, detail: audio } });

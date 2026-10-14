@@ -1,4 +1,27 @@
 import { getReviewProgressLabel } from "../inboxDisplay.js";
+import { useState } from "react";
+
+function PrivateShareLink({ memory, shareLink, busy, locked, actions }) {
+  const [copyFeedback, setCopyFeedback] = useState(null);
+  if (memory.visibility !== "FRIENDS_FAMILY" || memory.reviewStatus !== "KEEP") return null;
+  const url = shareLink?.url ? (typeof window === "undefined" ? shareLink.url : new URL(shareLink.url, window.location.origin).href) : null;
+  async function copyLink() {
+    try { await navigator.clipboard.writeText(url); setCopyFeedback("Link copied."); }
+    catch { setCopyFeedback("Select the link above to copy it manually."); }
+  }
+  return <div className="inbox-sharing-note">
+    <p>Anyone with this private link can view this memory. Send it only to the people you choose. Creating a new link replaces the previous one.</p>
+    {url && <><label htmlFor="memory-share-link">Private link</label>
+      <input id="memory-share-link" type="text" readOnly value={url} onFocus={event => event.target.select()} />
+      <button type="button" className="button-secondary" onClick={copyLink}>Copy private link</button>
+      {copyFeedback && <output role="status">{copyFeedback}</output>}</>}
+    {shareLink?.error && <p className="form-error" role="alert">{shareLink.error}</p>}
+    <div className="inbox-actions">
+      <button type="button" className="button-secondary" disabled={busy || locked} onClick={actions.createLink}>Create new private link</button>
+      {shareLink?.error && <button type="button" className="button-secondary" disabled={busy || locked} onClick={actions.reloadMemory}>Reload memory</button>}
+    </div>
+  </div>;
+}
 
 function ReviewRecovery({ review, busy, actions }) {
   if (["uncertain", "conflict"].includes(review.phase)) {
@@ -17,11 +40,14 @@ function ReviewActions({ memory, busy, locked, controls, deleteButton }) {
   if (locked || controls.confirmingDelete) return null;
   const deleted = memory.reviewStatus === "DELETE";
   return (
-    <div className="inbox-actions">
-      {memory.reviewStatus !== "KEEP" && !deleted && <button type="button" disabled={busy} onClick={() => controls.change("KEEP")}>Keep privately</button>}
-      {memory.reviewStatus !== "ARCHIVED" && !deleted && <button type="button" className="button-secondary" disabled={busy} onClick={() => controls.change("ARCHIVED")}>Archive</button>}
-      {["ARCHIVED", "DELETE"].includes(memory.reviewStatus) && <button type="button" disabled={busy} onClick={() => controls.change("PENDING")}>Restore to inbox</button>}
-      {!deleted && <button ref={deleteButton} type="button" className="button-secondary" disabled={busy} onClick={controls.beginDelete}>Delete…</button>}
+    <div className="inbox-actions inbox-sharing-actions">
+      {!deleted && <>
+        <button type="button" className="button-secondary" aria-pressed={memory.reviewStatus === "KEEP" && memory.visibility === "COUPLE_ONLY"} disabled={busy} onClick={() => controls.change("KEEP", "COUPLE_ONLY")}>Keep Private</button>
+        <button type="button" className="button-secondary" aria-pressed={memory.visibility === "FRIENDS_FAMILY"} disabled={busy} onClick={() => controls.change("KEEP", "FRIENDS_FAMILY")}>Share with Friends &amp; Family</button>
+        <button type="button" className="button-secondary" aria-pressed={memory.visibility === "PUBLIC"} disabled={busy} onClick={() => controls.change("KEEP", "PUBLIC")}>Share with Public</button>
+        <button ref={deleteButton} type="button" className="button-secondary inbox-delete-action" disabled={busy} onClick={controls.beginDelete}>Delete</button>
+      </>}
+      {deleted && <button type="button" disabled={busy} onClick={() => controls.change("PENDING")}>Restore to inbox</button>}
     </div>
   );
 }
@@ -40,16 +66,18 @@ function DeleteConfirmation({ busy, controls, cancelDelete }) {
   );
 }
 
-export default function MemoryReview({ memory, review, busy, locked, controls, actions, deleteButton, cancelDelete, reviewFeedback }) {
+export default function MemoryReview({ memory, review, shareLink, busy, locked, controls, actions, deleteButton, cancelDelete, reviewFeedback }) {
   const progressLabel = getReviewProgressLabel(review);
   return (
-    <section className="inbox-review" aria-label="Private review actions">
-      <p className="guest-help">These actions affect this individual memory. Keeping or archiving it does not publish it or change other memories.</p>
+    <section className="inbox-review" aria-label="Memory sharing and review">
+      <h3>Who can see this memory?</h3>
+      <p className="guest-help">Keep it in your private vault, send a private link to friends and family, or share it on the public guest site. Each choice affects only this memory.</p>
       {progressLabel && <output>{progressLabel}</output>}
       {review.error && <p ref={reviewFeedback} tabIndex={-1} className="form-error" role="alert">{review.error}</p>}
       {locked && <p className="guest-help">Keep this page open while this change is pending or unconfirmed. Other review actions, navigation, media loading and sign-out are paused.</p>}
       <ReviewRecovery review={review} busy={busy} actions={actions} />
       <ReviewActions memory={memory} busy={busy} locked={locked} controls={controls} deleteButton={deleteButton} />
+      <PrivateShareLink key={`${memory.memoryId}:${shareLink?.url ?? "none"}`} memory={memory} shareLink={shareLink} busy={busy} locked={locked} actions={actions} />
       <DeleteConfirmation busy={busy} controls={controls} cancelDelete={cancelDelete} />
     </section>
   );

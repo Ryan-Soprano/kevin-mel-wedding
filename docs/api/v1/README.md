@@ -13,7 +13,7 @@ MED-01 implements PHOTO intents (one to five), capability-bound grants/finalizat
 
 AUTH-01 implements GET/POST/DELETE `/api/session` with Spring Security server-side sessions, PostgreSQL accounts, bcrypt password hashes, CSRF/session rotation, durable login throttling, credential-version revocation, and reveal/role gates. Provisioning and recovery use a separate console utility. See [AUTH-01 verification](auth-verification.md) and the [account-access runbook](../../runbooks/account-access.md).
 
-AUTH-02 implements private playback issuance, now extended to verified AUDIO by AUD-03. Every issuance rechecks current couple/reveal authority, authenticated private-object size/MIME and a single-object GET expiry of at most 300 seconds. The private inbox supports notes, verified photos and verified audio; conditional review and independent-ledger-backed retention remain private. Publication, production onboarding and hosted acceptance remain release work. See [authorization verification](authorization-verification.md) and the [audio runbook](../../runbooks/voice-memories.md).
+AUTH-02 implements couple-authorized playback issuance, now extended to verified AUDIO by AUD-03. Every couple issuance rechecks current couple/reveal authority, authenticated private-object size/MIME and a single-object GET expiry of at most 300 seconds. The inbox supports notes, verified photos and verified audio, with conditional review and independent-ledger-backed retention. The [sharing contract](sharing.md) defines explicit audience choices and separate guest reads. Production onboarding and hosted acceptance remain release work. See [authorization verification](authorization-verification.md) and the [audio runbook](../../runbooks/voice-memories.md).
 
 ARC-01 adds [private couple creation and editable details](couple-memories.md), including account-bound upload recovery, Kept defaults for couple-authored memories, optional precise/partial dates and conditional metadata updates. Original guest content and files remain preserved. Recovery package v3 carries these additive V10 fields.
 
@@ -22,6 +22,8 @@ ARC-02 adds [private albums and event collections](albums.md): named many-to-man
 The [staging package](../../runbooks/staging-deployment.md) serves production frontend assets and `/api` through one Spring process. Its staging-only operator access gate is separate from the couple session API. Staging limits overlapping photo finalization to one: a busy request returns `503 MEDIA_UNAVAILABLE` before reading storage or changing item state; deliberate retry retains the same intent, item and capability key. File, dimension and batch limits are unchanged. Local package checks pass; hosted deployment and physical-phone acceptance remain pending.
 
 ## Shared conventions
+
+The [memory sharing contract](sharing.md) adds couple-controlled audiences: Keep Private, Friends & Family through a revocable private link, and Public on the guest site. Guest reads expose only explicitly shared content; couple routes continue to include every audience. Flyway V14 and recovery version 7 preserve these choices, with secret links excluded from recovery and portable exports. New contributions remain private by default.
 
 ARC-05 adds [portable couple exports](exports.md): temporary session-authorized jobs, bounded ZIP parts, exact original verification, unavailable-original reports and a separate offline reader. All export control routes use the shared contract, CSRF and privacy boundary; the authenticated binary route also requires contract version 1. This delivery format contains no operator recovery capabilities or database import state.
 
@@ -46,7 +48,7 @@ New photo intents and temporary permissions have separate serialized 7.5 GB rese
   valid Unicode scalar sequences without U+0000, which PostgreSQL text cannot store.
 - Server assigns eventKey `kevin-mel-wedding`; guests cannot choose events,
   review state, visibility, IDs, or storage keys.
-- New guest memories are PENDING and COUPLE_ONLY. Authenticated couple creation starts in KEEP and COUPLE_ONLY. KEEP and ARCHIVED remain private.
+- New guest memories are PENDING and COUPLE_ONLY. Authenticated couple creation starts in KEEP and COUPLE_ONLY. Shared audiences require an explicit KEEP audience choice; all other review states remain private.
   Publication is a separate future operation.
 - Fixtures use synthetic content, tokens, and URLs. Their far-future expiries
   support reusable examples, not production TTLs.
@@ -281,23 +283,23 @@ valid. MEMORY_DETAIL / MEDIA_DETAIL / INBOX_PAGE / EMPTY_INBOX define full examp
 
 - memoryId, contributionId, nullable guestName, memoryType.
 - textContent nonblank for TEXT/null for media; nullable caption (null for TEXT).
-- reviewStatus, visibility COUPLE_ONLY, integer revision starting at 1.
+- reviewStatus, visibility COUPLE_ONLY/FRIENDS_FAMILY/PUBLIC, integer revision starting at 1. Shared audiences require KEEP.
 - createdAt, updatedAt (at least creation), deleteAfter (null except DELETE).
 - media null for TEXT; otherwise originalFilename, detectedContentType, byteSize,
   checksumSha256, durationSeconds (null for PHOTO), uploadState. No URL/internal
   storage key. Inbox contains durable items; receipt reconciles unfinished uploads.
 
 GET detail returns ETag `"1"` matching persisted revision. The inbox includes TEXT and verified PHOTO/AUDIO, excluding unfinished/unverified and expired/claimed/purged items. Audio detail reports server-decoded `durationSeconds`. Recoverable DELETE returns its first deleteAfter; other states return null. See [INB-01 verification](inbox-verification.md) and [INB-02 verification](review-verification.md). PATCH review sends
-`{"reviewStatus":"KEEP"}`, `If-Match: "1"`, X-CSRF-Token. Server atomically
-checks authorization/CSRF/revision, increments revision for an actual change and returns detail/new ETag. A same-state request at the current revision is a no-op; stale same-state requests still conflict. State and content-free audit commit atomically.
+`{"reviewStatus":"KEEP","visibility":"COUPLE_ONLY"}`, `If-Match: "1"`, X-CSRF-Token. Visibility is optional for existing callers; the inbox sends an explicit audience. Server atomically
+checks authorization/CSRF/revision, increments revision for an actual status or audience change and returns detail/new ETag. A same-status, same-audience request at the current revision is a no-op; stale requests still conflict. State and content-free audit commit atomically.
 Missing precondition: 428 PRECONDITION_REQUIRED; stale revision: 412 REVIEW_CONFLICT.
 Reload and let the couple reconsider; never silently overwrite or auto-retry.
 
 The implemented DELETE review state is soft: deleteAfter = first deletion + 30 days. Repeated DELETE must not
 extend it. Before expiry, PATCH PENDING/KEEP/ARCHIVED restores and clears deleteAfter.
-After expiry, unavailable items return 404. Bounded maintenance writes an independent private deletion ledger before physical object deletion and metadata scrubbing. Retained opaque IDs/retry reservations prevent guest replay from recreating purged content; offline ledger replay reserves erased-key digests even when the backup predates submission creation. The [deletion/recovery runbook](../../runbooks/deletion-and-recovery.md) defines maintenance readiness and rolling-backup implications. No sibling cascade or memory HTTP DELETE route. KEEP is not publication.
+After expiry, unavailable items return 404. Bounded maintenance writes an independent private deletion ledger before physical object deletion and metadata scrubbing. Retained opaque IDs/retry reservations prevent guest replay from recreating purged content; offline ledger replay reserves erased-key digests even when the backup predates submission creation. The [deletion/recovery runbook](../../runbooks/deletion-and-recovery.md) defines maintenance readiness and rolling-backup implications. No sibling cascade or memory HTTP DELETE route. KEEP stays private unless the couple explicitly chooses a shared audience. Deletion revokes sharing, and restoring forces COUPLE_ONLY.
 
-PLAYBACK is `{"url":"https://…","expiresAt":"…Z"}`. AUTH-02/AUD-03 issue it for verified PHOTO/AUDIO items with `COUPLE_ONLY` visibility and `UPLOADED` assets. Each request revalidates the enabled COUPLE account and open reveal gate; guest capabilities, IDs and operator/developer roles grant no authority. Authenticated HEAD must match the private original's size and detected MIME before signing one S3 HTTPS GET for at most 300 seconds. `expiresAt` reports the actual signature expiry. Public custom domains and `r2.dev` stay disabled for originals and staging.
+PLAYBACK is `{"url":"https://…","expiresAt":"…Z"}`. AUTH-02/AUD-03 issue it through the couple route for verified PHOTO/AUDIO items of every supported audience with `UPLOADED` assets. Each couple-route request revalidates the enabled COUPLE account and open reveal gate; guest capabilities, IDs and operator/developer roles grant no authority on that route. The separate [guest sharing playback route](sharing.md) checks the current public audience or private-link capability. Authenticated HEAD must match the private original's size and detected MIME before signing one S3 HTTPS GET for at most 300 seconds. `expiresAt` reports the actual signature expiry. Public custom domains and `r2.dev` stay disabled for originals and staging.
 
 Unfinished/failed/unverified items, TEXT, missing or wrong-event memories, and DELETE items return safe 404. Restoring an eligible deleted item permits playback again. A missing eligible original, metadata mismatch or unavailable storage returns 503 MEDIA_UNAVAILABLE; database failure remains 503 SERVICE_UNAVAILABLE. Playback failure does not erase the memory, and inbox/detail reads remain independent of storage. Accepted AUDIO playback remains available when new audio admission is disabled.
 

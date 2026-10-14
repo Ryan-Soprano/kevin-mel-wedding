@@ -6,6 +6,7 @@ import { createGuestFlow, guestFlowReducer, hasUnfinishedWork, navigationLocked 
 import GuestGallery from "../features/guestGallery/GuestGallery.jsx";
 
 const AudioForm = lazy(() => import("../features/audio/components/AudioForm.jsx"));
+const PublicMemories = lazy(() => import("../features/sharing/SharedMemories.jsx").then(module => ({ default: module.PublicMemories })));
 
 function getChoiceLabel(form, savedLabel, draftLabel, emptyLabel) {
   if (form.complete) return savedLabel;
@@ -66,13 +67,13 @@ export default function App({ audioEnabled = audioCollectionEnabled(import.meta.
       {flow.screen === "welcome" && (
         <section className="guest-welcome" aria-label="Share a wedding memory">
           <p>{flow.audioEnabled ? "Share a note, your favorite photos, or a voice memory from the day." : "Share a note or your favorite photos from the day."}</p>
-          <p>Your contribution goes to Kevin and Melanie. It is not posted publicly.</p>
+          <p>Your contribution goes directly to Kevin and Melanie’s private vault. It is not posted publicly.</p>
           <button id="share-wedding-memory" type="button" onClick={() => dispatch({ type: "CHOOSE" })}>Share a memory</button>
           <p className="guest-help">No account needed. Your name is optional.</p>
-          <a className="guest-gallery-link" href="#couple-gallery">Browse Kevin and Melanie’s photos</a>
         </section>
       )}
       {flow.screen === "welcome" && <GuestGallery />}
+      {flow.screen === "welcome" && <Suspense fallback={null}><PublicMemories /></Suspense>}
 
       {flow.screen === "choose" && (
         <section className="guest-choices" aria-label="Choose your memory type">

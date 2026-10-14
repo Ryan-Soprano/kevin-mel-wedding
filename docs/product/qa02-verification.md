@@ -31,7 +31,7 @@ No rendered JavaScript errors were observed in the main eight-stage flow. The co
 
 The zoom run used a fresh isolated Chrome profile with its ordinary page-zoom preference set to 200%, keeping the outer window at 1280 × 800. Its CSS viewport was 629 × 351 with DPR 2; pinch scale and computed CSS zoom stayed 1. A separate 100% probe kept that outer window and measured a 1258 × 702 CSS viewport with DPR 1. Native CDP viewport captures preserved 1258 × 702 physical pixels and were visually inspected. Playwright's cropped full-page captures at browser zoom were excluded from visual acceptance; no CSS zoom or device-metric override was injected. The narrow run used a separate normal desktop page at 320 × 780 CSS pixels/DPR 1, with its rendered screenshots inspected. These are desktop layout results, not phone or screen-reader acceptance.
 
-The [tester guide](qa02-tester-guide.md) retains the actual-device, screen-reader, provider and network scenarios for later observation. Browser screenshots and intermediate helpers remain under ignored `logs/qa02-local/` with synthetic content only.
+The [tester guide](qa02-tester-guide.md) retains the actual-device, screen-reader, provider and network scenarios for later observation.
 
 ## Bounded simultaneous text rehearsal
 
@@ -59,13 +59,13 @@ The shared-peer fixture consumed exactly **400 admitted CREATE calls**: 390 acro
 
 A fresh fixture admitted **12 CREATE calls for one retry key**, denied the next call, restarted the same owned app, and denied the key again. `Retry-After` was 900 seconds; a fresh independent key and receipt recovery still worked. It contained exactly two private contributions/items. The unchanged 15-minute policy is 800 global / 400 peer / 12 retry-key CREATE calls, with separate receipt counters. This run proves peer/key boundaries and key persistence, not the global 800-call boundary or multi-process capacity.
 
-Normal cleanup and the deliberate-failure cleanup probe both passed. Independent Docker queries confirmed no reception-labelled containers or networks remained. Content-free output is retained in ignored `logs/qa02-local/concurrency.log` and `failure-cleanup.log`.
+Normal cleanup and the deliberate-failure cleanup probe both passed. Independent Docker queries confirmed no reception-labelled containers or networks remained.
 
 ## Tester and release preparation
 
 The [Kevin/Melanie tester guide](qa02-tester-guide.md) supplies guest/private-inbox scenarios and a content-free feedback template. The [release checklist](wedding-release-checklist.md) supplies proposed guest copy and records every unresolved launch gate. The [QR-card layout](wedding-qr-card-draft.html) is an inert draft with an empty QR placeholder and no final collection address.
 
-The draft card's desktop screenshot and complete one-page A4 PDF proof were rendered and visually inspected. Print CSS measured the card at **105 × 148 mm**; the blank QR area, private-contribution copy, readable fallback placeholder and draft marking fit without overlap or clipping. The proof is an ignored intermediate at `logs/qa02-local/qr-card-print-preview.pdf`; the editable HTML is the committed layout. This is print-layout preparation, not an actual-size printed scan or approval for guest distribution.
+The draft card's desktop screenshot and complete one-page A4 PDF proof were rendered and visually inspected. Print CSS measured the card at **105 × 148 mm**; the blank QR area, private-contribution copy, readable fallback placeholder and draft marking fit without overlap or clipping. The editable HTML is the committed layout. This is print-layout preparation, not an actual-size printed scan or approval for guest distribution.
 
 Frontend lint, all **286 tests**, production build, **four reception helper tests** and **three existing rollback helper tests** passed locally. The reception helper's complete normal and deliberate-failure runs both exited successfully. Application code, dependencies, CI and production flags were unchanged.
 

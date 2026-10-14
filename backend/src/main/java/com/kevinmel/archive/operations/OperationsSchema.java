@@ -31,7 +31,7 @@ final class OperationsSchema {
             "V3__add_photo_upload_lifecycle.sql", "V4__create_archive_accounts.sql",
             "V5__create_login_throttle.sql", "V6__add_inbox_revision.sql",
             "V7__add_private_review_retention.sql", "V8__anonymous_submission_protection.sql",
-            "V9__add_verified_audio_lifecycle.sql", "V10__add_couple_authored_memories.sql", "V11__add_private_albums.sql", "V12__add_private_timeline.sql", "V13__add_private_library_tags.sql");
+            "V9__add_verified_audio_lifecycle.sql", "V10__add_couple_authored_memories.sql", "V11__add_private_albums.sql", "V12__add_private_timeline.sql", "V13__add_private_library_tags.sql", "V14__add_memory_sharing.sql");
     private static final Map<String, String> COLUMNS = Map.ofEntries(
             Map.entry("contribution", "id:uuid event_key:varchar guest_name:varchar? idempotency_key:varchar created_at:timestamptz request_fingerprint:varchar? source:varchar author_account_id:uuid?"),
             Map.entry("memory", "id:uuid contribution_id:uuid memory_type:varchar text_content:text? review_status:varchar visibility:varchar created_at:timestamptz updated_at:timestamptz client_item_id:uuid? caption:varchar? item_position:int4? revision:int4 delete_after:timestamptz? purge_started_at:timestamptz? purged_at:timestamptz? title:varchar? description:varchar? memory_date:varchar? date_precision:varchar"),
@@ -47,7 +47,8 @@ final class OperationsSchema {
             Map.entry("archive_account", "id:uuid username:varchar display_name:varchar password_hash:varchar role:varchar enabled:bool credentials_version:int8 created_at:timestamptz updated_at:timestamptz"),
             Map.entry("archive_login_throttle", "bucket_key:bpchar window_started_at:timestamptz attempts:int4"),
             Map.entry("archive_anonymous_throttle", "bucket_key:varchar window_started_at:timestamptz attempts:int4"),
-            Map.entry("review_audit", "memory_id:uuid actor_account_id:uuid from_status:varchar to_status:varchar before_revision:int4 after_revision:int4 acted_at:timestamptz"),
+            Map.entry("review_audit", "memory_id:uuid actor_account_id:uuid from_status:varchar to_status:varchar before_revision:int4 after_revision:int4 acted_at:timestamptz before_visibility:varchar after_visibility:varchar"),
+            Map.entry("memory_share_link", "memory_id:uuid token_digest:bpchar issued_at:timestamptz"),
             Map.entry("deletion_ledger", "memory_id:uuid contribution_id:uuid asset_id:uuid? submission_key_digest:bpchar delete_after:timestamptz recorded_at:timestamptz purged_at:timestamptz?"),
             Map.entry("erased_submission_key", "key_digest:bpchar erased_at:timestamptz"));
 

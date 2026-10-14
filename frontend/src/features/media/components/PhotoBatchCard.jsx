@@ -24,7 +24,7 @@ export default function PhotoBatchCard({ photo, index, prefix, item, locked, bus
   }
   return (
     <div className="photo-batch-card">
-      <p id={filenameId} className="photo-card__filename">Photo {index + 1}: {photo.file.name}</p>
+      <span id={filenameId} className="visually-hidden">Photo {index + 1}: {photo.file.name}</span>
       <label htmlFor={captionId}>Caption for photo {index + 1} (optional)</label>
       <textarea id={captionId} rows={2} maxLength={500} value={photo.caption || ""} disabled={locked}
         ref={node => onCaptionRef(photo.id, node)} onChange={event => onCaptionChange(photo.id, event.target.value)}

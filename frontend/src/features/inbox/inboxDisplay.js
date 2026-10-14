@@ -1,5 +1,6 @@
 export const REVIEW_STATUS_LABELS = { PENDING: "Pending", KEEP: "Kept", ARCHIVED: "Archived", DELETE: "Recently deleted" };
 const REVIEW_ACTION_LABELS = { PENDING: "Restore to inbox", KEEP: "Keep privately", ARCHIVED: "Archive", DELETE: "Delete" };
+export const VISIBILITY_LABELS = { COUPLE_ONLY: "Private · Kevin & Melanie", FRIENDS_FAMILY: "Friends & Family · Private link", PUBLIC: "Public · Guest site" };
 export const MEMORY_TYPE_LABELS = { TEXT: "Written note", PHOTO: "Photo", AUDIO: "Voice memory" };
 const MEMORY_SHORT_LABELS = { TEXT: "note", PHOTO: "photo", AUDIO: "voice memory" };
 const AUTHENTICATED_PHASES = new Set(["inbox", "detail", "create", "albums", "timeline", "library", "tags", "export"]);
@@ -48,7 +49,7 @@ export function getMemorySourceLabel(memory) {
 
 export function getMemoryExcerpt(memory) {
   if (memory.memoryType === "TEXT") return memory.textContent.slice(0, 180);
-  return memory.caption ?? memory.media.originalFilename;
+  return memory.caption ?? (memory.memoryType === "PHOTO" ? "A photo saved in your vault." : "A voice memory saved in your vault.");
 }
 
 export function getMemoryOpenLabel(memory) {
@@ -67,7 +68,8 @@ export function getDetailBackLabel(snapshot) {
 }
 
 export function getReviewProgressLabel(review) {
-  if (review.phase === "saving") return `Saving: ${REVIEW_ACTION_LABELS[review.targetStatus]}…`;
+  if (review.phase === "saving") return `Saving: ${review.targetStatus === "KEEP" && review.targetVisibility
+    ? VISIBILITY_LABELS[review.targetVisibility] : REVIEW_ACTION_LABELS[review.targetStatus]}…`;
   if (review.phase === "refreshing") return "Refreshing your session and this memory…";
   if (review.phase === "loading") return "Loading this memory’s current state…";
   return null;

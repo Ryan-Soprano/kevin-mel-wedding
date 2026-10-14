@@ -1,148 +1,346 @@
 .private-inbox {
-  max-width: 760px;
+  --inbox-border: #dfded4;
+  --inbox-soft: #f0f3ed;
+  max-width: 1020px;
+  padding: clamp(24px, 5vw, 56px) clamp(18px, 4vw, 40px) 64px;
   overflow-wrap: anywhere;
 }
 
-.private-inbox h1:focus {
-  outline: none;
+.private-inbox h1:focus { outline: none; }
+
+.inbox-header {
+  position: relative;
+  margin-bottom: 32px;
+  padding-bottom: 26px;
+  border-bottom: 1px solid var(--inbox-border);
+}
+
+.inbox-header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 22px;
+}
+
+.inbox-header .guest-couple { margin: 0; }
+
+.inbox-header h1 {
+  max-width: 800px;
+  margin-bottom: 14px;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(2.1rem, 5vw, 3.15rem);
+  font-weight: 500;
+  letter-spacing: -0.03em;
+}
+
+.inbox-header-description {
+  max-width: 650px;
+  margin: 0;
+  color: var(--color-muted);
+  line-height: 1.7;
+}
+
+.inbox-vault-label,
+.inbox-memory-kind,
+.inbox-visibility {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--color-primary);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.inbox-vault-label {
+  padding: 7px 12px;
+  border: 1px solid #d5dfd2;
+  border-radius: 999px;
+  background: var(--inbox-soft);
+}
+
+.inbox-vault-label svg,
+.inbox-memory-kind svg {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .inbox-account,
 .inbox-filters,
 .inbox-pagination,
-.inbox-actions {
+.inbox-actions,
+.inbox-tools,
+.inbox-tool-links {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 12px;
-  margin: 20px 0;
 }
 
 .inbox-account {
   justify-content: space-between;
+  margin: 22px 0 0;
+  padding-top: 18px;
+  border-top: 1px dashed var(--inbox-border);
+  color: var(--color-muted);
+  font-size: 0.9rem;
 }
 
 .inbox-account p,
-.inbox-actions p {
-  margin: 0;
+.inbox-actions p { margin: 0; }
+
+.inbox-account button { min-height: 40px; padding: 8px 16px; }
+
+.inbox-tools { justify-content: space-between; margin-bottom: 26px; }
+
+.inbox-tool-links { gap: 6px; }
+
+.private-inbox .button-secondary { border-width: 1px; }
+
+.inbox-tool-links .button-secondary {
+  min-height: 44px;
+  padding: 10px 12px;
+  border-color: transparent;
+  background: transparent;
+}
+
+.inbox-tool-links .button-secondary:hover:not(:disabled) {
+  color: var(--color-primary);
+  background: #e7ece3;
+}
+
+.inbox-filters {
+  gap: 6px;
+  margin: 0 0 22px;
+  padding: 7px;
+  border: 1px solid var(--inbox-border);
+  border-radius: 14px;
+  background: #eeeee6;
+}
+
+.inbox-filters button {
+  flex: 1 1 auto;
+  min-height: 44px;
+  padding: 10px 15px;
+  border: none;
+  background: transparent;
+  color: var(--color-muted);
 }
 
 .inbox-filters [aria-pressed="true"] {
   color: var(--color-surface);
   background: var(--color-primary);
+  box-shadow: 0 2px 5px rgb(41 37 36 / 8%);
 }
+
+.inbox-page-count { margin: 0 0 16px; color: var(--color-muted); font-size: 0.85rem; }
 
 .inbox-list {
   display: grid;
-  gap: 20px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  margin: 0;
   padding: 0;
   list-style: none;
 }
 
 .inbox-card {
-  padding: 20px;
-  border: 1px solid var(--color-border);
-  border-radius: 12px;
-  background: var(--color-surface);
+  display: flex;
+  flex-direction: column;
   min-width: 0;
+  padding: 24px;
+  border: 1px solid var(--inbox-border);
+  border-radius: 18px;
+  background: var(--color-surface);
+  box-shadow: 0 5px 20px rgb(61 66 49 / 4%);
 }
 
-.inbox-card h2 {
-  margin-top: 0;
-  font-size: 1.25rem;
-}
+.inbox-card-top { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
+
+.inbox-visibility { color: var(--color-muted); font-size: 0.72rem; font-weight: 400; }
+
+.inbox-card h2 { margin: 0 0 8px; font-size: 1.3rem; font-weight: 650; line-height: 1.4; }
+
+.inbox-card-source,
+.inbox-card-date { color: var(--color-muted); font-size: 0.82rem; }
+
+.inbox-card-date { margin: 0 0 18px; }
 
 .inbox-excerpt,
-.inbox-note {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
+.inbox-note { white-space: pre-wrap; overflow-wrap: anywhere; }
 
-.inbox-note {
-  padding: 20px;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: 8px;
-  background: var(--color-surface);
-}
+.inbox-excerpt { flex: 1; margin: 0 0 22px; line-height: 1.75; }
 
-.inbox-detail {
+.inbox-card > button { align-self: flex-start; min-height: 44px; padding: 10px 17px; font-size: 0.9rem; }
+
+.inbox-pagination { justify-content: space-between; margin: 26px 0 0; color: var(--color-muted); font-size: 0.85rem; }
+
+.inbox-pagination button { font-size: 0.85rem; min-height: 44px; padding: 10px 14px; }
+
+.inbox-login {
   display: grid;
-  gap: 16px;
-  min-width: 0;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  overflow: hidden;
+  border: 1px solid var(--inbox-border);
+  border-radius: 22px;
+  background: var(--color-surface);
+  box-shadow: 0 12px 32px rgb(61 66 49 / 5%);
 }
 
-.inbox-detail > button {
-  width: fit-content;
-  max-width: 100%;
+.inbox-login-welcome {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 38px;
+  color: #fffdf7;
+  background: radial-gradient(ellipse at top left, #697b61, transparent 80%), #405747;
 }
 
-.inbox-original {
-  display: block;
-  width: 100%;
-  height: auto;
-  border-radius: 8px;
-}
-
-.inbox-download {
+.inbox-monogram {
   display: inline-flex;
   align-items: center;
-  min-height: 48px;
-  color: var(--color-primary);
-  font-weight: 600;
+  justify-content: center;
+  gap: 8px;
+  width: 105px;
+  height: 105px;
+  margin-bottom: 27px;
+  border: 1px solid rgb(255 253 247 / 35%);
+  border-radius: 50%;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 2rem;
 }
 
-.inbox-download:focus-visible {
-  outline: 3px solid var(--color-primary);
-  outline-offset: 3px;
+.inbox-monogram > span { font-size: 1.2rem; font-style: italic; }
+
+.inbox-login-welcome h2 {
+  margin: 0 0 18px;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 2.1rem;
+  font-weight: 400;
+  line-height: 1.2;
 }
+
+.inbox-login-welcome p { font-size: 0.92rem; line-height: 1.8; }
+
+.inbox-login-private { margin: 18px 0 0; padding-top: 20px; border-top: 1px solid rgb(255 253 247 / 25%); font-size: 0.78rem !important; }
+
+.inbox-login-form { gap: 22px; margin: 0; padding: 38px; align-content: center; }
+
+.inbox-login-intro h2 { margin: 0 0 8px; font-size: 1.4rem; }
+
+.inbox-login-intro p { margin: 0; color: var(--color-muted); font-size: 0.9rem; line-height: 1.7; }
+
+.inbox-login-form input { min-height: 50px; border-color: #aaa99d; border-radius: 10px; }
+
+.inbox-loading,
+.inbox-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 190px;
+  padding: 28px;
+  border: 1px solid var(--inbox-border);
+  border-radius: 18px;
+  background: var(--color-surface);
+  color: var(--color-muted);
+}
+
+.inbox-loading-dot { width: 11px; height: 11px; flex: 0 0 11px; border-radius: 50%; background: var(--color-primary); }
+
+.inbox-empty { flex-direction: column; gap: 8px; text-align: center; }
+
+.inbox-empty > span { font-size: 2rem; color: var(--color-primary); }
+
+.inbox-empty p { margin: 0; }
+
+.inbox-note { padding: 22px; border: 1px solid var(--inbox-border); border-radius: 12px; background: #faf9f5; line-height: 1.85; }
+
+.inbox-detail { display: grid; gap: 16px; min-width: 0; padding: 28px; border: 1px solid var(--inbox-border); border-radius: 20px; background: var(--color-surface); }
+
+.inbox-detail > h2 { margin: 4px 0 0; font-family: Georgia, "Times New Roman", serif; font-size: 1.8rem; font-weight: 500; }
+
+.inbox-detail > p { margin: 0; }
+
+.inbox-detail > button { width: fit-content; max-width: 100%; }
+
+.inbox-original { display: block; width: 100%; height: auto; border-radius: 12px; }
+
+.inbox-download { display: inline-flex; align-items: center; min-height: 48px; color: var(--color-primary); font-weight: 600; }
+
+.inbox-download:focus-visible { outline: 3px solid var(--color-primary); outline-offset: 3px; }
 
 .inbox-review,
 .inbox-metadata,
-.inbox-delete-confirmation {
-  padding: 20px;
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  min-width: 0;
-}
+.inbox-delete-confirmation { padding: 22px; border: 1px solid var(--inbox-border); border-radius: 14px; min-width: 0; }
 
-.inbox-metadata form {
-  display: grid;
-  gap: 8px;
-}
+.inbox-review { background: var(--inbox-soft); }
 
-.inbox-metadata label {
-  margin-top: 12px;
-}
+.inbox-actions { margin: 20px 0 0; }
 
-.inbox-metadata select {
-  width: 100%;
-  min-height: 48px;
-  padding: 12px;
-  font: inherit;
-  color: var(--color-text);
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-}
+.inbox-review > .inbox-actions,
+.inbox-sharing-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 
-.inbox-metadata select:focus-visible {
-  outline: 3px solid var(--color-primary);
-  outline-offset: 3px;
-}
+.inbox-sharing-note { color: var(--color-muted); font-size: 0.875rem; }
+.inbox-sharing-actions [aria-pressed="true"] { color: var(--color-surface); background: var(--color-primary); }
+.inbox-review .inbox-delete-action { color: var(--color-error); border-color: var(--color-error); }
+.inbox-sharing-note > button, .inbox-sharing-note > output { margin-top: 10px; }
+.inbox-sharing-note > output { display: block; }
+.inbox-context { min-width: 0; }
+.inbox-context > summary { padding: 16px 0; cursor: pointer; color: var(--color-primary); font-weight: 600; }
+.inbox-context > summary:focus-visible { outline: 3px solid var(--color-primary); outline-offset: 3px; }
+.inbox-context[open] { display: grid; gap: 16px; }
 
-.inbox-metadata form > button {
-  justify-self: start;
-}
+.inbox-review .button-danger,
+.inbox-delete-confirmation button:last-child { background: #944838; color: white; }
+
+.inbox-metadata form { display: grid; gap: 8px; }
+
+.inbox-metadata label { margin-top: 12px; }
+
+.inbox-metadata select { width: 100%; min-height: 48px; padding: 12px; font: inherit; color: var(--color-text); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px; }
+
+.inbox-metadata select:focus-visible { outline: 3px solid var(--color-primary); outline-offset: 3px; }
+
+.inbox-metadata form > button { justify-self: start; }
 
 .inbox-review-notice,
-.inbox-deletion-window {
-  padding: 16px;
-  border-left: 4px solid var(--color-primary);
-  background: var(--color-surface);
+.inbox-deletion-window { padding: 16px; border-left: 4px solid var(--color-primary); border-radius: 0 8px 8px 0; background: var(--inbox-soft); }
+
+.private-inbox button { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+
+@media (max-width: 720px) {
+  .inbox-login { grid-template-columns: minmax(0, 1fr); }
+  .inbox-login-welcome { padding: 28px; }
+  .inbox-monogram { display: none; }
+  .inbox-login-welcome h2 { font-size: 1.8rem; }
+  .inbox-login-welcome h2 br { display: none; }
+  .inbox-login-private { margin-top: 8px; padding-top: 12px; }
+  .inbox-login-form { padding: 28px; }
+  .inbox-list { grid-template-columns: minmax(0, 1fr); }
+  .inbox-card { padding: 22px; }
+  .inbox-tools { align-items: flex-start; gap: 16px; }
+  .inbox-detail { padding: 20px; }
 }
 
-.private-inbox button {
-  max-width: 100%;
-  white-space: normal;
-  overflow-wrap: anywhere;
+@media (max-width: 420px) {
+  .inbox-header-top { align-items: flex-start; }
+  .inbox-header .guest-couple { font-size: 0.9rem; }
+  .inbox-vault-label { font-size: 0.7rem; padding: 5px 8px; }
+  .inbox-review > .inbox-actions,
+  .inbox-sharing-actions { grid-template-columns: minmax(0, 1fr); }
+  .inbox-pagination { gap: 8px; }
+  .inbox-pagination button { padding: 8px 10px; }
+  .inbox-pagination span { width: 100%; order: -1; text-align: center; }
+  .inbox-review,
+  .inbox-metadata,
+  .inbox-delete-confirmation { padding: 16px; }
 }

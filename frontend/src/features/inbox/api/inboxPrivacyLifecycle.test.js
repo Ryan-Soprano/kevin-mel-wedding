@@ -2,45 +2,60 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { attachInboxPrivacyLifecycle } from "./inboxPrivacyLifecycle.js";
 
-test("intentional native-dialog blur is scoped; pagehide and hidden visibility always clear private content", () => {
+function fixture() {
   const eventTarget = new EventTarget(), documentTarget = new EventTarget(), calls = [];
-  let dialog = true;
+  const presentation = { username: "Kevin", password: "copied-password", page: 2, memoryId: "current-memory" };
+  let dialog = false;
   documentTarget.visibilityState = "visible";
   const detach = attachInboxPrivacyLifecycle({ eventTarget, documentTarget,
-    controller: { suspend: () => calls.push("hide"), resume: () => calls.push("check") },
+    controller: { suspend: () => calls.push("suspend"), resume: () => calls.push("resume"), recheckSession: () => calls.push("check session") },
     isIntentionalDialog: () => dialog, onDialogEnd: () => { dialog = false; },
+    onPause: () => calls.push("pause audio"),
+    onHide: () => { calls.push("clear presentation"); for (const key of Object.keys(presentation)) presentation[key] = null; },
+    flush: callback => { calls.push("flush start"); callback(); calls.push("flush end"); },
   });
-  eventTarget.dispatchEvent(new Event("blur")); assert.deepEqual(calls, []);
-  eventTarget.dispatchEvent(new Event("pagehide")); assert.deepEqual(calls, ["hide"]);
-  documentTarget.visibilityState = "hidden"; documentTarget.dispatchEvent(new Event("visibilitychange"));
-  assert.deepEqual(calls, ["hide", "hide"]);
-  documentTarget.visibilityState = "visible"; eventTarget.dispatchEvent(new Event("focus"));
-  assert.equal(dialog, false); eventTarget.dispatchEvent(new Event("blur"));
-  assert.deepEqual(calls, ["hide", "hide", "check", "hide"]); detach();
-});
+  return { eventTarget, documentTarget, calls, presentation, detach, openDialog: () => { dialog = true; }, isDialogOpen: () => dialog };
+}
 
-for (const event of ["pagehide", "blur", "visibilitychange"]) {
-  test(`${event} synchronously clears presentation and credentials; return events only restore a visible page`, () => {
-    const eventTarget = new EventTarget(), documentTarget = new EventTarget(), calls = [];
-    documentTarget.visibilityState = "visible";
-    const detach = attachInboxPrivacyLifecycle({ eventTarget, documentTarget,
-      controller: { suspend: () => calls.push("hide"), resume: () => { calls.push("check session"); return Promise.resolve(); } },
-      onHide: () => calls.push("clear credentials"), flush: callback => { calls.push("flush start"); callback(); calls.push("flush end"); },
-    });
-    if (event === "visibilitychange") documentTarget.visibilityState = "hidden";
-    (event === "visibilitychange" ? documentTarget : eventTarget).dispatchEvent(new Event(event));
-    assert.deepEqual(calls, ["flush start", "clear credentials", "hide", "flush end"]);
-    documentTarget.visibilityState = "hidden";
-    eventTarget.dispatchEvent(new Event("pageshow")); eventTarget.dispatchEvent(new Event("focus"));
-    assert.equal(calls.length, 4, "a background page cannot recheck or repopulate content");
-    documentTarget.visibilityState = "visible";
-    documentTarget.dispatchEvent(new Event("visibilitychange"));
-    eventTarget.dispatchEvent(new Event("pageshow")); eventTarget.dispatchEvent(new Event("focus"));
-    assert.deepEqual(calls.slice(4), ["check session", "check session", "check session"]);
-    detach();
-    const before = calls.length;
-    for (const name of ["pagehide", "blur", "pageshow", "focus"]) eventTarget.dispatchEvent(new Event(name));
-    documentTarget.dispatchEvent(new Event("visibilitychange"));
-    assert.equal(calls.length, before, "unmounted inbox owns no lifecycle listeners");
+for (const event of ["blur", "visibilitychange"]) {
+  test(`${event} preserves login fields and the current view while switching away`, () => {
+    const f = fixture(), before = { ...f.presentation };
+    if (event === "visibilitychange") f.documentTarget.visibilityState = "hidden";
+    (event === "visibilitychange" ? f.documentTarget : f.eventTarget).dispatchEvent(new Event(event));
+    assert.deepEqual(f.calls, ["pause audio"]);
+    assert.deepEqual(f.presentation, before, "copying a password or changing tabs does not reset the form or navigation");
+    f.documentTarget.visibilityState = "visible";
+    f.eventTarget.dispatchEvent(new Event("focus"));
+    assert.deepEqual(f.calls, ["pause audio", "resume", "check session"]);
+    assert.deepEqual(f.presentation, before);
+    f.detach();
   });
 }
+
+test("pagehide clears private presentation synchronously; hidden return events cannot repopulate it", () => {
+  const f = fixture();
+  f.eventTarget.dispatchEvent(new Event("pagehide"));
+  assert.deepEqual(f.calls, ["flush start", "clear presentation", "suspend", "flush end"]);
+  assert.ok(Object.values(f.presentation).every(value => value === null));
+  f.documentTarget.visibilityState = "hidden";
+  f.eventTarget.dispatchEvent(new Event("pageshow")); f.eventTarget.dispatchEvent(new Event("focus"));
+  assert.equal(f.calls.length, 4);
+  f.documentTarget.visibilityState = "visible";
+  f.eventTarget.dispatchEvent(new Event("pageshow"));
+  assert.deepEqual(f.calls.slice(4), ["resume", "check session"]);
+  f.detach();
+  const before = f.calls.length;
+  for (const name of ["pagehide", "blur", "pageshow", "focus"]) f.eventTarget.dispatchEvent(new Event(name));
+  f.documentTarget.dispatchEvent(new Event("visibilitychange"));
+  assert.equal(f.calls.length, before, "unmounted inbox owns no lifecycle listeners");
+});
+
+test("native chooser blur is scoped while pagehide still clears content", () => {
+  const f = fixture(); f.openDialog();
+  f.eventTarget.dispatchEvent(new Event("blur")); assert.deepEqual(f.calls, []);
+  f.eventTarget.dispatchEvent(new Event("focus")); assert.equal(f.isDialogOpen(), false);
+  f.eventTarget.dispatchEvent(new Event("blur")); assert.equal(f.calls.at(-1), "pause audio");
+  f.openDialog(); f.eventTarget.dispatchEvent(new Event("pagehide"));
+  assert.deepEqual(f.calls.slice(-4), ["flush start", "clear presentation", "suspend", "flush end"]);
+  f.detach();
+});

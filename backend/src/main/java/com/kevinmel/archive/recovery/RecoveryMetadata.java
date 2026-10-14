@@ -25,7 +25,7 @@ final class RecoveryMetadata {
     private final Map<UUID, Map<String, Object>> assetsByMemory = new HashMap<>();
 
     RecoveryMetadata(Map<String, List<Map<String, Object>>> tables, Instant at) {
-        this(tables, at, 6);
+        this(tables, at, 7);
     }
 
     RecoveryMetadata(Map<String, List<Map<String, Object>>> tables, Instant at, int version) {
@@ -86,7 +86,9 @@ final class RecoveryMetadata {
         for (var m : memories.values()) {
             UUID contribution = uuid(m, "contribution_id");
             if (!contributions.containsKey(contribution) || !(version == 1 ? Set.of("TEXT", "PHOTO") : Set.of("TEXT", "PHOTO", "AUDIO")).contains(text(m, "memory_type"))
-                    || !STATES.contains(text(m, "review_status")) || !"COUPLE_ONLY".equals(m.get("visibility"))
+                    || !STATES.contains(text(m, "review_status")) || !(version >= 7
+                        ? Set.of("COUPLE_ONLY", "FRIENDS_FAMILY", "PUBLIC") : Set.of("COUPLE_ONLY")).contains(m.get("visibility"))
+                    || !"COUPLE_ONLY".equals(m.get("visibility")) && !"KEEP".equals(m.get("review_status"))
                     || number(m, "revision") < 1 || instant(m, "updated_at").isBefore(instant(m, "created_at"))) throw invalid();
             boolean deleted = "DELETE".equals(m.get("review_status")), purged = m.get("purged_at") != null;
             if (deleted != (m.get("delete_after") != null) || (!deleted && (m.get("purge_started_at") != null || purged))) throw invalid();
@@ -155,6 +157,10 @@ final class RecoveryMetadata {
                     || number(row, "before_revision") < 1 || number(row, "after_revision") <= number(row, "before_revision")
                     || number(row, "after_revision") > number(memory, "revision")
                     || !audit.add(row.get("memory_id") + ":" + row.get("after_revision"))) throw invalid();
+            if (version >= 7 && (!Set.of("COUPLE_ONLY", "FRIENDS_FAMILY", "PUBLIC").contains(row.get("before_visibility"))
+                    || !Set.of("COUPLE_ONLY", "FRIENDS_FAMILY", "PUBLIC").contains(row.get("after_visibility"))
+                    || !"COUPLE_ONLY".equals(row.get("before_visibility")) && !"KEEP".equals(row.get("from_status"))
+                    || !"COUPLE_ONLY".equals(row.get("after_visibility")) && !"KEEP".equals(row.get("to_status")))) throw invalid();
         }
         var ledger = packagedPlans(); validatePlans(ledger, now);
         var plans = new HashMap<UUID, DeletionRecord>(); for (var plan : ledger) plans.put(plan.memoryId(), plan);

@@ -29,7 +29,7 @@ public class InboxRepository {
             LEFT JOIN media_asset a ON a.memory_id = m.id
             """;
     public static final String AVAILABLE = """
-            c.event_key = 'kevin-mel-wedding' AND m.visibility = 'COUPLE_ONLY'
+            c.event_key = 'kevin-mel-wedding' AND m.visibility IN ('COUPLE_ONLY', 'FRIENDS_FAMILY', 'PUBLIC')
                 AND m.review_status IN ('PENDING', 'KEEP', 'ARCHIVED', 'DELETE')
                 AND m.purge_started_at IS NULL AND m.purged_at IS NULL
                 AND (m.review_status <> 'DELETE' OR m.delete_after > :now)
@@ -84,17 +84,25 @@ public class InboxRepository {
     }
 
     public MemoryDetail changeReview(MemoryDetail current, String status, Instant deleteAfter, Instant actedAt) {
+        return changeReviewAndVisibility(current, status, current.visibility(), deleteAfter, actedAt);
+    }
+
+    public MemoryDetail changeReviewAndVisibility(MemoryDetail current, String status, String visibility, Instant deleteAfter, Instant actedAt) {
         int changed = db.sql("""
-                UPDATE memory SET review_status = :status, delete_after = :deadline,
+                UPDATE memory SET review_status = :status, visibility = :visibility, delete_after = :deadline,
                     revision = revision + 1, updated_at = :acted
                 WHERE id = :id AND revision = :revision AND purge_started_at IS NULL AND purged_at IS NULL
-                """).param("status", status).param("deadline", timestamp(deleteAfter)).param("acted", timestamp(actedAt))
+                """).param("status", status).param("visibility", visibility).param("deadline", timestamp(deleteAfter)).param("acted", timestamp(actedAt))
                 .param("id", current.memoryId()).param("revision", current.revision()).update();
         if (changed != 1) throw new ApiException(412, "REVIEW_CONFLICT", "This memory changed. Reload it before reviewing it again.");
         return new MemoryDetail(current.memoryId(), current.contributionId(), current.guestName(), current.memoryType(),
-                current.textContent(), current.caption(), status, current.visibility(), current.revision() + 1,
+                current.textContent(), current.caption(), status, visibility, current.revision() + 1,
                 current.createdAt(), actedAt, deleteAfter, current.media(), current.source(), current.title(),
                 current.description(), current.memoryDate(), current.datePrecision());
+    }
+
+    public void revokeShareLink(UUID memoryId) {
+        db.sql("DELETE FROM memory_share_link WHERE memory_id = :id").param("id", memoryId).update();
     }
 
     public MemoryDetail changeMetadata(MemoryDetail current, MemoryMetadataRequest request, Instant actedAt) {
@@ -116,11 +124,12 @@ public class InboxRepository {
     public void auditReview(MemoryDetail before, MemoryDetail after, UUID actorId, Instant actedAt) {
         db.sql("""
                 INSERT INTO review_audit(memory_id, actor_account_id, from_status, to_status,
-                    before_revision, after_revision, acted_at)
-                VALUES (:memory, :actor, :before, :after, :oldRevision, :revision, :acted)
+                    before_revision, after_revision, acted_at, before_visibility, after_visibility)
+                VALUES (:memory, :actor, :before, :after, :oldRevision, :revision, :acted, :beforeVisibility, :afterVisibility)
                 """).param("memory", before.memoryId()).param("actor", actorId)
                 .param("before", before.reviewStatus()).param("after", after.reviewStatus())
                 .param("oldRevision", before.revision()).param("revision", after.revision())
+                .param("beforeVisibility", before.visibility()).param("afterVisibility", after.visibility())
                 .param("acted", timestamp(actedAt)).update();
     }
 

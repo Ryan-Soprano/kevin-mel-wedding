@@ -846,6 +846,27 @@ class OperatorRecoveryPostgresTest {
         var restored = restore(bundle); assertThat(restored.memories()).isZero(); assertThat(restored.originals()).isZero(); assertEmptyTarget();
     }
 
+    @Test void versionSevenPreservesAudiencesButNeverRestoresOldPrivateLinkCapabilities() throws Exception {
+        source = schema("14"); target = schema("14");
+        var publicNote = note(source, "Synthetic public note", null);
+        var familyNote = note(source, "Synthetic family note", "Private guest name");
+        source.db().sql("UPDATE memory SET review_status='KEEP', visibility='PUBLIC' WHERE id=:id")
+                .param("id", publicNote.memory()).update();
+        source.db().sql("UPDATE memory SET review_status='KEEP', visibility='FRIENDS_FAMILY' WHERE id=:id")
+                .param("id", familyNote.memory()).update();
+        source.db().sql("INSERT INTO memory_share_link(memory_id,token_digest,issued_at) VALUES(:id,:digest,:at)")
+                .param("id", familyNote.memory()).param("digest", "a".repeat(64)).param("at", time(NOW)).update();
+        Path bundle = temporary.resolve("v7-sharing"); assertThat(export(bundle).ready()).isTrue();
+        var manifest = JSON.readTree(Files.readAllBytes(bundle.resolve("manifest.json")));
+        assertThat(manifest.get("version").intValue()).isEqualTo(7);
+        String encoded = Files.readString(bundle.resolve("metadata.json"));
+        assertThat(encoded).contains("FRIENDS_FAMILY", "PUBLIC").doesNotContain("memory_share_link", "token_digest");
+        assertThat(restore(bundle).memories()).isEqualTo(2);
+        assertThat(string(target, "SELECT visibility FROM memory WHERE id=:id", publicNote.memory())).isEqualTo("PUBLIC");
+        assertThat(string(target, "SELECT visibility FROM memory WHERE id=:id", familyNote.memory())).isEqualTo("FRIENDS_FAMILY");
+        assertThat(target.db().sql("SELECT COUNT(*) FROM memory_share_link").query(Long.class).single()).isZero();
+    }
+
     @Test void versionSixRequiresV13AndRejectsTagOnlyPopulatedTargetsBeforeAnyOriginalPublication() {
         var batch = photos(source, sourceStorage, "UPLOADED"); UUID id = tag(source, "Synthetic source tag", false);
         tagMember(source, id, batch.memories().getFirst()); Path bundle = temporary.resolve("v6-target-schema"); assertThat(export(bundle).ready()).isTrue();
@@ -1356,7 +1377,8 @@ class OperatorRecoveryPostgresTest {
         assertThat(targetStorage.operations).noneMatch(operation -> operation.startsWith("publish:")
                 || operation.startsWith("record:") || operation.startsWith("delete-"));
     }
-    private Fixture schema() { return schema(null); }
+    // Existing recovery fixtures exercise V8–V13 bundle compatibility; V14 sharing has its own case.
+    private Fixture schema() { return schema("13"); }
     private Fixture schema(String migrationTarget) {
         String schema = "recovery_" + UUID.randomUUID().toString().replace("-", "");
         schemas.add(schema);

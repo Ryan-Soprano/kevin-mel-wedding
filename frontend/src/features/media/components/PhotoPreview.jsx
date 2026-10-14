@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 
-export default function PhotoPreview({ file }) {
+export default function PhotoPreview({ file, alt = "" }) {
   const imageRef = useRef(null);
 
   useEffect(() => {
@@ -12,5 +12,5 @@ export default function PhotoPreview({ file }) {
     return () => URL.revokeObjectURL(previewUrl);
   }, [file]);
 
-  return <img ref={imageRef} className="photo-card__image" alt="" />;
+  return <img ref={imageRef} className="photo-card__image" alt={alt} />;
 }

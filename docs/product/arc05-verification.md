@@ -2,7 +2,7 @@
 
 ARC-05 adds temporary self-service export jobs and a separate portable format. The archive captures eligible memories, grouping, useful metadata, ordered albums, timeline events and tags. Original ZIP parts verify persisted size and SHA-256; a final index includes the complete human-readable archive, documented JSON and a static offline reader. See the [export contract](../api/v1/exports.md).
 
-The feature branch is `feature/portable-export`, based on main `05a0878` (ARC-04 PR #35). Final-head CI and merge identities belong in the ARC-05 tracker and pull request. Ignored `logs/arc05-local/` contains only synthetic local fixtures, reports, ZIPs and screenshots.
+The feature branch is `feature/portable-export`, based on main `05a0878` (ARC-04 PR #35). Final-head CI and merge identities belong in the ARC-05 tracker and pull request. The local verification fixtures contained synthetic data only.
 
 ## Automated verification
 

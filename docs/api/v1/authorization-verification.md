@@ -40,7 +40,7 @@ The bucket must remain private, with r2.dev/public custom domains disabled. Sign
 | Actual HTTP and existing frontend adapter | **178 assertions passed:** actual Spring/session/SQL/service/SDK signing with mocked HEAD, exact HTTPS playback decoding and headers, all ineligible records, anonymous/role/object/provider denial, public guest receipt privacy, logout/recovery/disable revocation and disabled-storage 503. No fixture URL was fetched from R2. |
 | Independent review | No remaining material AUTH-02 correctness/security issue identified in the implemented code and documentation. |
 
-The native and HTTP harnesses remain under ignored `backend/target/`; no additional committed test files were added for AUTH-02. HTTP fixture HEAD responses were synthetic, while authentication, PostgreSQL queries, HTTP transport, the existing JavaScript adapter and AWS SDK signing were real. These checks do not claim provider enforcement of signature tampering, actual link expiry, bucket privacy or CORS.
+The native and HTTP harnesses were temporary local verification tools; no additional committed test files were added for AUTH-02. HTTP fixture HEAD responses were synthetic, while authentication, PostgreSQL queries, HTTP transport, the existing JavaScript adapter and AWS SDK signing were real. These checks do not claim provider enforcement of signature tampering, actual link expiry, bucket privacy or CORS.
 
 Frontend behavior was not changed; its existing adapter was exercised against the real endpoint. The preceding AUTH-01 frontend lint, 73 tests and production build passed. Inbox/list/detail/review controller success and audio playback remain later work; current tests protect their route boundaries without claiming those features exist.
 
