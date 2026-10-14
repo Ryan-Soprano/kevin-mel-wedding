@@ -40,15 +40,19 @@ function ReviewActions({ memory, busy, locked, controls, deleteButton }) {
   if (locked || controls.confirmingDelete) return null;
   const deleted = memory.reviewStatus === "DELETE";
   return (
-    <div className="inbox-actions inbox-sharing-actions">
-      {!deleted && <>
+    <>
+      {!deleted && <div className="inbox-actions inbox-sharing-actions">
         <button type="button" className="button-secondary" aria-pressed={memory.reviewStatus === "KEEP" && memory.visibility === "COUPLE_ONLY"} disabled={busy} onClick={() => controls.change("KEEP", "COUPLE_ONLY")}>Keep Private</button>
         <button type="button" className="button-secondary" aria-pressed={memory.visibility === "FRIENDS_FAMILY"} disabled={busy} onClick={() => controls.change("KEEP", "FRIENDS_FAMILY")}>Share with Friends &amp; Family</button>
         <button type="button" className="button-secondary" aria-pressed={memory.visibility === "PUBLIC"} disabled={busy} onClick={() => controls.change("KEEP", "PUBLIC")}>Share with Public</button>
         <button ref={deleteButton} type="button" className="button-secondary inbox-delete-action" disabled={busy} onClick={controls.beginDelete}>Delete</button>
-      </>}
-      {deleted && <button type="button" disabled={busy} onClick={() => controls.change("PENDING")}>Restore to inbox</button>}
-    </div>
+      </div>}
+      <div className="inbox-actions">
+        {!deleted && memory.reviewStatus !== "ARCHIVED" && <button type="button" className="button-secondary" disabled={busy} onClick={() => controls.change("ARCHIVED")}>Archive</button>}
+        {["ARCHIVED", "DELETE"].includes(memory.reviewStatus) && <button type="button" disabled={busy} onClick={() => controls.change("PENDING")}>Restore to inbox</button>}
+      </div>
+      {!deleted && <p className="guest-help">Archiving keeps this memory private and removes shared access. You can restore it to your inbox.</p>}
+    </>
   );
 }
 
