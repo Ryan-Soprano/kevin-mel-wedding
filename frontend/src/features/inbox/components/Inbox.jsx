@@ -15,7 +15,7 @@ import "../inbox.css";
 
 function InboxContent({ view, authenticated, audioEnabled, audioPlayback, deleteButton, cancelDelete, reviewFeedback }) {
   const { snapshot, actions, reviewLocked } = view;
-  if (snapshot.phase === "checking") return <output>Checking archive access…</output>;
+  if (snapshot.phase === "checking") return <output className="inbox-loading"><span className="inbox-loading-dot" aria-hidden="true" />Checking archive access…</output>;
   if (snapshot.phase === "login") return <InboxLogin {...view.loginForm} busy={snapshot.busy} />;
   if (snapshot.phase === "unavailable") return <InboxAccessRecovery busy={snapshot.busy} logoutUnconfirmed={snapshot.logoutUnconfirmed} onRetry={view.retryAccess} onLogout={view.logout} />;
   if (!authenticated) return null;
@@ -54,8 +54,17 @@ export default function Inbox({ createController = createInboxController, audioE
   return (
     <main className="private-inbox">
       <header className="inbox-header">
-        <p className="guest-couple">Kevin &amp; Melanie</p>
+        <div className="inbox-header-top">
+          <p className="guest-couple">Kevin &amp; Melanie</p>
+          <span className="inbox-vault-label">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M7 10V7a5 5 0 0 1 10 0v3M6 10h12v11H6zM12 14v3" /></svg>
+            Private vault
+          </span>
+        </div>
         <h1 ref={heading} tabIndex={-1}>{getInboxTitle(snapshot.phase)}</h1>
+        <p className="inbox-header-description">{authenticated
+          ? "Your wedding memories, gathered in one place. New contributions arrive privately; you choose what to share."
+          : "A home for the stories, photos, and little moments you want to remember."}</p>
         {authenticated && (
           <div className="inbox-account">
             <p>Signed in as {snapshot.session.user.displayName}</p>
@@ -64,8 +73,10 @@ export default function Inbox({ createController = createInboxController, audioE
         )}
       </header>
       {snapshot.error && <p className="form-error" role="alert">{snapshot.error}</p>}
-      <InboxContent view={view} authenticated={authenticated} audioEnabled={audioEnabled} audioPlayback={audioPlayback}
-        deleteButton={deleteButton} cancelDelete={cancelDelete} reviewFeedback={reviewFeedback} />
+      <div className="inbox-content">
+        <InboxContent view={view} authenticated={authenticated} audioEnabled={audioEnabled} audioPlayback={audioPlayback}
+          deleteButton={deleteButton} cancelDelete={cancelDelete} reviewFeedback={reviewFeedback} />
+      </div>
     </main>
   );
 }

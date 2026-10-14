@@ -41,6 +41,7 @@ export function useInboxActions(controller) {
       },
       media: { retry: () => controller.current?.retryMedia() },
       review: {
+        createLink: () => controller.current?.createShareLink(),
         reload: () => controller.current?.reloadReview(),
         retry: () => controller.current?.retryReview(),
         refresh: () => controller.current?.refreshReviewSession(),

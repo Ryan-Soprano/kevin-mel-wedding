@@ -52,7 +52,7 @@ public final class R2ObjectStorage implements ObjectStorage, AutoCloseable {
                 .overrideConfiguration(builder -> builder.apiCallTimeout(Duration.ofSeconds(15))).build();
         signer = S3Presigner.builder().endpointOverride(endpoint).region(Region.of("auto"))
                 .credentialsProvider(credentials).serviceConfiguration(S3Configuration.builder()
-                        .pathStyleAccessEnabled(true).checksumValidationEnabled(false).build()).build();
+                    .pathStyleAccessEnabled(true).build()).build();
     }
 
     R2ObjectStorage(String bucket, S3Client s3, S3Presigner signer) {

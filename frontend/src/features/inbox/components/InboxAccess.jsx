@@ -6,9 +6,18 @@ export function InboxLogin({ busy, username, password, setUsername, setPassword,
     progressLabel = "Signing in to your private archive…";
   }
   return (
-    <>
-      <p>This archive is private for Kevin and Melanie. Use the account supplied when your archive is ready.</p>
-      <form onSubmit={onSubmit} aria-label="Sign in to the private archive">
+    <section className="inbox-login" aria-label="Archive sign in">
+      <div className="inbox-login-welcome">
+        <span className="inbox-monogram" aria-hidden="true">K <span>&amp;</span> M</span>
+        <h2>All the moments,<br />together.</h2>
+        <p>Notes from loved ones. Photos of the day. Memories to come back to, again and again.</p>
+        <p className="inbox-login-private">A keepsake for Kevin &amp; Melanie</p>
+      </div>
+      <form className="inbox-login-form" onSubmit={onSubmit} aria-label="Sign in to the private archive">
+        <div className="inbox-login-intro">
+          <h2>Welcome back</h2>
+          <p>This archive is private for Kevin and Melanie. Use the account supplied when your archive is ready.</p>
+        </div>
         <div>
           <label htmlFor="archive-username">Username</label>
           <input id="archive-username" autoComplete="username" autoCapitalize="none" spellCheck={false} value={username}
@@ -22,7 +31,7 @@ export function InboxLogin({ busy, username, password, setUsername, setPassword,
         <button type="submit" disabled={busy}>{buttonLabel}</button>
         <output className="visually-hidden">{progressLabel}</output>
       </form>
-    </>
+    </section>
   );
 }
 

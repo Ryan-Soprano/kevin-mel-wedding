@@ -2,7 +2,7 @@
 
 ARC-02 implements shared private many-to-many albums: create, rename, organization-only delete, add/remove and independent earlier/later order. Lists, member pages and selectors are bounded. Existing memory detail, review, media permissions and editable metadata remain the only way to operate on originals. See the [album contract](../api/v1/albums.md).
 
-Verification uses `feature/private-albums`, based on main `e1249c1`. Final-head CI and merge identities are recorded in the ARC-02 tracker and pull request. Ignored `logs/arc02-local/` contains local synthetic fixtures, logs, packages and screenshots.
+Verification uses `feature/private-albums`, based on main `e1249c1`. Final-head CI and merge identities are recorded in the ARC-02 tracker and pull request.
 
 ## Automated verification
 

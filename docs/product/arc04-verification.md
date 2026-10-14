@@ -2,7 +2,7 @@
 
 ARC-04 adds database-backed private library browsing and tag organization. Search uses literal text metadata, inclusive known memory-date years, date precision, type, review status and one selected tag. Results sort by saved time and identity; tags reference originals and support bounded catalogue, member and attachment pages. See the [library contract](../api/v1/library.md).
 
-The feature branch is `feature/private-library`, based on main `b0c4458`. Final-head CI and merge identities belong in the ARC-04 tracker and pull request. Ignored `logs/arc04-local/` holds synthetic fixtures, packages, logs and screenshots.
+The feature branch is `feature/private-library`, based on main `b0c4458`. Final-head CI and merge identities belong in the ARC-04 tracker and pull request.
 
 ## Automated verification
 

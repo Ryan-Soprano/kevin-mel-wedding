@@ -1,17 +1,20 @@
-/** Clear private DOM synchronously before background/history capture, then recheck access. */
+/** Keep the current view while switching windows; clear it before leaving the page. */
 export function attachInboxPrivacyLifecycle({
   controller, eventTarget = window, documentTarget = document, onHide = () => {}, flush = callback => callback(),
-  isIntentionalDialog = () => false, onDialogEnd = () => {},
+  onPause = () => {}, isIntentionalDialog = () => false, onDialogEnd = () => {},
 }) {
   const hide = () => flush(() => { onHide(); controller.suspend(); });
-  // Native chooser/permission blur is scoped to an explicit action. Backgrounding
-  // and pagehide always clear private content, including while a dialog is open.
-  const blur = () => { if (!isIntentionalDialog()) hide(); };
+  // A password manager, another app, or another tab must not discard typed
+  // credentials or the current memory. Nothing is written to browser storage.
+  const blur = () => { if (!isIntentionalDialog()) onPause(); };
   const restore = () => {
     onDialogEnd();
-    if (documentTarget.visibilityState !== "hidden") void controller.resume();
+    if (documentTarget.visibilityState !== "hidden") {
+      void controller.resume();
+      void controller.recheckSession();
+    }
   };
-  const visibility = () => documentTarget.visibilityState === "hidden" ? hide() : restore();
+  const visibility = () => documentTarget.visibilityState === "hidden" ? onPause() : restore();
   eventTarget.addEventListener("pagehide", hide);
   eventTarget.addEventListener("blur", blur);
   eventTarget.addEventListener("pageshow", restore);

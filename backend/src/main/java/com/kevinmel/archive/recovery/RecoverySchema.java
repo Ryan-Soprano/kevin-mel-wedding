@@ -43,6 +43,7 @@ final class RecoverySchema {
     private static final List<Table> ALBUM_TABLES;
     private static final List<Table> TIMELINE_TABLES;
     static final List<Table> TABLES;
+    private static final List<Table> SHARING_TABLES;
     static {
         var tables = new ArrayList<>(ARCHIVE_TABLES);
         tables.add(table("album", "id:u name:s? visibility:s revision:u created_at:t updated_at:t deleted_at:t?"));
@@ -55,12 +56,15 @@ final class RecoverySchema {
         tables.add(table("tag", "id:u name:s? visibility:s revision:u created_at:t updated_at:t deleted_at:t?"));
         tables.add(table("memory_tag", "tag_id:u memory_id:u"));
         TABLES = List.copyOf(tables);
+        SHARING_TABLES = TABLES.stream().map(table -> table.name().equals("review_audit")
+                ? table("review_audit", table.definition() + " before_visibility:s after_visibility:s") : table).toList();
     }
     private static final List<String> MIGRATIONS = List.of(
         "V1__create_memory_archive_schema.sql", "V2__add_contribution_request_fingerprint.sql", "V3__add_photo_upload_lifecycle.sql",
         "V4__create_archive_accounts.sql", "V5__create_login_throttle.sql", "V6__add_inbox_revision.sql",
         "V7__add_private_review_retention.sql", "V8__anonymous_submission_protection.sql", "V9__add_verified_audio_lifecycle.sql",
-        "V10__add_couple_authored_memories.sql", "V11__add_private_albums.sql", "V12__add_private_timeline.sql", "V13__add_private_library_tags.sql");
+        "V10__add_couple_authored_memories.sql", "V11__add_private_albums.sql", "V12__add_private_timeline.sql", "V13__add_private_library_tags.sql",
+        "V14__add_memory_sharing.sql");
 
     static Reviewed requireReviewed(JdbcClient db) {
         try {
@@ -104,6 +108,7 @@ final class RecoverySchema {
             }
             int bundleVersion = history.size() - 7;
             requireColumns(db, tables(bundleVersion));
+            if (bundleVersion >= 7) requireColumns(db, List.of(table("memory_share_link", "memory_id:u token_digest:s issued_at:t")));
             return new Reviewed(bundleVersion, fingerprints.get(bundleVersion), Map.copyOf(fingerprints));
         } catch (RecoveryException failure) { throw failure; }
         catch (Exception failure) { throw invalid(); }
@@ -129,7 +134,7 @@ final class RecoverySchema {
     }
 
     static Map<String, List<Map<String, Object>>> read(JdbcClient db) {
-        return read(db, 6);
+        return read(db, 7);
     }
 
     static Map<String, List<Map<String, Object>>> read(JdbcClient db, int version) {
@@ -177,6 +182,9 @@ final class RecoverySchema {
                     value.put("title", null); value.put("description", null); value.put("memory_date", null);
                     value.put("date_precision", "UNKNOWN");
                 }
+                if (version < 7 && table.name().equals("review_audit")) {
+                    value.put("before_visibility", "COUPLE_ONLY"); value.put("after_visibility", "COUPLE_ONLY");
+                }
                 decoded.add(value);
             }
             result.put(table.name(), List.copyOf(decoded));
@@ -221,6 +229,7 @@ final class RecoverySchema {
         if (version == 4) return ALBUM_TABLES;
         if (version == 5) return TIMELINE_TABLES;
         if (version == 6) return TABLES;
+        if (version == 7) return SHARING_TABLES;
         throw invalid();
     }
     record Reviewed(int bundleVersion, String fingerprint, Map<Integer, String> fingerprints) {

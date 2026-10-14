@@ -96,7 +96,7 @@ class ReviewHttpSecurityTest {
                 .andExpect(status().isPreconditionRequired()).andExpect(jsonPath("$.error.code").value("PRECONDITION_REQUIRED"));
         mvc.perform(request(session(couple)).with(r -> { r.removeHeader("If-Match"); r.addHeader("If-Match", "*"); return r; }).with(csrf().asHeader()))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"));
-        mvc.perform(request(session(couple)).content("{\"reviewStatus\":\"KEEP\",\"visibility\":\"PUBLIC\"}").with(csrf().asHeader()))
+        mvc.perform(request(session(couple)).content("{\"reviewStatus\":\"ARCHIVED\",\"visibility\":\"PUBLIC\"}").with(csrf().asHeader()))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"));
         verifyNoInteractions(repository);
     }

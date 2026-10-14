@@ -1,5 +1,5 @@
 import { memoryTime } from "../memoryDisplay.js";
-import { getDetailBackLabel, getMemoryDetailTitle, getMemorySourceLabel, REVIEW_STATUS_LABELS } from "../inboxDisplay.js";
+import { getDetailBackLabel, getMemoryDetailTitle, getMemorySourceLabel, REVIEW_STATUS_LABELS, VISIBILITY_LABELS } from "../inboxDisplay.js";
 import MemoryMetadataEditor from "./MemoryMetadataEditor.jsx";
 import MemoryTags from "../../library/components/MemoryTags.jsx";
 import MemoryMedia from "./MemoryMedia.jsx";
@@ -16,17 +16,21 @@ function MemoryContents({ state, locked, actions, audioPlayback, reviewControls,
       {memory.description && <p className="inbox-note">{memory.description}</p>}
       {memory.memoryDate && <p>Memory date: {memory.memoryDate} ({memory.datePrecision.toLowerCase()} precision)</p>}
       <p>Saved on: <time dateTime={memory.createdAt}>{memoryTime(memory.createdAt)}</time> · Eastern time</p>
-      <p>Status: {REVIEW_STATUS_LABELS[memory.reviewStatus]} · Couple only</p>
+      <p>Status: {REVIEW_STATUS_LABELS[memory.reviewStatus]} · {VISIBILITY_LABELS[memory.visibility]}</p>
       {deleted && (
         <p className="inbox-deletion-window">This individual memory is in Recently deleted. Restore it before <time dateTime={memory.deleteAfter}>{memoryTime(memory.deleteAfter)}</time> (Eastern time), when its 30-day recovery window ends. Deleted photos and audio cannot be opened or downloaded.</p>
       )}
       <MemoryMedia memory={memory} photo={state.photo} locked={locked} audioPlayback={audioPlayback} onRetry={actions.media.retry} />
       {state.notice && <output ref={reviewFeedback} tabIndex={-1} className="inbox-review-notice">{state.notice}</output>}
-      {!deleted && <MemoryMetadataEditor key={`${memory.memoryId}:${memory.revision}`} memory={memory}
-        state={state.metadata} busy={state.busy} locked={locked} onSave={actions.metadata.save} onReload={actions.metadata.reload} onRetry={actions.metadata.retry} />}
-      {!deleted && <MemoryTags key={`${memory.memoryId}:${state.tags.view}:${state.tags.q}`} state={state.tags} busy={state.busy} locked={locked} actions={actions.memoryTags} />}
-      <MemoryReview memory={memory} review={state.review} busy={state.busy} locked={locked} controls={reviewControls} actions={actions.review}
+      <MemoryReview memory={memory} review={state.review} shareLink={state.shareLink} busy={state.busy} locked={locked} controls={reviewControls}
+        actions={{ ...actions.review, reloadMemory: () => actions.navigation.openMemory(memory.memoryId) }}
         deleteButton={deleteButton} cancelDelete={cancelDelete} reviewFeedback={reviewFeedback} />
+      {!deleted && <details className="inbox-context">
+        <summary>Memory details and tags</summary>
+        <MemoryMetadataEditor key={`${memory.memoryId}:${memory.revision}`} memory={memory}
+          state={state.metadata} busy={state.busy} locked={locked} onSave={actions.metadata.save} onReload={actions.metadata.reload} onRetry={actions.metadata.retry} />
+        <MemoryTags key={`${memory.memoryId}:${state.tags.view}:${state.tags.q}`} state={state.tags} busy={state.busy} locked={locked} actions={actions.memoryTags} />
+      </details>}
     </>
   );
 }

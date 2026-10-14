@@ -202,9 +202,9 @@ class ReadinessAdministrationTest {
             entry(zip, "META-INF/MANIFEST.MF", "Manifest-Version: 1.0\nMain-Class: org.springframework.boot.loader.launch.JarLauncher\nStart-Class: com.kevinmel.archive.MemoryArchiveApplication\n\n".getBytes(StandardCharsets.UTF_8));
             entry(zip, "BOOT-INF/classes/com/kevinmel/archive/MemoryArchiveApplication.class", new byte[]{(byte) 0xca, (byte) 0xfe, (byte) 0xba, (byte) 0xbe});
             for (var migration : OperationsSchema.bundled()) try (var input = OperationsSchema.class.getResourceAsStream("/db/migration/" + migration.script())) {
-                if (omitLatest && migration.version().equals("13")) continue;
+                if (omitLatest && migration.version().equals("14")) continue;
                 byte[] bytes = input.readAllBytes();
-                if (change != null && migration.version().equals("13")) bytes = (new String(bytes, StandardCharsets.UTF_8) + change).getBytes(StandardCharsets.UTF_8);
+                if (change != null && migration.version().equals("14")) bytes = (new String(bytes, StandardCharsets.UTF_8) + change).getBytes(StandardCharsets.UTF_8);
                 entry(zip, "BOOT-INF/classes/db/migration/" + migration.script(), bytes);
             }
             if (unknown) entry(zip, "BOOT-INF/classes/db/migration/V14__synthetic_unknown.sql", "SELECT 1;".getBytes(StandardCharsets.UTF_8));

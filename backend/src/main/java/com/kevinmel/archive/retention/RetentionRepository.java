@@ -162,7 +162,7 @@ public class RetentionRepository {
             String metadataScrub = scrubArchiveMetadata
                     ? "title = NULL, description = NULL, memory_date = NULL, date_precision = 'UNKNOWN', " : "";
             int changed = db.sql("""
-                    UPDATE memory SET review_status = 'DELETE', delete_after = :deadline,
+                    UPDATE memory SET review_status = 'DELETE', visibility = 'COUPLE_ONLY', delete_after = :deadline,
                         purge_started_at = COALESCE(purge_started_at, :recorded), purged_at = :now,
                         text_content = NULL, caption = NULL,
                     """ + metadataScrub + """

@@ -59,13 +59,19 @@ public class ReviewService {
         // A lock can wait across the deadline; recheck after it has actually been acquired.
         if ("DELETE".equals(current.reviewStatus()) && !now.isBefore(current.deleteAfter())) throw unavailable();
         if (current.revision() != request.revision()) throw conflict();
-        if (current.reviewStatus().equals(request.reviewStatus())) return current;
+        String visibility = request.visibility() == null ? current.visibility() : request.visibility();
+        // Restoring a deleted memory never restores its previous audience or a secret link.
+        if (!"KEEP".equals(request.reviewStatus()) || "DELETE".equals(current.reviewStatus())) visibility = "COUPLE_ONLY";
+        if (current.reviewStatus().equals(request.reviewStatus()) && current.visibility().equals(visibility)) return current;
         if (current.revision() == Integer.MAX_VALUE) throw conflict();
 
         // Keep timestamps monotonic if a wall-clock adjustment occurs.
         Instant actedAt = now.isBefore(current.updatedAt()) ? current.updatedAt() : now;
         Instant deleteAfter = "DELETE".equals(request.reviewStatus()) ? now.plus(RETENTION) : null;
-        var changed = repository.changeReview(current, request.reviewStatus(), deleteAfter, actedAt);
+        var changed = current.visibility().equals(visibility)
+                ? repository.changeReview(current, request.reviewStatus(), deleteAfter, actedAt)
+                : repository.changeReviewAndVisibility(current, request.reviewStatus(), visibility, deleteAfter, actedAt);
+        repository.revokeShareLink(memoryId);
         if ("DELETE".equals(request.reviewStatus()) && albums != null) {
             albums.detach(memoryId,actedAt);
             authorization.requireCoupleAccess();

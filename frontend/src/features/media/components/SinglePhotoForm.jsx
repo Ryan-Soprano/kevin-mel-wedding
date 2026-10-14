@@ -90,7 +90,7 @@ export default function SinglePhotoForm({ createSubmission = createPhotoSubmissi
             disabled={locked} onChange={choose} aria-describedby="photo-guidance" />
           <p id="photo-guidance">Keep this page open until your photo is confirmed. HEIC photos are not supported yet.</p>
         </div>
-        {file && <div className="photo-original-preview"><PhotoPreview file={file} /><p>{file.name}</p></div>}
+        {file && <div className="photo-original-preview"><PhotoPreview file={file} alt="Selected photo" /></div>}
         <div>
           <label htmlFor="photo-name">Your name for this photo (optional)</label>
           <input id="photo-name" autoComplete="name" maxLength={100} value={guestName} disabled={locked}

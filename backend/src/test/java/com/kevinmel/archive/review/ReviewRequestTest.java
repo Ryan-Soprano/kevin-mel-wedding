@@ -28,10 +28,20 @@ class ReviewRequestTest {
         var nullState = new HashMap<String, Object>(); nullState.put("reviewStatus", null);
         for (Map<String, Object> body : List.of(Map.<String,Object>of(), Map.<String,Object>of("reviewStatus", "PUBLIC"),
                 Map.<String,Object>of("reviewStatus", "keep"), Map.<String,Object>of("reviewStatus", 1),
-                Map.<String,Object>of("reviewStatus", "KEEP", "visibility", "PUBLIC"), nullState)) {
+                Map.<String,Object>of("reviewStatus", "ARCHIVED", "visibility", "PUBLIC"),
+                Map.<String,Object>of("reviewStatus", "KEEP", "visibility", "UNKNOWN"), nullState)) {
             rejects(() -> ReviewRequest.from(body, "\"1\""), 400, "VALIDATION_FAILED");
         }
         rejects(() -> ReviewRequest.from(null, "\"1\""), 400, "VALIDATION_FAILED");
+    }
+    @Test void deliberateSharingRequiresKeepAndAnExplicitRecognizedAudience() {
+        for (String audience : List.of("COUPLE_ONLY", "FRIENDS_FAMILY", "PUBLIC")) {
+            assertThat(ReviewRequest.from(Map.of("reviewStatus", "KEEP", "visibility", audience), "\"3\""))
+                    .isEqualTo(new ReviewRequest("KEEP", 3, audience));
+        }
+        for (String status : List.of("PENDING", "ARCHIVED", "DELETE")) {
+            rejects(() -> ReviewRequest.from(Map.of("reviewStatus", status, "visibility", "PUBLIC"), "\"3\""), 400, "VALIDATION_FAILED");
+        }
     }
     private static void rejects(Runnable operation, int status, String code) {
         assertThatThrownBy(operation::run).isInstanceOf(ApiException.class).satisfies(failure -> {

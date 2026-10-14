@@ -73,7 +73,7 @@ export default function PhotoPicker({
                     aria-label={`Select photo ${index + 1}, ${photo.file.name}, for removal`} />
                   <PhotoPreview file={photo.file} />
                 </label>
-                {renderPhoto ? renderPhoto(photo, index) : <p className="photo-card__filename">{photo.file.name}</p>}
+                {renderPhoto?.(photo, index)}
               </li>
             ))}
           </ul>

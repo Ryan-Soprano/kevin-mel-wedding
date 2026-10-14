@@ -6,6 +6,7 @@ import { createAlbumApi } from "../../features/albums/api/albumApi.js";
 import { createTimelineApi } from "../../features/timeline/api/timelineApi.js";
 import { createLibraryApi } from "../../features/library/api/libraryApi.js";
 import { createExportApi } from "../../features/export/api/exportApi.js";
+import { createSharingApi, MEMORY_VISIBILITIES } from "../../features/sharing/sharingApi.js";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const KEY = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -128,7 +129,8 @@ export function decodeReceipt(value) {
   const clientIds = new Set();
   for (const memory of value.memories) {
     if (!isId(memory.memoryId) || ids.has(memory.memoryId) || !TYPES.includes(memory.memoryType)
-      || !STATES.includes(memory.reviewStatus) || memory.visibility !== "COUPLE_ONLY") {
+      || !STATES.includes(memory.reviewStatus) || !MEMORY_VISIBILITIES.includes(memory.visibility)
+      || (memory.reviewStatus !== "KEEP" && memory.visibility !== "COUPLE_ONLY")) {
       throw contractMismatch();
     }
     ids.add(memory.memoryId);
@@ -166,7 +168,8 @@ function decodeMemory(value) {
   if (!isId(value?.memoryId) || !isId(value.contributionId) || !TYPES.includes(value.memoryType)
     || !["GUEST", "COUPLE"].includes(value.source) || !sameMetadata(value, metadata)
     || (value.source === "COUPLE" && value.guestName !== null)
-    || !STATES.includes(value.reviewStatus) || value.visibility !== "COUPLE_ONLY"
+    || !STATES.includes(value.reviewStatus) || !MEMORY_VISIBILITIES.includes(value.visibility)
+    || (value.reviewStatus !== "KEEP" && value.visibility !== "COUPLE_ONLY")
     || !positiveInteger(value.revision) || !isTime(value.createdAt) || !isTime(value.updatedAt)
     || Date.parse(value.updatedAt) < Date.parse(value.createdAt)
     || !(value.guestName === null || typeof value.guestName === "string")
@@ -239,6 +242,7 @@ export function createArchiveApi({
     ...createTimelineApi({ client, decodeMemory, csrf }),
     ...createLibraryApi({ client, decodeMemory, csrf }),
     ...createExportApi({ client, csrf, exportFetch }),
+    ...createSharingApi({ client, csrf }),
     createCoupleTextContribution(payload, { idempotencyKey, csrfToken, signal } = {}) {
       const body = normalizeTextContribution(payload);
       if (body.guestName !== null) throw new TypeError("Private memories do not have a guest name.");
@@ -387,17 +391,22 @@ export function createArchiveApi({
         },
       });
     },
-    reviewMemory(memoryId, { reviewStatus, revision }, { csrfToken, signal } = {}) {
+    reviewMemory(memoryId, { reviewStatus, revision, visibility }, { csrfToken, signal } = {}) {
       if (!STATES.includes(reviewStatus) || !positiveInteger(revision)) {
         throw new TypeError("Supply a valid review state and the latest memory revision.");
       }
+      if (visibility !== undefined && (!MEMORY_VISIBILITIES.includes(visibility)
+        || (reviewStatus !== "KEEP" && visibility !== "COUPLE_ONLY"))) {
+        throw new TypeError("Choose a supported memory audience.");
+      }
       return client.request("/api/memories/" + id(memoryId) + "/review", {
-        method: "PATCH", body: { reviewStatus },
+        method: "PATCH", body: { reviewStatus, ...(visibility !== undefined ? { visibility } : {}) },
         headers: { ...csrf(csrfToken), "If-Match": '"' + revision + '"' },
         signal,
         decode(value, response) {
           const memory = decodeMemory(value);
           if (memory.memoryId !== memoryId || memory.reviewStatus !== reviewStatus
+            || (visibility !== undefined && memory.visibility !== visibility)
             || ![revision, revision + 1].includes(memory.revision)
             || response.headers.get("ETag") !== '"' + memory.revision + '"') throw contractMismatch();
           return memory;

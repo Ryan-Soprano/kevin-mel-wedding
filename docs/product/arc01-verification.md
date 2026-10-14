@@ -2,7 +2,7 @@
 
 ARC-01 implements private couple creation and optional title, description and memory-date editing, ahead of the later REV-03 feedback milestone at Ryan's request. The [v1 contract](../api/v1/couple-memories.md) specifies fields, date precision, review bypass, authenticated retries and preservation behavior.
 
-Verified locally on October 9, 2026, from `feature/couple-memories` based on main `bfe5e24`. Final-head CI and the merge identity are recorded in the ARC-01 tracker issue and pull request. Local fixture logs, screenshots, packages and caches stay under ignored `logs/arc01-local/`; they contain synthetic data only.
+Verified locally on October 9, 2026, from `feature/couple-memories` based on main `bfe5e24`. Final-head CI and the merge identity are recorded in the ARC-01 tracker issue and pull request. The local verification fixtures contained synthetic data only.
 
 ## Automated verification
 

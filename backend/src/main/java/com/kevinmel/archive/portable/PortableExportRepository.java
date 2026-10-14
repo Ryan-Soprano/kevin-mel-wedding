@@ -36,7 +36,7 @@ public class PortableExportRepository {
             + " AND m.review_status <> 'DELETE'";
     private static final String MEMORY_SQL = """
             SELECT m.id, m.contribution_id, m.item_position, m.revision, m.memory_type, c.source, c.guest_name, m.review_status,
-                m.text_content, m.caption, m.title, m.description, m.memory_date, m.date_precision,
+                m.text_content, m.caption, m.title, m.description, m.memory_date, m.date_precision, m.visibility,
                 m.created_at, m.updated_at, a.id AS asset_id, a.detected_format, a.byte_size,
                 a.checksum_sha256, a.audio_duration_ms, a.audio_container, a.audio_codec, a.original_filename
             FROM memory m JOIN contribution c ON c.id=m.contribution_id
@@ -140,7 +140,7 @@ public class PortableExportRepository {
         var memory = new PortableSnapshot.Memory(id, rs.getObject("contribution_id", UUID.class), rs.getObject("item_position", Integer.class), type, rs.getString("source"),
                 rs.getString("guest_name"), rs.getString("review_status"), rs.getString("text_content"), rs.getString("caption"),
                 rs.getString("title"), rs.getString("description"), rs.getString("memory_date"), rs.getString("date_precision"),
-                instant(rs, "created_at"), instant(rs, "updated_at"), original == null ? null : original.assetId());
+                instant(rs, "created_at"), instant(rs, "updated_at"), original == null ? null : original.assetId(), rs.getString("visibility"));
         return new MemoryRow(memory, original, rs.getLong("revision"));
     }
 

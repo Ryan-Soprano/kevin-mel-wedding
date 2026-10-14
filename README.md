@@ -2,6 +2,8 @@
 
 A private home for preserving the couple's memories, beginning with contributions from their wedding guests.
 
+The inbox now supports explicit memory audiences: Keep Private, Share with Friends & Family through a private link, and Share with Public on the guest site. Delete keeps the existing recovery window and revokes sharing; new contributions remain private. See the [sharing contract](docs/api/v1/sharing.md). The guest gallery opens as a carousel, and switching windows preserves the inbox's current view and unfinished sign-in fields in memory.
+
 ARC-02 adds private albums and event collections with many-to-many membership, independent ordering and paginated browsing. Album deletion preserves original memories and files; recovery package v4 includes album relationships. See the [album contract](docs/api/v1/albums.md) and [local verification](docs/product/arc02-verification.md).
 
 ARC-03 adds private chronological events and milestones with exact, partial or unknown dates, bounded year/precision filtering and explicit memory links. Event placement preserves original memories; recovery v5 includes timeline relationships. See the [timeline contract](docs/api/v1/timeline.md) and [local verification](docs/product/arc03-verification.md).

@@ -48,7 +48,14 @@ public final class PortableSnapshot {
     }
     public record Memory(UUID memoryId, UUID contributionId, Integer itemPosition, String memoryType, String source, String guestName,
             String reviewStatus, String text, String caption, String title, String description, String memoryDate,
-            String datePrecision, Instant createdAt, Instant updatedAt, UUID assetId) {}
+            String datePrecision, Instant createdAt, Instant updatedAt, UUID assetId, String visibility) {
+        public Memory(UUID memoryId, UUID contributionId, Integer itemPosition, String memoryType, String source, String guestName,
+                String reviewStatus, String text, String caption, String title, String description, String memoryDate,
+                String datePrecision, Instant createdAt, Instant updatedAt, UUID assetId) {
+            this(memoryId, contributionId, itemPosition, memoryType, source, guestName, reviewStatus, text, caption, title,
+                    description, memoryDate, datePrecision, createdAt, updatedAt, assetId, "COUPLE_ONLY");
+        }
+    }
     public record Original(UUID memoryId, UUID assetId, String path, String contentType, long byteSize,
             String sha256, Long durationMs, String audioContainer, String audioCodec, String originalFilename) {}
     public record Album(UUID id, String name, Instant createdAt, Instant updatedAt, List<AlbumMember> members) {

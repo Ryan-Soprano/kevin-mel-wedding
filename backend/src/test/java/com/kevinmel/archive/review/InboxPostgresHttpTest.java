@@ -44,6 +44,7 @@ class InboxPostgresHttpTest {
     @Autowired com.kevinmel.archive.contribution.ContributionRepository contributions;
     @Autowired com.kevinmel.archive.media.PhotoRepository photos;
     @Autowired org.springframework.transaction.PlatformTransactionManager transactions;
+    @Autowired com.kevinmel.archive.sharing.SharingRepository sharing;
     private static final Instant TIME = Instant.parse("2026-10-09T12:00:00.123456Z");
     private static final String PASSWORD = "synthetic-inbox-only-password";
     private final List<UUID> contributionIds = new ArrayList<>();
@@ -108,6 +109,129 @@ class InboxPostgresHttpTest {
         assertThat(get("/api/memories/" + photo + "/playback").statusCode()).isEqualTo(503);
         // Unavailable original storage does not hide the durable metadata or pretend the photo disappeared.
         assertThat(get("/api/memories/" + photo).statusCode()).isEqualTo(200);
+    }
+
+    @Test void sharingAudiencesAreDurableAndEveryGuestRequestEnforcesCurrentVisibility() throws Exception {
+        UUID note = memory(800, "kevin-mel-wedding", "PENDING", "TEXT", TIME, "Private guest identity");
+        assertThat(guestGet("/api/shared-memories/" + note).statusCode()).isEqualTo(404);
+        login();
+        var shared = audience(note, "KEEP", "FRIENDS_FAMILY", 1);
+        assertThat(shared.statusCode()).isEqualTo(200);
+        assertThat(JsonPath.<String>read(shared.body(), "$.visibility")).isEqualTo("FRIENDS_FAMILY");
+        assertThat(guestGet("/api/shared-memories/" + note).statusCode()).isEqualTo(404);
+        assertThat(ids(guestGet("/api/shared-memories"))).doesNotContain(note.toString());
+        var issued = shareLink(note, 2);
+        assertThat(issued.statusCode()).isEqualTo(200);
+        assertThat(issued.headers().firstValue("ETag")).contains("\"3\"");
+        String url = JsonPath.read(issued.body(), "$.url");
+        String token = url.substring(url.indexOf("#token=") + 7);
+        assertThat(token).hasSize(43);
+        assertThat(db.sql("SELECT token_digest FROM memory_share_link WHERE memory_id=:id").param("id", note).query(String.class).single())
+                .hasSize(64).isNotEqualTo(token);
+        var guest = guestGet("/api/shared-memories/" + note + "?token=" + token);
+        assertThat(guest.statusCode()).isEqualTo(200);
+        assertThat(guest.headers().firstValue("Cache-Control")).contains("no-store");
+        assertThat(guest.headers().firstValue("Referrer-Policy")).contains("no-referrer");
+        assertThat(guest.body()).contains("synthetic markup").doesNotContain("Private guest identity", "guestName", "contributionId",
+                "originalFilename", "checksum", "objectKey", "token", "reviewStatus", "idempotencyKey");
+        assertThat(guestGet("/api/shared-memories/" + note + "?token=" + "A".repeat(43)).statusCode()).isEqualTo(404);
+        assertThat(shareLink(note, 2).statusCode()).isEqualTo(412);
+        var rotated = shareLink(note, 3);
+        assertThat(rotated.statusCode()).isEqualTo(200);
+        String newUrl = JsonPath.read(rotated.body(), "$.url");
+        String newToken = newUrl.substring(newUrl.indexOf("#token=") + 7);
+        assertThat(newToken).isNotEqualTo(token);
+        assertThat(guestGet("/api/shared-memories/" + note + "?token=" + token).statusCode()).isEqualTo(404);
+        assertThat(guestGet("/api/shared-memories/" + note + "?token=" + newToken).statusCode()).isEqualTo(200);
+        assertThat(audience(note, "KEEP", "PUBLIC", 4).statusCode()).isEqualTo(200);
+        assertThat(guestGet("/api/shared-memories/" + note).statusCode()).isEqualTo(200);
+        assertThat(ids(guestGet("/api/shared-memories"))).contains(note.toString());
+        assertThat(ids(get("/api/memories?reviewStatus=KEEP"))).contains(note.toString());
+        assertThat(get("/api/memories/" + note).statusCode()).isEqualTo(200);
+        assertThat(audience(note, "KEEP", "COUPLE_ONLY", 5).statusCode()).isEqualTo(200);
+        assertThat(guestGet("/api/shared-memories/" + note + "?token=" + newToken).statusCode()).isEqualTo(404);
+        assertThat(ids(guestGet("/api/shared-memories"))).doesNotContain(note.toString());
+        assertThat(db.sql("SELECT COUNT(*) FROM memory_share_link WHERE memory_id=:id").param("id", note).query(Long.class).single()).isZero();
+        assertThat(db.sql("SELECT before_visibility||'>'||after_visibility FROM review_audit WHERE memory_id=:id ORDER BY after_revision")
+                .param("id", note).query(String.class).list()).containsExactly("COUPLE_ONLY>FRIENDS_FAMILY", "FRIENDS_FAMILY>FRIENDS_FAMILY",
+                        "FRIENDS_FAMILY>FRIENDS_FAMILY", "FRIENDS_FAMILY>PUBLIC", "PUBLIC>COUPLE_ONLY");
+    }
+
+    @Test void deleteArchiveAndRestoreNeverRepublishSharedContentAndPublicPagesExcludeUnsafeMedia() throws Exception {
+        UUID note = memory(801, "kevin-mel-wedding", "PENDING", "TEXT", TIME, null);
+        UUID badPhoto = photo(802, "KEEP", "UPLOADED", true);
+        db.sql("UPDATE memory SET visibility='PUBLIC' WHERE id=:id").param("id", badPhoto).update();
+        assertThat(guestGet("/api/shared-memories/" + badPhoto).statusCode()).isEqualTo(404);
+        assertThat(guestGet("/api/shared-memories/" + badPhoto + "/playback").statusCode()).isEqualTo(404);
+        assertThat(ids(guestGet("/api/shared-memories"))).doesNotContain(badPhoto.toString());
+        login();
+        assertThat(audience(note, "KEEP", "PUBLIC", 1).statusCode()).isEqualTo(200);
+        assertThat(patch(note, "ARCHIVED", 2).statusCode()).isEqualTo(200);
+        assertThat(guestGet("/api/shared-memories/" + note).statusCode()).isEqualTo(404);
+        assertThat(audience(note, "KEEP", "FRIENDS_FAMILY", 3).statusCode()).isEqualTo(200);
+        String url = JsonPath.read(shareLink(note, 4).body(), "$.url");
+        String token = url.substring(url.indexOf("#token=") + 7);
+        var deleted = patch(note, "DELETE", 5);
+        assertThat(deleted.statusCode()).isEqualTo(200);
+        assertThat(JsonPath.<String>read(deleted.body(), "$.visibility")).isEqualTo("COUPLE_ONLY");
+        assertThat(guestGet("/api/shared-memories/" + note + "?token=" + token).statusCode()).isEqualTo(404);
+        var restored = audience(note, "KEEP", "PUBLIC", 6);
+        assertThat(restored.statusCode()).isEqualTo(200);
+        assertThat(JsonPath.<String>read(restored.body(), "$.visibility")).isEqualTo("COUPLE_ONLY");
+        assertThat(guestGet("/api/shared-memories/" + note).statusCode()).isEqualTo(404);
+        assertThat(db.sql("SELECT COUNT(*) FROM memory_share_link WHERE memory_id=:id").param("id", note).query(Long.class).single()).isZero();
+    }
+
+    @Test void playbackQueuedBehindTokenRotationChecksFreshCapabilitySnapshot() throws Exception {
+        UUID note = memory(803, "kevin-mel-wedding", "PENDING", "TEXT", TIME, null);
+        login();
+        assertThat(audience(note, "KEEP", "FRIENDS_FAMILY", 1).statusCode()).isEqualTo(200);
+        assertThat(shareLink(note, 2).statusCode()).isEqualTo(200);
+        String oldDigest = db.sql("SELECT token_digest FROM memory_share_link WHERE memory_id=:id")
+                .param("id", note).query(String.class).single();
+        var future = new java.util.concurrent.atomic.AtomicReference<java.util.concurrent.Future<java.util.Optional<MemoryDetail>>>();
+        try (var executor = java.util.concurrent.Executors.newSingleThreadExecutor()) {
+            new org.springframework.transaction.support.TransactionTemplate(transactions).execute(ignored -> {
+                db.sql("SELECT id FROM memory WHERE id=:id FOR UPDATE").param("id", note).query(UUID.class).single();
+                future.set(executor.submit(() -> new org.springframework.transaction.support.TransactionTemplate(transactions)
+                        .execute(read -> sharing.accessibleDetail(note, oldDigest, true))));
+                long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5);
+                boolean waiting = false;
+                while (System.nanoTime() < deadline) {
+                    waiting = db.sql("""
+                            SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_database()
+                                AND wait_event_type='Lock' AND query LIKE '%FOR SHARE%')
+                            """).query(Boolean.class).single();
+                    if (waiting) break;
+                    try { Thread.sleep(10); } catch (InterruptedException interrupted) { throw new IllegalStateException(interrupted); }
+                }
+                assertThat(waiting).as("Reader must have reached the memory lock before the capability rotates").isTrue();
+                db.sql("UPDATE memory_share_link SET token_digest=:digest WHERE memory_id=:id")
+                        .param("digest", "f".repeat(64)).param("id", note).update();
+                db.sql("UPDATE memory SET revision=revision+1 WHERE id=:id").param("id", note).update();
+                return null;
+            });
+            assertThat(future.get().get(5, java.util.concurrent.TimeUnit.SECONDS)).isEmpty();
+        }
+    }
+
+    private HttpResponse<String> audience(UUID memory, String status, String visibility, int revision) throws Exception {
+        var request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/memories/" + memory + "/review"))
+                .timeout(Duration.ofSeconds(20)).header("X-Api-Contract", "1").header("X-CSRF-Token", csrfToken)
+                .header("If-Match", "\"" + revision + "\"").header("Content-Type", "application/json").header("Origin", "http://localhost:" + port)
+                .method("PATCH", HttpRequest.BodyPublishers.ofString("{\"reviewStatus\":\"" + status + "\",\"visibility\":\"" + visibility + "\"}")).build();
+        return client.send(request, HttpResponse.BodyHandlers.ofString());
+    }
+    private HttpResponse<String> shareLink(UUID memory, int revision) throws Exception {
+        var request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/memories/" + memory + "/share-link"))
+                .timeout(Duration.ofSeconds(20)).header("X-Api-Contract", "1").header("X-CSRF-Token", csrfToken)
+                .header("If-Match", "\"" + revision + "\"").header("Origin", "http://localhost:" + port)
+                .POST(HttpRequest.BodyPublishers.noBody()).build();
+        return client.send(request, HttpResponse.BodyHandlers.ofString());
+    }
+    private HttpResponse<String> guestGet(String path) throws Exception {
+        return newClient().send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))
+                .timeout(Duration.ofSeconds(20)).GET().build(), HttpResponse.BodyHandlers.ofString());
     }
 
     @Test void tiedTimestampKeysetPaginationDoesNotDuplicateRowsWhenNewMemoriesArrive() throws Exception {

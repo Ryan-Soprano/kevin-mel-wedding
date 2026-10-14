@@ -31,6 +31,9 @@ export function useInboxController(createController) {
   const actions = useInboxActions(controller);
   const audioPlayback = useRef(null);
   const clearPlayback = useCallback(() => stopAudioPlayback(audioPlayback.current), []);
+  const pausePlayback = useCallback(() => {
+    try { audioPlayback.current?.pause(); } catch { /* A window switch must preserve the loaded audio source. */ }
+  }, []);
   const heading = useRef(null);
   const deleteButton = useRef(null);
   const cancelDelete = useRef(null);
@@ -63,6 +66,7 @@ export function useInboxController(createController) {
       flush: flushSync,
       isIntentionalDialog: () => intentionalDialog.current,
       onDialogEnd: () => { intentionalDialog.current = false; },
+      onPause: pausePlayback,
       onHide: () => {
         intentionalDialog.current = false;
         clearPlayback();
@@ -81,7 +85,7 @@ export function useInboxController(createController) {
       unsubscribe();
       current.dispose();
     };
-  }, [clearPlayback]);
+  }, [clearPlayback, pausePlayback]);
 
   useEffect(() => {
     heading.current?.focus();
@@ -158,10 +162,10 @@ export function useInboxController(createController) {
     void controller.current?.loadInbox(snapshot.reviewStatus, previous.at(-1));
   }
 
-  function changeReview(status) {
+  function changeReview(status, visibility) {
     if (snapshot.busy || reviewLocked) return;
     setDeleteConfirmation(null);
-    void controller.current?.reviewMemory(status);
+    void controller.current?.reviewMemory(status, visibility);
   }
 
   function beginDelete() {

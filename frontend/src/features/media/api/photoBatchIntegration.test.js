@@ -46,6 +46,7 @@ test("real batch presentation keeps retained originals locked, exposes deliberat
     const { default: PhotoBatchCompose } = await server.ssrLoadModule("/src/features/media/components/PhotoBatchCompose.jsx");
     const { default: PhotoBatchCard } = await server.ssrLoadModule("/src/features/media/components/PhotoBatchCard.jsx");
     const { default: PhotoBatchActions } = await server.ssrLoadModule("/src/features/media/components/PhotoBatchActions.jsx");
+    const { default: PhotoPicker } = await server.ssrLoadModule("/src/features/media/components/PhotoPicker.jsx");
     const render = (Component, props) => renderToStaticMarkup(createElement(Component, props));
     const noop = () => {};
     const actions = Object.fromEntries(["review", "editPhotos", "sendPhotos", "retry", "resetBatch", "finish", "shareAnother", "toggleRetry",
@@ -61,6 +62,9 @@ test("real batch presentation keeps retained originals locked, exposes deliberat
     };
     let factoryCalls = 0, flowReports = 0;
     const initialProps = { createSubmission: () => { factoryCalls++; }, onFlowStateChange: () => { flowReports++; } };
+    const picker = render(PhotoPicker, { photos: f.photos, idPrefix: "selected-photos" });
+    assert.match(picker, /aria-label="Select photo 1, test-0.png, for removal"/);
+    assert.doesNotMatch(picker, /photo-card__filename/);
     const guest = render(PhotoBatchForm, initialProps);
     assert.match(guest, />Share photos</);
     assert.match(guest, /Your name for this batch/);
@@ -77,6 +81,8 @@ test("real batch presentation keeps retained originals locked, exposes deliberat
     assert.match(review, /From: Guest &lt;visitor&gt;/);
     assert.match(review, /First &lt;caption&gt;/);
     assert.match(review, /No caption provided/);
+    assert.match(review, /alt="Photo 1"/);
+    assert.doesNotMatch(review, /photo-card__filename|test-0\.png/);
     assert.match(review, /class="note-review__message"><\/p>/, "an intentionally empty caption does not gain a fallback");
     assert.match(review, />Send photos</);
     assert.match(review, /role="status" aria-live="polite" aria-atomic="true"/);
@@ -108,6 +114,8 @@ test("real batch presentation keeps retained originals locked, exposes deliberat
       globalWait: 5, error: "Check this caption", selected: true, onCaptionChange: noop, onCaptionRef: noop, onToggleRetry: noop,
     };
     const waitingCard = render(PhotoBatchCard, { ...cardProps, item: { ...partial.items[1], retryAfterSeconds: 2.2 } });
+    assert.match(waitingCard, /class="visually-hidden">Photo 2: test-1\.png<\/span>/);
+    assert.doesNotMatch(waitingCard, /photo-card__filename/);
     assert.match(waitingCard, /aria-invalid="true"/);
     assert.match(waitingCard, new RegExp(`aria-describedby="batch-check-filename-${f.photos[1].id} batch-check-caption-${f.photos[1].id}-error"`));
     assert.match(waitingCard, /Select photo 2 to retry \(wait 5 seconds\)/);
