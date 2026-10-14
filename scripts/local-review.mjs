@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { randomBytes, randomUUID } from "node:crypto";
 import { check, RollbackFailure, localDockerEndpoint, readJarTar, sha256 } from "./rollback-helpers.mjs";
 import { POSTGRES_17_IMAGE } from "./reception-helpers.mjs";
-import { parseLocalReviewArguments, localReviewNames, assertLocalReviewOwnership, localReviewDockerEnvironment,
+import { parseLocalReviewArguments, localReviewNames, assertLocalReviewOwnership, localReviewDockerEnvironment, verifyLocalReviewSchema,
   LOCAL_REVIEW_LABEL, SYNTHETIC_REVIEW_ACCOUNTS, SYNTHETIC_REVIEW_PASSWORD, SYNTHETIC_REVIEW_PASSWORD_HASH } from "./local-review-helpers.mjs";
 
 // All persistent writes belong to this UUID-labelled disposable Docker fixture.
@@ -148,7 +148,7 @@ async function verifyPackage() {
   }
 }
 async function seed() {
-  check(await sql("SELECT count(*),max(version::int),bool_and(success) FROM flyway_schema_history WHERE type='SQL';") === "13|13|t", "The packaged review application requires exactly the successful V1-V13 schema.");
+  await verifyLocalReviewSchema(runId, owned);
   await verifyPackage();
   check((await json(await request("/api/memories"), 401)).error?.code === "AUTH_REQUIRED", "Anonymous review requests acquired private access.");
   for (const account of SYNTHETIC_REVIEW_ACCOUNTS) await sql("INSERT INTO archive_account(username,display_name,password_hash,role,enabled) VALUES ('"

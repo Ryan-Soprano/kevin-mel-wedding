@@ -190,20 +190,29 @@ class InboxPostgresHttpTest {
         String oldDigest = db.sql("SELECT token_digest FROM memory_share_link WHERE memory_id=:id")
                 .param("id", note).query(String.class).single();
         var future = new java.util.concurrent.atomic.AtomicReference<java.util.concurrent.Future<java.util.Optional<MemoryDetail>>>();
+        var readerPid = new java.util.concurrent.atomic.AtomicReference<Integer>();
         try (var executor = java.util.concurrent.Executors.newSingleThreadExecutor()) {
             new org.springframework.transaction.support.TransactionTemplate(transactions).execute(ignored -> {
                 db.sql("SELECT id FROM memory WHERE id=:id FOR UPDATE").param("id", note).query(UUID.class).single();
                 future.set(executor.submit(() -> new org.springframework.transaction.support.TransactionTemplate(transactions)
-                        .execute(read -> sharing.accessibleDetail(note, oldDigest, true))));
+                        .execute(read -> {
+                            readerPid.set(db.sql("SELECT pg_backend_pid()").query(Integer.class).single());
+                            return sharing.accessibleDetail(note, oldDigest, true);
+                        })));
                 long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5);
                 boolean waiting = false;
+                // Activity inventories can be cached for this writer transaction. The known
+                // reader PID lets the lock manager prove this exact writer is blocking it.
                 while (System.nanoTime() < deadline) {
-                    waiting = db.sql("""
-                            SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_database()
-                                AND wait_event_type='Lock' AND query LIKE '%FOR SHARE%')
-                            """).query(Boolean.class).single();
+                    waiting = readerPid.get() != null && db.sql("SELECT pg_backend_pid() = ANY(pg_blocking_pids(:reader))")
+                            .param("reader", readerPid.get()).query(Boolean.class).single();
                     if (waiting) break;
-                    try { Thread.sleep(10); } catch (InterruptedException interrupted) { throw new IllegalStateException(interrupted); }
+                    if (future.get().isDone()) {
+                        try { throw new AssertionError("Reader completed before the owned memory-lock wait: " + future.get().get()); }
+                        catch (java.util.concurrent.ExecutionException failure) { throw new AssertionError("Reader failed before the owned memory-lock wait.", failure.getCause()); }
+                        catch (InterruptedException failure) { Thread.currentThread().interrupt(); throw new AssertionError(failure); }
+                    }
+                    try { Thread.sleep(10); } catch (InterruptedException failure) { Thread.currentThread().interrupt(); throw new AssertionError(failure); }
                 }
                 assertThat(waiting).as("Reader must have reached the memory lock before the capability rotates").isTrue();
                 db.sql("UPDATE memory_share_link SET token_digest=:digest WHERE memory_id=:id")

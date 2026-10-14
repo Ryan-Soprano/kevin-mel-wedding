@@ -23,6 +23,8 @@ The disposable accounts are **synthetic-kevin** / **Synthetic Kevin** and **synt
 
 The runner creates an owned standard bridge network, a PostgreSQL tmpfs data directory with no published database port, and a nonroot application container with a read-only filesystem. The bridge permits network routing; it is not an air gap. Only synthetic application settings enter the containers, ambient provider credentials are excluded, and storage, audio and retention are disabled. Saved changes persist within this run until cleanup removes its containers and tmpfs database. Restarting the runner creates a fresh archive. The normal Compose database and its `postgres_data` volume remain outside this fixture.
 
+Before seeding, the selected application's packaged read-only schema validator checks that the database exactly matches its bundled migrations, checksums and schema. A mismatch stops startup and triggers owned-resource cleanup. This check follows the selected package rather than a fixed migration count.
+
 ## A 25-minute walkthrough
 
 Use made-up names and notes for anything you add. The supplied couple gallery is for browsing; use separate synthetic files for photo selection. Follow the existing [tester guide](../product/qa02-tester-guide.md) for fuller scenarios and the results template.
