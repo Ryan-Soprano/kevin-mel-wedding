@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parseLocalReviewArguments, localReviewNames, assertLocalReviewOwnership, localReviewDockerEnvironment } from "./local-review-helpers.mjs";
+import { parseLocalReviewArguments, localReviewNames, assertLocalReviewOwnership, localReviewDockerEnvironment, verifyLocalReviewSchema } from "./local-review-helpers.mjs";
 
 const image = "sha256:" + "a".repeat(64), run = "11111111-2222-4333-8444-555555555555";
 
@@ -51,4 +51,43 @@ test("Docker subprocesses cannot inherit ambient provider, database, Node or JVM
     HOME: source.HOME, DOCKER_HOST: source.DOCKER_HOST, DOCKER_CONTEXT: source.DOCKER_CONTEXT });
   assert.equal(source.PGPASSWORD, "synthetic-forbidden");
   assert.deepEqual(localReviewDockerEnvironment(Object.create({ PATH: "inherited", MEMORY_ARCHIVE_R2_BUCKET: "inherited" })), {});
+});
+
+test("review schema uses the owned application's packaged validator and the same immutable JAR", async () => {
+  const calls = [];
+  await verifyLocalReviewSchema(run, async (...args) => {
+    calls.push(args);
+    return { ok: true, output: "ROLLBACK_SCHEMA_MATCH" };
+  });
+  assert.equal(calls.length, 1);
+  const [app, command, , options] = calls[0];
+  assert.equal(app, localReviewNames(run).app);
+  assert.deepEqual(command, ["container", "exec", app, "java",
+    "-Dloader.main=com.kevinmel.archive.operations.ReadinessAdministration", "-cp", "/app/app.jar",
+    "org.springframework.boot.loader.launch.PropertiesLauncher", "--expect-environment", "local",
+    "schema-check", "--prior-jar", "/app/app.jar"]);
+  assert.deepEqual(options, { allowFailure: true });
+});
+
+test("review schema fails closed on failed execution, rejection, missing or ambiguous confirmation", async () => {
+  for (const result of [
+    { ok: false, output: "ROLLBACK_SCHEMA_MATCH" },
+    { ok: true, output: "ROLLBACK_SCHEMA_UNCONFIRMED" },
+    { ok: false, output: "" },
+    { ok: true, output: "" },
+    { ok: true, output: "13|13|t" },
+    { ok: true, output: "14|14|t" },
+    { ok: true, output: "ROLLBACK_SCHEMA_MATCH\nROLLBACK_SCHEMA_UNCONFIRMED" },
+    { ok: true, output: "ROLLBACK_SCHEMA_MATCH\nROLLBACK_SCHEMA_MATCH" },
+  ]) {
+    await assert.rejects(verifyLocalReviewSchema(run, async () => result), /must exactly match/);
+  }
+});
+
+test("review schema cannot bypass resource ownership or accept an invalid run", async () => {
+  const denied = new Error("Synthetic ownership denial");
+  await assert.rejects(verifyLocalReviewSchema(run, async () => { throw denied; }), error => error === denied);
+  let invoked = false;
+  await assert.rejects(verifyLocalReviewSchema("invalid-run", async () => { invoked = true; }), /UUID-v4/);
+  assert.equal(invoked, false);
 });

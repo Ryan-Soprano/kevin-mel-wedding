@@ -18,7 +18,11 @@ For prerequisites, install/run/check commands, the development proxy, and curren
 | [src/features/archive/](src/features/archive/) | Reserved for the private archive and review experience |
 | [src/features/auth/](src/features/auth/) | Reserved for couple authentication |
 | [src/shared/](src/shared/) | Reusable API and UI code shared by multiple features |
-| [src/shared/api/archiveApi.js](src/shared/api/archiveApi.js) | Durable v1 adapter/decoders used by the wedding text and photo forms |
+| [src/shared/api/archiveApi.js](src/shared/api/archiveApi.js) | Stable archive API facade; composes the feature adapters and preserves the shared exports |
+| [src/shared/api/archiveContracts.js](src/shared/api/archiveContracts.js) | Shared v1 validation, normalization and response decoders |
+| [src/shared/api/contributionApi.js](src/shared/api/contributionApi.js) | Guest and couple contribution, upload and receipt requests |
+| [src/shared/api/sessionApi.js](src/shared/api/sessionApi.js) | Session lookup, sign-in and sign-out requests |
+| [src/shared/api/memoryApi.js](src/shared/api/memoryApi.js) | Inbox, memory detail, metadata, review and playback requests |
 | [src/shared/api/mockArchiveApi.js](src/shared/api/mockArchiveApi.js) | Isolated synthetic server behind the same transport/adapter |
 | [src/shared/api/v1/fixtures.js](src/shared/api/v1/fixtures.js) | Executable versioned request/response examples |
 | [src/dev/](src/dev/) / [contract-preview.html](contract-preview.html) | Development-only synthetic UI preview; excluded from the normal build |

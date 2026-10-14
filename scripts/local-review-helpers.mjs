@@ -55,6 +55,18 @@ export function localReviewDockerEnvironment(source) {
   return result;
 }
 
+// Run the reviewed image's own read-only schema validator, so its bundled
+// migrations and checksums remain the authority for either an older or new image.
+export async function verifyLocalReviewSchema(runId, ownedCommand) {
+  const app = localReviewNames(runId).app;
+  const result = await ownedCommand(app, ["container", "exec", app, "java",
+    "-Dloader.main=com.kevinmel.archive.operations.ReadinessAdministration", "-cp", "/app/app.jar",
+    "org.springframework.boot.loader.launch.PropertiesLauncher", "--expect-environment", "local",
+    "schema-check", "--prior-jar", "/app/app.jar"], "Packaged read-only review schema check", { allowFailure: true });
+  check(result.ok === true && result.output === "ROLLBACK_SCHEMA_MATCH",
+    "The review database must exactly match the reviewed image's successful bundled migrations and schema.");
+}
+
 // Published test-only fixture, already used by the disposable container/browser
 // rehearsals. Never use this credential or low-cost hash for a real account.
 export const SYNTHETIC_REVIEW_PASSWORD = "synthetic-auth-container-passphrase";
