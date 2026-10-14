@@ -29,7 +29,7 @@ function MemorySummary({ memory }) {
   return <><h3>{heading(memory)}</h3>
     <p>{TYPES[memory.memoryType]} · {LABELS[memory.reviewStatus]} · {memory.source === "COUPLE" ? "Couple memory" : `Guest contribution · From ${memory.guestName ?? "Name not provided"}`}</p>
     <p>Memory date: {partialDateLabel(memory.memoryDate, memory.datePrecision)}</p>
-    <p>Saved on: <time dateTime={memory.createdAt}>{memoryTime(memory.createdAt)}</time> · Chicago</p>
+    <p>Saved on: <time dateTime={memory.createdAt}>{memoryTime(memory.createdAt)}</time> · Eastern</p>
     <p className="inbox-excerpt">{memory.memoryType === "TEXT" ? memory.textContent.slice(0, 180) : memory.caption ?? memory.media.originalFilename}</p></>;
 }
 export default function Timeline({ state, busy, locked, actions }) {

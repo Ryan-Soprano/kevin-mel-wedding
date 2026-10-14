@@ -10,6 +10,9 @@ For prerequisites, install/run/check commands, the development proxy, and curren
 | [src/app/App.jsx](src/app/App.jsx) | Top-level application shell |
 | [src/features/contribution/](src/features/contribution/) | Guest text form and retained draft/key coordinator in api/textSubmission.js |
 | [src/features/media/](src/features/media/) | Active batch photo form/coordinator, shared controlled picker, constraints/previews and the retained MED-01 singleton coordinator |
+| [src/features/inbox/components/Inbox.jsx](src/features/inbox/components/Inbox.jsx) | Private archive shell and feature routing; smaller access, list, detail, media and review views live beside it |
+| [src/features/inbox/hooks/](src/features/inbox/hooks/) | Single controller lifetime, privacy clearing, focus/pagination state and stable action adapters |
+| [src/features/inbox/inboxDisplay.js](src/features/inbox/inboxDisplay.js) / [memoryDisplay.js](src/features/inbox/memoryDisplay.js) | Private view labels/guards and Eastern display times; API timestamps remain UTC |
 | [src/features/archive/](src/features/archive/) | Reserved for the private archive and review experience |
 | [src/features/auth/](src/features/auth/) | Reserved for couple authentication |
 | [src/shared/](src/shared/) | Reusable API and UI code shared by multiple features |

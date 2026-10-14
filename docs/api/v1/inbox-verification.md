@@ -50,7 +50,7 @@ With Docker available, run the normal full backend suite, which includes the new
 
 The private screen is lazy-loaded at `/?view=inbox` on the same application origin. It is not advertised in the guest invitation. It starts by checking the existing session API, then displays sign-in or the authorized inbox. The reveal gate remains closed by default and no real accounts were created. Use only the existing synthetic local-account runbook for local demonstrations.
 
-Pending, Kept and Archived filters show individual notes/verified photos in bounded pages. Each card identifies the optional guest name, type and time in `America/Chicago`, including daylight-saving changes. Detail Back retains the loaded page and filter. Failed pages must be retried before further pagination; recovery through a fresh access check resets to the first Pending page.
+Pending, Kept and Archived filters show individual notes/verified photos in bounded pages. Each card identifies the optional guest name, type and time in `America/New_York`, including daylight-saving changes. Saved times and recovery deadlines throughout the private archive are labeled Eastern. API and stored timestamps remain UTC; provided dates retain their precision. Detail Back retains the loaded page and filter. Failed pages must be retried before further pagination; recovery through a fresh access check resets to the first Pending page.
 
 Guest names, text, filenames and captions are ordinary React text children; submitted markup does not become HTML. Loading, empty, unavailable, missing original and expired-session states give explicit recovery controls. Read-only status filters do not expose keep/archive/delete actions or publication.
 
@@ -65,3 +65,7 @@ Ryan requested direct VS Code editing: this implementation is in the primary che
 ## CI verification
 
 [CI run 37939842152](https://github.com/Ryan-Soprano/kevin-mel-wedding/actions/runs/37939842152) at implementation commit `b5e03c5` passes both jobs: **124 backend tests**, including actual PostgreSQL HTTP/pagination/authorization and migration/upgrade coverage, and **165 frontend tests**, with zero failures/errors/skips. Frontend lockfile installation, lint and production build also pass. Independent review findings are resolved. Actual browser/physical-device/hosted acceptance and complete audio remain open.
+
+## October 14, 2026 — Eastern time adjustment
+
+Ryan requested Eastern time for Kevin and Melanie in NYC. Current private views and the readable portable archive use `America/New_York`, with EDT or EST appropriate to each instant. UTC API/storage and JSON timestamps, provided partial dates and elapsed recovery/expiry windows remain unchanged. Regression coverage includes a UTC date crossing and the spring/fall daylight-saving transitions. The Chicago boundary result and test counts above describe the earlier implementation and remain historical evidence; they are not results for this adjustment.

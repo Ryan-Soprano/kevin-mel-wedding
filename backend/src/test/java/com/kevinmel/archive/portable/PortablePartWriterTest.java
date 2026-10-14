@@ -76,6 +76,35 @@ class PortablePartWriterTest {
         assertPrivate(originalZip);
     }
 
+    @Test void readableTimesUseEasternAcrossDateAndDstBoundariesWhileJsonPreservesUtcAndPartialDates() throws Exception {
+        var writer = new PortablePartWriter(new Storage());
+        var cases = Map.of(
+                "2026-10-25T02:30:00Z", "Oct 24, 2026, 10:30 PM EDT",
+                "2026-11-01T05:30:00Z", "Nov 1, 2026, 1:30 AM EDT",
+                "2026-11-01T06:30:00Z", "Nov 1, 2026, 1:30 AM EST",
+                "2026-03-08T06:59:00Z", "Mar 8, 2026, 1:59 AM EST",
+                "2026-03-08T07:00:00Z", "Mar 8, 2026, 3:00 AM EDT");
+        for (var entry : cases.entrySet()) {
+            Instant at = Instant.parse(entry.getKey());
+            var memory = new PortableSnapshot.Memory(UUID.randomUUID(), UUID.randomUUID(), null, "TEXT", "GUEST", null,
+                    "KEEP", "Synthetic note", null, null, null, "2024-03", "MONTH", at, at, null);
+            var snapshot = new PortableSnapshot(at, List.of(memory), List.of(), List.of(), List.of(), List.of(), Map.of(), Map.of());
+            Path directory = privateDirectory(), indexZip = directory.resolve("index.zip");
+            writer.writeIndexPart(snapshot, List.of(), indexZip, () -> true); extract(indexZip, directory);
+            String text = Files.readString(directory.resolve("archive.txt")), html = Files.readString(directory.resolve("index.html"));
+            assertThat(text).contains("Captured: " + entry.getValue(), "Saved on: " + entry.getValue(), "Eastern time", "2024-03 (MONTH)");
+            assertThat(html).contains("<time datetime=\"" + entry.getKey() + "\">" + entry.getValue() + "</time>", "Eastern time", "2024-03 (MONTH)");
+            JsonNode archive = PortableExportRepository.JSON.readTree(Files.readAllBytes(directory.resolve("archive.json")));
+            assertThat(archive.get("capturedAt").asString()).isEqualTo(entry.getKey());
+            assertThat(archive.get("memories").get(0).get("createdAt").asString()).isEqualTo(entry.getKey());
+            assertThat(archive.get("memories").get(0).get("updatedAt").asString()).isEqualTo(entry.getKey());
+            assertThat(archive.get("memories").get(0).get("memoryDate").asString()).isEqualTo("2024-03");
+            assertThat(archive.get("memories").get(0).get("datePrecision").asString()).isEqualTo("MONTH");
+            JsonNode manifest = PortableExportRepository.JSON.readTree(Files.readAllBytes(directory.resolve("manifest.json")));
+            assertThat(manifest.get("capturedAt").asString()).isEqualTo(entry.getKey());
+        }
+    }
+
     @Test void missingWrongSizeWrongHashAndReadFailureRemainExplicitAndNeverPublishBadBytes() throws Exception {
         Path directory = privateDirectory(); var storage = new Storage(); var writer = new PortablePartWriter(storage);
         var originals = List.of(original(new byte[] {1, 2}, "image/png", "missing.png"), original(new byte[] {3, 4}, "image/png", "size.png"),

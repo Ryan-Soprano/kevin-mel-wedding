@@ -22,6 +22,11 @@ test("actual export view gives explicit bounded parts, honest missing/excluded/e
     const parts = [{ partNumber: 1, kind: "ORIGINALS", state: "PROCESSED", availableOriginals: 0, unavailableOriginals: 1 }, { partNumber: 2, kind: "INDEX", state: "UNPROCESSED", availableOriginals: 0, unavailableOriginals: 0 }];
     const warnings = render({ job, parts, issues: [{ partNumber: 1, memoryId: id(5), assetId: id(6), code: "READ_FAILED" }] }); assert.match(warnings, /This export is incomplete/); assert.match(warnings, /2 unfinished or unavailable memories/); assert.match(warnings, /5 deleted tags/); assert.match(warnings, /Original could not be read/);
     assert.match(warnings, /Prepare ZIP part 1/); assert.match(warnings, /Final index and offline reader/); assert.match(warnings, /Only one prepared ZIP/); assert.match(warnings, /Check export progress/); assert.match(warnings, /App restart/); assert.match(warnings, /30 minutes/);
+    assert.match(warnings, /Created <time dateTime="2026-10-10T12:00:00Z">Oct 10, 2026, 8:00 AM EDT<\/time> · Eastern/);
+    assert.match(warnings, /Archive captured <time dateTime="2026-10-10T12:00:01Z">Oct 10, 2026, 8:00 AM EDT<\/time> · Eastern/);
+    assert.match(warnings, /by <time dateTime="2026-10-11T12:00:00Z">Oct 11, 2026, 8:00 AM EDT<\/time> \(Eastern\)/);
+    assert.match(warnings, /Current inactivity deadline: <time dateTime="2026-10-10T12:30:00Z">Oct 10, 2026, 8:30 AM EDT<\/time> · Eastern/);
+    assert.doesNotMatch(warnings, /Chicago|CDT|CST/);
     const part = { partNumber: 2, kind: "INDEX", byteSize: 1024, filename: "kevin-mel-archive-" + id(1) + "-part-2.zip" };
     const ready = render({ job: { ...job, preparedPart: part }, download: { phase: "ready", url: "blob:synthetic-export", filename: part.filename, receivedBytes: 1024, totalBytes: 1024 } }); assert.match(ready, /Save verified ZIP part/); assert.match(ready, /Size and SHA-256 verified/); assert.match(ready, /confirm it saved/); assert.doesNotMatch(ready, /saved successfully/);
     const complete = render({ job: { ...job, unavailableOriginals: 0, complete: true, indexNeedsRefresh: false } }); assert.match(complete, /does not confirm browser saves/);

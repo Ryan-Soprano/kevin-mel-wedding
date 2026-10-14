@@ -12,7 +12,7 @@ function MemorySummary({ memory }) {
     <h3>{heading(memory)}</h3>
     <p>{TYPES[memory.memoryType]} · {LABELS[memory.reviewStatus]} · {memory.source === "COUPLE" ? "Couple memory" : `Guest contribution · From ${memory.guestName ?? "Name not provided"}`}</p>
     {memory.memoryDate && <p>Memory date: {memory.memoryDate}</p>}
-    <p>Saved on: {memoryTime(memory.createdAt)} · Chicago</p>
+    <p>Saved on: {memoryTime(memory.createdAt)} · Eastern</p>
     <p className="inbox-excerpt">{memory.memoryType === "TEXT" ? memory.textContent.slice(0, 180) : memory.caption ?? memory.media.originalFilename}</p>
   </>;
 }
