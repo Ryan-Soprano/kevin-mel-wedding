@@ -15,12 +15,16 @@ import java.nio.file.attribute.AclFileAttributeView;
 import java.nio.file.attribute.PosixFileAttributeView;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.security.MessageDigest;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -42,6 +46,8 @@ public class PortablePartWriter {
     public static final int MAX_PART_ORIGINALS = 50;
     public static final long MAX_ARTIFACT_BYTES = 83_886_080L;
     private static final int READER_ROWS = 1000;
+    private static final DateTimeFormatter DISPLAY_TIME = DateTimeFormatter.ofPattern("MMM d, uuuu, h:mm a z", Locale.US)
+            .withZone(ZoneId.of("America/New_York"));
     private final ObjectStorage storage;
     public PortablePartWriter(ObjectStorage storage) { this.storage = storage; }
 
@@ -188,13 +194,14 @@ public class PortablePartWriter {
         return byAsset;
     }
     private static String text(PortableSnapshot snapshot, Map<UUID, OriginalOutcome> outcomes) {
-        var text = new StringBuilder("Kevin & Mel — private portable archive\nCaptured: ").append(snapshot.capturedAt())
-                .append("\nMemory dates are provided dates, not submission dates. YEAR and MONTH dates remain partial; UNKNOWN means no date was supplied.\n")
+        var text = new StringBuilder("Kevin & Mel — private portable archive\nCaptured: ").append(displayTime(snapshot.capturedAt()))
+                .append("\nTimes are shown in Eastern time, including daylight saving. Machine-readable timestamps remain UTC.\n")
+                .append("Memory dates are provided dates, not submission dates. YEAR and MONTH dates remain partial; UNKNOWN means no date was supplied.\n")
                 .append("Excluded counts: ").append(snapshot.excludedCounts()).append("\n\nMEMORIES\n");
         for (var memory : snapshot.memories()) {
             text.append("\nMemory ").append(memory.memoryId()).append("\nType: ").append(memory.memoryType()).append("; review: ").append(memory.reviewStatus())
                     .append("\nFrom: ").append(attribution(memory)).append("\nContribution: ").append(memory.contributionId()).append("; item position: ").append(memory.itemPosition())
-                    .append("\nProvided date: ").append(date(memory.memoryDate(), memory.datePrecision())).append("\nSaved on: ").append(memory.createdAt()).append('\n');
+                    .append("\nProvided date: ").append(date(memory.memoryDate(), memory.datePrecision())).append("\nSaved on: ").append(displayTime(memory.createdAt())).append('\n');
             labeled(text, "Title", memory.title()); labeled(text, "Description", memory.description()); labeled(text, "Note", memory.text()); labeled(text, "Caption", memory.caption());
             if (memory.assetId() != null) { var outcome = outcomes.get(memory.assetId()); text.append("Original: ").append(outcome.path()).append(" — ").append(outcome.status()).append('\n'); }
         }
@@ -216,12 +223,13 @@ public class PortablePartWriter {
                 .append("<p>Extract every original part and the final index part into the same folder. Keep this folder private.</p><p>")
                 .append(complete ? "All captured originals were included." : "INCOMPLETE: some captured originals are missing, could not be read, or failed integrity checks. See each original outcome below.")
                 .append("</p><p>This page shows bounded previews (up to 1,000 rows per section and 512 characters per text). <a href=\"archive.txt\">Read the complete human-readable archive</a>, <a href=\"archive.json\">machine-readable archive</a>, or <a href=\"manifest.json\">original delivery outcomes</a>.</p>")
-                .append("<p>Provided dates preserve their YEAR, MONTH or DAY precision. “Date unknown” means none was supplied. “Saved on” is the submission time.</p><p>Excluded counts: ")
+                .append("<p>Provided dates preserve their YEAR, MONTH or DAY precision. “Date unknown” means none was supplied. “Saved on” is the submission time, shown in Eastern time with daylight saving.</p><p>Excluded counts: ")
                 .append(escape(snapshot.excludedCounts().toString())).append("</p><nav><a href=\"#memories\">Memories</a><a href=\"#albums\">Albums</a><a href=\"#timeline\">Life timeline</a><a href=\"#tags\">Tags</a></nav><h2 id=\"memories\">Memories</h2>");
         for (var memory : snapshot.memories().stream().limit(READER_ROWS).toList()) {
             html.append("<article id=\"memory-").append(memory.memoryId()).append("\"><h3>").append(escape(memory.title() == null ? memory.memoryType() + " memory" : excerpt(memory.title())))
                     .append("</h3><p>").append(escape(attribution(memory))).append(" · ").append(escape(memory.reviewStatus())).append("</p><p>Provided date: ")
-                    .append(escape(date(memory.memoryDate(), memory.datePrecision()))).append("<br>Saved on: ").append(memory.createdAt()).append("</p>");
+                    .append(escape(date(memory.memoryDate(), memory.datePrecision()))).append("<br>Saved on: <time datetime=\"").append(memory.createdAt())
+                    .append("\">").append(escape(displayTime(memory.createdAt()))).append("</time></p>");
             paragraph(html, "Description", memory.description()); paragraph(html, "Note", memory.text()); paragraph(html, "Caption", memory.caption());
             if (memory.assetId() != null) {
                 var outcome = outcomes.get(memory.assetId()); html.append("<p>Original: ").append(outcome.status());
@@ -247,6 +255,7 @@ public class PortablePartWriter {
     private static void labeled(StringBuilder text, String label, String value) { if (value != null) text.append(label).append(": ").append(value).append('\n'); }
     private static String attribution(PortableSnapshot.Memory memory) { return "COUPLE".equals(memory.source()) ? "Couple memory" : memory.guestName() == null ? "Anonymous guest" : memory.guestName(); }
     private static String date(String date, String precision) { return date == null ? "Date unknown" : date + " (" + precision + ")"; }
+    private static String displayTime(Instant instant) { return DISPLAY_TIME.format(instant); }
     private static String excerpt(String value) { if (value.length() <= 512) return value; int end = Character.isHighSurrogate(value.charAt(511)) ? 511 : 512; return value.substring(0, end) + "… [continued in archive.txt]"; }
     private static String escape(String value) { return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;").replace("'", "&#39;"); }
     private static byte[] json(Object value) { return PortableExportRepository.JSON.writeValueAsBytes(value); }

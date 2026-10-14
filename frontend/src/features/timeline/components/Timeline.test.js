@@ -28,6 +28,7 @@ test("real private timeline views expose honest partial dates, original dates/sa
     const create = render({ view: "create" }); assert.match(create, /Create a private timeline event/); assert.match(create, /Event date precision/); assert.doesNotMatch(create, /id="timeline-date"/);
     const detail = render({ view: "detail", event, members: [{ memory: { ...MEMORY_DETAIL, memoryDate: "2022", datePrecision: "YEAR" } }] });
     assert.match(detail, /Event date: March 2024/); assert.match(detail, /Memory date: Sometime in 2022/); assert.match(detail, /Saved on:/);
+    assert.match(detail, /Oct 24, 2026, 2:30 PM EDT<\/time> · Eastern/); assert.doesNotMatch(detail, /Chicago|CDT|CST/);
     assert.match(detail, /YYYY-MM/); assert.match(detail, /Save event details/); assert.match(detail, /Unlink from event/); assert.match(detail, /Guest contribution/);
     assert.doesNotMatch(detail.match(/<input[^>]*id="timeline-date"[^>]*>/)?.[0] ?? "", /inputMode="numeric"/);
     const yearDetail = render({ view: "detail", event: { ...event, eventDate: "2024", datePrecision: "YEAR" } });

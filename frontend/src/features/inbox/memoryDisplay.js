@@ -1,5 +1,5 @@
 const eventTime = new Intl.DateTimeFormat("en-US", {
-  timeZone: "America/Chicago", month: "short", day: "numeric", year: "numeric",
+  timeZone: "America/New_York", month: "short", day: "numeric", year: "numeric",
   hour: "numeric", minute: "2-digit", timeZoneName: "short",
 });
 

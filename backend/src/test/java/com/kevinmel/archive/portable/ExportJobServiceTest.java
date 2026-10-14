@@ -168,8 +168,8 @@ class ExportJobServiceTest {
 
     @Test void boundedPrepareRetryHistoryAlwaysLeavesRoomForAnAcknowledgedCancellation()throws Exception {
         UUID id=create();
-        for(int attempt=0;attempt<511;attempt++){jobs.prepare(id,1,UUID.randomUUID().toString());prepared(id);}
-        assertStatus(()->jobs.prepare(id,1,UUID.randomUUID().toString()),429);
+        for(int attempt=0;attempt<511;attempt++){prepareWhenIdle(id,1,UUID.randomUUID().toString());prepared(id);}
+        assertStatus(()->prepareWhenIdle(id,1,UUID.randomUUID().toString()),429);
         UUID cancel=UUID.randomUUID();assertThat(jobs.cancel(id,cancel.toString()).state()).isEqualTo("CANCELLED");
         assertThat(jobs.attempt(id,cancel).state()).isEqualTo("SUCCEEDED");assertThat(jobs.get(id).preparedPart()).isNull();
         assertThat(jobs.cancel(id,cancel.toString()).state()).isEqualTo("CANCELLED");UUID fresh=create();assertThat(jobs.current().exportId()).isEqualTo(fresh);

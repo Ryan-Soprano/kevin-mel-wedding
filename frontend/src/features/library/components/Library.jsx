@@ -45,7 +45,7 @@ export default function Library({ state, busy, locked, actions }) {
         : <ul className="inbox-list library-results">{state.items.map(memory => <li key={memory.memoryId} className="inbox-card library-result">
           <h2>{memory.title ?? (memory.source === "COUPLE" ? "Couple memory" : `From ${memory.guestName ?? "Name not provided"}`)}</h2>
           <p>{TYPES[memory.memoryType]} · {STATUSES[memory.reviewStatus]} · {memory.source === "COUPLE" ? "Couple memory" : `Guest contribution · From ${memory.guestName ?? "Name not provided"}`}</p>
-          <p>Memory date: {partialDateLabel(memory.memoryDate, memory.datePrecision)}</p><p>Saved on: <time dateTime={memory.createdAt}>{memoryTime(memory.createdAt)}</time> · Chicago</p>
+          <p>Memory date: {partialDateLabel(memory.memoryDate, memory.datePrecision)}</p><p>Saved on: <time dateTime={memory.createdAt}>{memoryTime(memory.createdAt)}</time> · Eastern</p>
           <p className="inbox-excerpt">{memory.memoryType === "TEXT" ? memory.textContent.slice(0, 180) : memory.caption ?? memory.media.originalFilename}</p>
           <button type="button" disabled={disabled} onClick={() => actions.open(memory.memoryId)}>Open memory</button></li>)}</ul>}
     </>}

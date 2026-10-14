@@ -27,10 +27,10 @@ export default function ExportArchive({ state, busy, locked, actions }) {
     {(!job || terminal || state.unavailable) && !locked && <button type="button" disabled={busy} onClick={actions.create}>{job || state.unavailable ? "Start a new export" : "Prepare archive export"}</button>}
     {job && <div className="export-status">
       <h2>{STATES[job.state]}</h2>
-      <p>Created <time dateTime={job.createdAt}>{memoryTime(job.createdAt)}</time> · Chicago</p>
-      {job.capturedAt && <p>Archive captured <time dateTime={job.capturedAt}>{memoryTime(job.capturedAt)}</time> · Chicago</p>}
-      {!terminal && <><p>Expires after 30 minutes without activity, and by <time dateTime={job.hardExpiresAt}>{memoryTime(job.hardExpiresAt)}</time> (Chicago). App restart makes this job unavailable; start a fresh export explicitly.</p>
-        <p>Current inactivity deadline: <time dateTime={job.expiresAt}>{memoryTime(job.expiresAt)}</time> · Chicago</p>
+      <p>Created <time dateTime={job.createdAt}>{memoryTime(job.createdAt)}</time> · Eastern</p>
+      {job.capturedAt && <p>Archive captured <time dateTime={job.capturedAt}>{memoryTime(job.capturedAt)}</time> · Eastern</p>}
+      {!terminal && <><p>Expires after 30 minutes without activity, and by <time dateTime={job.hardExpiresAt}>{memoryTime(job.hardExpiresAt)}</time> (Eastern). App restart makes this job unavailable; start a fresh export explicitly.</p>
+        <p>Current inactivity deadline: <time dateTime={job.expiresAt}>{memoryTime(job.expiresAt)}</time> · Eastern</p>
         <div className="inbox-actions"><button type="button" disabled={disabled} onClick={() => actions.check(false)}>Check export progress</button>
           <button ref={cancelTrigger} className="button-secondary" type="button" disabled={disabled} onClick={() => setConfirmCancel(true)}>Cancel export…</button></div></>}
       {confirmCancel && !locked && !terminal && <div className="export-cancel-confirmation" role="group" aria-labelledby="export-cancel-title"><h3 id="export-cancel-title">Cancel this export?</h3><p>Its temporary files will be discarded. Your archive and files already saved on your device remain unchanged.</p>

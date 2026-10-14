@@ -39,7 +39,7 @@ From the inbox, choose **Add a memory**, then **Write a note**. Write your memor
 
 Open any available guest or couple memory to add a **Title**, **Description** and **Memory date** under **Memory details**. Choose only the date precision you know: unknown, year (`2024`), year and month (`2024-06`), or full date (`2024-06-15`). Choose **Save memory details** and wait for confirmation.
 
-These fields add context. They preserve the submitted note, caption and original file. **Memory date** describes when the remembered event happened; **Saved on** describes when the memory entered the archive. Saved times and recovery deadlines are displayed in Chicago time.
+These fields add context. They preserve the submitted note, caption and original file. **Memory date** describes when the remembered event happened; **Saved on** describes when the memory entered the archive. Saved times, recovery deadlines and export times are displayed in Eastern time, including daylight-saving changes. The portable reader and complete readable archive use Eastern time too; machine-readable timestamps remain UTC.
 
 ## Organize your archive
 
