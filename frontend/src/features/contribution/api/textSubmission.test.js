@@ -1,12 +1,122 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { fileURLToPath } from "node:url";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { createServer } from "vite";
+import react from "@vitejs/plugin-react";
 import { createTextSubmission } from "./textSubmission.js";
 import { createMockArchiveApi } from "../../../shared/api/mockArchiveApi.js";
-import { createArchiveApi } from "../../../shared/api/archiveApi.js";
+import { createArchiveApi, normalizeTextContribution } from "../../../shared/api/archiveApi.js";
 import { ApiError, createApiClient } from "../../../shared/api/apiClient.js";
 import { IDS, TEXT_RECEIPT } from "../../../shared/api/v1/fixtures.js";
+import { getContributionSubmitError } from "../contributionDisplay.js";
 
 const draft = { guestName: " Guest ", message: " hello " };
+
+test("extracted note views preserve guest/private copy, validation descriptions, pending locks and cooldown label precedence", async () => {
+  // SSR verifies real React presentation without executing lifecycle/focus/timer
+  // effects; separate mounted checks cover those interaction guarantees.
+  const server = await createServer({ configFile: false, logLevel: "silent", root: fileURLToPath(new URL("../../../../", import.meta.url)),
+    plugins: [react()], server: { middlewareMode: true, hmr: false, watch: null }, appType: "custom",
+    optimizeDeps: { noDiscovery: true, include: [] } });
+  try {
+    const { default: ContributionForm } = await server.ssrLoadModule("/src/features/contribution/components/ContributionForm.jsx");
+    const { default: ContributionCompose } = await server.ssrLoadModule("/src/features/contribution/components/ContributionCompose.jsx");
+    const { default: ContributionReview } = await server.ssrLoadModule("/src/features/contribution/components/ContributionReview.jsx");
+    const { default: ContributionResult } = await server.ssrLoadModule("/src/features/contribution/components/ContributionResult.jsx");
+    const render = (Component, props) => renderToStaticMarkup(createElement(Component, props));
+    const noop = () => {};
+    const actions = Object.fromEntries(["review", "edit", "send", "finish", "shareAnother", "changeGuestName", "changeMessage"].map(name => [name, noop]));
+    const preview = normalizeTextContribution({ guestName: " Guest <visitor> ", message: " First <note>\nSecond line " });
+    const view = {
+      guestName: "Guest <visitor>", message: "First <note>\nSecond line", step: "review", preview,
+      fieldErrors: {}, error: "", isSubmitting: false, pending: false, retryAfter: 0, busy: false, hasShellActions: false, actions,
+    };
+    let factoryCalls = 0, flowReports = 0;
+    const initialProps = { createSubmission: () => { factoryCalls++; }, onFlowStateChange: () => { flowReports++; } };
+    const initial = render(ContributionForm, initialProps);
+    assert.match(initial, /class="contribution-flow"/);
+    assert.match(initial, /Your name \(optional\)/);
+    assert.match(initial, />Review note</);
+    const privateInitial = render(ContributionForm, { ...initialProps, privateArchive: true });
+    assert.match(privateInitial, /Add a written memory to your private archive/);
+    assert.doesNotMatch(privateInitial, /Your name \(optional\)|id="guestName"/);
+    assert.equal(factoryCalls, 0, "coordinators remain effect-owned during server rendering");
+    assert.equal(flowReports, 0, "flow callbacks remain effect-owned");
+
+    const validationView = { ...view, message: "x".repeat(5000), fieldErrors: { guestName: "Check <name>", message: "Check <message>" }, error: "Check <form>" };
+    const compose = render(ContributionCompose, { view: validationView, privateArchive: false });
+    assert.match(compose, /maxLength="100" aria-invalid="true" aria-describedby="guestName-error"/);
+    assert.match(compose, /maxLength="5000" required="" aria-invalid="true" aria-describedby="message-count message-error"/);
+    assert.match(compose, new RegExp(`<p id="message-count">${validationView.message.length.toLocaleString()} / 5,000 characters<`));
+    assert.match(compose, /Check &lt;name&gt;/);
+    assert.match(compose, /Check &lt;message&gt;/);
+    assert.match(compose, /Check &lt;form&gt;/);
+    const emptyCompose = render(ContributionCompose, { view, privateArchive: false });
+    assert.match(emptyCompose, /aria-invalid="false"/);
+    assert.match(emptyCompose, /aria-describedby="message-count"/);
+    assert.doesNotMatch(emptyCompose, /aria-describedby="guestName-error"/);
+    const pendingCompose = render(ContributionCompose, { view: { ...view, pending: true, isSubmitting: true, busy: true }, privateArchive: false });
+    assert.doesNotMatch(pendingCompose, /disabled=/, "extraction does not introduce new compose guards");
+
+    const review = render(ContributionReview, { view, privateArchive: false });
+    assert.match(review, /Ready to send\?/);
+    assert.match(review, /From: Guest &lt;visitor&gt;/);
+    assert.match(review, /First &lt;note&gt;\nSecond line/);
+    assert.match(review, /role="status" aria-live="polite"/);
+    assert.match(review, />Send note</);
+    assert.match(review, />Edit note</);
+    assert.doesNotMatch(review, /<note>/);
+    const privateReview = render(ContributionReview, { view, privateArchive: true });
+    assert.match(privateReview, /Ready to save privately\?/);
+    assert.match(privateReview, />Save note privately</);
+    assert.doesNotMatch(privateReview, /From:|Guest &lt;visitor&gt;/);
+    const unnamed = render(ContributionReview, { view: { ...view, preview: { ...preview, guestName: null } }, privateArchive: false });
+    assert.match(unnamed, /From: Name not provided/);
+
+    const pending = render(ContributionReview, { view: { ...view, pending: true }, privateArchive: false });
+    assert.match(pending, /Trying again checks this same submission/);
+    assert.match(pending, />Try again</);
+    assert.doesNotMatch(pending, />Edit note</);
+    const waiting = render(ContributionReview, { view: { ...view, pending: true, retryAfter: 17, busy: true }, privateArchive: false });
+    assert.match(waiting, /aria-busy="false"/);
+    assert.match(waiting, /disabled="">Please wait before trying again/);
+    assert.doesNotMatch(waiting, />Try again<|>Edit note</);
+    const submitting = render(ContributionReview, { view: { ...view, pending: true, retryAfter: 17, isSubmitting: true, busy: true }, privateArchive: true });
+    assert.match(submitting, /aria-busy="true"/);
+    assert.match(submitting, /Sending your note…/);
+    assert.match(submitting, /disabled="">Saving…/);
+    assert.doesNotMatch(submitting, /Please wait before trying again|>Try again</);
+    const editableWait = render(ContributionReview, { view: { ...view, retryAfter: 17, busy: true }, privateArchive: false });
+    assert.match(editableWait, /disabled="">Please wait before trying again/);
+    assert.match(editableWait, /<button type="button" class="button-secondary">Edit note<\/button>/,
+      "cooldown does not add an edit guard when no submission is pending");
+
+    const successView = { ...view, step: "success" };
+    const success = render(ContributionResult, { view: successView, privateArchive: false });
+    assert.match(success, /Thank you — your note was saved for Kevin and Melanie/);
+    assert.match(success, />Done</);
+    assert.match(success, />Write another note</);
+    const shellSuccess = render(ContributionResult, { view: { ...successView, hasShellActions: true }, privateArchive: false });
+    assert.match(shellSuccess, />Share another memory</);
+    assert.doesNotMatch(shellSuccess, /Write another note/);
+    const privateSuccess = render(ContributionResult, { view: successView, privateArchive: true });
+    assert.match(privateSuccess, /Your note is saved in your private archive/);
+    assert.match(privateSuccess, /New memories start in Kept/);
+    assert.match(privateSuccess, />View added memory</);
+    const done = render(ContributionResult, { view: { ...successView, step: "done" }, privateArchive: false });
+    assert.match(done, /You’re all set/);
+    assert.match(done, /You can close this page/);
+    assert.doesNotMatch(done, /<button/);
+
+    const unknownError = getContributionSubmitError(new ApiError("Raw transport diagnostic", { code: "NETWORK_ERROR", unknownOutcome: true }));
+    assert.match(unknownError, /try again to check the same note/);
+    assert.doesNotMatch(unknownError, /diagnostic/);
+    assert.equal(getContributionSubmitError(new ApiError("Known <rejection>", { code: "INVALID_CREDENTIALS" })), "Known <rejection>");
+    assert.equal(getContributionSubmitError(new Error("Raw transport diagnostic")), "We could not confirm whether your note was saved. Keep this page open and try again.");
+  } finally { await server.close(); }
+});
 
 test("repeat taps share one request/key and a saved message requires explicit start-another", async () => {
   const calls = [];
