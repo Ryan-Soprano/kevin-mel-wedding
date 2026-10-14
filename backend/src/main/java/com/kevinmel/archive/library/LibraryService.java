@@ -24,8 +24,9 @@ public class LibraryService {
         if(!rows.getFirst().tagValid()) throw LibraryRequest.missing();
         if(!rows.getFirst().anchorValid()) throw LibraryRequest.libraryConflict();
         var cards=rows.stream().map(LibraryRepository.Row::memory).filter(java.util.Objects::nonNull).toList();
-        boolean more=cards.size()>query.limit(); var items=more ? cards.subList(0,query.limit()) : cards;
-        String next=more ? new LibraryCursor("LIBRARY",query.fingerprint(),items.getLast().memoryId(),null,null).encode() : null;
+        boolean more = cards.size() > query.limit();
+        var items = more ? cards.subList(0, query.limit()) : cards;
+        String next = more ? new LibraryCursor("LIBRARY", query.fingerprint(), items.getLast().memoryId(), null, null).encode() : null;
         authorization.requireCoupleAccess(); return new Page(List.copyOf(items),next);
     }
     public record Page(List<MemoryDetail> items,String nextCursor) { }

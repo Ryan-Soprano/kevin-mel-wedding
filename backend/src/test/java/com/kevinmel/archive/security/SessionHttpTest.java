@@ -128,6 +128,57 @@ class SessionHttpTest {
     }
 
     @Test
+    void archivePrincipalRetainsSpringUserEqualityAcrossMetadataAndCredentialErasure() {
+        var principal = new ArchivePrincipal(couple);
+        var springUser = new User(USERNAME, "different-fixture-password", false, false, false, false,
+                principal.getAuthorities());
+        var changedMetadata = new ArchivePrincipal(new ArchiveAccount(UUID.randomUUID(), USERNAME,
+                "Changed display name", "another-fixture-password", "COUPLE", false, 2));
+        var otherUsername = User.withUsername("synthetic-other-user").password("unused-fixture-password")
+                .roles("COUPLE").build();
+
+        assertThat(principal).isEqualTo(springUser).isEqualTo(changedMetadata).isNotEqualTo(otherUsername);
+        assertThat(springUser).isEqualTo(principal).isEqualTo(changedMetadata);
+        assertThat(changedMetadata).isEqualTo(principal).isEqualTo(springUser);
+        assertThat(otherUsername).isNotEqualTo(principal);
+        assertThat(principal.hashCode()).isEqualTo(springUser.hashCode()).isEqualTo(changedMetadata.hashCode());
+        assertThat(List.of(principal).contains(springUser)).isTrue();
+        assertThat(List.of(springUser).contains(principal)).isTrue();
+        var users = new HashSet<User>(List.of(principal, springUser, changedMetadata));
+        assertThat(users).hasSize(1).contains(principal, springUser, changedMetadata);
+
+        var archiveToken = UsernamePasswordAuthenticationToken.authenticated(principal, null, principal.getAuthorities());
+        var springToken = UsernamePasswordAuthenticationToken.authenticated(springUser, null, springUser.getAuthorities());
+        var changedToken = UsernamePasswordAuthenticationToken.authenticated(changedMetadata, null, changedMetadata.getAuthorities());
+        assertThat(archiveToken).isEqualTo(springToken).isEqualTo(changedToken);
+        assertThat(springToken).isEqualTo(archiveToken).isEqualTo(changedToken);
+        assertThat(changedToken).isEqualTo(archiveToken).isEqualTo(springToken);
+        assertThat(archiveToken.hashCode()).isEqualTo(springToken.hashCode()).isEqualTo(changedToken.hashCode());
+        assertThat(List.of(archiveToken).contains(springToken)).isTrue();
+        assertThat(List.of(springToken).contains(archiveToken)).isTrue();
+        var tokens = new HashSet<Authentication>(List.of(archiveToken, springToken, changedToken));
+        assertThat(tokens).hasSize(1).contains(archiveToken, springToken, changedToken);
+        var restrictedToken = UsernamePasswordAuthenticationToken.authenticated(principal, null,
+                List.of(new SimpleGrantedAuthority("ROLE_OPERATOR")));
+        assertThat(archiveToken).isNotEqualTo(restrictedToken);
+        assertThat(restrictedToken).isNotEqualTo(archiveToken);
+
+        int userHash = principal.hashCode(), tokenHash = archiveToken.hashCode();
+        archiveToken.eraseCredentials();
+        springToken.eraseCredentials();
+        changedToken.eraseCredentials();
+        assertThat(principal.getPassword()).isNull();
+        assertThat(springUser.getPassword()).isNull();
+        assertThat(changedMetadata.getPassword()).isNull();
+        assertThat(principal).isEqualTo(springUser);
+        assertThat(springUser).isEqualTo(principal);
+        assertThat(principal.hashCode()).isEqualTo(userHash);
+        assertThat(archiveToken.hashCode()).isEqualTo(tokenHash);
+        assertThat(users).hasSize(1).contains(principal, springUser, changedMetadata);
+        assertThat(tokens).hasSize(1).contains(archiveToken, springToken, changedToken);
+    }
+
+    @Test
     void healthIsPublicAndAnonymousSessionIssuesAnUnpredictableToken() throws Exception {
         mvc.perform(get("/api/health"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("ok"));
@@ -368,15 +419,16 @@ class SessionHttpTest {
 
     @Test
     void genericSpringPrincipalCannotUseCoupleAuthorityToAccessThePrivateArchive() throws Exception {
-        var principal = User.withUsername("synthetic-other-user").password("unused-fixture-password")
-                .roles("COUPLE").build();
-        var authentication = UsernamePasswordAuthenticationToken.authenticated(principal, null, principal.getAuthorities());
-        authentication.eraseCredentials();
-        var context = SecurityContextHolder.createEmptyContext();
-        context.setAuthentication(authentication);
-        var session = new MockHttpSession();
-        session.setAttribute(HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY, context);
-        error(mvc.perform(get("/api/memories").session(session)), 403, "ARCHIVE_UNAVAILABLE");
+        for (String username : List.of("synthetic-other-user", USERNAME)) {
+            var principal = User.withUsername(username).password("unused-fixture-password").roles("COUPLE").build();
+            var authentication = UsernamePasswordAuthenticationToken.authenticated(principal, null, principal.getAuthorities());
+            authentication.eraseCredentials();
+            var context = SecurityContextHolder.createEmptyContext();
+            context.setAuthentication(authentication);
+            var session = new MockHttpSession();
+            session.setAttribute(HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY, context);
+            error(mvc.perform(get("/api/memories").session(session)), 403, "ARCHIVE_UNAVAILABLE");
+        }
     }
 
     @Test
@@ -619,9 +671,11 @@ class SessionHttpTest {
                 401, "AUTH_REQUIRED");
         directGuardDenies(new AnonymousAuthenticationToken("fixture-key", "anonymousUser",
                 List.of(new SimpleGrantedAuthority("ROLE_COUPLE"))), 401, "AUTH_REQUIRED");
-        var user = User.withUsername("synthetic-other-user").password("unused-fixture-password").roles("COUPLE").build();
-        directGuardDenies(UsernamePasswordAuthenticationToken.authenticated(user, null, user.getAuthorities()),
-                403, "ARCHIVE_UNAVAILABLE");
+        for (String username : List.of("synthetic-other-user", USERNAME)) {
+            var user = User.withUsername(username).password("unused-fixture-password").roles("COUPLE").build();
+            directGuardDenies(UsernamePasswordAuthenticationToken.authenticated(user, null, user.getAuthorities()),
+                    403, "ARCHIVE_UNAVAILABLE");
+        }
         verify(accounts, never()).findById(any(UUID.class));
     }
 

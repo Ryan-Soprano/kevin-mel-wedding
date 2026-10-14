@@ -31,6 +31,7 @@ import org.springframework.security.web.access.intercept.AuthorizationFilter;
 
 @Configuration
 public class SecurityConfiguration {
+    private static final String SESSION_ENDPOINT = "/api/session";
 
     @Bean
     @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
@@ -80,10 +81,10 @@ public class SecurityConfiguration {
             if (staging) authorize.requestMatchers(HttpMethod.GET, "/staging/audio", "/staging/audio/",
                     "/staging/audio/recorder.js", "/staging/audio/probe-model.js", "/staging/audio/style.css").permitAll();
             authorize.dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
-                .requestMatchers(HttpMethod.GET, "/api/health", "/api/session", "/api/contributions/*/receipt").permitAll()
-                .requestMatchers(HttpMethod.POST, "/api/session", "/api/contributions",
+                .requestMatchers(HttpMethod.GET, "/api/health", SESSION_ENDPOINT, "/api/contributions/*/receipt").permitAll()
+                .requestMatchers(HttpMethod.POST, SESSION_ENDPOINT, "/api/contributions",
                         "/api/contributions/*/memories/*/upload-grants", "/api/contributions/*/memories/*/finalize").permitAll()
-                .requestMatchers(HttpMethod.DELETE, "/api/session").permitAll()
+                .requestMatchers(HttpMethod.DELETE, SESSION_ENDPOINT).permitAll()
                 .requestMatchers(HttpMethod.GET, "/", "/index.html", "/assets/**", "/favicon.ico").permitAll()
                 .requestMatchers("/api/memories", "/api/memories/**", "/api/albums", "/api/albums/**", "/api/timeline", "/api/timeline/**", "/api/library", "/api/library/**", "/api/tags", "/api/tags/**", "/api/exports", "/api/exports/**").hasRole("COUPLE")
                 .anyRequest().denyAll();
