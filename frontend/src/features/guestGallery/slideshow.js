@@ -10,7 +10,7 @@ export function startSlideshow(
   let timer = null;
   function update() {
     if (timer !== null) clearIntervalImpl(timer);
-    timer = documentImpl.hidden ? null : setIntervalImpl(advance, 3500);
+    timer = documentImpl.hidden ? null : setIntervalImpl(advance, 5000);
   }
   documentImpl.addEventListener("visibilitychange", update);
   update();
