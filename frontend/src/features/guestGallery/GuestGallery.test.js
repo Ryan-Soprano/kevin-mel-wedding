@@ -130,6 +130,13 @@ test("real public gallery immediately renders one accessible slide with navigati
     const invitationStart = landing.indexOf('class="guest-invitation"');
     const profilesStart = landing.indexOf('class="couple-stories"');
     const galleryStart = landing.indexOf('class="guest-gallery"');
+    const landingImages = landing.match(/<img\b[^>]*>/g) ?? [];
+    assert.equal(landingImages.filter(image => image.includes('fetchPriority="high"')).length, 1, "only the opening photo gets high download priority");
+    const galleryImage = landing.slice(galleryStart).match(/<img\b[^>]*>/)?.[0];
+    assert.match(galleryImage, /loading="lazy"/);
+    assert.match(galleryImage, /fetchPriority="auto"/);
+    const landingPreloads = (landing.match(/<link\b[^>]*>/g) ?? []).filter(link => link.includes('as="image"'));
+    assert.equal(landingPreloads.length, 1, "the gallery does not preload a competing image");
     assert.ok(scrapbookStart >= 0 && scrapbookStart < invitationStart, "one focal couple photo leads into the invitation");
     assert.ok(invitationStart < profilesStart && profilesStart < galleryStart, "the invitation precedes individual stories and the full gallery");
     const scrapbook = landing.slice(scrapbookStart, invitationStart);

@@ -246,7 +246,7 @@ export default function App({
       )}
 
       {welcome && <CoupleStories />}
-      {welcome && <GuestGallery />}
+      {welcome && <GuestGallery deferInitialPhoto />}
       {welcome && (
         <Suspense fallback={null}>
           <PublicMemories />
