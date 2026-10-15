@@ -2,7 +2,7 @@
 
 ARC-03 adds explicit private events and milestones with exact, partial or unknown dates and many-to-many links to existing memories. Chronological pages and year/precision filters are bounded. Event editing, unlinking and event-only deletion preserve originals, memory dates and saved timestamps. See the [timeline contract](../api/v1/timeline.md).
 
-The feature branch is `feature/life-timeline`, based on main `be45aac`. Final-head CI and merge identities belong in the ARC-03 tracker and pull request.
+The original implementation evidence below belongs to `feature/life-timeline`, based on main `be45aac`. Later scoped verification is dated separately; final-head CI and merge identities belong in the tracker and pull request.
 
 ## Automated verification
 
@@ -21,8 +21,27 @@ The combined production JAR passed **86 rendered browser states**: 28 at desktop
 
 The packaged runtime image was `sha256:8cc71c79d8e7d08de7ad9e20da9747c10ef1e9cdfdb1bd2dd092d6f5601d8270`; its JAR SHA-256 was `70df535f8812f79acf53b0ac7937835148f1cf6773ac9d699f6064723814b9a2`. The disposable local fixture kept storage, audio admission and retention off and used synthetic private data, loopback HTTP, nonroot/read-only application containers and tmpfs PostgreSQL. Its containers, network and browser profile were verified absent after cleanup. Physical device/provider behavior remains outside this fixture.
 
+## October 15, 2026 — presentation and hook refactor
+
+`feature/timeline-presentation-refactor` starts from main `fe2e348`, preserving the newer shared Archive layout, sharing, navigation, gallery and voice work. `Timeline.jsx` is now a small screen shell with focused fields/list/editor/detail/selector/recovery/pagination/memory views, one local-state/focus/action hook and explicit display helpers. The existing timeline coordinator still owns requests, revisions, write fencing and recovery. The parent remount key still owns draft resets.
+
+Full frontend verification passed **456 tests**, ESLint and the production build on pinned Node 24.21.0. The existing timeline SSR file now also checks stale-page results, unknown-date grouping, date input modes/limits, independent retry drafts, busy versus locked recovery controls, deletion confirmation, nullish display fallbacks and metadata-only summaries. No new tracked test files or dependencies were added.
+
+The **14 timeline contract/HTTP tests** passed against disposable PostgreSQL 17 using Java 25.0.4 and Maven 3.9.16. These exercise dates, chronology, revisions, linking, event-only deletion and original preservation. Independent review found no blocker; the timeline API/coordinator/normalizers/CSS, shared Archive layout, inbox integration/history and Eastern formatter match the starting commit byte for byte.
+
+The current production JAR passed a loopback native-app/browser rehearsal with **740 assertions**, nine scoped flow groups and **16 synthetic screenshots** across desktop 1280×900, narrow 320×720 and simulated CSS 200%/32px text. The full graph/recovery flow ran at desktop; narrow/enlarged-text checks covered representative list/member/selector, validation, focus and privacy states. Chromium was 149.0.7827.55 with Playwright 1.62.1; the enlarged-text check is not native browser zoom or physical-device acceptance.
+
+- The real PostgreSQL/API fixture exercised 24 notes, 24 dated/unknown events and a 24-member event, including list/member/selector pagination, year/precision filters, create/edit/no-op validation, date-precision clearing, review-status selection, linking/unlinking, memory-detail return, delete-cancel focus and event tombstones.
+- A real stale revision fenced changes until reload. Controlled local response loss checked committed-write reconciliation without duplication and an unsent change followed by pagehide clearing and deliberate exact-field retry. No automatic retry was introduced. Current privacy behavior retains the archive across blur and clears it on pagehide; sign-out also cleared it.
+- All complete original memory rows had identical digests before and after organization changes. Native-app restart preserved the original 24 notes and 24 links plus the scrubbed tombstone. These synthetic note checks supplement the backend original-file tests; they do not establish live-provider media behavior.
+- All recorded states had no horizontal overflow, browser application errors or external/provider requests. The owned browser, native Java process and exact labelled PostgreSQL fixture were verified removed.
+
+A separate mounted supplement passed **37 assertions** across nine component cases and four real inbox-controller/mock cases. It checked reload routing, explicit undefined retry payloads, current callbacks, focus, parent-key resets and late read/write completions after suspend/dispose. It reported no page errors or external requests and closed its owned browser and Vite server. This supplement verifies controlled wiring behavior rather than real backend persistence.
+
+The JAR SHA-256 was `998f413937dd03b5e44d733f4fbb8269f16c8e2c9cdc23ce07462b4067da9889`. Ignored local evidence is under `logs/timeline-refactor.local/`, with summaries in `native-888cfaa1-ea7e-4399-a2ce-2c965764cd23/summary.json` and `mounted-supplement/summary.json`. Local storage/audio/retention fixture settings do not describe hosted release settings. No deployment, account/provider/configuration change or invitation was performed.
+
 ## Retained acceptance
 
-Local engineering verification precedes Kevin and Melanie's real onboarding and feedback. REV-01/REV-03 acceptance remains open. Physical devices, actual screen readers, native dialogs, hidden-tab/BFCache behavior, live-provider originals and hosted network/capacity/recovery checks remain open. Controlled blur/resume and synthetic storage do not establish those behaviors. Audio gates remain off for release.
+Local engineering verification precedes Kevin and Melanie's real onboarding and feedback. REV-01/REV-03 acceptance remains open. Physical devices, actual screen readers, native dialogs, hidden-tab/BFCache behavior, live-provider originals and hosted network/capacity/recovery checks remain open. Controlled blur/resume and synthetic storage do not establish those behaviors. Audio was disabled in the original fixture; current audio settings and acceptance are recorded in the [voice memory runbook](../runbooks/voice-memories.md).
 
 No paid resources, deployment, provider configuration, real account activation, invitation or tester message is included. Self-service couple export remains ARC-05. Operator recovery excludes accounts, passwords, sessions and configuration. Event-only deletion has no independent deletion ledger; an older valid package can restore earlier organization while current memory-erasure authority still removes erased members and originals. V12 closes binary rollback to a V11 build under the existing migration guard.
