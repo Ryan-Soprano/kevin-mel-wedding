@@ -35,3 +35,66 @@ Final compilation image: `sha256:55135aedd859ae75cb0cbf6e25b25d381489fa92bbe0343
 Kevin and Melanie's real onboarding, export usability and feedback remain open. Physical-device save/extraction, actual screen-reader/native-dialog and hidden-tab/BFCache behavior remain separate acceptance checks. Controlled storage proves exact-byte handling locally; it does not prove current provider latency, hosted capacity or reception-network behavior. Both audio release gates remain off.
 
 No paid resources, hosting, deployment, real account activation, invitation or tester message is included. Export jobs expire after 30 minutes without activity and at 24 hours absolutely; restarting the application loses jobs. A recipient's downloaded copies cannot be erased by sign-out, cancellation, expiry or later archive deletion. Download admission is the release boundary; bytes admitted before a deletion or authority change may already be delivered.
+
+## Export presentation refactor — 2026-10-15
+
+The focused refactor starts from main `33103e3`. `ExportArchive` now composes
+guide, recovery, status, parts, prepared-download and warning views. A local hook
+owns cancellation state and feedback/confirmation focus; display helpers make
+labels and conditions explicit. Expanded formatting follows Ryan's album-file
+preference. The export coordinator, adapters, byte verification, CSS, inbox
+integration and Eastern formatter are unchanged. No migration, dependency or
+deployment/configuration change is included.
+
+Verification used an intended-PR-source snapshot, excluding the four unrelated
+local LibraryService, ArchiveUserDetailsService, guestFlow and Inbox edits. Their
+working-copy hashes remained unchanged. Pinned Node 24.21.0 checks passed all
+460 frontend tests, ESLint and the production build. The existing export view
+test file now has four cases covering the retained guide/expiry/save wording,
+terminal summaries, preparation and busy/lock gates, recovery, feedback
+precedence and download progress. No new tracked test file was added.
+
+The five existing backend export test classes reported 32 tests, zero failures
+or errors, and one explicit Windows skip for the symlink/outside-bytes case.
+They exercise repository capture, owned temporary files, job/original handling
+and HTTP authority/delivery against disposable PostgreSQL 17. Final Linux CI
+results and commit/PR identities belong in the pull request and Notion task.
+
+Independent comparison found all 7,822 rendered-state cases byte-identical to
+the original component, including labels, DOM order and truthy/nullish guards.
+A separate actual-component StrictMode supplement passed 338 assertions across
+16 cases: the same eight callback/focus flows on both baseline and refactored
+components. It checks cancellation lifetime and delayed Keep-focus restoration,
+exact callback arguments, both paging families, recovery, feedback dependencies
+and the save-link gate. Production-file hashes stayed fixed. This controlled
+supplement uses callback spies and intercepts native save; it makes no API,
+persistence or actual-download claim. Earlier helper setup interruptions are
+excluded from its final passing summary.
+
+The combined JAR, SHA-256
+`ed7232dd1acbf283ee5d72e72891d0a3720cc23e3814820095bba918ac30b4f4`,
+passed its first native loopback rehearsal: 400 assertions in four scoped flow
+groups, three layouts and 20 synthetic screenshots. Six persisted notes and
+three synthetic accounts exercised controlled pre-send creation loss, explicit
+same-identity reconciliation/retry, duplicate-action fencing, fresh-sign-in job
+discovery, index preparation, loading, cancellation, focus, private-state
+clearing and Blob revocation. Each layout saved a real notes-only index ZIP,
+independently checked its length/SHA-256, extracted its five allowed entries and
+opened the reader in a fresh cookie-free file context with zero HTTP attempts.
+Full text, inert markup, partial-date precision, UTC attributes and Eastern
+labels were retained; complete original memory rows stayed unchanged.
+
+Desktop 1280×900, narrow 320×720 and simulated CSS 200%/32px text checks passed
+without horizontal overflow. Representative confirmation, verified-save and
+offline-reader screenshots were visually reviewed. Both browser supplements
+had zero page errors or external requests; owned Java, PostgreSQL, browser and
+Vite resources were cleaned up and their absence/closure verified. This focused
+notes-only rehearsal does not repeat the historical original-media or large
+part/warning-page matrix, or establish physical-device, screen-reader,
+native-save-chooser, provider or hosted acceptance. No hosted data was used.
+
+Ignored local evidence is under `logs/export-refactor.local/`:
+`review-differential-summary.json`, `mounted-supplement/summary.json`,
+`native-1c40fa5d-5133-4b0b-ae66-232ff9889cc0/summary.json` and the frontend,
+backend-focused and package logs. The earlier ARC-05 evidence above remains
+separate from this refactor verification.

@@ -2,7 +2,7 @@
 
 ARC-02 implements shared private many-to-many albums: create, rename, organization-only delete, add/remove and independent earlier/later order. Lists, member pages and selectors are bounded. Existing memory detail, review, media permissions and editable metadata remain the only way to operate on originals. See the [album contract](../api/v1/albums.md).
 
-Verification uses `feature/private-albums`, based on main `e1249c1`. Final-head CI and merge identities are recorded in the ARC-02 tracker and pull request.
+The original implementation evidence below belongs to `feature/private-albums`, based on main `e1249c1`. Later scoped verification is dated separately; final-head CI and merge identities belong in the tracker and pull request.
 
 ## Automated verification
 
@@ -18,8 +18,39 @@ The final combined package passed **65 rendered states**: 21 desktop, 21 narrow 
 
 Tested compilation image: `sha256:52a6d86c41e2c1ea4ca8d6ddb380f3c15b83780f37b1bbfec8332720a09bb796`. Packaged runtime: `sha256:36deefd3598168f2d825ccfd3b1a4b623a824677d5c0e3ebe011266c928c29bb`. Combined JAR SHA-256: `0b159b00b59699b37df14500a4aba94eccf9e9e5004a873a76033483e01ed6f2`. Owned Java/package runners, browser containers, network and disposable browser profile were verified absent after completion.
 
+## October 15, 2026 — presentation and hook refactor
+
+`feature/albums-presentation-refactor` starts from main `d5aa375`, preserving the latest shared Archive layout, sharing, navigation, gallery, voice and timeline work. `Albums.jsx` is now a small screen shell with focused list/name/detail/selector/recovery/pagination/memory views, one local-state/focus/action hook and explicit display helpers. The existing album coordinator still owns requests, revisions, ordering, write fencing and recovery; the parent remount key still owns draft resets.
+
+Full frontend verification passed **457 tests**, ESLint and the production build on pinned Node 24.21.0. The existing album SSR file now also checks stale-page results, cached-member loading, movement controls, raw/nullish memory summaries, separate retry names, busy versus locked controls, confirmation suppression and feedback precedence. No new tracked test files or dependencies were added.
+
+The **12 album contract/HTTP tests** passed against disposable PostgreSQL 17 using Java 25.0.4 and Maven 3.9.16. These cover conditional revisions, membership, ordering, organization-only deletion and original preservation. Independent production review found no blocker; the album API/coordinator/name normalizer/CSS, shared Archive layout, inbox integration/history/privacy, mocks and Eastern formatter match the starting commit byte for byte.
+
+Albums-specific behavior remains intact: local validation has a separate alert outside server-feedback focus dependencies; opening deletion focuses Cancel without adding trigger-focus restoration; the confirmation hides while locked, recovery controls use busy-only gates, and populated member rows remain visible while busy. Memory summaries retain raw memory dates and metadata-only content without adding timestamps or original-media preloads.
+
+The current production JAR passed a loopback native-app/browser rehearsal with **609 assertions**, ten scoped flow groups and **16 synthetic screenshots** across desktop 1280×900, narrow 320×720 and simulated CSS 200%/32px text. Full graph/recovery checks ran at desktop; narrow/enlarged-text checks covered representative list/member/selector, validation, focus and privacy states. Chromium was 149.0.7827.55 with Playwright 1.62.1; this enlarged-text check is not native browser zoom or physical-device acceptance.
+
+- The real PostgreSQL/API fixture exercised 24 notes, 24 albums and a 24-member ordered album. List/member/selector pagination, cross-page earlier/later moves, independent order, shared membership, duplicate-add no-op revisions, rename validation, review-status selection, member removal/detail return and album tombstones passed.
+- A real stale revision fenced changes until reload. Controlled local response loss checked committed-write reconciliation without duplication and an unsent change followed by pagehide clearing and deliberate exact-name retry. Current privacy behavior retains private drafts across blur and clears them on pagehide; sign-out also cleared the archive. No automatic mutation retry was introduced.
+- All complete original memory rows had identical digests before and after organization changes. Native-app restart preserved all 24 original notes, the original 24-member order and a scrubbed tombstone. These synthetic note checks supplement backend original-file tests; they do not establish live-provider media behavior.
+- All recorded states had no horizontal overflow, browser application errors or external/provider requests. The owned browser disconnection, native Java stop and exact labelled PostgreSQL fixture removal were verified.
+
+A separate mounted supplement passed **45 assertions** across ten actual-component StrictMode cases and four real inbox-controller/mock cases. It checked reload routing, current callbacks, explicit undefined retry payloads, draft retention/reset keys, feedback versus local-error focus, confirmation/loading behavior and late read/write completions after suspend/dispose. It reported no page errors or external requests and closed its owned browser and Vite server. This verifies controlled wiring behavior rather than real backend persistence.
+
+The JAR SHA-256 was `1ea4a2a07bd359438840f18d2a922bf434dd030006ecb7b92cf582b7298a4b06`. Ignored local evidence is under `logs/albums-refactor.local/`, with summaries in `native-a296ea02-c70d-4988-891a-41ca97a0c1d8/summary.json` and `mounted-supplement/summary.json`. Local storage/audio/retention fixture settings do not describe hosted release settings. No deployment, account/provider/configuration change or invitation was performed.
+
+### Readability and native markup follow-up
+
+Ryan's expanded album formatting is retained: multiline JSX props/imports/objects, separate statements and assertions, and readable control-flow blocks. The hook/display helpers now follow that style too, and the frontend guide records the preference for future edits. Native `output` elements preserve loading/status semantics; the delete confirmation uses a `fieldset` and `legend`, with its existing warning linked through `aria-describedby`. Existing SSR assertions now cover those native elements instead of requiring the former explicit ARIA markup.
+
+Independent review compared normalized syntax and rendered text: action arguments, conditions, state/focus/loading behavior and visible word spacing are unchanged. Full frontend verification passed **457 tests**, ESLint and build using an ignored source snapshot containing the committed application plus only the intended album update. This excludes the unrelated local LibraryService, ArchiveUserDetailsService, guestFlow and Inbox edits, which remain untouched outside this PR. No new tracked test files, dependencies or formatter configuration were added.
+
+The intended-source JAR (`bcef5d0f0373ebc425fdf54fa855746cd36473aa84c5fed98812cb63147a1a34`) passed a focused native markup rehearsal: **241 assertions**, five scoped flow groups and **16 screenshots** across desktop 1280×900, narrow 320×720 and simulated CSS 200%/32px. All five loading/progress outputs exposed browser status roles; the fieldset/legend supplied the confirmation group's accessible name. SSR checks cover the warning-description association. Keyboard order, Cancel/Confirm focus, cancellation, wrapping and real rename/retry/create/delete flows passed, with original memory rows unchanged. This supplements the earlier ordering/recovery rehearsal; it does not repeat its full paging/restart matrix or establish physical screen-reader/device acceptance.
+
+The final run had no browser errors, external/provider requests or horizontal overflow. Its native Java process, exact labelled PostgreSQL fixture and browser were verified stopped/absent/closed. Two earlier helper-only interruptions are excluded from passing metrics and were also cleaned up. Ignored follow-up evidence is under `logs/albums-followup.local/native-3c8d787c-11af-4720-93d4-1ac60ed34267/summary.json`. No deployment was performed for this album update.
+
 ## Retained acceptance
 
-This is local engineering verification ahead of Kevin and Melanie's real onboarding and feedback. REV-01/REV-03 acceptance remains open. Physical phones/tablets, assistive technology, actual hidden-tab/BFCache behavior, native dialogs, live-provider originals and hosted capacity/network/recovery acceptance remain open. Controlled blur/resume and synthetic storage do not establish those behaviors. Audio gates remain off for release.
+This is local engineering verification ahead of Kevin and Melanie's real onboarding and feedback. REV-01/REV-03 acceptance remains open. Physical phones/tablets, assistive technology, actual hidden-tab/BFCache behavior, native dialogs, live-provider originals and hosted capacity/network/recovery acceptance remain open. Controlled blur/resume and synthetic storage do not establish those behaviors. Audio was disabled in the original fixture; current audio settings and acceptance are recorded in the [voice memory runbook](../runbooks/voice-memories.md).
 
 No paid resources, deployment, hosting change, production account activation, invitation or tester message is part of this implementation. Self-service couple export remains ARC-05; current operator recovery excludes accounts, passwords, sessions and configuration. Album-only organization can return from older valid backups because it has no independent deletion ledger; current memory-erasure authority still removes erased members and originals.

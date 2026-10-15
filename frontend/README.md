@@ -14,10 +14,14 @@ For prerequisites, install/run/check commands, the development proxy, and curren
 | [src/features/media/components/PhotoBatchForm.jsx](src/features/media/components/PhotoBatchForm.jsx) | Photo batch shell and compose/review/card/action views; the form hook owns editable state, focus and coordinator wiring while the upload lifecycle stays in api/photoBatchSubmission.js |
 | [src/features/inbox/components/Inbox.jsx](src/features/inbox/components/Inbox.jsx) | Shared private archive page layout; InboxScreens.jsx selects small screen adapters, each owning its feature props and reset key |
 | [src/features/inbox/components/ArchiveLayout.jsx](src/features/inbox/components/ArchiveLayout.jsx) | Shared cards, action rows, empty states and pagination for archive features |
+| [src/features/library/components/Library.jsx](src/features/library/components/Library.jsx) | Library shell and focused filters/results/tag chooser/recovery/paging views; its hook owns editable search fields, validation, focus and action wiring while the existing library coordinator owns applied filters, requests and return context |
 | [src/features/timeline/components/Timeline.jsx](src/features/timeline/components/Timeline.jsx) | Timeline shell and focused list/editor/detail/selector/recovery views; its hook owns local fields, filters, validation and focus while the existing timeline coordinator owns requests and recovery |
+| [src/features/albums/components/Albums.jsx](src/features/albums/components/Albums.jsx) | Album shell and focused list/name/detail/selector/recovery views; its hook owns local drafts, validation, focus and action wiring while the existing album coordinator owns requests, ordering and recovery |
+| [src/features/export/components/ExportArchive.jsx](src/features/export/components/ExportArchive.jsx) | Export shell and focused guide/recovery/status/parts/download/warnings views; its hook owns cancellation and feedback focus while the existing export coordinator owns jobs, retries, paging and verified download lifetimes |
 | [src/features/inbox/api/inboxHistory.js](src/features/inbox/api/inboxHistory.js) | Browser Back/Forward with fresh private reads, mutation guards and disposable in-memory route metadata; browser history contains opaque keys only |
 | [src/app/guestHistory.js](src/app/guestHistory.js) / [useGuestHistory.js](src/app/useGuestHistory.js) | Guest screen history; visited forms retain drafts in memory and pending submissions block traversal |
 | [src/shared/components/MemoryChoice.jsx](src/shared/components/MemoryChoice.jsx) | Accessible memory-type cards shared by guest and private creation screens |
+| [src/features/guestGallery/](src/features/guestGallery/) | Approved public photos, the welcome collage, single-photo slideshow and batched thumbnail browser; separate from private archive data |
 | [src/features/inbox/api/inboxController.js](src/features/inbox/api/inboxController.js) | Private state publication, access checks, cancellation, lifecycle and navigation; composes feature actions |
 | [src/features/inbox/api/memoryMutationActions.js](src/features/inbox/api/memoryMutationActions.js) | Memory review, audiences, private links and metadata edits, including revision checks and unconfirmed-action recovery |
 | [src/features/inbox/api/inboxMedia.js](src/features/inbox/api/inboxMedia.js) | Original photo/audio loading, integrity checks and owned preview URL cleanup |
@@ -41,6 +45,18 @@ For prerequisites, install/run/check commands, the development proxy, and curren
 | [package.json](package.json) / [package-lock.json](package-lock.json) | Scripts, dependency ranges, and resolved versions |
 
 Keep component tests beside the implementation they exercise. Update this map when boundaries change; keep implementation work in Notion.
+
+## Source readability
+
+Ryan prefers the expanded formatting used in the album files. Put long imports,
+JSX props and structured objects on multiple lines, keep statements and test
+assertions separate, and use clear blocks for control flow. Favor readable code
+over dense one-line expressions so someone learning the project can follow it.
+Use this style for new and edited code without reformatting unrelated files.
+
+During each focused file review, look for unnecessary work, unclear boundaries
+and departures from established coding practices. Prefer simple changes that
+improve maintainability; preserve behavior and avoid speculative optimization.
 
 The [v1 contract](../docs/api/v1/README.md) owns API semantics and implementation gaps.
 Run `npm test` here for transport, decoder, and mock contract checks; no backend or
