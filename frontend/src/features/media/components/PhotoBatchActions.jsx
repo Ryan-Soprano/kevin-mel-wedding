@@ -13,8 +13,8 @@ export default function PhotoBatchActions({ view, privateArchive }) {
         )}
         {complete && shellActions && !busy && (
           <>
-            <button type="button" className="button-secondary" onClick={actions.finish}>{getPhotoBatchCopy(privateArchive).finishLabel}</button>
-            <button type="button" onClick={actions.shareAnother}>Share another memory</button>
+            <button type="button" onClick={actions.finish}>{getPhotoBatchCopy(privateArchive).finishLabel}</button>
+            <button type="button" className="button-secondary" onClick={actions.shareAnother}>Share another memory</button>
           </>
         )}
         {snapshot.canStartAnother && !busy && (!complete || !shellActions) && (

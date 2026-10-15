@@ -50,18 +50,18 @@ test("Back and Forward revisit every guest screen without replacing mounted form
     f.update({ type: "FORM_STATE", kind: "audio", state: { complete: true } });
     f.update({ type: "FINISHED", kind: "audio" });
     const forms = f.flow().forms, started = f.flow().started, entryCount = f.entries.length;
-    assert.equal(f.flow().screen, "done"); assert.equal(hasUnfinishedWork(f.flow()), true);
+    assert.equal(f.flow().screen, "welcome"); assert.equal(hasUnfinishedWork(f.flow()), true);
     assert.deepEqual(started, ["note", "photos", "audio"]);
     for (const screen of ["audio", "choose", "photos", "choose", "note", "choose", "welcome"]) {
       f.history.go(-1); assert.equal(f.flow().screen, screen);
       assert.equal(f.flow().forms, forms); assert.equal(f.flow().started, started);
     }
-    for (const screen of ["choose", "note", "choose", "photos", "choose", "audio", "done"]) {
+    for (const screen of ["choose", "note", "choose", "photos", "choose", "audio", "welcome"]) {
       f.history.go(1); assert.equal(f.flow().screen, screen);
       assert.equal(f.flow().forms, forms); assert.equal(f.flow().started, started);
     }
     assert.equal(f.flow().forms.note.hasDraft, true); assert.equal(f.flow().forms.photos.hasDraft, true);
-    assert.equal(f.flow().forms.audio.complete, false, "Done's deliberate reset is not undone by browser history");
+    assert.equal(f.flow().forms.audio.complete, false, "finishing a saved memory is not undone by browser history");
     assert.equal(f.entries.length, entryCount, "pop navigation does not push replacement history entries");
   } finally { f.recording.dispose(); }
 });

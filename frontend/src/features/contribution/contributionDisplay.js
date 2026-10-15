@@ -5,7 +5,7 @@ const GUEST_COPY = {
   reviewTitle: "Ready to send?", sendLabel: "Send note",
   resultTitle: "Thank you — your note was saved for Kevin and Melanie.",
   resultDescription: "They can review it privately when their archive is ready.",
-  finishLabel: "Done",
+  finishLabel: "Back to our photos",
 };
 const PRIVATE_COPY = {
   introduction: "Add a written memory to your private archive. You can add a title, description and date after saving.",

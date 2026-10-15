@@ -87,7 +87,7 @@ export function guestFlowReducer(flow, action) {
         return flow;
       return {
         ...flow,
-        screen: action.type === "FINISHED" ? "done" : "choose",
+        screen: action.type === "FINISHED" ? "welcome" : "choose",
         forms: { ...flow.forms, [action.kind]: emptyForm() },
       };
     default:

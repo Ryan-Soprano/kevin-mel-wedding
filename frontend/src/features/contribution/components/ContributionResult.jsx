@@ -15,7 +15,7 @@ export default function ContributionResult({ view, privateArchive, resultHeading
       <h2 id="result-heading" ref={resultHeading} tabIndex={-1}>{copy.resultTitle}</h2>
       <p>{copy.resultDescription}</p>
       <div className="note-actions">
-        <button type="button" className="button-secondary" onClick={view.actions.finish}>{copy.finishLabel}</button>
+        <button type="button" className="button-secondary" onClick={view.actions.finish}>{!privateArchive && !view.hasShellActions ? "Done" : copy.finishLabel}</button>
         <button type="button" onClick={view.actions.shareAnother}>{getContributionShareLabel(view.hasShellActions)}</button>
       </div>
     </section>
