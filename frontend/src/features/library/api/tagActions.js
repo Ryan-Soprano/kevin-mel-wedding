@@ -173,7 +173,7 @@ export function createTagActions({ api, getState, publish, start, bounded, run, 
       if (!visible() || !tagId) return Promise.resolve(getState());
       returnTagId = null;
       const op = start(base({ view: "detail", requestedId: tagId, tag: state().tag?.tagId === tagId ? state().tag : null,
-        members: EMPTY, candidates: EMPTY, nextCursor: null }));
+        members: EMPTY, candidates: EMPTY, nextCursor: null, cursors: freeze(cursors) }));
       return run(op, () => members(op, tagId, cursor, cursors), readFailure);
     },
     beginTagCreation() {
@@ -251,7 +251,7 @@ export function createTagActions({ api, getState, publish, start, bounded, run, 
     },
     showTagSelector(reviewStatus = "KEEP", cursor = null, cursors = [null]) {
       if (!visible() || !state().tag || state().tag.deletedAt !== null) return Promise.resolve(getState());
-      const op = start(base({ view: "select", candidates: EMPTY, nextCursor: null, selectorStatus: reviewStatus }));
+      const op = start(base({ view: "select", candidates: EMPTY, nextCursor: null, selectorStatus: reviewStatus, cursors: freeze(cursors) }));
       return run(op, async () => {
         const result = await bounded(op, signal => api.listMemories({ reviewStatus, limit: 20, ...(cursor ? { cursor } : {}), signal }));
         assertCurrent(op);

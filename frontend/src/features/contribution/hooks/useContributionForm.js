@@ -11,7 +11,6 @@ export function useContributionForm({ active, onFlowStateChange, onDone, onShare
   const mounted = useRef(false);
   const nameInput = useRef(null);
   const messageInput = useRef(null);
-  const reviewHeading = useRef(null);
   const resultHeading = useRef(null);
   const focusField = useRef(null);
   const sending = useRef(false);
@@ -19,7 +18,6 @@ export function useContributionForm({ active, onFlowStateChange, onDone, onShare
   const [guestName, setGuestName] = useState("");
   const [message, setMessage] = useState("");
   const [step, setStep] = useState("compose");
-  const [preview, setPreview] = useState(null);
   const [fieldErrors, setFieldErrors] = useState({});
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -27,7 +25,7 @@ export function useContributionForm({ active, onFlowStateChange, onDone, onShare
   const [retryAfter, setRetryAfter] = useState(0);
   const busy = isSubmitting || retryAfter > 0;
   const complete = step === "success" || step === "done";
-  const hasDraft = !complete && (guestName.length > 0 || message.length > 0 || preview !== null);
+  const hasDraft = !complete && (guestName.length > 0 || message.length > 0);
   const reportFlow = useEffectEvent(state => onFlowStateChange?.(state));
 
   useEffect(() => {
@@ -48,17 +46,15 @@ export function useContributionForm({ active, onFlowStateChange, onDone, onShare
   }, [retryAfter]);
 
   useEffect(() => {
-    if (!active) return;
+    if (!active || isSubmitting) return;
     if (step === "compose" && focusField.current) {
       if (focusField.current === "guestName") nameInput.current?.focus();
       else messageInput.current?.focus();
       focusField.current = null;
-    } else if (step === "review") {
-      reviewHeading.current?.focus();
     } else if (step === "success" || step === "done") {
       resultHeading.current?.focus();
     }
-  }, [active, step]);
+  }, [active, step, isSubmitting]);
 
   function showValidation(failure) {
     const next = {};
@@ -73,7 +69,7 @@ export function useContributionForm({ active, onFlowStateChange, onDone, onShare
     setError("");
     focusField.current = getContributionValidationField(next);
     if (step === "compose") {
-      if (active) {
+      if (active && !sending.current) {
         if (focusField.current === "guestName") nameInput.current?.focus();
         else messageInput.current?.focus();
         focusField.current = null;
@@ -83,30 +79,20 @@ export function useContributionForm({ active, onFlowStateChange, onDone, onShare
     }
   }
 
-  function review(event) {
-    event.preventDefault();
+  async function send(event) {
+    event?.preventDefault();
+    const current = submission.current;
+    if (sending.current || busy || !current) return;
     setError("");
     setFieldErrors({});
     try {
-      setPreview(normalizeTextContribution({ guestName: getContributionGuestName(privateArchive, guestName), message }));
-      setStep("review");
+      normalizeTextContribution({ guestName: getContributionGuestName(privateArchive, guestName), message });
     } catch (failure) {
       if (failure instanceof ApiError && failure.code === "VALIDATION_FAILED") showValidation(failure);
       else setError("Please check your message and try again.");
+      return;
     }
-  }
-
-  function edit() {
-    if (isSubmitting || pending) return;
-    focusField.current = "message";
-    setStep("compose");
-  }
-
-  async function send() {
-    const current = submission.current;
-    if (sending.current || !preview || !current) return;
     sending.current = true;
-    setError("");
     setIsSubmitting(true);
     try {
       await current.submit({ guestName: getContributionGuestName(privateArchive, guestName), message });
@@ -132,7 +118,6 @@ export function useContributionForm({ active, onFlowStateChange, onDone, onShare
     submission.current.startAnother();
     setGuestName("");
     setMessage("");
-    setPreview(null);
     setFieldErrors({});
     setError("");
     setPending(false);
@@ -158,21 +143,23 @@ export function useContributionForm({ active, onFlowStateChange, onDone, onShare
   }
 
   function changeGuestName(value) {
+    if (sending.current || pending) return;
     setGuestName(value);
     setFieldErrors(old => ({ ...old, guestName: "" }));
   }
 
   function changeMessage(value) {
+    if (sending.current || pending) return;
     setMessage(value);
     setFieldErrors(old => ({ ...old, message: "" }));
   }
 
   return {
-    nameInput, messageInput, reviewHeading, resultHeading,
+    nameInput, messageInput, resultHeading,
     view: {
-      guestName, message, step, preview, fieldErrors, error, isSubmitting, pending, retryAfter, busy,
+      guestName, message, step, fieldErrors, error, isSubmitting, pending, retryAfter, busy,
       hasShellActions: Boolean(onDone || onShareAnother),
-      actions: { review, edit, send, finish, shareAnother, changeGuestName, changeMessage },
+      actions: { send, finish, shareAnother, changeGuestName, changeMessage },
     },
   };
 }

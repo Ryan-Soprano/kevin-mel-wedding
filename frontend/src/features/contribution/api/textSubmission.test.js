@@ -7,30 +7,28 @@ import { createServer } from "vite";
 import react from "@vitejs/plugin-react";
 import { createTextSubmission } from "./textSubmission.js";
 import { createMockArchiveApi } from "../../../shared/api/mockArchiveApi.js";
-import { createArchiveApi, normalizeTextContribution } from "../../../shared/api/archiveApi.js";
+import { createArchiveApi } from "../../../shared/api/archiveApi.js";
 import { ApiError, createApiClient } from "../../../shared/api/apiClient.js";
 import { IDS, TEXT_RECEIPT } from "../../../shared/api/v1/fixtures.js";
 import { getContributionSubmitError } from "../contributionDisplay.js";
 
 const draft = { guestName: " Guest ", message: " hello " };
 
-test("extracted note views preserve guest/private copy, validation descriptions, pending locks and cooldown label precedence", async () => {
+test("direct note form exposes send, private copy, validation descriptions, pending locks and cooldown label precedence", async () => {
   // SSR verifies real React presentation without executing lifecycle/focus/timer
   // effects; separate mounted checks cover those interaction guarantees.
-  const server = await createServer({ configFile: false, logLevel: "silent", root: fileURLToPath(new URL("../../../../", import.meta.url)),
+  const server = await createServer({ configFile: false, logLevel: "silent", cacheDir: "node_modules/.vite/contribution-presentation-test", root: fileURLToPath(new URL("../../../../", import.meta.url)),
     plugins: [react()], server: { middlewareMode: true, hmr: false, watch: null }, appType: "custom",
     optimizeDeps: { noDiscovery: true, include: [] } });
   try {
     const { default: ContributionForm } = await server.ssrLoadModule("/src/features/contribution/components/ContributionForm.jsx");
     const { default: ContributionCompose } = await server.ssrLoadModule("/src/features/contribution/components/ContributionCompose.jsx");
-    const { default: ContributionReview } = await server.ssrLoadModule("/src/features/contribution/components/ContributionReview.jsx");
     const { default: ContributionResult } = await server.ssrLoadModule("/src/features/contribution/components/ContributionResult.jsx");
     const render = (Component, props) => renderToStaticMarkup(createElement(Component, props));
     const noop = () => {};
-    const actions = Object.fromEntries(["review", "edit", "send", "finish", "shareAnother", "changeGuestName", "changeMessage"].map(name => [name, noop]));
-    const preview = normalizeTextContribution({ guestName: " Guest <visitor> ", message: " First <note>\nSecond line " });
+    const actions = Object.fromEntries(["send", "finish", "shareAnother", "changeGuestName", "changeMessage"].map(name => [name, noop]));
     const view = {
-      guestName: "Guest <visitor>", message: "First <note>\nSecond line", step: "review", preview,
+      guestName: "Guest <visitor>", message: "First <note>\nSecond line", step: "compose",
       fieldErrors: {}, error: "", isSubmitting: false, pending: false, retryAfter: 0, busy: false, hasShellActions: false, actions,
     };
     let factoryCalls = 0, flowReports = 0;
@@ -38,9 +36,11 @@ test("extracted note views preserve guest/private copy, validation descriptions,
     const initial = render(ContributionForm, initialProps);
     assert.match(initial, /class="contribution-flow"/);
     assert.match(initial, /Your name \(optional\)/);
-    assert.match(initial, />Review note</);
+    assert.match(initial, />Send note</);
+    assert.doesNotMatch(initial, /<h2|Review note|Ready to send/);
     const privateInitial = render(ContributionForm, { ...initialProps, privateArchive: true });
     assert.match(privateInitial, /Add a written memory to your private archive/);
+    assert.match(privateInitial, />Save note privately</);
     assert.doesNotMatch(privateInitial, /Your name \(optional\)|id="guestName"/);
     assert.equal(factoryCalls, 0, "coordinators remain effect-owned during server rendering");
     assert.equal(flowReports, 0, "flow callbacks remain effect-owned");
@@ -56,42 +56,30 @@ test("extracted note views preserve guest/private copy, validation descriptions,
     const emptyCompose = render(ContributionCompose, { view, privateArchive: false });
     assert.match(emptyCompose, /aria-invalid="false"/);
     assert.match(emptyCompose, /aria-describedby="message-count"/);
+    assert.match(emptyCompose, /value="Guest &lt;visitor&gt;"/);
+    assert.match(emptyCompose, /First &lt;note&gt;\nSecond line/);
     assert.doesNotMatch(emptyCompose, /aria-describedby="guestName-error"/);
     const pendingCompose = render(ContributionCompose, { view: { ...view, pending: true, isSubmitting: true, busy: true }, privateArchive: false });
-    assert.doesNotMatch(pendingCompose, /disabled=/, "extraction does not introduce new compose guards");
+    assert.equal((pendingCompose.match(/disabled=""/g) ?? []).length, 3, "sending freezes both fields and the send button");
+    assert.match(pendingCompose, /role="status" aria-live="polite"/);
 
-    const review = render(ContributionReview, { view, privateArchive: false });
-    assert.match(review, /Ready to send\?/);
-    assert.match(review, /From: Guest &lt;visitor&gt;/);
-    assert.match(review, /First &lt;note&gt;\nSecond line/);
-    assert.match(review, /role="status" aria-live="polite"/);
-    assert.match(review, />Send note</);
-    assert.match(review, />Edit note</);
-    assert.doesNotMatch(review, /<note>/);
-    const privateReview = render(ContributionReview, { view, privateArchive: true });
-    assert.match(privateReview, /Ready to save privately\?/);
-    assert.match(privateReview, />Save note privately</);
-    assert.doesNotMatch(privateReview, /From:|Guest &lt;visitor&gt;/);
-    const unnamed = render(ContributionReview, { view: { ...view, preview: { ...preview, guestName: null } }, privateArchive: false });
-    assert.match(unnamed, /From: Name not provided/);
-
-    const pending = render(ContributionReview, { view: { ...view, pending: true }, privateArchive: false });
+    const pending = render(ContributionCompose, { view: { ...view, pending: true }, privateArchive: false });
     assert.match(pending, /Trying again checks this same submission/);
     assert.match(pending, />Try again</);
     assert.doesNotMatch(pending, />Edit note</);
-    const waiting = render(ContributionReview, { view: { ...view, pending: true, retryAfter: 17, busy: true }, privateArchive: false });
+    assert.equal((pending.match(/disabled=""/g) ?? []).length, 2, "unknown outcome freezes the draft while enabling same-note retry");
+    const waiting = render(ContributionCompose, { view: { ...view, pending: true, retryAfter: 17, busy: true }, privateArchive: false });
     assert.match(waiting, /aria-busy="false"/);
     assert.match(waiting, /disabled="">Please wait before trying again/);
     assert.doesNotMatch(waiting, />Try again<|>Edit note</);
-    const submitting = render(ContributionReview, { view: { ...view, pending: true, retryAfter: 17, isSubmitting: true, busy: true }, privateArchive: true });
+    const submitting = render(ContributionCompose, { view: { ...view, pending: true, retryAfter: 17, isSubmitting: true, busy: true }, privateArchive: true });
     assert.match(submitting, /aria-busy="true"/);
     assert.match(submitting, /Sending your note…/);
     assert.match(submitting, /disabled="">Saving…/);
     assert.doesNotMatch(submitting, /Please wait before trying again|>Try again</);
-    const editableWait = render(ContributionReview, { view: { ...view, retryAfter: 17, busy: true }, privateArchive: false });
+    const editableWait = render(ContributionCompose, { view: { ...view, retryAfter: 17, busy: true }, privateArchive: false });
     assert.match(editableWait, /disabled="">Please wait before trying again/);
-    assert.match(editableWait, /<button type="button" class="button-secondary">Edit note<\/button>/,
-      "cooldown does not add an edit guard when no submission is pending");
+    assert.equal((editableWait.match(/disabled=""/g) ?? []).length, 1, "cooldown freezes only sending when no submission is pending");
 
     const successView = { ...view, step: "success" };
     const success = render(ContributionResult, { view: successView, privateArchive: false });

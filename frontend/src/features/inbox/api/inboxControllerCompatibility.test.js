@@ -28,7 +28,7 @@ test("inbox lifecycle retains its public snapshot shape and stable snapshots aft
   const unsubscribe = controller.subscribe(snapshot => snapshots.push(snapshot));
   try {
     const initial = controller.getSnapshot();
-    assert.deepEqual(Object.keys(initial), `phase session busy error reviewStatus items nextCursor detail photo review shareLink
+    assert.deepEqual(Object.keys(initial), `phase session busy error reviewStatus items nextCursor detail requestedMemoryId photo review shareLink
       metadata albums albumReturnId timeline timelineReturnId library libraryReturn tags tagReturnId export notice
       pageResetVersion logoutUnconfirmed`.split(/\s+/));
     assert.deepEqual(initial.photo, { phase: "idle", url: null, error: null });
@@ -38,6 +38,7 @@ test("inbox lifecycle retains its public snapshot shape and stable snapshots aft
     assert.equal(initial.phase, "checking");
     assert.equal(initial.session, null);
     assert.equal(initial.detail, null);
+    assert.equal(initial.requestedMemoryId, null);
     assert.deepEqual(initial.items, []);
     assert.equal(initial.busy, false);
     assert.equal(initial.pageResetVersion, 0);
