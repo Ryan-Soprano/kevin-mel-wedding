@@ -17,6 +17,7 @@ import {
 } from "./guestFlow.js";
 import GuestGallery from "../features/guestGallery/GuestGallery.jsx";
 import CoupleScrapbook from "../features/guestGallery/CoupleScrapbook.jsx";
+import CoupleStories from "../features/guestGallery/CoupleStories.jsx";
 import MemoryChoice from "../shared/components/MemoryChoice.jsx";
 import { useGuestHistory } from "./useGuestHistory.js";
 import "../styles/guest.css";
@@ -148,45 +149,58 @@ export default function App({
 
   return (
     <main className={`guest-page guest-page--${flow.screen}`}>
-      <header className={`guest-header${welcome ? " guest-header--welcome" : ""}`}>
-        {welcome ? (
-          <p className="guest-eyebrow">Good stories deserve a place to stay.</p>
-        ) : (
-          <p className="guest-couple">Kevin &amp; Melanie</p>
-        )}
-        <h1 ref={heading} tabIndex={-1}>
+      <div className={welcome ? "guest-opening" : undefined}>
+        <header className={`guest-header${welcome ? " guest-header--welcome" : ""}`}>
           {welcome ? (
-            <>
-              <span className="guest-welcome-title">A little love for</span>
-              <span className="guest-names">
+            <p className="guest-eyebrow">A little love for</p>
+          ) : (
+            <p className="guest-couple">Kevin &amp; Melanie</p>
+          )}
+          <h1 ref={heading} tabIndex={-1}>
+            {welcome ? (
+              <>
                 Kevin <span className="guest-ampersand">&amp;</span> Melanie
-              </span>
-            </>
-          ) : title}
-        </h1>
+              </>
+            ) : title}
+          </h1>
+        </header>
+
+        {welcome && <CoupleScrapbook />}
         {welcome && (
-          <>
-            <p className="guest-welcome-character">
-              Kevin’s humor and loyalty. Melanie’s honesty and grit.
+          <section className="guest-invitation" aria-label="Share a memory">
+            <p className="guest-invitation-copy">
+              A favorite photo. A good story.<br />
+              A little love for their next chapter.
             </p>
-            <p className="guest-welcome-introduction">
-              From the wedding day or years before, help them keep the moments
-              that make their story.
+            <button
+              type="button"
+              className="guest-share-button"
+              onClick={() => dispatch({ type: "CHOOSE" })}
+            >
+              Share a memory <span aria-hidden="true">↗</span>
+            </button>
+            <p className="guest-invitation-help">
+              No account needed. Your name is optional.<br />
+              Sent privately to Kevin and Melanie.
             </p>
-          </>
+            {unfinished && (
+              <p className="guest-draft-notice" role="status">
+                You have an unfinished memory here. Open Share a memory, then choose
+                its memory type to continue before closing this page.
+              </p>
+            )}
+          </section>
         )}
-      </header>
+      </div>
 
-      {welcome && <CoupleScrapbook />}
-
-      {(welcome || flow.screen === "choose") && (
+      {flow.screen === "choose" && (
         <section
-          className={`guest-choices${welcome ? " guest-choices--welcome" : ""}`}
+          className="guest-choices"
           aria-labelledby="share-wedding-memory"
         >
           <div className="guest-choices-heading">
             <h2 id="share-wedding-memory" tabIndex={-1}>
-              {welcome ? "Share a memory" : "Choose a memory"}
+              Choose a memory
             </h2>
             <p className="guest-help">No account needed. Your name is optional.</p>
           </div>
@@ -221,20 +235,18 @@ export default function App({
           <p className="guest-help guest-privacy">
             Sent privately to Kevin and Melanie. They choose which memories to share.
           </p>
-          {welcome && unfinished && <p className="guest-draft-notice" role="status">You have an unfinished memory here. Choose its memory type above to continue before closing this page.</p>}
-          {!welcome && (
-            <button
-              type="button"
-              className="button-secondary"
-              onClick={() => dispatch({ type: "BACK" })}
-            >
-              Back to welcome
-            </button>
-          )}
+          <button
+            type="button"
+            className="button-secondary"
+            onClick={() => dispatch({ type: "BACK" })}
+          >
+            Back to welcome
+          </button>
         </section>
       )}
 
-      {welcome && <GuestGallery />}
+      {welcome && <CoupleStories />}
+      {welcome && <GuestGallery deferInitialPhoto />}
       {welcome && (
         <Suspense fallback={null}>
           <PublicMemories />

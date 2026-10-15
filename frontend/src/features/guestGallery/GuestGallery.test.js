@@ -127,48 +127,58 @@ test("real public gallery immediately renders one accessible slide with navigati
     const { default: App } = await server.ssrLoadModule("/src/app/App.jsx");
     const landing = renderToStaticMarkup(createElement(App, { audioEnabled: false }));
     const scrapbookStart = landing.indexOf('class="couple-scrapbook"');
+    const invitationStart = landing.indexOf('class="guest-invitation"');
+    const profilesStart = landing.indexOf('class="couple-stories"');
     const galleryStart = landing.indexOf('class="guest-gallery"');
-    const shareStart = landing.indexOf('id="share-wedding-memory"');
-    assert.ok(scrapbookStart < shareStart);
-    assert.ok(galleryStart > scrapbookStart);
-    const scrapbook = landing.slice(scrapbookStart, shareStart);
-    assert.match(scrapbook, /id="couple-scrapbook"/);
-    for (const photoId of [15, 90, 148]) {
-      const selected = couplePhotos.find(photo => photo.id === photoId);
-      assert.ok(scrapbook.includes(`src="${selected.src}"`), `welcome uses selected photo #${photoId}`);
-    }
-    for (const name of ["couple-arch", "couple-globe"]) {
-      const selected = new URL(`./welcome-assets/${name}.webp`, import.meta.url).href;
-      const smaller = new URL(`./welcome-assets/${name}-384.webp`, import.meta.url).href;
-      assert.ok(scrapbook.includes(`src="${selected}"`), `welcome includes ${name}`);
-      assert.ok(scrapbook.includes(`srcSet="${smaller} 384w, ${selected} 768w"`));
-    }
+    const landingImages = landing.match(/<img\b[^>]*>/g) ?? [];
+    assert.equal(landingImages.filter(image => image.includes('fetchPriority="high"')).length, 1, "only the opening photo gets high download priority");
+    const galleryImage = landing.slice(galleryStart).match(/<img\b[^>]*>/)?.[0];
+    assert.match(galleryImage, /loading="lazy"/);
+    assert.match(galleryImage, /fetchPriority="auto"/);
+    const landingPreloads = (landing.match(/<link\b[^>]*>/g) ?? []).filter(link => link.includes('as="image"'));
+    assert.equal(landingPreloads.length, 1, "the gallery does not preload a competing image");
+    assert.ok(scrapbookStart >= 0 && scrapbookStart < invitationStart, "one focal couple photo leads into the invitation");
+    assert.ok(invitationStart < profilesStart && profilesStart < galleryStart, "the invitation precedes individual stories and the full gallery");
+    const scrapbook = landing.slice(scrapbookStart, invitationStart);
     const scrapbookImages = scrapbook.match(/<img\b[^>]*>/g) ?? [];
-    assert.equal(scrapbookImages.length, 5);
-    assert.ok(scrapbookImages[0].includes(couplePhotos.find(photo => photo.id === 148).src), "couple photo leads before the solo snapshots");
-    assert.ok(scrapbookImages.every(image => image.includes('loading="lazy"')));
-    assert.match(scrapbook, /She makes an entrance. He brings the perfect hair/);
+    const focalPhoto = couplePhotos.find(photo => photo.id === 148);
+    assert.equal(scrapbookImages.length, 1);
+    assert.ok(scrapbookImages[0].includes(`src="${focalPhoto.src}"`));
+    assert.ok(scrapbookImages[0].includes('loading="eager"'));
+    assert.ok(scrapbookImages[0].includes('fetchPriority="high"'));
+    assert.ok(scrapbookImages[0].includes(`width="${focalPhoto.width}" height="${focalPhoto.height}"`));
+    assert.match(scrapbook, /Her entrance\.<br\/>His perfect hair\./);
     assert.doesNotMatch(scrapbook, /scrapbook-share|Add your own memory/);
-    assert.doesNotMatch(scrapbook, /href="#/);
-    assert.doesNotMatch(scrapbook, /Meet Kevin|meet-the-couple|biography|Kevin is the friend|Melanie is a Taurus/);
-    assert.ok(landing.indexOf("id=\"share-wedding-memory\"") < landing.indexOf("guest-gallery-photo"));
-    assert.equal((landing.match(/class="memory-choice memory-choice--/g) ?? []).length, 2);
-    for (const label of ["Add photos", "Write a message", "Caught a good moment?", "Tell us a story."]) {
-      assert.ok(landing.includes(label), `welcome directly offers ${label}`);
-      assert.ok(landing.indexOf(label) > scrapbookStart);
-      assert.ok(landing.indexOf(label) < landing.indexOf("guest-gallery-photo"));
+
+    const invitation = landing.slice(invitationStart, profilesStart);
+    assert.match(invitation, /<button\b[^>]*type="button"[^>]*class="guest-share-button"[^>]*>Share a memory /);
+    assert.match(invitation, /A favorite photo\. A good story\.<br\/>A little love for their next chapter\./);
+    assert.match(invitation, /No account needed\. Your name is optional/);
+    assert.match(invitation, /Sent privately to Kevin and Melanie\./);
+
+    const profiles = landing.slice(profilesStart, galleryStart);
+    assert.match(profiles, /Two people\. One next chapter\./);
+    assert.equal((profiles.match(/<img\b/g) ?? []).length, 2);
+    for (const [name, photoId, biography] of [
+      ["Kevin", 90, /funny, endlessly resourceful/],
+      ["Melanie", 15, /honesty, determination/],
+    ]) {
+      const key = name.toLowerCase();
+      const article = profiles.match(new RegExp(`<article\\b[^>]*aria-labelledby="couple-story-${key}"[^>]*>(.*?)</article>`))?.[1];
+      assert.ok(article, `${name} has a named biography article`);
+      const selected = couplePhotos.find(photo => photo.id === photoId);
+      assert.ok(article.includes(`src="${selected.smallSrc ?? selected.src}"`), `${name}'s portrait stays with their biography`);
+      assert.match(article, /loading="lazy"/);
+      assert.ok(article.includes(`<h3 id="couple-story-${key}">${name}</h3>`));
+      assert.match(article, biography);
     }
     assert.match(landing, /A little love for/);
-    assert.match(landing, /From the wedding day or years before/);
-    assert.match(landing, /No account needed. Your name is optional/);
-    assert.doesNotMatch(landing, /memory-choice--audio|Record a message/);
+    assert.equal((landing.match(/<h1\b/g) ?? []).length, 1);
+    assert.doesNotMatch(landing, /class="memory-choice memory-choice--|Add photos|Write a message|Record a message/);
     const withAudio = renderToStaticMarkup(createElement(App, { audioEnabled: true }));
-    assert.equal((withAudio.match(/class="memory-choice memory-choice--/g) ?? []).length, 3);
-    assert.ok(withAudio.indexOf("Record a message") < withAudio.indexOf("guest-gallery-photo"));
-    assert.ok(withAudio.indexOf("Record a message") > withAudio.indexOf('class="couple-scrapbook"'));
-    assert.match(withAudio, /Record or upload a clip/);
+    assert.doesNotMatch(withAudio, /class="memory-choice memory-choice--|Add photos|Write a message|Record a message/);
+    assert.match(withAudio, /class="guest-share-button"/);
     assert.doesNotMatch(landing, /Browse Kevin and Melanie|Skip photos and share a memory|favourite/);
-    assert.match(landing, /Sent privately to Kevin and Melanie. They choose which memories to share/);
   } finally { await server.close(); }
 });
 

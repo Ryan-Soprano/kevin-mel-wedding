@@ -15,7 +15,7 @@ function subscribeToMotionPreference(notify) {
 const prefersReducedMotion = () =>
   window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-function Photo({ photo, index, total }) {
+function Photo({ photo, index, total, deferLoading = false }) {
   const responsive =
     photo.smallSrc && photo.smallWidth < photo.width
       ? {
@@ -35,8 +35,8 @@ function Photo({ photo, index, total }) {
         width={photo.width}
         height={photo.height}
         alt={photo.alt}
-        loading="eager"
-        fetchPriority={index === 0 ? "high" : "auto"}
+        loading={deferLoading ? "lazy" : "eager"}
+        fetchPriority={!deferLoading && index === 0 ? "high" : "auto"}
         decoding="async"
         style={{ maxWidth: photo.width }}
         {...responsive}
@@ -87,7 +87,7 @@ export function GalleryThumbnails({ photos, visibleCount, onOpen, onMore }) {
 }
 
 /** Deliberately public couple photos; never reads the private archive or uploads. */
-export default function GuestGallery({ photos = couplePhotos }) {
+export default function GuestGallery({ photos = couplePhotos, deferInitialPhoto = false }) {
   const [index, setIndex] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [hovered, setHovered] = useState(false);
@@ -224,6 +224,7 @@ export default function GuestGallery({ photos = couplePhotos }) {
               photo={photos[currentIndex]}
               index={currentIndex}
               total={photos.length}
+              deferLoading={deferInitialPhoto && view === "preview" && currentIndex === 0 && !playing}
             />
           </div>
           <div className="guest-gallery-controls">
