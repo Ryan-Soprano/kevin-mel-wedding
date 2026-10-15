@@ -22,7 +22,7 @@ Kevin and Melanie already know about the project and help shape it. Include them
 - **Understand the project:** open the [Notion project home](https://app.notion.com/p/3dad9739c6bc81ff89cbd713cddf08d1?pvs=204) and read the [project plan](docs/project-plan.md) for scope, accepted architecture, module boundaries, and collaboration conventions.
 - **Run the code:** use the local-development instructions below.
 
-This is a learning project. Explain and agree on infrastructure, dependencies, and CI/CD before Ryan performs each hands-on setup step. Do not automatically create provider accounts, connect services, provision infrastructure, add dependencies, configure CI/CD, or deploy application changes without Ryan's explicit request.
+This is a learning project with [standing autonomous project authorization](docs/project-plan.md#standing-project-authorization). Explain significant technical choices and report verification; proceed with project work without routine approval requests.
 
 ## Local development
 
@@ -258,7 +258,7 @@ V4 adds disabled-by-default private accounts and credential versions; V5 adds du
 | [docs/project-plan.md](docs/project-plan.md) | Product scope, accepted architecture, and collaboration conventions |
 | [Feature tracker.md](<Feature tracker.md>) | Migration pointer to Notion; do not maintain task status here |
 
-Work in small, explained increments. Claim work in Notion and use `feature/<description>` for new feature branches. The current branch does not assign tasks. Ryan granted standing autonomous project authority on October 9: implement, verify, commit, push, open pull requests and merge after review and passing checks. On October 14 he explicitly requested audio availability on the existing Render service, superseding the earlier audio-enablement deferral. Keep remaining device acceptance and unrelated hosting/spending restrictions in force unless separately authorized.
+Work in small, explained increments. Claim work in Notion and use `feature/<description>` for new feature branches. The current branch does not assign tasks. Ryan expanded his October 9 autonomous-work authorization on October 15 to cover the complete GitHub workflow, repository changes and related project work without routine approval requests. Follow the [standing project authorization](docs/project-plan.md#standing-project-authorization), including review, passing checks, existing budgets and privacy safeguards. The October 14 audio-enablement request remains in force; outstanding physical-device and release evidence still needs verification.
 
 ## Where information belongs
 
