@@ -43,6 +43,14 @@ For prerequisites, install/run/check commands, the development proxy, and curren
 
 Keep component tests beside the implementation they exercise. Update this map when boundaries change; keep implementation work in Notion.
 
+## Source readability
+
+Ryan prefers the expanded formatting used in the album files. Put long imports,
+JSX props and structured objects on multiple lines, keep statements and test
+assertions separate, and use clear blocks for control flow. Favor readable code
+over dense one-line expressions so someone learning the project can follow it.
+Use this style for new and edited code without reformatting unrelated files.
+
 The [v1 contract](../docs/api/v1/README.md) owns API semantics and implementation gaps.
 Run `npm test` here for transport, decoder, and mock contract checks; no backend or
 Docker is required. They do not replace server integration/browser/device tests.

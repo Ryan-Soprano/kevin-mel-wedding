@@ -1,4 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { normalizeAlbumName } from "../albumName.js";
 
 export function useAlbums({ state, busy, locked, actions }) {
@@ -11,11 +15,15 @@ export function useAlbums({ state, busy, locked, actions }) {
   const disabled = busy || locked;
 
   useEffect(() => {
-    if (state.mutation.error || state.notice || state.error) feedback.current?.focus();
+    if (state.mutation.error || state.notice || state.error) {
+      feedback.current?.focus();
+    }
   }, [state.mutation.error, state.notice, state.error]);
 
   useEffect(() => {
-    if (confirmDelete) cancelDelete.current?.focus();
+    if (confirmDelete) {
+      cancelDelete.current?.focus();
+    }
   }, [confirmDelete]);
 
   function submitName(event) {
@@ -23,38 +31,75 @@ export function useAlbums({ state, busy, locked, actions }) {
     try {
       const normalized = normalizeAlbumName(name);
       setError(null);
-      if (state.view === "create") void actions.create(normalized);
-      else void actions.rename(normalized);
-    } catch (failure) { setError(failure.message); }
+      if (state.view === "create") {
+        void actions.create(normalized);
+      } else {
+        void actions.rename(normalized);
+      }
+    } catch (failure) {
+      setError(failure.message);
+    }
   }
 
   function retry() {
     try {
       setError(null);
       let normalized;
-      if (state.mutation.needsName) normalized = normalizeAlbumName(originalName);
+      if (state.mutation.needsName) {
+        normalized = normalizeAlbumName(originalName);
+      }
       void actions.retry(normalized);
-    } catch (failure) { setError(failure.message); }
+    } catch (failure) {
+      setError(failure.message);
+    }
   }
 
-  function beginDelete() { setConfirmDelete(true); }
-  function cancelDeletion() { setConfirmDelete(false); }
+  function beginDelete() {
+    setConfirmDelete(true);
+  }
+
+  function cancelDeletion() {
+    setConfirmDelete(false);
+  }
+
   function confirmDeletion() {
     setConfirmDelete(false);
     void actions.delete();
   }
 
   function reloadFirstPage() {
-    if (state.view === "list") return actions.list();
-    if (state.requestedId) return actions.open(state.requestedId);
+    if (state.view === "list") {
+      return actions.list();
+    }
+    if (state.requestedId) {
+      return actions.open(state.requestedId);
+    }
     return actions.list();
   }
 
   return {
-    feedback, cancelDelete,
+    feedback,
+    cancelDelete,
     view: {
-      state, busy, locked, actions, disabled, name, setName, originalName, setOriginalName, error, confirmDelete,
-      handlers: { submitName, retry, beginDelete, cancelDeletion, confirmDeletion, reloadFirstPage },
+      state,
+      busy,
+      locked,
+      actions,
+      disabled,
+      name,
+      setName,
+      originalName,
+      setOriginalName,
+      error,
+      confirmDelete,
+      handlers: {
+        submitName,
+        retry,
+        beginDelete,
+        cancelDeletion,
+        confirmDeletion,
+        reloadFirstPage,
+      },
     },
   };
 }
