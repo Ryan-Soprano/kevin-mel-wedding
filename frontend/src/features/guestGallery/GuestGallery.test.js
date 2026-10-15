@@ -148,7 +148,7 @@ test("real public gallery immediately renders one accessible slide with navigati
     assert.ok(scrapbookImages[0].includes(couplePhotos.find(photo => photo.id === 148).src), "couple photo leads before the solo snapshots");
     assert.ok(scrapbookImages.every(image => image.includes('loading="lazy"')));
     assert.match(scrapbook, /She makes an entrance. He brings the perfect hair/);
-    assert.match(scrapbook, /<button\b[^>]*class="scrapbook-share"[^>]*type="button"/);
+    assert.doesNotMatch(scrapbook, /scrapbook-share|Add your own memory/);
     assert.doesNotMatch(scrapbook, /href="#/);
     assert.doesNotMatch(scrapbook, /Meet Kevin|meet-the-couple|biography|Kevin is the friend|Melanie is a Taurus/);
     assert.ok(landing.indexOf("id=\"share-wedding-memory\"") < landing.indexOf("guest-gallery-photo"));

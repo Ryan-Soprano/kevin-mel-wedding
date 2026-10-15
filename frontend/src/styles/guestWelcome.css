@@ -1,0 +1,233 @@
+/* The welcome is a colorful scrapbook; composing a memory keeps its quiet card. */
+.guest-page--welcome {
+  --color-background: #fff7ed;
+  --color-primary: #21675e;
+  --color-primary-hover: #174f47;
+  --color-text: #3d2b32;
+  --color-muted: #65504f;
+  --guest-wine: #87344f;
+  --guest-parchment: #e9cbbb;
+  --guest-coral: #cf5c49;
+  --guest-gold: #edb648;
+  padding-top: 28px;
+}
+
+body:has(.guest-page--welcome) {
+  background: #fff7ed;
+}
+
+.guest-page--welcome .guest-header--welcome {
+  position: relative;
+  isolation: isolate;
+  margin-bottom: 36px;
+  padding: 32px 28px 36px;
+  border: 0;
+  border-radius: 28px 28px 72px 28px;
+  background: #fbe1d7;
+}
+
+/* Empty, static shapes stay decorative and never cover controls. */
+.guest-page--welcome .guest-header--welcome::before,
+.guest-page--welcome .guest-header--welcome::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  width: 42px;
+  aspect-ratio: 1;
+  background: var(--guest-gold);
+  clip-path: polygon(50% 0, 61% 32%, 85% 15%, 68% 39%, 100% 50%, 68% 61%, 85% 85%, 61% 68%, 50% 100%, 39% 68%, 15% 85%, 32% 61%, 0 50%, 32% 39%, 15% 15%, 39% 32%);
+  pointer-events: none;
+}
+
+.guest-page--welcome .guest-header--welcome::before {
+  top: 100px;
+  left: 5%;
+  transform: rotate(-12deg);
+}
+
+.guest-page--welcome .guest-header--welcome::after {
+  right: 5%;
+  bottom: 40px;
+  width: 28px;
+  background: var(--guest-coral);
+  transform: rotate(12deg);
+}
+
+.guest-page--welcome .guest-eyebrow {
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 auto 20px;
+  padding: 8px 14px;
+  border-radius: 5px;
+  color: #663d24;
+  background: #f8d78a;
+  letter-spacing: 0.1em;
+  transform: rotate(-1deg);
+}
+
+.guest-page--welcome .guest-welcome-title {
+  color: #8a3c36;
+}
+
+.guest-page--welcome .guest-names {
+  color: var(--guest-wine);
+}
+
+.guest-page--welcome .guest-ampersand {
+  color: #a84735;
+  text-shadow: 2px 3px 0 #f7c96e;
+}
+
+.guest-page--welcome .guest-welcome-introduction {
+  max-width: 580px;
+}
+
+.guest-page--welcome .couple-scrapbook {
+  padding-bottom: 26px;
+  border: 0;
+}
+
+.guest-page--welcome .couple-scrapbook-heading {
+  margin-bottom: 28px;
+}
+
+.guest-page--welcome .couple-scrapbook h2 {
+  text-decoration: underline wavy #e9b06c;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 8px;
+}
+
+.guest-page--welcome .scrapbook-photo {
+  position: relative;
+  border-color: #ead5c5;
+  background: #fffefa;
+  box-shadow: 3px 6px 0 #edd9c6, 0 8px 18px rgb(104 55 49 / 8%);
+}
+
+.guest-page--welcome .scrapbook-photo--arch::before,
+.guest-page--welcome .scrapbook-photo--together::before,
+.guest-page--welcome .scrapbook-photo--globe::before {
+  content: "";
+  position: absolute;
+  top: -7px;
+  left: calc(50% - 24px);
+  z-index: 1;
+  width: 48px;
+  height: 17px;
+  background: #efaf9ee6;
+  transform: rotate(-8deg);
+  pointer-events: none;
+}
+
+.guest-page--welcome .scrapbook-photo--together::before {
+  background: #f5ce77e6;
+  transform: rotate(5deg);
+}
+
+.guest-page--welcome .scrapbook-photo--globe::before {
+  background: #97c5b5e6;
+  transform: rotate(-5deg);
+}
+
+.guest-page--welcome .guest-choices-heading h2 {
+  font-size: clamp(1.8rem, 3vw, 2.1rem);
+}
+
+.guest-page--welcome .memory-choice--photos {
+  --choice-surface: #f9d4c9;
+  --choice-border: #d7a290;
+  --choice-ink: #80392f;
+  --choice-icon: #f3b5a3;
+}
+
+.guest-page--welcome .memory-choice--note {
+  --choice-surface: #fbe5aa;
+  --choice-border: #d5b766;
+  --choice-ink: #71491d;
+  --choice-icon: #f4cd6f;
+}
+
+.guest-page--welcome .memory-choice--audio {
+  --choice-surface: #d5e9df;
+  --choice-border: #99bdad;
+  --choice-ink: #225c50;
+  --choice-icon: #b1d4c4;
+}
+
+.guest-page--welcome .memory-choice {
+  border: 1px solid var(--choice-border);
+  border-radius: 20px 20px 28px 8px;
+  background: var(--choice-surface);
+  box-shadow: 0 4px 0 var(--choice-border);
+}
+
+.guest-page--welcome .memory-choice:hover:not(:disabled) {
+  border-color: var(--choice-ink);
+  background: var(--choice-surface);
+  box-shadow: 0 4px 0 var(--choice-ink);
+}
+
+.guest-page--welcome .memory-choice:focus-visible {
+  outline: 3px solid var(--choice-ink);
+  outline-offset: 5px;
+}
+
+.guest-page--welcome .memory-choice .memory-choice-icon {
+  color: var(--choice-ink);
+  border-radius: 50%;
+  background: var(--choice-icon);
+  transform: rotate(-6deg);
+}
+
+.guest-page--welcome .memory-choice-prompt,
+.guest-page--welcome .memory-choice-title,
+.guest-page--welcome .memory-choice .memory-choice-arrow {
+  color: var(--choice-ink);
+}
+
+.guest-page--welcome .memory-choice-description {
+  color: #594444;
+}
+
+.guest-page--welcome .guest-gallery {
+  border-top: 2px dashed #d9b49b;
+}
+
+.guest-page--welcome .guest-gallery-frame {
+  border-color: #d4b5a1;
+  background: #f5e4d1;
+}
+
+@media (max-width: 560px) {
+  .guest-page--welcome {
+    padding-top: 16px;
+  }
+
+  .guest-page--welcome .guest-header--welcome {
+    margin: 0 -8px 28px;
+    padding: 24px 16px 28px;
+    border-radius: 20px 20px 44px 20px;
+  }
+
+  .guest-page--welcome .guest-header--welcome::before {
+    top: 85px;
+    left: 10px;
+    width: 18px;
+  }
+
+  .guest-page--welcome .guest-header--welcome::after {
+    right: 12px;
+    bottom: 14px;
+    width: 18px;
+  }
+
+  .guest-page--welcome .guest-eyebrow {
+    padding: 7px 9px;
+    font-size: 0.6rem;
+    letter-spacing: 0.07em;
+  }
+
+  .guest-page--welcome .couple-scrapbook {
+    padding-bottom: 10px;
+  }
+}

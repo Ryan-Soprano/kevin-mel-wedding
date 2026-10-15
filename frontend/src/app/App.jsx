@@ -20,6 +20,7 @@ import CoupleScrapbook from "../features/guestGallery/CoupleScrapbook.jsx";
 import MemoryChoice from "../shared/components/MemoryChoice.jsx";
 import { useGuestHistory } from "./useGuestHistory.js";
 import "../styles/guest.css";
+import "../styles/guestWelcome.css";
 
 const AudioForm = lazy(
   () => import("../features/audio/components/AudioForm.jsx"),

@@ -91,13 +91,6 @@ export default function CoupleScrapbook() {
       <p className="scrapbook-caption">
         She makes an entrance. He brings the perfect hair.
       </p>
-      <button
-        className="scrapbook-share"
-        type="button"
-        onClick={() => document.getElementById("share-wedding-memory")?.focus()}
-      >
-        Add your own memory <span aria-hidden="true">↓</span>
-      </button>
     </section>
   );
 }
