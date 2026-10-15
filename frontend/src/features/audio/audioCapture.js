@@ -1,5 +1,5 @@
 import { AUDIO_CONTENT_TYPES, MAX_AUDIO_BYTES, MAX_AUDIO_SECONDS, RECORDER_MIME_CANDIDATES,
-  audioContentType, audioFilename } from "./audioConstraints.js";
+  audioContentType, audioFileContentType, audioFilename } from "./audioConstraints.js";
 
 export class AudioCaptureError extends Error {
   constructor(code) { super(code); this.code = code; }
@@ -11,7 +11,7 @@ export async function validateAudioFile(file, {
   setTimeoutImpl = globalThis.setTimeout, clearTimeoutImpl = globalThis.clearTimeout,
   timeoutMs = 20_000,
 } = {}) {
-  const type = audioContentType(file?.type);
+  const type = audioFileContentType(file);
   if (!(file instanceof Blob) || !type || !file.size || file.size > MAX_AUDIO_BYTES) {
     throw new AudioCaptureError("FILE_INVALID");
   }
