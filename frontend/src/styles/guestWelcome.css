@@ -1,176 +1,127 @@
-/* Kevin's greens and Melanie's maroon meet in the wedding backdrop. */
-.guest-page--welcome {
-  --color-primary: #4c5748;
-  --color-primary-hover: #394235;
-  --color-text: #372e2a;
-  --color-muted: #645a50;
-  --color-surface: #fffdf8;
-  --guest-wine: #70384b;
-  --guest-parchment: #dfd2bf;
-  padding-top: 28px;
-  color: #fff8ee;
+@import "./guestFonts.css";
+
+/* Warm paper carries the page. Their favorite colors are small, deliberate accents. */
+.guest-page {
+  --color-primary: #3f594c;
+  --color-primary-hover: #31463b;
+  --color-text: #34312c;
+  --color-muted: #6c655b;
+  --guest-wine: #77434c;
+  --guest-heading-font: "Fraunces", Georgia, "Times New Roman", serif;
+  font-family: "Manrope", Arial, sans-serif;
 }
 
-body:has(.guest-page--welcome) {
-  background-color: #3b5146;
-  background-image:
-    radial-gradient(ellipse at 35% 0, rgb(225 208 166 / 9%), transparent 55%),
-    linear-gradient(90deg, #344e41, #40574b 35%, #503f47 68%, #63394b);
+.guest-page h1,
+.guest-page .guest-choices-heading h2,
+.guest-page .guest-gallery h2,
+.guest-page .memory-form h2,
+.guest-page .memory-success h3 {
+  font-family: var(--guest-heading-font);
+  font-weight: 400;
 }
 
-.guest-page--welcome .guest-header--welcome {
-  margin-bottom: 36px;
-  padding: 26px 28px 32px;
+.guest-page--welcome { padding-top: 36px; }
+
+.guest-opening {
+  max-width: 390px;
+  margin: 0 auto;
+}
+
+.guest-page .guest-header--welcome {
+  margin: 0;
+  padding: 0;
   border: 0;
-  border-bottom: 1px solid rgb(240 225 203 / 30%);
+  text-align: center;
 }
 
 .guest-page--welcome .guest-eyebrow {
-  margin: 0 0 22px;
-  color: #eadbc4;
-  letter-spacing: 0.12em;
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 1.7px;
 }
 
-.guest-page--welcome .guest-welcome-title {
-  color: #f1dfd0;
-}
-
-.guest-page--welcome .guest-names {
-  color: #fff8ee;
-}
-
-.guest-page--welcome .guest-ampersand {
-  color: #eed7ad;
-}
-
-.guest-page--welcome .guest-welcome-character {
-  margin: 20px auto 0;
-  color: #fff8ee;
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: 1.08rem;
-  line-height: 1.6;
+.guest-page .guest-header--welcome h1 {
+  display: block;
+  margin: 10px -8px 25px;
+  color: var(--color-text);
+  font-size: 42px;
+  letter-spacing: -1.6px;
+  line-height: 1.12;
   text-wrap: balance;
 }
 
-.guest-page--welcome .guest-welcome-introduction {
-  max-width: 580px;
-  margin-top: 12px;
-  color: #f1e5d8;
+.guest-ampersand { color: var(--guest-wine); font-style: italic; }
+.guest-invitation { text-align: center; }
+
+.guest-invitation-copy {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.65;
 }
 
-.guest-page--welcome .couple-scrapbook {
-  padding-bottom: 26px;
-  border: 0;
+.guest-page .guest-share-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 27px;
+  width: 100%;
+  min-height: 52px;
+  margin: 19px 0 13px;
+  padding: 12px 18px;
+  border: 1px solid var(--color-primary);
+  border-radius: 4px;
+  color: #fffdf7;
+  background: var(--color-primary);
+  font-size: 14px;
+  font-weight: 500;
 }
 
-.guest-page--welcome .couple-scrapbook-heading {
-  margin-bottom: 28px;
+.guest-page .guest-share-button:hover { background: var(--color-primary-hover); }
+
+.guest-invitation-help {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 11px;
+  line-height: 1.7;
 }
 
-.guest-page--welcome .couple-scrapbook h2,
-.guest-page--welcome .guest-choices-heading h2,
-.guest-page--welcome .guest-gallery h2 {
-  color: #fff8ee;
-}
-
-.guest-page--welcome .scrapbook-photo {
-  border-color: #e7ddcf;
-  background: #fffefa;
-  box-shadow: 0 6px 18px rgb(20 25 22 / 22%);
-}
-
-.guest-page--welcome .scrapbook-caption {
-  color: #f1dfd0;
-}
-
-.guest-page--welcome .guest-choices-heading h2 {
-  font-size: clamp(1.8rem, 3vw, 2.1rem);
-}
-
-.guest-page--welcome .guest-choices-heading .guest-help,
-.guest-page--welcome .guest-privacy,
-.guest-page--welcome .guest-gallery header > p,
-.guest-page--welcome .guest-gallery-position,
-.guest-page--welcome .guest-gallery-playback-status,
-.guest-page--welcome .guest-gallery-overview-help {
-  color: #efe4d6;
-}
-
-.guest-page--welcome .memory-choice {
-  border: 1px solid #d7ccbd;
-  border-radius: 14px;
-  background: var(--color-surface);
-  box-shadow: 0 4px 16px rgb(20 25 22 / 12%);
-}
-
-.guest-page--welcome .memory-choice:hover:not(:disabled) {
-  border-color: #a99a84;
-  background: #fffdf8;
-  box-shadow: 0 5px 20px rgb(20 25 22 / 24%);
-}
-
-.guest-page--welcome .memory-choice:focus-visible {
-  outline: 3px solid #fff8ee;
-  outline-offset: 4px;
-}
-
-.guest-page--welcome .memory-choice .memory-choice-icon {
-  color: #554c43;
-  border-radius: 12px;
-  background: #eee8dc;
-}
-
-.guest-page--welcome .memory-choice-prompt,
-.guest-page--welcome .memory-choice-title {
-  color: var(--color-text);
-}
-
-.guest-page--welcome .memory-choice .memory-choice-arrow {
-  color: #6e6258;
-}
-
-.guest-page--welcome .guest-gallery {
-  border-top-color: rgb(240 225 203 / 30%);
-}
-
-.guest-page--welcome .guest-gallery-frame {
-  border-color: #dfd2bf;
-  background: #eee4d5;
-}
-
-.guest-page--welcome .shared-memories > .guest-couple,
-.guest-page--welcome .shared-memories > .guest-help {
-  color: #efe4d6;
-}
-
-.guest-page--welcome .shared-memory {
-  color: var(--color-text);
-}
-
-.guest-page--welcome button:focus-visible {
-  outline-color: #fff8ee;
-}
-
-.guest-page--welcome .shared-memory button:focus-visible {
-  outline-color: var(--color-primary);
-}
+.guest-invitation .guest-draft-notice { margin-top: 16px; text-align: left; }
+.guest-page .guest-gallery h2 { color: var(--color-text); }
+.guest-page .memory-choice-prompt { font-family: var(--guest-heading-font); }
 
 @media (max-width: 560px) {
-  .guest-page--welcome {
-    padding-top: 16px;
+  .guest-page--welcome { padding: 29px 26px 32px; }
+}
+
+@media (max-width: 360px) {
+  .guest-page--welcome { padding: 25px 20px 30px; }
+}
+
+@media (min-width: 800px) {
+  .guest-page--welcome { padding-top: 64px; }
+
+  .guest-opening {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: center;
+    column-gap: clamp(42px, 6vw, 80px);
+    max-width: 920px;
+    min-height: 540px;
+    padding: 12px 12px 30px;
   }
 
-  .guest-page--welcome .guest-header--welcome {
-    margin-bottom: 28px;
-    padding: 18px 0 28px;
+  .guest-opening > .guest-header { align-self: end; }
+
+  .guest-page .guest-header--welcome h1 {
+    margin: 18px 0 30px;
+    font-size: clamp(3.4rem, 5vw, 4.4rem);
+    letter-spacing: -0.045em;
   }
 
-  .guest-page--welcome .guest-eyebrow {
-    font-size: 0.6rem;
-    letter-spacing: 0.08em;
-  }
-
-  .guest-page--welcome .couple-scrapbook {
-    padding-bottom: 10px;
-  }
+  .guest-opening > .couple-scrapbook { grid-column: 2; grid-row: 1 / 3; }
+  .guest-opening > .guest-invitation { align-self: start; }
+  .guest-invitation-copy { font-size: 15px; }
+  .guest-page .guest-share-button { max-width: 340px; margin-inline: auto; }
 }
