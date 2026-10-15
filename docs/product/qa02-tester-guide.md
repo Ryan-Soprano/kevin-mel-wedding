@@ -2,7 +2,7 @@
 
 Prepared October 9, 2026. **Scenarios prepared; tester results pending.**
 
-Updated October 10 with the approved public photo gallery, private timeline, library/tag and portable-export scenarios. These additions remain prepared checks until tried in the intended test environment.
+Updated October 14 with the expanded 218-photo public carousel and its optional five-second slideshow. Private timeline, library/tag and portable-export scenarios remain included. These are prepared checks until tried in the intended test environment.
 
 We would like your help making the archive easy to use and useful to you. Try it first as a wedding guest, then as someone reviewing the private inbox. Tell Ryan what feels confusing, awkward or missing, as well as what works.
 
@@ -24,7 +24,7 @@ Keep the page open while sending or recovering an uncertain result. Refreshing, 
 
 | ID | Try this | What to look for |
 |---|---|---|
-| G0 — Couple gallery | On the guest welcome, browse Kevin and Melanie's approved photos, then use the link back to sharing a memory. | All 52 selected photos are available without sign-in, with full framing and readable descriptions. Sharing stays easy to reach. Viewing the couple gallery does not reveal private guest submissions. Use only the separate synthetic files Ryan supplies for upload tests. |
+| G0 — Couple gallery | On the guest welcome, browse the approved photos with Previous/Next or the arrow keys. Try Play/Pause slideshow, then use Share a memory above the gallery. | All 218 approved photos are available without sign-in, beginning with the original Grand Central photo. Only the current slide loads; its full framing and readable description remain clear. Optional playback advances every five seconds, pauses while hovered or hidden, and stops after manual navigation or keyboard focus. Reduced-motion settings keep manual browsing available. Sharing stays easy to reach. Viewing the gallery does not reveal private guest submissions. Use only the separate synthetic files Ryan supplies for upload tests. |
 | G1 — Named note | Choose **Write a note**. Try an empty message, then enter a made-up name and a short test note. Review it, edit it, review again and send. Tap Send twice quickly. | Clear validation keeps your work. Review shows the intended name/message. Sending produces one saved note and a clear confirmation. **Done** and **Share another memory** have distinct, understandable results. |
 | G2 — Unnamed note and draft | Start a note with the name blank. Before sending, go back to the memory choices and return. Send it, then choose another memory. | The draft survives in-page navigation. Leaving the name blank works. The inbox later says **Name not provided**. Returning to a saved result does not silently send again. |
 | G3 — Five photos | Select five supplied JPEG, PNG or WebP photos, each under 10 MB. Add a made-up name and different test captions. Review, edit, then send. | All five previews, filenames and captions stay associated with the correct photos. Progress distinguishes sending from saving. Only the confirmed saved count is celebrated. All five photos later appear in the private inbox with their matching captions. |

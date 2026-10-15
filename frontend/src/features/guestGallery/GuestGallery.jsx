@@ -3,7 +3,7 @@ import { couplePhotos } from "./photos.js";
 import { startSlideshow } from "./slideshow.js";
 import "./guestGallery.css";
 
-const SIZES = "(max-width: 600px) calc(100vw - 40px), 560px";
+const SIZES = "(max-width: 600px) calc(100vw - 48px), (max-width: 1020px) 90vw, 908px";
 
 function subscribeToMotionPreference(notify) {
   const preference = window.matchMedia("(prefers-reduced-motion: reduce)");

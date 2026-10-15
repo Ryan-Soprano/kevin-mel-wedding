@@ -4,7 +4,7 @@ Prepared October 10, 2026; package updated October 11. **Local technical prepara
 
 This runner gives Ryan a short interactive session in the actual packaged application, with synthetic archive data already present. It uses an existing local application image and the pinned PostgreSQL 17 image. It does not build or pull images, install dependencies, contact providers, deploy a site or use the existing Compose database.
 
-The guest welcome includes the already approved 52-photo couple gallery. The runner seeds 25 written notes: 24 guest notes, eight without names, and one couple memory. There are 22 Pending, two Kept and one Archived, plus partial memory dates, two albums, four timeline events and three tags. The gallery is public static content; it does not make private submissions public.
+The guest welcome includes the approved 218-photo carousel, with manual browsing and an optional five-second slideshow. The runner seeds 25 written notes: 24 guest notes, eight without names, and one couple memory. There are 22 Pending, two Kept and one Archived, plus partial memory dates, two albums, four timeline events and three tags. The gallery is public static content; it does not make private submissions public.
 
 ## Start a session
 
