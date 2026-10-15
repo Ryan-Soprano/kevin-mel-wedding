@@ -79,7 +79,7 @@ test("real public gallery immediately renders one accessible slide with navigati
   const server = await createServer({ configFile: false, logLevel: "silent", root: fileURLToPath(new URL("../../../", import.meta.url)),
     plugins: [react()], server: { middlewareMode: true, hmr: false, watch: null }, appType: "custom", optimizeDeps: { noDiscovery: true, include: [] } });
   try {
-    const { default: GuestGallery } = await server.ssrLoadModule("/src/features/guestGallery/GuestGallery.jsx");
+    const { default: GuestGallery, GalleryThumbnails } = await server.ssrLoadModule("/src/features/guestGallery/GuestGallery.jsx");
     const markup = renderToStaticMarkup(createElement(GuestGallery));
     const images = markup.match(/<img\b[^>]*>/g) ?? [];
     assert.equal(images.length, 1); assert.equal(images.filter(image => image.includes('loading="eager"')).length, 1);
@@ -93,21 +93,81 @@ test("real public gallery immediately renders one accessible slide with navigati
     assert.match(markup, /aria-roledescription="carousel"/); assert.match(markup, /aria-roledescription="slide"/);
     assert.match(markup, /aria-label="Previous photo"/); assert.match(markup, /aria-label="Next photo"/);
     assert.match(markup, /Play slideshow/); assert.match(markup, /aria-live="polite"/);
+    assert.match(markup, /Browse all 218 photos/);
+    assert.doesNotMatch(markup, /couple-scrapbook|scrapbook-snapshot|scrapbook-couple-print|welcome-assets|couple-arch|couple-globe/);
+    assert.ok(markup.indexOf("Play slideshow") < markup.indexOf('id="couple-gallery-slide"'), "playback control is the first interactive control");
     assert.doesNotMatch(markup, /Skip photos and share a memory|Back to Share a memory/);
     assert.doesNotMatch(markup, /\/api\/|image_page|\.pdf|<audio|<video/);
     const responsivePhoto = { id: 1, src: "/assets/synthetic-large.webp", smallSrc: "/assets/synthetic-small.webp",
       width: 1120, height: 840, smallWidth: 560, alt: "Synthetic responsive fixture" };
     const responsive = renderToStaticMarkup(createElement(GuestGallery, { photos: [responsivePhoto] }));
     assert.match(responsive, /srcSet="\/assets\/synthetic-small.webp 560w, \/assets\/synthetic-large.webp 1120w"/);
-    assert.match(responsive, /sizes="\(max-width: 600px\) calc\(100vw - 48px\), \(max-width: 1020px\) 90vw, 908px"/);
+    assert.match(responsive, /sizes="\(max-width: 480px\) calc\(100vw - 74px\), \(max-width: 1100px\) calc\(90vw - 26px\), 962px"/);
     assert.doesNotMatch(responsive, /Previous photo|Next photo|Play slideshow/);
     assert.equal(renderToStaticMarkup(createElement(GuestGallery, { photos: [] })), "");
+    const renderOverview = (visibleCount) => renderToStaticMarkup(createElement(GalleryThumbnails, {
+      photos: couplePhotos, visibleCount, onOpen() {}, onMore() {},
+    }));
+    const overview = renderOverview(24);
+    const thumbnails = overview.match(/<img\b[^>]*>/g) ?? [];
+    assert.equal(thumbnails.length, 24);
+    assert.ok(thumbnails.every(image => image.includes('loading="lazy"')));
+    assert.equal((overview.match(/<link\b[^>]*as="image"/g) ?? []).length, 0, "browsing does not preload the full gallery");
+    assert.ok(thumbnails[1].includes(couplePhotos[1].smallSrc), "thumbnail uses the smaller public copy when available");
+    assert.match(overview, /aria-label="View photo 24 of 218:/);
+    assert.doesNotMatch(overview, /aria-label="View photo 25 of 218:/);
+    assert.match(overview, /Showing 24 of 218 photos/);
+    assert.match(overview, /Show 24 more photos/);
+    assert.equal((renderOverview(48).match(/<img\b/g) ?? []).length, 48);
+    assert.match(renderOverview(216), /Show 2 more photos/);
+    const allPhotos = renderOverview(240);
+    assert.equal((allPhotos.match(/<img\b/g) ?? []).length, 218);
+    assert.match(allPhotos, /Showing 218 of 218 photos/);
+    assert.doesNotMatch(allPhotos, /more photos/);
     const { default: App } = await server.ssrLoadModule("/src/app/App.jsx");
     const landing = renderToStaticMarkup(createElement(App, { audioEnabled: false }));
+    const scrapbookStart = landing.indexOf('class="couple-scrapbook"');
+    const galleryStart = landing.indexOf('class="guest-gallery"');
+    assert.ok(scrapbookStart > landing.indexOf('id="share-wedding-memory"'));
+    assert.ok(galleryStart > scrapbookStart);
+    const scrapbook = landing.slice(scrapbookStart, galleryStart);
+    assert.match(scrapbook, /id="couple-scrapbook"/);
+    for (const photoId of [15, 90, 148]) {
+      const selected = couplePhotos.find(photo => photo.id === photoId);
+      assert.ok(scrapbook.includes(`src="${selected.src}"`), `welcome uses selected photo #${photoId}`);
+    }
+    for (const name of ["couple-arch", "couple-globe"]) {
+      const selected = new URL(`./welcome-assets/${name}.webp`, import.meta.url).href;
+      const smaller = new URL(`./welcome-assets/${name}-384.webp`, import.meta.url).href;
+      assert.ok(scrapbook.includes(`src="${selected}"`), `welcome includes ${name}`);
+      assert.ok(scrapbook.includes(`srcSet="${smaller} 384w, ${selected} 768w"`));
+    }
+    const scrapbookImages = scrapbook.match(/<img\b[^>]*>/g) ?? [];
+    assert.equal(scrapbookImages.length, 5);
+    assert.ok(scrapbookImages[0].includes(couplePhotos.find(photo => photo.id === 148).src), "couple photo leads before the solo snapshots");
+    assert.ok(scrapbookImages.every(image => image.includes('loading="lazy"')));
+    assert.match(scrapbook, /She makes an entrance. He brings the perfect hair/);
+    assert.match(scrapbook, /<button\b[^>]*class="scrapbook-share"[^>]*type="button"/);
+    assert.doesNotMatch(scrapbook, /href="#/);
+    assert.doesNotMatch(scrapbook, /Meet Kevin|meet-the-couple|biography|Kevin is the friend|Melanie is a Taurus/);
     assert.ok(landing.indexOf("id=\"share-wedding-memory\"") < landing.indexOf("guest-gallery-photo"));
+    assert.equal((landing.match(/class="memory-choice memory-choice--/g) ?? []).length, 2);
+    for (const label of ["Add photos", "Write a message", "Caught a good moment?", "Tell us a story."]) {
+      assert.ok(landing.includes(label), `welcome directly offers ${label}`);
+      assert.ok(landing.indexOf(label) < scrapbookStart);
+      assert.ok(landing.indexOf(label) < landing.indexOf("guest-gallery-photo"));
+    }
+    assert.match(landing, /A little love for/);
+    assert.match(landing, /From the wedding day or years before/);
+    assert.match(landing, /No account needed. Your name is optional/);
+    assert.doesNotMatch(landing, /memory-choice--audio|Record a message/);
+    const withAudio = renderToStaticMarkup(createElement(App, { audioEnabled: true }));
+    assert.equal((withAudio.match(/class="memory-choice memory-choice--/g) ?? []).length, 3);
+    assert.ok(withAudio.indexOf("Record a message") < withAudio.indexOf("guest-gallery-photo"));
+    assert.ok(withAudio.indexOf("Record a message") < withAudio.indexOf('class="couple-scrapbook"'));
+    assert.match(withAudio, /Record or upload a clip/);
     assert.doesNotMatch(landing, /Browse Kevin and Melanie|Skip photos and share a memory|favourite/);
-    assert.match(landing, /your favorite photos/);
-    assert.match(landing, /Your contribution goes directly to Kevin and Melanie’s private vault. It is not posted publicly/);
+    assert.match(landing, /Sent privately to Kevin and Melanie. They choose which memories to share/);
   } finally { await server.close(); }
 });
 

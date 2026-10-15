@@ -33,7 +33,7 @@ export default function PhotoBatchCompose({ view, privateArchive, onDialogStateC
         {!privateArchive && <BatchGuestName prefix={prefix} guestName={guestName} error={fields.name} locked={locked} onChange={actions.changeName} nameInput={nameInput} />}
         <PhotoPicker key={batchNumber} photos={photos} onPhotosChange={actions.updateSelection} inputRef={picker}
           onDialogStateChange={onDialogStateChange} disabled={locked} idPrefix={prefix + "-picker"} showHeading={false}
-          note="Keep this page open until every photo is confirmed. HEIC photos are not supported."
+          note="Keep this page open until every photo is confirmed. Your selected files are sent as originals."
           renderPhoto={(photo, index) => <PhotoBatchCard photo={photo} index={index} prefix={prefix} item={byId.get(photo.id)}
             locked={locked} busy={busy} globalWait={globalWait} error={fields[photo.id]} selected={selectedRetry.has(photo.id)}
             onCaptionChange={actions.changeCaption} onCaptionRef={actions.registerCaptionInput} onToggleRetry={actions.toggleRetry} />} />

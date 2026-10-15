@@ -16,6 +16,7 @@ import {
   navigationLocked,
 } from "./guestFlow.js";
 import GuestGallery from "../features/guestGallery/GuestGallery.jsx";
+import CoupleScrapbook from "../features/guestGallery/CoupleScrapbook.jsx";
 import MemoryChoice from "../shared/components/MemoryChoice.jsx";
 import { useGuestHistory } from "./useGuestHistory.js";
 import "../styles/guest.css";
@@ -59,6 +60,7 @@ export default function App({
   const started = new Set(flow.started);
   const locked = navigationLocked(flow);
   const unfinished = hasUnfinishedWork(flow);
+  const welcome = flow.screen === "welcome";
   const navigationHelp = getNavigationHelp(
     locked,
     flow.forms[flow.screen]?.complete,
@@ -115,7 +117,7 @@ export default function App({
   }, [unfinished]);
 
   const title = {
-    welcome: "Help Kevin and Melanie remember their wedding.",
+    welcome: "A little love for Kevin & Melanie",
     choose: "What would you like to share?",
     note: "A note for Kevin and Melanie",
     photos: "Photos for Kevin and Melanie",
@@ -127,7 +129,7 @@ export default function App({
     flow.forms.note,
     "View your saved note",
     "Continue your note",
-    "Write a note",
+    "Write a message",
   );
   const photosChoiceLabel = getChoiceLabel(
     flow.forms.photos,
@@ -139,93 +141,98 @@ export default function App({
     flow.forms.audio,
     "View your saved voice memory",
     "Continue your voice memory",
-    "Record a voice memory",
+    "Record a message",
   );
 
   return (
     <main className={`guest-page guest-page--${flow.screen}`}>
-      <header className="guest-header">
-        <p className="guest-couple">Kevin &amp; Melanie</p>
+      <header className={`guest-header${welcome ? " guest-header--welcome" : ""}`}>
+        {welcome ? (
+          <p className="guest-eyebrow">Good stories deserve a place to stay.</p>
+        ) : (
+          <p className="guest-couple">Kevin &amp; Melanie</p>
+        )}
         <h1 ref={heading} tabIndex={-1}>
-          {title}
+          {welcome ? (
+            <>
+              <span className="guest-welcome-title">A little love for</span>
+              <span className="guest-names">
+                Kevin <span className="guest-ampersand">&amp;</span> Melanie
+              </span>
+            </>
+          ) : title}
         </h1>
+        {welcome && (
+          <p className="guest-welcome-introduction">
+            {flow.audioEnabled
+              ? "A favorite photo, a good story, a few words from the heart."
+              : "A favorite photo, a good story, a wish for their next chapter."}
+            {" "}From the wedding day or years before, help them keep the moments
+            that matter.
+          </p>
+        )}
       </header>
 
-      {flow.screen === "welcome" && (
-        <section className="guest-welcome" aria-label="Share a wedding memory">
-          <p>
-            {flow.audioEnabled
-              ? "Share a note, your favorite photos, or a voice memory from the day."
-              : "Share a note or your favorite photos from the day."}
-          </p>
-          <p>
-            Your contribution goes directly to Kevin and Melanie’s private
-            vault. It is not posted publicly.
-          </p>
-          <button
-            id="share-wedding-memory"
-            type="button"
-            onClick={() => dispatch({ type: "CHOOSE" })}
-          >
-            Share a memory
-          </button>
-          <p className="guest-help">
-            No account needed. Your name is optional.
-          </p>
-        </section>
-      )}
-      {flow.screen === "welcome" && <GuestGallery />}
-      {flow.screen === "welcome" && (
-        <Suspense fallback={null}>
-          <PublicMemories />
-        </Suspense>
-      )}
-
-      {flow.screen === "choose" && (
-        <section className="guest-choices" aria-label="Choose your memory type">
-          <p>
-            Choose one type at a time. You can share another memory after it is
-            saved.
-          </p>
-          <div className="memory-choices">
-            <MemoryChoice
-              kind="note"
-              title={noteChoiceLabel}
-              onClick={() => dispatch({ type: "SELECT", kind: "note" })}
-            >
-              A story, a wish, or a little moment you’ll remember. Up to 5,000
-              characters.
-            </MemoryChoice>
+      {(welcome || flow.screen === "choose") && (
+        <section
+          className={`guest-choices${welcome ? " guest-choices--welcome" : ""}`}
+          aria-labelledby="share-wedding-memory"
+        >
+          <div className="guest-choices-heading">
+            <h2 id="share-wedding-memory" tabIndex={-1}>
+              {welcome ? "Share a memory" : "Choose a memory"}
+            </h2>
+            <p className="guest-help">No account needed. Your name is optional.</p>
+          </div>
+          <div className={`memory-choices${flow.audioEnabled ? " memory-choices--three" : ""}`}>
             <MemoryChoice
               kind="photos"
+              prompt="Caught a good moment?"
               title={photosChoiceLabel}
               onClick={() => dispatch({ type: "SELECT", kind: "photos" })}
             >
-              Share the day through your lens. Up to 5 JPEG, PNG or WebP photos
-              · 10 MB each.
+              A favorite snapshot or a few from the day. Up to 5 photos · 10 MB each.
+            </MemoryChoice>
+            <MemoryChoice
+              kind="note"
+              prompt="Tell us a story."
+              title={noteChoiceLabel}
+              onClick={() => dispatch({ type: "SELECT", kind: "note" })}
+            >
+              A good memory, a little advice, or a wish for what’s next.
             </MemoryChoice>
             {flow.audioEnabled && (
               <MemoryChoice
                 kind="audio"
+                prompt="Leave a little love."
                 title={audioChoiceLabel}
                 onClick={() => dispatch({ type: "SELECT", kind: "audio" })}
               >
-                Say it in your own voice. One audio clip · up to two minutes and
-                25 MB.
+                Say it in your own voice. Record or upload a clip up to two minutes.
               </MemoryChoice>
             )}
           </div>
-          <p className="guest-help">
-            Your memories stay private. No account needed.
+          <p className="guest-help guest-privacy">
+            Sent privately to Kevin and Melanie. They choose which memories to share.
           </p>
-          <button
-            type="button"
-            className="button-secondary"
-            onClick={() => dispatch({ type: "BACK" })}
-          >
-            Back
-          </button>
+          {!welcome && (
+            <button
+              type="button"
+              className="button-secondary"
+              onClick={() => dispatch({ type: "BACK" })}
+            >
+              Back to welcome
+            </button>
+          )}
         </section>
+      )}
+
+      {welcome && <CoupleScrapbook />}
+      {welcome && <GuestGallery />}
+      {welcome && (
+        <Suspense fallback={null}>
+          <PublicMemories />
+        </Suspense>
       )}
 
       {(flow.screen === "note" ||
