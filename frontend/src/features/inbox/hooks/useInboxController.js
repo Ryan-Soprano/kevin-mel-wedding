@@ -50,8 +50,12 @@ export function useInboxController(createController) {
   const updatePages = useCallback(next => { pagesRef.current = next; setPages(next); }, []);
   const creationRef = useRef(null);
   const [creationState, setCreationFlow] = useState(null);
-  const setCreationState = useCallback(next => { creationRef.current = next; setCreationFlow(next); }, []);
   const [navigationNotice, setNavigationNotice] = useState(null);
+  const setCreationState = useCallback(next => {
+    creationRef.current = next;
+    setCreationFlow(next);
+    if (!next?.busy && !next?.pending) setNavigationNotice(null);
+  }, []);
   const [deleteConfirmation, setDeleteConfirmation] = useState(null);
 
   useEffect(() => {
