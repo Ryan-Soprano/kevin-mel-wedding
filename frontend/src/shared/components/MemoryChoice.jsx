@@ -4,10 +4,10 @@ const ICONS = {
   audio: <><rect x="9" y="2" width="6" height="13" rx="3" /><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8" /></>,
 };
 
-export default function MemoryChoice({ kind, title, children, onClick, disabled = false }) {
-  return <button type="button" className="memory-choice" onClick={onClick} disabled={disabled}>
+export default function MemoryChoice({ kind, title, prompt, children, onClick, disabled = false }) {
+  return <button type="button" className={`memory-choice memory-choice--${kind}`} onClick={onClick} disabled={disabled}>
     <span className="memory-choice-icon"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">{ICONS[kind]}</svg></span>
-    <span className="memory-choice-copy"><span className="memory-choice-title">{title}</span><span className="memory-choice-description">{children}</span></span>
+    <span className="memory-choice-copy">{prompt && <span className="memory-choice-prompt">{prompt}</span>}<span className="memory-choice-title">{title}</span><span className="memory-choice-description">{children}</span></span>
     <svg className="memory-choice-arrow" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 12h14m-5-5 5 5-5 5" /></svg>
   </button>;
 }

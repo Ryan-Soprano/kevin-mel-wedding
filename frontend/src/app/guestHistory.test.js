@@ -67,6 +67,49 @@ test("Back and Forward revisit every guest screen without replacing mounted form
 });
 
 for (const kind of ["note", "photos", "audio"]) {
+  test(`${kind} welcome entry preserves its draft through direct browser Back and Forward`, () => {
+    const f = fixture();
+    try {
+      const welcomeEntry = f.history.state;
+      f.update({ type: "SELECT", kind });
+      f.update({ type: "FORM_STATE", kind, state: { hasDraft: true } });
+      const forms = f.flow().forms, started = f.flow().started, entry = f.history.state;
+      const writes = f.writes.length;
+      assert.equal(f.entries.length, 2, "direct selection has no intermediate choices entry");
+      f.history.go(-1);
+      assert.equal(f.flow().screen, "welcome"); assert.deepEqual(f.history.state, welcomeEntry);
+      assert.equal(f.flow().forms, forms); assert.equal(f.flow().started, started);
+      assert.equal(hasUnfinishedWork(f.flow()), true);
+      f.history.go(1);
+      assert.equal(f.flow().screen, kind); assert.deepEqual(f.history.state, entry);
+      assert.equal(f.flow().forms, forms); assert.equal(f.flow().started, started);
+      assert.equal(f.flow().forms[kind].hasDraft, true);
+      assert.deepEqual(started, [kind]); assert.equal(f.writes.length, writes);
+      assert.deepEqual(f.navigations, ["welcome", kind]);
+    } finally { f.recording.dispose(); }
+  });
+
+  test(`${kind} direct welcome entry bounces busy or pending browser navigation without a choices entry`, () => {
+    for (const state of [{ busy: true }, { pending: true }]) {
+      const f = fixture();
+      try {
+        f.update({ type: "SELECT", kind });
+        f.update({ type: "FORM_STATE", kind, state: { ...state, hasDraft: true } });
+        const before = f.flow(), entry = f.history.state, writes = f.writes.length;
+        assert.equal(f.entries.length, 2);
+        f.history.go(-1);
+        assert.deepEqual(f.movements, [-1, 1]); assert.deepEqual(f.history.state, entry);
+        assert.equal(f.flow(), before); assert.deepEqual(f.navigations, []);
+        assert.equal(f.writes.length, writes); assert.equal(hasUnfinishedWork(f.flow()), true);
+        f.update({ type: "FORM_STATE", kind, state: { hasDraft: true } });
+        f.history.go(-1); assert.equal(f.flow().screen, "welcome");
+        f.history.go(1); assert.equal(f.flow().screen, kind);
+        assert.equal(f.flow().forms[kind].hasDraft, true); assert.deepEqual(f.flow().started, [kind]);
+        assert.equal(f.writes.length, writes);
+      } finally { f.recording.dispose(); }
+    }
+  });
+
   test(`${kind} busy/pending work bounces browser navigation back to its owned entry`, () => {
     for (const state of [{ busy: true }, { pending: true }]) {
       const f = fixture();

@@ -6,17 +6,17 @@ import { AUDIO_ACCEPT } from "../audioConstraints.js";
 const INITIAL = { phase: "idle", supported: false, clip: null, errorCode: null, elapsedSeconds: 0 };
 const CAPTURE_BUSY = new Set(["requesting", "recording", "stopping", "checking"]);
 const CAPTURE_MESSAGES = {
-  PERMISSION_DENIED: "Microphone access was not allowed. You can choose an audio file or write a note instead.",
-  PERMISSION_TIMEOUT: "Microphone access could not be confirmed. Try recording again, choose a file, or write a note.",
-  FORMAT_UNSUPPORTED: "This browser’s recording format is not supported. Choose a WebM, Ogg, or M4A file, or write a note.",
+  PERMISSION_DENIED: "Microphone access was not allowed. You can choose an audio file or write a message instead.",
+  PERMISSION_TIMEOUT: "Microphone access could not be confirmed. Try recording again, choose a file, or write a message.",
+  FORMAT_UNSUPPORTED: "This browser’s recording format is not supported. Choose a WebM, Ogg, or M4A file, or write a message.",
   FILE_INVALID: "Choose a non-empty WebM, Ogg, or M4A audio file up to 25 MB.",
-  BYTE_LIMIT: "This recording grew beyond 25 MB. Please make a shorter recording or write a note.",
+  BYTE_LIMIT: "This recording grew beyond 25 MB. Please make a shorter recording or write a message.",
   DURATION_LIMIT: "This clip is longer than two minutes. Please choose a shorter clip or re-record.",
-  DECODE_UNSUPPORTED: "This browser cannot check audio playback. Try another browser or write a note.",
-  DECODE_TIMEOUT: "This clip took too long to check. Choose a shorter file or write a note.",
-  DECODE_FAILED: "This clip could not be played here. Choose another file, re-record, or write a note.",
+  DECODE_UNSUPPORTED: "This browser cannot check audio playback. Try another browser or write a message.",
+  DECODE_TIMEOUT: "This clip took too long to check. Choose a shorter file or write a message.",
+  DECODE_FAILED: "This clip could not be played here. Choose another file, re-record, or write a message.",
   INTERRUPTED: "Recording was interrupted and was not saved. You can record again or choose a file.",
-  RECORDER_ERROR: "Recording could not be completed. Try again, choose an audio file, or write a note.",
+  RECORDER_ERROR: "Recording could not be completed. Try again, choose an audio file, or write a message.",
 };
 const time = seconds => `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 
@@ -128,7 +128,8 @@ export default function AudioForm({
   return (
     <section className="audio-memory" aria-labelledby={`${prefix}-title`}>
       <h2 id={`${prefix}-title`}>{privateArchive ? "Add a voice memory" : "Share a voice memory"}</h2>
-      <p>Record a message up to two minutes, or choose one WebM, Ogg, or M4A audio file up to 25 MB. It stays private for Kevin and Melanie.</p>
+      <p>Record up to two minutes. Listen before sending.</p>
+      <p className="guest-help">{privateArchive ? "Your recording starts private in your archive." : "Sent privately to Kevin and Melanie. They may choose to share it."}</p>
       <form onSubmit={submit} noValidate aria-label="Share a voice memory" aria-busy={busy || recordingBusy}>
         {!saved && (
           <div className="audio-memory-actions">
@@ -138,18 +139,22 @@ export default function AudioForm({
             {snapshot.clip && !locked && <button type="button" className="button-secondary" onClick={discard}>Discard clip</button>}
           </div>
         )}
-        {snapshot.phase === "unsupported" && <p>Recording is unavailable in this browser. Choose an audio file below or use Write a note from memory choices.</p>}
-        <p className="guest-help">Microphone access is requested only when you choose Start recording. Listen to the finished clip before saving. An interrupted recording is discarded.</p>
+        {snapshot.phase === "unsupported" && <p>Recording is unavailable in this browser. Choose an audio file below or use Write a message from memory choices.</p>}
         {snapshot.phase === "requesting" && <p role="status">Waiting for microphone permission…</p>}
         {snapshot.phase === "recording" && <p role="status">Recording · {time(snapshot.elapsedSeconds)} / 2:00. Recording stops automatically just before two minutes.</p>}
         {snapshot.phase === "stopping" && <p role="status">Finishing the recording…</p>}
         {snapshot.phase === "checking" && <p role="status">Checking the clip for playback and length…</p>}
         {captureError && <p className="form-error" role="alert">{captureError} Nothing was uploaded.</p>}
         <div>
-          <label htmlFor={`${prefix}-file`}>Choose an existing audio file</label>
+          <label htmlFor={`${prefix}-file`}>Or upload an audio file</label>
           <input id={`${prefix}-file`} type="file" accept={AUDIO_ACCEPT} disabled={locked || recordingBusy} onChange={choose}
             onClick={() => onDialogStateChange?.(true)} onCancel={() => onDialogStateChange?.(false)} />
-          <p className="guest-help">WebM and Ogg must contain Opus audio; M4A/MP4 must contain AAC audio. Video and other formats are not accepted.</p>
+          <details className="guest-help audio-memory-help">
+            <summary>Audio formats and recording help</summary>
+            <p>Choose one WebM, Ogg, or M4A/MP4 audio file up to two minutes and 25 MB.</p>
+            <p>WebM and Ogg must contain Opus audio; M4A/MP4 must contain AAC audio. Video and other formats are not accepted.</p>
+            <p>Microphone access is requested only when you choose Start recording. An interrupted recording is discarded.</p>
+          </details>
         </div>
         {snapshot.clip && (
           <div className="audio-memory-preview">

@@ -37,7 +37,7 @@ class ExportJobServiceTest {
         UUID id=UUID.randomUUID(),key=UUID.randomUUID();
         assertStatus(()->jobs.create(id,null),428); jobs.create(id,"*"); ready(id);
         assertStatus(()->jobs.create(id,"*"),412); verify(repository,times(1)).capture();
-        assertThat(jobs.prepare(id,1,key.toString()).statusCode()).isEqualTo(202); var done=prepared(id);
+        assertThat(prepareWhenIdle(id,1,key.toString()).statusCode()).isEqualTo(202); var done=prepared(id);
         assertThat(done.complete()).isTrue(); assertThat(done.preparedPart().kind()).isEqualTo("INDEX");
         assertThat(jobs.prepare(id,1,key.toString()).statusCode()).isEqualTo(200);
         assertThat(jobs.attempt(id,key).state()).isEqualTo("SUCCEEDED"); assertStatus(()->jobs.cancel(id,key.toString()),409);
@@ -56,7 +56,7 @@ class ExportJobServiceTest {
     }
 
     @Test void expiryAndRestartAreExplicitAndTerminalIdentitySurvivesUntilHardExpiry() throws Exception {
-        UUID id=create(); jobs.prepare(id,1,UUID.randomUUID().toString()); prepared(id);
+        UUID id=create(); prepareWhenIdle(id,1,UUID.randomUUID().toString()); prepared(id);
         clock.now=clock.now.plus(Duration.ofMinutes(31)); var expired=jobs.get(id);
         assertThat(expired.state()).isEqualTo("EXPIRED"); assertThat(expired.totalMemories()).isZero(); assertThat(expired.preparedPart()).isNull();
         assertStatus(()->jobs.create(id,"*"),412);
@@ -75,7 +75,7 @@ class ExportJobServiceTest {
     }
 
     @Test void activeDiscoveryIsScopedAndCredentialRotationRetiresTheOldJob() throws Exception {
-        UUID id=create();jobs.prepare(id,1,UUID.randomUUID().toString());var old=prepared(id);
+        UUID id=create();prepareWhenIdle(id,1,UUID.randomUUID().toString());var old=prepared(id);
         assertThat(jobs.current().exportId()).isEqualTo(id);var owner=actor.get();
         actor.set(new ExportAuthority.Actor(UUID.randomUUID(),1));assertStatus(()->jobs.current(),404);
         actor.set(new ExportAuthority.Actor(owner.accountId(),2));assertStatus(()->jobs.current(),404);assertStatus(()->jobs.get(id),404);
@@ -90,12 +90,12 @@ class ExportJobServiceTest {
         byte[] bytes={1,2,3,4}; var original=original(bytes);snapshot=snapshot(List.of(original));objects.put("originals/"+original.assetId(),bytes);
         var entered=new CountDownLatch(1);var release=new CountDownLatch(1);
         when(storage.read(anyString(),anyInt())).thenAnswer(call->{entered.countDown();assertThat(release.await(5,TimeUnit.SECONDS)).isTrue();return Optional.of(bytes);});
-        UUID id=create();jobs.prepare(id,1,UUID.randomUUID().toString());assertThat(entered.await(5,TimeUnit.SECONDS)).isTrue();
+        UUID id=create();prepareWhenIdle(id,1,UUID.randomUUID().toString());assertThat(entered.await(5,TimeUnit.SECONDS)).isTrue();
         current.set(false);release.countDown(); var stale=terminal(id);
         assertThat(stale.state()).isEqualTo("STALE");assertThat(stale.preparedPart()).isNull();assertThat(stale.totalOriginals()).isZero();
         current.set(true);var enteredAgain=new CountDownLatch(1);var releaseAgain=new CountDownLatch(1);
         when(storage.read(anyString(),anyInt())).thenAnswer(call->{enteredAgain.countDown();assertThat(releaseAgain.await(5,TimeUnit.SECONDS)).isTrue();return Optional.of(bytes);});
-        UUID second=create();jobs.prepare(second,1,UUID.randomUUID().toString());assertThat(enteredAgain.await(5,TimeUnit.SECONDS)).isTrue();var rejected=new CountDownLatch(1);
+        UUID second=create();prepareWhenIdle(second,1,UUID.randomUUID().toString());assertThat(enteredAgain.await(5,TimeUnit.SECONDS)).isTrue();var rejected=new CountDownLatch(1);
         doAnswer(ignored->{if(!allowed.get()){if(Thread.currentThread().getName().equals("portable-export-worker"))rejected.countDown();throw new ApiException(401,"AUTH_REQUIRED","Synthetic revoked account.");}return null;}).when(authority).require(any());
         allowed.set(false);releaseAgain.countDown();
         assertStatus(()->jobs.get(second),401);
@@ -106,15 +106,15 @@ class ExportJobServiceTest {
         byte[] bytes={7,8,9};var originals=new ArrayList<PortableSnapshot.Original>();
         for(int i=0;i<53;i++) originals.add(original(bytes));snapshot=snapshot(originals);
         UUID id=create();assertThat(jobs.get(id).originalPartCount()).isEqualTo(2);assertStatus(()->jobs.prepare(id,3,UUID.randomUUID().toString()),409);
-        jobs.prepare(id,1,UUID.randomUUID().toString());var warning=prepared(id);assertThat(warning.unavailableOriginals()).isEqualTo(50);assertThat(warning.state()).isEqualTo("READY_WITH_WARNINGS");
+        prepareWhenIdle(id,1,UUID.randomUUID().toString());var warning=prepared(id);assertThat(warning.unavailableOriginals()).isEqualTo(50);assertThat(warning.state()).isEqualTo("READY_WITH_WARNINGS");
         var first=jobs.issues(id,"20",null);assertThat(first.items()).hasSize(20);assertThat(jobs.issues(id,"20",first.nextCursor()).items()).hasSize(20);
         assertStatus(()->jobs.parts(id,"20",first.nextCursor()),400);
         for(var original:originals) objects.put("originals/"+original.assetId(),bytes);
-        jobs.prepare(id,2,UUID.randomUUID().toString());prepared(id);jobs.prepare(id,3,UUID.randomUUID().toString());var index=prepared(id);
+        prepareWhenIdle(id,2,UUID.randomUUID().toString());prepared(id);prepareWhenIdle(id,3,UUID.randomUUID().toString());var index=prepared(id);
         assertThat(index.complete()).isFalse();assertThat(index.unavailableOriginals()).isEqualTo(50);
-        UUID retry=UUID.randomUUID();var beginning=jobs.prepare(id,1,retry.toString()).status();assertThat(beginning.indexNeedsRefresh()).isTrue();assertThat(beginning.complete()).isFalse();
+        UUID retry=UUID.randomUUID();var beginning=prepareWhenIdle(id,1,retry.toString()).status();assertThat(beginning.indexNeedsRefresh()).isTrue();assertThat(beginning.complete()).isFalse();
         prepared(id);assertThat(jobs.get(id).availableOriginals()).isEqualTo(53);assertThat(jobs.issues(id,"50",null).items()).isEmpty();
-        jobs.prepare(id,3,UUID.randomUUID().toString());assertThat(prepared(id).complete()).isTrue();
+        prepareWhenIdle(id,3,UUID.randomUUID().toString());assertThat(prepared(id).complete()).isTrue();
         var pages=jobs.parts(id,"2",null);assertThat(pages.items()).hasSize(2);assertThat(jobs.parts(id,"2",pages.nextCursor()).items()).hasSize(1);
     }
 
@@ -139,7 +139,7 @@ class ExportJobServiceTest {
 
     @Test void byteChunksUseCheapGuardsAndFullValidationIsBoundedByParts() throws Exception {
         byte[] bytes=new byte[2*1024*1024];Arrays.fill(bytes,(byte)37);var original=original(bytes);snapshot=snapshot(List.of(original));objects.put("originals/"+original.assetId(),bytes);
-        UUID id=create();clearInvocations(repository);jobs.prepare(id,1,UUID.randomUUID().toString());prepared(id);
+        UUID id=create();clearInvocations(repository);prepareWhenIdle(id,1,UUID.randomUUID().toString());prepared(id);
         verify(repository,times(2)).originalStillCurrent(any(),eq(original));verify(repository,atMost(40)).stillCurrent(any());
     }
 
@@ -147,7 +147,7 @@ class ExportJobServiceTest {
         jobs.close();var denyCleanup=new AtomicBoolean(false);var paths=new CopyOnWriteArrayList<Path>();
         jobs=new ExportJobService(repository,writer,authority,clock,path->{paths.add(path);if(denyCleanup.get())throw new IOException("Synthetic shutdown cleanup failure.");Files.deleteIfExists(path);});
         try {
-            UUID id=create();jobs.prepare(id,1,UUID.randomUUID().toString());prepared(id);denyCleanup.set(true);
+            UUID id=create();prepareWhenIdle(id,1,UUID.randomUUID().toString());prepared(id);denyCleanup.set(true);
             assertStatus(jobs::close,503);assertThat(paths).anyMatch(Files::exists);
             assertStatus(()->jobs.create(UUID.randomUUID(),"*"),410);
             denyCleanup.set(false);jobs.close();assertThat(paths).allMatch(path->!Files.exists(path));
@@ -158,7 +158,7 @@ class ExportJobServiceTest {
         jobs.close();var blocking=new AtomicBoolean(false);var entered=new CountDownLatch(1);var release=new CountDownLatch(1);
         jobs=new ExportJobService(repository,writer,authority,clock,path->{if(blocking.get()){entered.countDown();try {if(!release.await(5,TimeUnit.SECONDS))throw new IOException("Synthetic cleanup wait.");}catch(InterruptedException failure){Thread.currentThread().interrupt();throw new IOException("Synthetic cleanup interrupted.");}}Files.deleteIfExists(path);});
         try(var requests=Executors.newSingleThreadExecutor()) {
-            UUID id=create();jobs.prepare(id,1,UUID.randomUUID().toString());prepared(id);UUID attempt=UUID.randomUUID();blocking.set(true);
+            UUID id=create();prepareWhenIdle(id,1,UUID.randomUUID().toString());prepared(id);UUID attempt=UUID.randomUUID();blocking.set(true);
             var cancelled=requests.submit(()->jobs.cancel(id,attempt.toString()));
             try {assertThat(entered.await(5,TimeUnit.SECONDS)).isTrue();allowed.set(false);}finally {release.countDown();}
             assertThatThrownBy(()->cancelled.get(5,TimeUnit.SECONDS)).isInstanceOfSatisfying(ExecutionException.class,error->assertThat(error.getCause()).isInstanceOfSatisfying(ApiException.class,api->assertThat(api.status()).isEqualTo(401)));

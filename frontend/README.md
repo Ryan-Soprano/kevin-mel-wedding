@@ -21,6 +21,7 @@ For prerequisites, install/run/check commands, the development proxy, and curren
 | [src/features/inbox/api/inboxHistory.js](src/features/inbox/api/inboxHistory.js) | Browser Back/Forward with fresh private reads, mutation guards and disposable in-memory route metadata; browser history contains opaque keys only |
 | [src/app/guestHistory.js](src/app/guestHistory.js) / [useGuestHistory.js](src/app/useGuestHistory.js) | Guest screen history; visited forms retain drafts in memory and pending submissions block traversal |
 | [src/shared/components/MemoryChoice.jsx](src/shared/components/MemoryChoice.jsx) | Accessible memory-type cards shared by guest and private creation screens |
+| [src/features/guestGallery/](src/features/guestGallery/) | Approved public photos, the welcome collage, single-photo slideshow and batched thumbnail browser; separate from private archive data |
 | [src/features/inbox/api/inboxController.js](src/features/inbox/api/inboxController.js) | Private state publication, access checks, cancellation, lifecycle and navigation; composes feature actions |
 | [src/features/inbox/api/memoryMutationActions.js](src/features/inbox/api/memoryMutationActions.js) | Memory review, audiences, private links and metadata edits, including revision checks and unconfirmed-action recovery |
 | [src/features/inbox/api/inboxMedia.js](src/features/inbox/api/inboxMedia.js) | Original photo/audio loading, integrity checks and owned preview URL cleanup |
