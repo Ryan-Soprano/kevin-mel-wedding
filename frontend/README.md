@@ -15,6 +15,7 @@ For prerequisites, install/run/check commands, the development proxy, and curren
 | [src/features/inbox/components/Inbox.jsx](src/features/inbox/components/Inbox.jsx) | Shared private archive page layout; InboxScreens.jsx selects small screen adapters, each owning its feature props and reset key |
 | [src/features/inbox/components/ArchiveLayout.jsx](src/features/inbox/components/ArchiveLayout.jsx) | Shared cards, action rows, empty states and pagination for archive features |
 | [src/features/timeline/components/Timeline.jsx](src/features/timeline/components/Timeline.jsx) | Timeline shell and focused list/editor/detail/selector/recovery views; its hook owns local fields, filters, validation and focus while the existing timeline coordinator owns requests and recovery |
+| [src/features/albums/components/Albums.jsx](src/features/albums/components/Albums.jsx) | Album shell and focused list/name/detail/selector/recovery views; its hook owns local drafts, validation, focus and action wiring while the existing album coordinator owns requests, ordering and recovery |
 | [src/features/inbox/api/inboxHistory.js](src/features/inbox/api/inboxHistory.js) | Browser Back/Forward with fresh private reads, mutation guards and disposable in-memory route metadata; browser history contains opaque keys only |
 | [src/app/guestHistory.js](src/app/guestHistory.js) / [useGuestHistory.js](src/app/useGuestHistory.js) | Guest screen history; visited forms retain drafts in memory and pending submissions block traversal |
 | [src/shared/components/MemoryChoice.jsx](src/shared/components/MemoryChoice.jsx) | Accessible memory-type cards shared by guest and private creation screens |
@@ -41,6 +42,14 @@ For prerequisites, install/run/check commands, the development proxy, and curren
 | [package.json](package.json) / [package-lock.json](package-lock.json) | Scripts, dependency ranges, and resolved versions |
 
 Keep component tests beside the implementation they exercise. Update this map when boundaries change; keep implementation work in Notion.
+
+## Source readability
+
+Ryan prefers the expanded formatting used in the album files. Put long imports,
+JSX props and structured objects on multiple lines, keep statements and test
+assertions separate, and use clear blocks for control flow. Favor readable code
+over dense one-line expressions so someone learning the project can follow it.
+Use this style for new and edited code without reformatting unrelated files.
 
 The [v1 contract](../docs/api/v1/README.md) owns API semantics and implementation gaps.
 Run `npm test` here for transport, decoder, and mock contract checks; no backend or
