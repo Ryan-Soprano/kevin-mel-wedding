@@ -29,3 +29,66 @@ Packaged runtime image: `sha256:0c9451d295937885783a5a1d3b8ee7ab59b59ded0bf4ec96
 Kevin and Melanie's real onboarding and product feedback remain open under REV-01/REV-03. Physical-device, actual screen-reader/native-dialog, hidden-tab/BFCache, live-provider originals and hosted network/capacity/recovery acceptance remain open. Local synthetic archive-size observations do not establish reception traffic or hosted capacity. Audio gates remain off for release.
 
 No paid resources, deployment, provider/runtime configuration, dependencies, real account activation, invitation or tester message is included. Self-service couple export remains ARC-05. Operator recovery excludes accounts, passwords, sessions and configuration. Tag-only deletion has no independent deletion ledger; an older valid package can restore earlier labels or organization while current memory-erasure authority still removes erased members and originals. V13 closes binary rollback to a V12 artifact under the existing migration guard.
+
+## Library presentation refactor — 2026-10-15
+
+The focused refactor starts from main `33103e3` on
+`feature/library-presentation-refactor`. `Library` now composes readable filter,
+result, tag-chooser, recovery and paging views. A local hook owns editable fields,
+validation, feedback focus and action wiring; display helpers make attribution
+and excerpt fallbacks explicit. This removes nested rendering and dense inline
+handlers while retaining the existing mount/reset boundaries. It adds no
+automatic searches, caching or request effects and makes no runtime-speed claim.
+The coordinator, adapters, normalizers, Tags/MemoryTags, styles, inbox integration
+and Eastern formatter are unchanged. No dependencies, migrations or deployment
+changes are included.
+
+An intended-PR-source snapshot excluded the four unrelated LibraryService,
+ArchiveUserDetailsService, guestFlow and Inbox working-copy edits. Their hashes
+stayed unchanged. Pinned Node 24.21.0 verification passed 460 frontend tests,
+ESLint and the production build. The existing component test file retains every
+Tags/MemoryTags assertion and now has four cases covering Library loading,
+retained error results, busy/lock gates, separate chooser paging, applied fields,
+nullish attribution and excerpts. No new tracked test file was added. The two
+existing Library contract/HTTP classes passed all 12 backend tests against
+disposable PostgreSQL 17, with zero failures, errors or skips. Final full CI and
+commit/PR identities belong in the pull request and Notion task.
+
+Independent SSR comparison found literal markup matches in all 586 valid-state
+and display-boundary cases. Thirteen protected source files, including the four
+user-edited files, remained byte-identical. A separate actual-component StrictMode
+supplement passed 394 assertions across 15 cases: seven matching flows on each
+baseline/refactored component plus the actual InboxScreen reset-key case. It
+checks exact callback arguments/identity and current callbacks, validation and
+synchronous catches, draft/applied chooser queries, reset/error lifetime,
+feedback focus dependencies and busy/lock visibility. All eight production-file
+hashes stayed fixed. These callback-spy and static-render checks are distinct
+from real persistence and browser verification.
+
+The combined JAR, SHA-256
+`f6d2b8022cc9a56bc7dd120586d4c4b31e3e28fe4bf5889ccb6ed660e0167e53`,
+passed its first native loopback rehearsal: 648 assertions, six scoped flow
+groups, three layouts and 22 synthetic screenshots. Twenty-four persisted notes,
+24 tags and five relationships exercised real result/chooser pagination, detail
+and browser-Back return, unapplied drafts and chooser cancellation, literal text
+and inert markup, combined type/review/date/year/tag filters, selection/clearing,
+keyboard validation focus, controlled read loss and deliberate first-page reload.
+Blur retention, pagehide clearing and fresh unfiltered resume, opaque history,
+Eastern labels/UTC time attributes and absence of original preload requests were
+checked. Complete memory, tag and relationship row digests stayed unchanged.
+
+Desktop 1280×900, narrow 320×720 and simulated CSS 200%/32px text passed without
+horizontal overflow. Representative validation, combined-filter and chooser screenshots
+were visually reviewed. Both mounted and native runs had zero page errors or
+external requests; mounted checks made no API requests. Owned Java, PostgreSQL,
+browser and Vite resources were cleaned up and their absence/closure verified.
+This notes-only refactor rehearsal does not repeat historical original-media,
+tag-write, recovery or archive-size acceptance. Physical devices, actual browser
+zoom, screen readers, native lifecycle behavior, providers and hosted acceptance
+remain separate; no hosted data was used.
+
+Ignored local evidence is under `logs/library-refactor.local/`:
+`review/differential-summary.json`, `mounted-supplement/summary.json`,
+`native-9e3b16e8-1a83-4ff9-9bee-3fa95e028477/summary.json` and the frontend,
+backend-focused and package logs. The earlier ARC-04 evidence above remains
+separate from this refactor verification.
