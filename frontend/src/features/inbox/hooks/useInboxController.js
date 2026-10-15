@@ -13,7 +13,7 @@ import { useInboxActions } from "./useInboxActions.js";
 
 const INITIAL = {
   phase: "checking", session: null, busy: true, error: null,
-  reviewStatus: "PENDING", items: [], nextCursor: null, detail: null,
+  reviewStatus: "PENDING", items: [], nextCursor: null, detail: null, requestedMemoryId: null,
   photo: { phase: "idle", url: null, error: null },
   review: { phase: "idle", targetStatus: null, error: null, canRetry: false },
   metadata: { phase: "idle", error: null, canRetry: false },

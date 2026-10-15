@@ -142,7 +142,7 @@ export function createExportActions({ api, getState, publish, start, bounded, ru
     exportPage(kind, next) {
       if (!visible() || getState().busy || !jobId || !waitAllowed()) return Promise.resolve(getState()); const issues = kind === "issues", cursors = issues ? state().issueCursors : state().partCursors;
       const nextCursor = issues ? state().issuesNextCursor : state().partsNextCursor, stack = next ? [...cursors, nextCursor] : cursors.slice(0, -1); if ((next && !nextCursor) || !stack.length) return Promise.resolve(getState());
-      const op = start(base(issues ? { issues: EMPTY } : { parts: EMPTY }));
+      const op = start(base(issues ? { issues: EMPTY, issueCursors: stack } : { parts: EMPTY, partCursors: stack }));
       return run(op, async () => { const result = await bounded(op, signal => issues ? api.listExportIssues(jobId, { cursor: stack.at(-1), signal }) : api.listExportParts(jobId, { cursor: stack.at(-1), signal })); assertCurrent(op);
         set(issues ? { issues: result.items, issuesNextCursor: result.nextCursor, issueCursors: stack } : { parts: result.items, partsNextCursor: result.nextCursor, partCursors: stack }); }, readFailure);
     },

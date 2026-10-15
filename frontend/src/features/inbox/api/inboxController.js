@@ -24,13 +24,13 @@ export function createInboxController({
   albumNameFingerprint, timelineFieldsFingerprint, tagNameFingerprint,
 } = {}) {
   let state = Object.freeze({ phase: "checking", session: null, busy: false, error: null,
-    reviewStatus: "PENDING", items: EMPTY_ITEMS, nextCursor: null, detail: null,
+    reviewStatus: "PENDING", items: EMPTY_ITEMS, nextCursor: null, detail: null, requestedMemoryId: null,
     photo: idlePhoto(), review: idleReview(), shareLink: idleShareLink(), metadata: idleMetadata(), albums: initialAlbums(), albumReturnId: null,
     timeline: initialTimeline(), timelineReturnId: null, library: initialLibrary(), libraryReturn: false,
     tags: initialTags(), tagReturnId: null, export: initialExport(), notice: null, pageResetVersion: 0, logoutUnconfirmed: false });
   let generation = 0, operation = null, disposed = false, inboxDirty = false;
   let suspended = false, resuming = null, rechecking = null;
-  let notifying = false, notifyAgain = false;
+  let notifying = false, notifyAgain = false, batchDepth = 0;
   const listeners = new Set();
 
   function notify() {
@@ -54,11 +54,19 @@ export function createInboxController({
   function publish(patch) {
     if (disposed) return;
     const next = { ...state, ...patch };
+    next.requestedMemoryId = next.phase === "detail" && next.session?.authenticated
+      ? next.detail?.memoryId ?? next.requestedMemoryId : null;
     if (next.shareLink.url && (next.detail?.memoryId !== next.shareLink.memoryId
       || next.detail?.revision !== next.shareLink.revision || next.detail?.visibility !== "FRIENDS_FAMILY")) next.shareLink = idleShareLink();
     if (Object.keys(next).every(key => next[key] === state[key])) return;
     state = Object.freeze(next);
-    notify();
+    if (batchDepth === 0) notify();
+  }
+
+  function batchPublication(task) {
+    batchDepth++;
+    try { return task(); }
+    finally { if (--batchDepth === 0) notify(); }
   }
 
   function cancel() {
@@ -364,7 +372,7 @@ export function createInboxController({
       const op = start({ phase: "checking", session: null, items: EMPTY_ITEMS, nextCursor: null, detail: null, notice: null });
       return run(op, async () => {
         const session = sessionCopy(await bounded(op, signal => api.getSession({ signal })));
-        publish({ session, phase: session.authenticated ? "inbox" : "login" });
+        publish({ session, phase: session.authenticated ? "inbox" : "login", reviewStatus: "PENDING" });
         if (session.authenticated) await page(op, "PENDING", null);
       }, failure => {
         if (!authFailure(failure)) clearPrivate({ phase: "unavailable", error: "The archive could not be reached. Try checking access again." });
@@ -378,7 +386,7 @@ export function createInboxController({
         const session = sessionCopy(await bounded(op, signal => api.login(
           { username: credentials.username, password: credentials.password }, { csrfToken: fresh.csrfToken, signal })));
         if (!session.authenticated) throw new ApiError("Sign-in was not confirmed.", { code: "CONTRACT_MISMATCH" });
-        publish({ session, phase: "inbox" });
+        publish({ session, phase: "inbox", reviewStatus: "PENDING" });
         await page(op, "PENDING", null);
       }, failure => {
         if (!authFailure(failure)) {
@@ -417,14 +425,17 @@ export function createInboxController({
     },
     openMemory(id, { albumId = null, eventId = null, libraryReturn = false, tagId = null } = {}) {
       if (!state.session?.authenticated || disposed || mutations.locked() || albums.locked() || timeline.locked() || tags.locked() || exports.locked()) return Promise.resolve(state);
-      albums.memoryContext(albumId);
-      timeline.memoryContext(eventId);
-      library.memoryContext(libraryReturn); tags.memoryContext(tagId); tags.clearMemoryPresentation();
-      if (!albumId) publish({ albums: initialAlbums(), ...albums.clearNavigation() });
-      if (!eventId) publish({ timeline: initialTimeline(), ...timeline.clearNavigation() });
-      if (!libraryReturn) publish({ library: initialLibrary(), ...library.clearNavigation() });
-      if (!tagId) publish(tags.clearNavigation());
-      const op = start({ phase: "detail", detail: null, notice: null });
+      // Publish the requested memory and its return context as one destination.
+      const op = batchPublication(() => {
+        albums.memoryContext(albumId);
+        timeline.memoryContext(eventId);
+        library.memoryContext(libraryReturn); tags.memoryContext(tagId); tags.clearMemoryPresentation();
+        if (!albumId) publish({ albums: initialAlbums(), ...albums.clearNavigation() });
+        if (!eventId) publish({ timeline: initialTimeline(), ...timeline.clearNavigation() });
+        if (!libraryReturn) publish({ library: initialLibrary(), ...library.clearNavigation() });
+        if (!tagId) publish(tags.clearNavigation());
+        return start({ phase: "detail", detail: null, requestedMemoryId: id, notice: null });
+      });
       return run(op, async () => {
         const detail = frozenCopy(await bounded(op, signal => api.getMemory(id, { signal })));
         publish({ detail });
@@ -476,7 +487,7 @@ export function createInboxController({
       timeline.clear();
       library.clear(); tags.clear(); exports.clear();
       state = Object.freeze({ ...state, session: null, items: EMPTY_ITEMS, nextCursor: null,
-        detail: null, photo: idlePhoto(), review: idleReview(), shareLink: idleShareLink(), metadata: idleMetadata(), albums: initialAlbums(), albumReturnId: null,
+        detail: null, requestedMemoryId: null, photo: idlePhoto(), review: idleReview(), shareLink: idleShareLink(), metadata: idleMetadata(), albums: initialAlbums(), albumReturnId: null,
         timeline: initialTimeline(), timelineReturnId: null, library: initialLibrary(), libraryReturn: false, tags: initialTags(), tagReturnId: null, export: initialExport(), notice: null, busy: false, error: null });
       suspended = true;
       resuming = null;

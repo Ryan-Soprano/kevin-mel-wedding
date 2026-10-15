@@ -5,10 +5,11 @@ const cursorOf = pages => pages.at(-1) ?? null;
 const filtersOf = value => value ? { ...value } : {};
 
 function featureRoute(phase, state, idField, recordField) {
-  return { phase, view: state.view, id: state[recordField]?.[idField] ?? state.requestedId ?? null,
-    pages: pagesOf(state.cursors), selectorStatus: state.selectorStatus,
-    ...(phase === "timeline" ? { filters: filtersOf(state.filters) } : {}),
-    ...(phase === "tags" ? { q: state.q } : {}) };
+  return { phase, view: state.view, pages: pagesOf(state.cursors),
+    ...(["detail", "select"].includes(state.view) ? { id: state[recordField]?.[idField] ?? state.requestedId ?? null } : {}),
+    ...(state.view === "select" ? { selectorStatus: state.selectorStatus } : {}),
+    ...(phase === "timeline" && state.view === "list" ? { filters: filtersOf(state.filters) } : {}),
+    ...(phase === "tags" && state.view === "list" ? { q: state.q } : {}) };
 }
 
 function libraryRoute(state) {
@@ -30,13 +31,14 @@ function routeOf(snapshot, inboxPages) {
     case "library": return libraryRoute(snapshot.library);
     case "export": return { phase: "export", parts: snapshot.export.partCursors.length, issues: snapshot.export.issueCursors.length };
     case "detail": {
-      if (!snapshot.detail) return null;
+      const id = snapshot.detail?.memoryId ?? snapshot.requestedMemoryId;
+      if (!id) return null;
       const parent = snapshot.albumReturnId ? featureRoute("albums", snapshot.albums, "albumId", "album")
         : snapshot.timelineReturnId ? featureRoute("timeline", snapshot.timeline, "eventId", "event")
           : snapshot.tagReturnId ? featureRoute("tags", snapshot.tags, "tagId", "tag")
             : snapshot.libraryReturn ? libraryRoute(snapshot.library)
               : { phase: "inbox", reviewStatus: snapshot.reviewStatus, pages: pagesOf(inboxPages) };
-      return { phase: "detail", id: snapshot.detail.memoryId, parent,
+      return { phase: "detail", id, parent,
         context: { albumId: snapshot.albumReturnId ?? null, eventId: snapshot.timelineReturnId ?? null,
           tagId: snapshot.tagReturnId ?? null, libraryReturn: Boolean(snapshot.libraryReturn) },
         tags: { view: snapshot.tags.view === "attach" ? "attach" : "memory", q: snapshot.tags.q,
@@ -78,7 +80,9 @@ export function attachInboxHistory({ controller, eventTarget = window, historyIm
       if (current || routes.size || restoring) clear();
       return;
     }
-    if (restoring || snapshot.busy || isInboxLocked(snapshot)) return;
+    // Read destinations must own an entry before their transport settles, so
+    // Back can cancel a slow read and Forward can reread the intended target.
+    if (restoring || isInboxLocked(snapshot)) return;
     const route = routeOf(snapshot, getInboxPages());
     if (!route) return;
     const destination = destinationOf(route);

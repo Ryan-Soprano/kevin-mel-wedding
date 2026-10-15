@@ -8,10 +8,11 @@ import { COUPLE_SESSION, IDS, MEMORY_DETAIL } from "../../../shared/api/v1/fixtu
 const turn = () => new Promise(resolve => setImmediate(resolve));
 const clone = value => structuredClone(value);
 
-function fixture() {
+function fixture(api) {
   const source = createInboxController({ api: {} });
   const empty = clone(source.getSnapshot()); source.dispose();
-  let state = { ...empty, phase: "inbox", session: clone(COUPLE_SESSION) }, recording, serial = 0;
+  const actualController = api ? createInboxController({ api }) : null;
+  let state = actualController?.getSnapshot() ?? { ...empty, phase: "inbox", session: clone(COUPLE_SESSION) }, recording, serial = 0;
   const events = new EventTarget(), entries = [], calls = [], movements = [];
   let position = -1, blocked = 0, pages = [null], creationBlocked = false, draft = false, discard = false;
   const emitPop = value => {
@@ -24,7 +25,7 @@ function fixture() {
     go(delta) { movements.push(delta); position += delta; assert.ok(position >= 0 && position < entries.length); emitPop(entries[position]); },
   };
   const set = patch => { state = { ...state, ...patch }; recording?.sync(state); return state; };
-  const controller = {
+  const controller = actualController ?? {
     getSnapshot: () => state,
     loadInbox: async (status, cursor) => { calls.push(["inbox", status, cursor]); return set({ phase: "inbox", reviewStatus: status, detail: null }); },
     beginCreation: () => { calls.push(["create"]); return set({ phase: "create" }); },
@@ -55,12 +56,154 @@ function fixture() {
     getInboxPages: () => pages, setInboxPages: value => { pages = value; }, randomId: () => "opaque-" + ++serial,
     isCreationBlocked: () => creationBlocked, hasCreationDraft: () => draft, confirmDiscard: () => discard,
     onBlocked: () => { blocked++; } });
+  const unsubscribe = actualController?.subscribe(next => { state = next; recording.sync(next); });
   recording.sync(state);
   return { controller, recording, history, events, entries, calls, movements, empty, set,
     setPages: value => { pages = value; }, getPages: () => pages, blocked: () => blocked,
     creation: (busy, hasDraft, confirm = false) => { creationBlocked = busy; draft = hasDraft; discard = confirm; },
     pop: emitPop,
+    dispose() { unsubscribe?.(); recording.dispose(); actualController?.dispose(); },
   };
+}
+
+test("Back interrupts a held album read and Forward freshly reads its requested page", async () => {
+  let release;
+  const cursors = [], fresh = { albumId: IDS.contribution, name: "Fresh album" };
+  const f = fixture({
+    getSession: async () => clone(COUPLE_SESSION),
+    listMemories: async () => ({ items: [], nextCursor: null }),
+    listAlbums: ({ cursor }) => {
+      cursors.push(cursor);
+      return cursors.length === 1 ? new Promise(resolve => { release = resolve; })
+        : Promise.resolve({ items: [fresh], nextCursor: null });
+    },
+  });
+  try {
+    await f.controller.loadSession(); const inbox = f.history.state;
+    const reading = f.controller.loadAlbums("requested-page", [null, "requested-page"]);
+    assert.equal(f.controller.getSnapshot().busy, true);
+    assert.equal(f.entries.length, 2); await turn();
+    f.history.go(-1); await turn();
+    assert.deepEqual(f.history.state, inbox);
+    assert.equal(f.controller.getSnapshot().phase, "inbox");
+    f.history.go(1); await turn();
+    assert.equal(f.controller.getSnapshot().phase, "albums");
+    assert.deepEqual(cursors, ["requested-page", "requested-page"]);
+    assert.deepEqual(f.controller.getSnapshot().albums.cursors, [null, "requested-page"]);
+    release({ items: [{ albumId: IDS.key, name: "Obsolete response" }], nextCursor: null }); await reading; await turn();
+    assert.deepEqual(f.controller.getSnapshot().albums.items, [fresh]);
+    assert.equal(f.entries.length, 2);
+    assert.doesNotMatch(JSON.stringify(f.entries), /requested-page|albumId|11111111/);
+  } finally { release?.({ items: [], nextCursor: null }); f.dispose(); }
+});
+
+test("a held memory has a history entry before detail arrives and Forward rereads that identity", async () => {
+  let release;
+  const memories = [];
+  const f = fixture({
+    getSession: async () => clone(COUPLE_SESSION),
+    listMemories: async () => ({ items: [], nextCursor: null }),
+    getMemory: id => {
+      memories.push(id);
+      return memories.length === 1 ? new Promise(resolve => { release = resolve; })
+        : Promise.resolve({ ...MEMORY_DETAIL, memoryId: id, textContent: "Fresh detail" });
+    },
+    listMemoryTags: async () => ({ items: [], nextCursor: null }),
+    logout: async () => {},
+  });
+  try {
+    await f.controller.loadSession(); const inbox = f.history.state;
+    const reading = f.controller.openMemory(IDS.text);
+    assert.equal(f.controller.getSnapshot().busy, true);
+    assert.equal(f.controller.getSnapshot().detail, null);
+    assert.equal(f.entries.length, 2); await turn();
+    f.history.go(-1); await turn();
+    assert.deepEqual(f.history.state, inbox);
+    assert.equal(f.controller.getSnapshot().phase, "inbox");
+    f.history.go(1); await turn();
+    assert.deepEqual(memories, [IDS.text, IDS.text]);
+    assert.equal(f.controller.getSnapshot().detail.textContent, "Fresh detail");
+    release({ ...MEMORY_DETAIL, textContent: "Obsolete response" }); await reading; await turn();
+    assert.equal(f.controller.getSnapshot().detail.textContent, "Fresh detail");
+    assert.equal(f.entries.length, 2);
+    assert.doesNotMatch(JSON.stringify(f.entries), /22222222|memoryId|Fresh detail/);
+    const signingOut = f.controller.logout();
+    assert.equal(f.controller.getSnapshot().requestedMemoryId, null);
+    await signingOut;
+    assert.equal(f.controller.getSnapshot().requestedMemoryId, null);
+  } finally { release?.(clone(MEMORY_DETAIL)); f.dispose(); }
+});
+
+test("opening another memory records one coherent destination after clearing the old tag picker", async () => {
+  const f = fixture({
+    getSession: async () => clone(COUPLE_SESSION),
+    listMemories: async () => ({ items: [], nextCursor: null }),
+    getMemory: async id => ({ ...MEMORY_DETAIL, memoryId: id }),
+    listMemoryTags: async () => ({ items: [], nextCursor: null }),
+    listTags: async () => ({ items: [], nextCursor: null }),
+  });
+  try {
+    await f.controller.loadSession(); await f.controller.openMemory(IDS.text);
+    await f.controller.chooseMemoryTag("old-picker-query");
+    const count = f.entries.length;
+    const reading = f.controller.openMemory(IDS.photo);
+    assert.equal(f.entries.length, count + 1);
+    assert.equal(f.controller.getSnapshot().requestedMemoryId, IDS.photo);
+    await reading;
+    assert.equal(f.entries.length, count + 1);
+    f.history.go(-1); await turn();
+    assert.equal(f.controller.getSnapshot().detail.memoryId, IDS.text);
+    assert.equal(f.controller.getSnapshot().tags.view, "attach");
+    assert.equal(f.controller.getSnapshot().tags.q, "old-picker-query");
+    f.history.go(1); await turn();
+    assert.equal(f.controller.getSnapshot().detail.memoryId, IDS.photo);
+    assert.equal(f.controller.getSnapshot().tags.view, "memory");
+  } finally { f.dispose(); }
+});
+
+for (const boundary of ["suspend", "dispose", 401, 403]) {
+  test(`${boundary} clears a held memory identity and invalidates its history ownership`, async () => {
+    let reject, reads = 0;
+    const f = fixture({
+      getSession: async () => clone(COUPLE_SESSION),
+      listMemories: async () => ({ items: [], nextCursor: null }),
+      getMemory: () => { reads++; return new Promise((_, rejectRead) => { reject = rejectRead; }); },
+    });
+    try {
+      await f.controller.loadSession(); const reading = f.controller.openMemory(IDS.text); await turn();
+      const old = f.history.state;
+      assert.equal(f.controller.getSnapshot().requestedMemoryId, IDS.text);
+      if (typeof boundary === "number") reject(Object.assign(new Error("Access lost"), { status: boundary }));
+      else f.controller[boundary]();
+      await reading;
+      assert.equal(f.controller.getSnapshot().requestedMemoryId, null);
+      f.pop(old); await turn();
+      assert.equal(reads, 1);
+      assert.equal(f.controller.getSnapshot().session, null);
+    } finally { reject?.(new Error("Test ended")); f.dispose(); }
+  });
+}
+
+for (const action of ["loadSession", "login"]) {
+  test(`${action} records its initial Pending read without an old-filter history entry`, async () => {
+    let release, reads = 0;
+    const f = fixture({
+      getSession: async () => clone(COUPLE_SESSION),
+      login: async () => clone(COUPLE_SESSION),
+      listMemories: () => ++reads === 3 ? new Promise(resolve => { release = resolve; })
+        : Promise.resolve({ items: [], nextCursor: null }),
+    });
+    try {
+      await f.controller.loadSession(); await f.controller.loadInbox("ARCHIVED");
+      const count = f.entries.length;
+      const reading = f.controller[action]({ username: "synthetic", password: "synthetic" }); await turn();
+      assert.equal(f.controller.getSnapshot().busy, true);
+      assert.equal(f.controller.getSnapshot().reviewStatus, "PENDING");
+      assert.equal(f.entries.length, count);
+      release({ items: [], nextCursor: null }); await reading;
+      assert.equal(f.entries.length, count);
+    } finally { release?.({ items: [], nextCursor: null }); f.dispose(); }
+  });
 }
 
 test("history contains only opaque ownership while Back and Forward reread the original filter and page", async () => {

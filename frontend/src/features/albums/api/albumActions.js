@@ -161,14 +161,14 @@ export function createAlbumActions({ api, getState, publish, start, bounded, run
     loadAlbums(cursor = null, cursors = [null]) {
       if (!visible()) return Promise.resolve(getState());
       returnAlbumId = null;
-      const op = start(base({ view: "list", items: EMPTY, album: null, members: EMPTY, candidates: EMPTY, nextCursor: null }));
+      const op = start(base({ view: "list", items: EMPTY, album: null, members: EMPTY, candidates: EMPTY, nextCursor: null, cursors: freeze(cursors) }));
       return run(op, () => actions.readList(op, cursor, cursors), readFailure);
     },
     openAlbum(albumId, cursor = null, cursors = [null]) {
       if (!visible() || !albumId) return Promise.resolve(getState());
       returnAlbumId = null;
       const op = start(base({ view: "detail", requestedId: albumId, album: state().album?.albumId === albumId ? state().album : null,
-        members: EMPTY, candidates: EMPTY, nextCursor: null }));
+        members: EMPTY, candidates: EMPTY, nextCursor: null, cursors: freeze(cursors) }));
       return run(op, () => members(op, albumId, cursor, cursors), readFailure);
     },
     beginAlbumCreation() {
@@ -247,7 +247,7 @@ export function createAlbumActions({ api, getState, publish, start, bounded, run
     },
     showAlbumSelector(reviewStatus = "KEEP", cursor = null, cursors = [null]) {
       if (!visible() || !state().album || state().album.deletedAt !== null) return Promise.resolve(getState());
-      const op = start(base({ view: "select", candidates: EMPTY, nextCursor: null, selectorStatus: reviewStatus }));
+      const op = start(base({ view: "select", candidates: EMPTY, nextCursor: null, selectorStatus: reviewStatus, cursors: freeze(cursors) }));
       return run(op, async () => {
         const result = await bounded(op, signal => api.listMemories({ reviewStatus, limit: 20, ...(cursor ? { cursor } : {}), signal }));
         assertCurrent(op);
