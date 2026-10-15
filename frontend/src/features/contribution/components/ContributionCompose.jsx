@@ -6,9 +6,10 @@ export default function ContributionCompose({ view, privateArchive, nameInput, m
   let nameDescription;
   if (fieldErrors.guestName) nameDescription = "guestName-error";
   let messageDescription = "message-count";
+  if (!privateArchive) messageDescription += " message-starters";
   if (fieldErrors.message) messageDescription += " message-error";
   return (
-    <form className="note-compose" onSubmit={actions.send} noValidate aria-label="Write a note" aria-busy={isSubmitting}>
+    <form className="note-compose" onSubmit={actions.send} noValidate aria-label={privateArchive ? "Write a note" : "Write a message"} aria-busy={isSubmitting}>
       <p className="note-compose-introduction">{getContributionCopy(privateArchive).introduction}</p>
       {!privateArchive && <div>
         <label htmlFor="guestName">Your name (optional)</label>
@@ -19,6 +20,7 @@ export default function ContributionCompose({ view, privateArchive, nameInput, m
       </div>}
       <div>
         <label htmlFor="message">Leave a message</label>
+        {!privateArchive && <p id="message-starters" className="message-starters">A few ideas, if you need them: a favorite memory, a wish for you both, or a piece of advice.</p>}
         <textarea ref={messageInput} id="message" name="message" rows="6" maxLength={5000} required
           value={message} aria-invalid={Boolean(fieldErrors.message)} aria-describedby={messageDescription}
           disabled={fieldsLocked} onChange={event => actions.changeMessage(event.target.value)} />
@@ -29,7 +31,7 @@ export default function ContributionCompose({ view, privateArchive, nameInput, m
       {error && <p className="form-error" role="alert">{error}</p>}
       {pending && <p className="note-pending">Your note is locked until we confirm it. Trying again checks this same submission.</p>}
       <div className="note-compose-footer">
-        <p className="note-privacy"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M7 10V7a5 5 0 0 1 10 0v3M6 10h12v11H6zM12 14v3" /></svg>{privateArchive ? "This note starts private." : "Your contribution is not posted publicly."}</p>
+        <p className="note-privacy"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M7 10V7a5 5 0 0 1 10 0v3M6 10h12v11H6zM12 14v3" /></svg>{privateArchive ? "This note starts private." : "Sent privately to Kevin and Melanie. They may choose to share it."}</p>
         <button type="submit" disabled={busy}>{getContributionSendLabel(view, privateArchive)}</button>
       </div>
     </form>

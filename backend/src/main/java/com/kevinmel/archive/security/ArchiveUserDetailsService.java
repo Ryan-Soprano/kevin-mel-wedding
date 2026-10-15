@@ -21,8 +21,7 @@ public class ArchiveUserDetailsService implements UserDetailsService {
 
         ArchiveAccount account = accountRepository
                 .findByUsername(username)
-                .orElseThrow(() ->
-                        new UsernameNotFoundException("Invalid credentials"));
+                .orElseThrow(() -> new UsernameNotFoundException("Invalid credentials"));
 
         return new ArchivePrincipal(account);
     }

@@ -59,9 +59,9 @@ export default function Inbox({
         </p>
       )}
       {view.navigationNotice && (
-        <p className="inbox-review-notice" role="status">
+        <output className="inbox-review-notice">
           {view.navigationNotice}
-        </p>
+        </output>
       )}
       <div className="inbox-content">
         <InboxScreen

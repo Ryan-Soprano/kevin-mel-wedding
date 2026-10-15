@@ -1,6 +1,6 @@
 import { useId, useState } from "react";
 import { ACCEPTED_FILE_TYPES, ALLOWED_FILE_TYPE_LABELS, MAX_PHOTO_SIZE_MB, MAX_PHOTOS } from "../mediaConstraints.js";
-import { addPhotoSelection, removePhotoSelection } from "../photoSelection.js";
+import { addPhotoSelectionWithFeedback, removePhotoSelection } from "../photoSelection.js";
 import PhotoPreview from "./PhotoPreview.jsx";
 
 /** Controlled selection for the batch form, or a standalone local preview. */
@@ -14,9 +14,11 @@ export default function PhotoPicker({
   const [localPhotos, setLocalPhotos] = useState([]);
   const [selectedForRemoval, setSelectedForRemoval] = useState(new Set());
   const [photoError, setPhotoError] = useState("");
+  const [selectionFeedback, setSelectionFeedback] = useState(null);
   const photos = controlledPhotos ?? localPhotos;
   const changePhotos = onPhotosChange ?? setLocalPhotos;
   const removalCount = photos.filter(photo => selectedForRemoval.has(photo.id)).length;
+  const hasSelectionError = Boolean(photoError || selectionFeedback?.rejections.length);
 
   function choose(event) {
     onDialogStateChange?.(false);
@@ -24,9 +26,12 @@ export default function PhotoPicker({
     event.target.value = "";
     if (disabled || !files.length) return;
     try {
-      changePhotos(addPhotoSelection(photos, files));
+      const next = addPhotoSelectionWithFeedback(photos, files);
+      if (next.addedCount) changePhotos(next.photos);
+      setSelectionFeedback(next.rejections.length ? { addedCount: next.addedCount, rejections: next.rejections } : null);
       setPhotoError("");
     } catch (error) {
+      setSelectionFeedback(null);
       setPhotoError(error.message);
     }
   }
@@ -44,6 +49,7 @@ export default function PhotoPicker({
     if (disabled) return;
     changePhotos(removePhotoSelection(photos, selectedForRemoval));
     setSelectedForRemoval(new Set());
+    setSelectionFeedback(null);
     setPhotoError("");
   }
 
@@ -54,12 +60,23 @@ export default function PhotoPicker({
       <label htmlFor={prefix + "-input"}>Choose photos</label>
       <p id={prefix + "-guidance"}>
         Select up to {MAX_PHOTOS} photos ({ALLOWED_FILE_TYPE_LABELS}) no larger than {MAX_PHOTO_SIZE_MB} MB each.
+        {" "}For HEIC or HEIF, export or convert a copy to JPEG or PNG, then choose that copy. Keep your original.
       </p>
       <input ref={inputRef} type="file" id={prefix + "-input"} accept={ACCEPTED_FILE_TYPES} multiple
         onClick={() => onDialogStateChange?.(true)} onCancel={() => onDialogStateChange?.(false)}
-        disabled={disabled} onChange={choose} aria-invalid={photoError ? "true" : undefined}
+        disabled={disabled} onChange={choose} aria-invalid={hasSelectionError ? "true" : undefined}
         aria-describedby={`${prefix}-guidance ${prefix}-note ${prefix}-error`} />
-      <p id={prefix + "-error"} className="form-error" role="alert">{photoError}</p>
+      <div id={prefix + "-error"} className="form-error" role="alert">
+        {photoError && <p>{photoError}</p>}
+        {selectionFeedback && <>
+          <p>{selectionFeedback.addedCount
+            ? `${selectionFeedback.addedCount} ${selectionFeedback.addedCount === 1 ? "photo was" : "photos were"} added. The following files were skipped:`
+            : "No photos were added. The following files were skipped:"}</p>
+          <ul>{selectionFeedback.rejections.map((rejection, index) => (
+            <li key={`${index}-${rejection.fileName}`}><strong>{rejection.fileName}</strong>: {rejection.reason}</li>
+          ))}</ul>
+        </>}
+      </div>
       <output aria-live="polite">{photos.length} of {MAX_PHOTOS} photos selected.</output>
       {photos.length > 0 && (
         <fieldset className="photo-selection">

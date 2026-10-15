@@ -8,7 +8,26 @@
 .guest-gallery-controls { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 12px; margin-top: 16px; }
 .guest-gallery-position { margin: 0; color: var(--color-muted); font-size: 0.875rem; font-variant-numeric: tabular-nums; }
 .guest-gallery-arrow { min-width: 48px; padding: 8px 14px; font-size: 1.25rem; }
-.guest-gallery-play { flex-basis: 100%; max-width: 180px; font-size: 0.875rem; }
-@media (min-width: 480px) {
-  .guest-gallery-play { flex-basis: auto; margin-left: auto; }
+.guest-gallery-frame:focus { outline: none; }
+.guest-gallery-playback { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin-top: 20px; }
+.guest-gallery-play { flex: 0 0 auto; font-size: 0.875rem; }
+.guest-gallery-playback-status { margin: 0; color: var(--color-muted); font-size: 0.8rem; }
+.guest-gallery-browse { display: flex; justify-content: center; margin-top: 20px; }
+.guest-gallery-browse > button { max-width: 100%; }
+.guest-gallery-overview { margin-top: 24px; }
+.guest-gallery-overview-help { margin-bottom: 16px; color: var(--color-muted); font-size: 0.9rem; }
+.guest-gallery-thumbnails { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; padding: 0; margin: 0; list-style: none; }
+.guest-gallery-thumbnails li { min-width: 0; }
+.guest-gallery-thumbnail { display: block; position: relative; width: 100%; aspect-ratio: 1; padding: 6px; border: 1px solid var(--color-border-subtle); border-radius: 10px; background: var(--color-surface); overflow: hidden; }
+.guest-gallery-thumbnail img { display: block; width: 100%; height: 100%; object-fit: cover; border-radius: 5px; }
+.guest-gallery-thumbnail span { position: absolute; right: 10px; bottom: 10px; padding: 2px 7px; border-radius: 4px; color: #fffdf8; background: rgb(48 44 41 / 85%); font-size: 0.75rem; font-variant-numeric: tabular-nums; }
+.guest-gallery-thumbnail:hover:not(:disabled) { background: var(--color-surface); border-color: var(--color-primary); }
+.guest-gallery-overview-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; margin-top: 24px; }
+@media (max-width: 600px) {
+  .guest-gallery-thumbnails { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+  .guest-gallery-thumbnail { padding: 4px; }
+  .guest-gallery-thumbnail span { right: 7px; bottom: 7px; }
+}
+@media (max-width: 380px) {
+  .guest-gallery-thumbnails { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

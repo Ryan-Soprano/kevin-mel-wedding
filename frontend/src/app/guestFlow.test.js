@@ -14,6 +14,25 @@ test("the invitation leads to an implemented memory type; unavailable choices ca
   assert.equal(select(choice, "photos").screen, "photos");
 });
 
+test("welcome choices open every enabled form directly without resetting form ownership", () => {
+  for (const audioEnabled of [false, true]) {
+    for (const kind of ["note", "photos", "audio"]) {
+      const welcome = createGuestFlow({ audioEnabled });
+      const selected = select(welcome, kind);
+      if (kind === "audio" && !audioEnabled) {
+        assert.equal(selected, welcome);
+        assert.deepEqual(selected.started, []);
+        continue;
+      }
+      assert.equal(selected.screen, kind);
+      assert.equal(selected.forms, welcome.forms);
+      assert.deepEqual(selected.started, [kind]);
+      assert.equal(select(selected, kind).started, selected.started);
+      assert.equal(hasUnfinishedWork(selected), false);
+    }
+  }
+});
+
 test("back and switching types preserve every started form and editable draft", () => {
   let flow = select(createGuestFlow(), "note");
   flow = report(flow, "note", { hasDraft: true });

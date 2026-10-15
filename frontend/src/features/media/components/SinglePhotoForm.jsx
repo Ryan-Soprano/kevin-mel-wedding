@@ -88,7 +88,7 @@ export default function SinglePhotoForm({ createSubmission = createPhotoSubmissi
           <label htmlFor="photo-file">Choose a photo</label>
           <input ref={picker} id="photo-file" type="file" accept="image/jpeg,image/png,image/webp"
             disabled={locked} onChange={choose} aria-describedby="photo-guidance" />
-          <p id="photo-guidance">Keep this page open until your photo is confirmed. HEIC photos are not supported yet.</p>
+          <p id="photo-guidance">Keep this page open until your photo is confirmed. For HEIC or HEIF, export or convert a copy to JPEG or PNG, then choose that copy. Keep your original.</p>
         </div>
         {file && <div className="photo-original-preview"><PhotoPreview file={file} alt="Selected photo" /></div>}
         <div>

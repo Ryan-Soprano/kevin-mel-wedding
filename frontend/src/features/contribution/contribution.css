@@ -14,6 +14,7 @@
 .contribution-flow .note-compose { gap: 20px; }
 .note-compose .note-compose-introduction { margin: 0; color: var(--color-muted); font-size: 0.95rem; line-height: 1.75; }
 .note-compose label { margin-bottom: 10px; font-size: 0.95rem; }
+.note-compose .message-starters { margin: 0 0 12px; color: var(--color-muted); font-size: 0.85rem; line-height: 1.65; }
 .note-compose input,
 .note-compose textarea { border-color: #b9b8ad; border-radius: 12px; background: var(--color-surface); }
 .note-compose textarea { min-height: 170px; line-height: 1.75; }
