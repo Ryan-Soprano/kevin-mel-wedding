@@ -1,0 +1,176 @@
+/* Kevin's greens and Melanie's maroon meet in the wedding backdrop. */
+.guest-page--welcome {
+  --color-primary: #4c5748;
+  --color-primary-hover: #394235;
+  --color-text: #372e2a;
+  --color-muted: #645a50;
+  --color-surface: #fffdf8;
+  --guest-wine: #70384b;
+  --guest-parchment: #dfd2bf;
+  padding-top: 28px;
+  color: #fff8ee;
+}
+
+body:has(.guest-page--welcome) {
+  background-color: #3b5146;
+  background-image:
+    radial-gradient(ellipse at 35% 0, rgb(225 208 166 / 9%), transparent 55%),
+    linear-gradient(90deg, #344e41, #40574b 35%, #503f47 68%, #63394b);
+}
+
+.guest-page--welcome .guest-header--welcome {
+  margin-bottom: 36px;
+  padding: 26px 28px 32px;
+  border: 0;
+  border-bottom: 1px solid rgb(240 225 203 / 30%);
+}
+
+.guest-page--welcome .guest-eyebrow {
+  margin: 0 0 22px;
+  color: #eadbc4;
+  letter-spacing: 0.12em;
+}
+
+.guest-page--welcome .guest-welcome-title {
+  color: #f1dfd0;
+}
+
+.guest-page--welcome .guest-names {
+  color: #fff8ee;
+}
+
+.guest-page--welcome .guest-ampersand {
+  color: #eed7ad;
+}
+
+.guest-page--welcome .guest-welcome-character {
+  margin: 20px auto 0;
+  color: #fff8ee;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 1.08rem;
+  line-height: 1.6;
+  text-wrap: balance;
+}
+
+.guest-page--welcome .guest-welcome-introduction {
+  max-width: 580px;
+  margin-top: 12px;
+  color: #f1e5d8;
+}
+
+.guest-page--welcome .couple-scrapbook {
+  padding-bottom: 26px;
+  border: 0;
+}
+
+.guest-page--welcome .couple-scrapbook-heading {
+  margin-bottom: 28px;
+}
+
+.guest-page--welcome .couple-scrapbook h2,
+.guest-page--welcome .guest-choices-heading h2,
+.guest-page--welcome .guest-gallery h2 {
+  color: #fff8ee;
+}
+
+.guest-page--welcome .scrapbook-photo {
+  border-color: #e7ddcf;
+  background: #fffefa;
+  box-shadow: 0 6px 18px rgb(20 25 22 / 22%);
+}
+
+.guest-page--welcome .scrapbook-caption {
+  color: #f1dfd0;
+}
+
+.guest-page--welcome .guest-choices-heading h2 {
+  font-size: clamp(1.8rem, 3vw, 2.1rem);
+}
+
+.guest-page--welcome .guest-choices-heading .guest-help,
+.guest-page--welcome .guest-privacy,
+.guest-page--welcome .guest-gallery header > p,
+.guest-page--welcome .guest-gallery-position,
+.guest-page--welcome .guest-gallery-playback-status,
+.guest-page--welcome .guest-gallery-overview-help {
+  color: #efe4d6;
+}
+
+.guest-page--welcome .memory-choice {
+  border: 1px solid #d7ccbd;
+  border-radius: 14px;
+  background: var(--color-surface);
+  box-shadow: 0 4px 16px rgb(20 25 22 / 12%);
+}
+
+.guest-page--welcome .memory-choice:hover:not(:disabled) {
+  border-color: #a99a84;
+  background: #fffdf8;
+  box-shadow: 0 5px 20px rgb(20 25 22 / 24%);
+}
+
+.guest-page--welcome .memory-choice:focus-visible {
+  outline: 3px solid #fff8ee;
+  outline-offset: 4px;
+}
+
+.guest-page--welcome .memory-choice .memory-choice-icon {
+  color: #554c43;
+  border-radius: 12px;
+  background: #eee8dc;
+}
+
+.guest-page--welcome .memory-choice-prompt,
+.guest-page--welcome .memory-choice-title {
+  color: var(--color-text);
+}
+
+.guest-page--welcome .memory-choice .memory-choice-arrow {
+  color: #6e6258;
+}
+
+.guest-page--welcome .guest-gallery {
+  border-top-color: rgb(240 225 203 / 30%);
+}
+
+.guest-page--welcome .guest-gallery-frame {
+  border-color: #dfd2bf;
+  background: #eee4d5;
+}
+
+.guest-page--welcome .shared-memories > .guest-couple,
+.guest-page--welcome .shared-memories > .guest-help {
+  color: #efe4d6;
+}
+
+.guest-page--welcome .shared-memory {
+  color: var(--color-text);
+}
+
+.guest-page--welcome button:focus-visible {
+  outline-color: #fff8ee;
+}
+
+.guest-page--welcome .shared-memory button:focus-visible {
+  outline-color: var(--color-primary);
+}
+
+@media (max-width: 560px) {
+  .guest-page--welcome {
+    padding-top: 16px;
+  }
+
+  .guest-page--welcome .guest-header--welcome {
+    margin-bottom: 28px;
+    padding: 18px 0 28px;
+  }
+
+  .guest-page--welcome .guest-eyebrow {
+    font-size: 0.6rem;
+    letter-spacing: 0.08em;
+  }
+
+  .guest-page--welcome .couple-scrapbook {
+    padding-bottom: 10px;
+  }
+}
