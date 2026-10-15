@@ -380,3 +380,190 @@ test("Library preserves applied field values, nullish attribution and original e
     assert.match(render({ ...state, tagName: null }), /Tag filter: <strong>All tags<\/strong>/);
   });
 });
+
+async function withTagsView(check) {
+  const server = await createServer({
+    configFile: false,
+    logLevel: "silent",
+    root: fileURLToPath(new URL("../../../../", import.meta.url)),
+    plugins: [react()],
+    server: {
+      middlewareMode: true,
+      hmr: false,
+      watch: null,
+    },
+    appType: "custom",
+    optimizeDeps: {
+      noDiscovery: true,
+      include: [],
+    },
+  });
+
+  try {
+    const { default: Tags } = await server.ssrLoadModule(
+      "/src/features/library/components/Tags.jsx",
+    );
+    const render = (patch = {}, props = {}) => renderToStaticMarkup(
+      createElement(Tags, {
+        state: { ...initialTags(), ...patch },
+        busy: false,
+        locked: false,
+        actions,
+        ...props,
+      }),
+    );
+    await check(render);
+  } finally {
+    await server.close();
+  }
+}
+
+test("Tags list preserves search, counts, page gates and cached error results", async () => {
+  await withTagsView(render => {
+    const state = {
+      q: "<literal_%>",
+      items: [TAG, { ...TAG, tagId: "other-tag", memberCount: 1 }],
+      cursors: [null, "current-page"],
+      nextCursor: "next-page",
+    };
+    const list = render(state);
+    assert.match(list, /value="&lt;literal_%&gt;"/);
+    assert.match(list, /25 memories · Couple only/);
+    assert.match(list, /1 memory · Couple only/);
+    assert.match(list, /aria-label="Open tag Our &lt;tag&gt;"/);
+    assert.match(list, /Page 2/);
+    assert.doesNotMatch(list, /disabled=""[^>]*>Next tag page/);
+
+    const busy = render(state, { busy: true });
+    assert.match(busy, /role="status">Loading tags…/);
+    assert.doesNotMatch(busy, /Open tag|No tags yet/);
+    assert.match(busy, /disabled=""[^>]*>Create a tag/);
+
+    const locked = render(state, { locked: true });
+    assert.match(locked, /Our &lt;tag&gt;/);
+    assert.match(locked, /disabled=""[^>]*aria-label="Open tag/);
+    assert.match(locked, /disabled=""[^>]*>Search tags/);
+
+    const failed = render({ ...state, error: "Tags unavailable" });
+    assert.match(failed, /role="alert">Tags unavailable/);
+    assert.match(failed, /Our &lt;tag&gt;/);
+    assert.match(failed, /Reload tag first page/);
+    assert.match(failed, /disabled=""[^>]*>Previous tag page/);
+    assert.match(failed, /disabled=""[^>]*>Next tag page/);
+    assert.doesNotMatch(render({ error: "Tags unavailable" }), /No tags yet/);
+  });
+});
+
+test("Tags detail retains members during loading and preserves tag-only deletion boundaries", async () => {
+  await withTagsView(render => {
+    const state = {
+      view: "detail",
+      tag: TAG,
+      members: [{ memory: { ...MEMORY_DETAIL, title: "Retained member" } }],
+    };
+    const busy = render(state, { busy: true });
+    assert.match(busy, /Retained member/);
+    assert.doesNotMatch(busy, /Loading tag memories…|This tag is empty/);
+    assert.match(busy, /disabled=""[^>]*>Save tag name/);
+    assert.match(busy, /disabled=""[^>]*aria-label="Remove Retained member from tag"/);
+    assert.match(render({ ...state, members: [] }, { busy: true }), /Loading tag memories…/);
+    assert.match(render({ ...state, members: [] }), /This tag is empty/);
+    assert.doesNotMatch(render({ ...state, members: [] }, { locked: true }), /This tag is empty/);
+    assert.doesNotMatch(render({ ...state, members: [], error: "Read failed" }), /This tag is empty/);
+
+    const deleted = render({
+      ...state,
+      tag: { ...TAG, deletedAt: TAG.updatedAt, name: null, memberCount: 0 },
+    });
+    assert.match(deleted, /Deleted tag/);
+    assert.match(deleted, /memories and original files remain/);
+    assert.doesNotMatch(deleted, /Save tag name|Add memories|Tagged memories|Next tag page/);
+    assert.doesNotMatch(deleted, /Retained member/);
+
+    const create = render({ view: "create" });
+    assert.match(create, /aria-label="Create a private tag"/);
+    assert.match(create, /id="tag-name"[^>]*maxLength="200"/);
+    assert.doesNotMatch(create, /Previous tag page|Next tag page/);
+  });
+});
+
+test("Tags selector keeps status filters, literal summaries and Eastern saved times without preloads", async () => {
+  await withTagsView(render => {
+    const note = {
+      ...MEMORY_DETAIL,
+      title: "<Private title>",
+      textContent: "a".repeat(180) + "EXCERPT-END",
+      memoryDate: "2024-03",
+    };
+    const photo = {
+      ...MEDIA_DETAIL,
+      source: "COUPLE",
+      title: null,
+      caption: "",
+      memoryDate: null,
+      media: { ...MEDIA_DETAIL.media, originalFilename: "not-the-caption.jpg" },
+    };
+    const state = {
+      view: "select",
+      tag: TAG,
+      selectorStatus: "ARCHIVED",
+      candidates: [note, photo],
+    };
+    const selector = render(state);
+    assert.match(selector, /Add memories to Our &lt;tag&gt;/);
+    assert.match(selector, /aria-pressed="true">Archived/);
+    assert.match(selector, /aria-label="Add &lt;Private title&gt; to tag"/);
+    assert.match(selector, /Memory date: 2024-03/);
+    assert.match(selector, /Saved on: Oct 24, 2026, 2:30 PM EDT · Eastern/);
+    assert.match(selector, /Couple memory/);
+    assert.match(selector, /<p class="inbox-excerpt"><\/p>/);
+    assert.match(selector, new RegExp("a".repeat(180) + "<"));
+    assert.doesNotMatch(selector, /EXCERPT-END|not-the-caption.jpg/);
+    assert.doesNotMatch(selector, /<img|<audio|<video|\/playback|Chicago|CDT|CST/);
+
+    const busy = render(state, { busy: true });
+    assert.match(busy, /Loading available memories…/);
+    assert.doesNotMatch(busy, /Add to tag|No completed/);
+    assert.match(busy, /disabled=""[^>]*>Back to tag/);
+    assert.match(render({ ...state, candidates: [] }), /No completed archived memories on this page/);
+    assert.doesNotMatch(render({ ...state, candidates: [], error: "Read failed" }), /No completed/);
+    assert.match(render(state, { locked: true }), /disabled=""[^>]*aria-label="Add/);
+  });
+});
+
+test("Tags recovery keeps deliberate retry gates and feedback precedence", async () => {
+  await withTagsView(render => {
+    for (const [phase, label] of [
+      ["saving", "Saving tag change…"],
+      ["loading", "Checking the current tag…"],
+    ]) {
+      const pending = render({ mutation: { phase } }, { locked: true });
+      assert.match(pending, new RegExp(label));
+      assert.doesNotMatch(pending, /Reload current tag|Retry this same tag change/);
+    }
+
+    for (const phase of ["uncertain", "conflict", "csrf"]) {
+      const state = {
+        mutation: { phase, canRetry: true, needsName: true, error: "Unknown outcome" },
+      };
+      const recovery = render(state, { locked: true });
+      const reload = phase === "csrf" ? "Refresh session and current tag" : "Reload current tag";
+      assert.match(recovery, new RegExp(reload));
+      assert.match(recovery, /Original tag name/);
+      assert.match(recovery, /Retry this same tag change/);
+      assert.doesNotMatch(recovery, /disabled=""[^>]*>Retry this same tag change/);
+      assert.match(render(state, { locked: true, busy: true }), /disabled=""[^>]*>Retry this same tag change/);
+      assert.doesNotMatch(render({ mutation: { phase, canRetry: false } }, { locked: true }), /Original tag name|Retry this same tag change/);
+    }
+
+    const feedback = render({
+      error: "Read failed",
+      mutation: { phase: "uncertain", error: "Mutation failed" },
+      notice: "Change saved",
+    });
+    assert.match(feedback, /role="alert">Read failed/);
+    assert.doesNotMatch(feedback, /Mutation failed|Change saved/);
+    assert.match(render({ notice: "Change saved" }), /role="status">Change saved/);
+    assert.match(render({ error: "", notice: "Notice" }), /role="status"><\/p>/);
+  });
+});

@@ -92,3 +92,73 @@ Ignored local evidence is under `logs/library-refactor.local/`:
 `native-9e3b16e8-1a83-4ff9-9bee-3fa95e028477/summary.json` and the frontend,
 backend-focused and package logs. The earlier ARC-04 evidence above remains
 separate from this refactor verification.
+
+## Tags presentation refactor — 2026-10-15
+
+This focused refactor was prepared from main `33103e3`, then updated onto
+`f26bb00` after Library and ExportArchive merged, on
+`feature/tags-presentation-refactor`. Tags composes separate list, name,
+detail, selector, recovery and paging views. A local hook owns editable fields,
+validation, feedback and deletion focus, and action wiring. Display helpers make
+attribution, excerpts and count labels explicit. The change improves readability
+and review boundaries; it makes no runtime-speed claim.
+
+The tag coordinator, adapters, normalizers, MemoryTags, styles, inbox integration
+and Eastern formatter remain unchanged. Request identity, revision checks,
+deliberate retry, hidden-name recovery, shared write fences and original-memory
+preservation continue to belong to the existing coordinator and API. No
+dependencies, migrations or deployment changes are included.
+
+An isolated checkout was necessary because the existing guest-page README edit
+prevented switching the primary checkout to main. Checks use that clean source
+so unrelated working-copy edits are excluded from the package and pull request.
+The existing combined Library/Tags component test file gains focused Tags cases;
+no new tracked test file is added. Final checks, evidence and commit/PR identities
+are recorded below and in the focused Notion task and pull request.
+
+Pinned Node 24.21.0 verification passed all 467 frontend tests, ESLint and the
+production build. The existing Library contract and HTTP classes passed all 12
+backend tests against disposable PostgreSQL 17, with zero failures, errors or
+skips, including verified photo/audio preservation. The first local attempt
+lacked FFmpeg on its process path; rerunning with the already-installed pinned
+audio tools passed without source changes. The ten production files were then
+copied into the primary checkout, and only the four new Tags cases were appended
+to its existing component test file. All eight combined Library/Tags cases pass
+there. All 29 files with pre-existing working-copy changes remain byte-identical.
+
+Independent comparison found identical static markup in all 1,291 valid-state
+cases. Twelve protected coordinator, API, integration, formatter and style files
+remain unchanged. A separate actual-component StrictMode supplement passed 328
+assertions across 13 groups: six matching flows on each baseline/refactored
+component and the actual InboxScreen reset-key checks. It covers exact callback
+arguments and current actions, normalization and synchronous catches, feedback
+precedence and focus dependencies, deletion cancellation and delayed focus
+restoration, busy/lock visibility, confirmation persistence and remounts. It made
+no API requests or automatic actions. All ten production-file hashes stayed fixed.
+
+The combined JAR, SHA-256
+`e84b45b3c1871ce2cfd1a769e20ea276c0bb95cc0d6ae59721c265ec8f56fe01`,
+passed six native browser flow groups (632 harness checks, including readiness).
+Twenty-eight real
+synthetic notes, 24 tags and a 24-member tag exercised catalogue/member/selector
+paging, literal search, detail return, separate same-name identities, no-op
+revisions, adding/removing members across review states, create/rename/delete,
+terminal tombstones, real revision conflict/reload, controlled read failure and
+hidden-name same-identity/revision retry with wrong-name suppression. Complete
+original-memory row digests and the primary membership graph stayed intact.
+
+Desktop 1280×900, narrow 320×720 and simulated CSS 200%/32px text passed without
+horizontal overflow. Nineteen distinct screenshots remain from 22 capture events;
+representative recovery, deletion-confirmation and larger-text screenshots were
+visually reviewed. Eastern saved times, raw partial memory dates, private-content
+clearing and safe keyboard cancellation are retained. Mounted and native runs
+had zero page errors or external requests. Their owned browser, Vite, Java and
+PostgreSQL resources were stopped or removed and closure/absence verified.
+
+Ignored evidence is under `logs/tags-refactor.local/`: `review/`,
+`mounted-supplement/summary.json`,
+`native-ba4ec900-891c-496a-b36d-a32c36ce437d/summary.json`, and the frontend,
+backend-focused and package logs. These local notes-only browser fixtures do not
+repeat provider/original-file or hosted acceptance. Physical devices, screen
+readers, native hidden-tab behavior and actual browser zoom remain separate.
+Full final-head CI and review status belong in the pull request and Notion task.
