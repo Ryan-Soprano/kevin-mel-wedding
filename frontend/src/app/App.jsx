@@ -165,13 +165,15 @@ export default function App({
           ) : title}
         </h1>
         {welcome && (
-          <p className="guest-welcome-introduction">
-            {flow.audioEnabled
-              ? "A favorite photo, a good story, a few words from the heart."
-              : "A favorite photo, a good story, a wish for their next chapter."}
-            {" "}From the wedding day or years before, help them keep the moments
-            that matter.
-          </p>
+          <>
+            <p className="guest-welcome-character">
+              Kevin’s humor and loyalty. Melanie’s honesty and grit.
+            </p>
+            <p className="guest-welcome-introduction">
+              From the wedding day or years before, help them keep the moments
+              that make their story.
+            </p>
+          </>
         )}
       </header>
 

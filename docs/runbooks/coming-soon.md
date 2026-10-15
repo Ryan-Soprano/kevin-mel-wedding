@@ -10,7 +10,7 @@ The page uses system fonts and the Grand Central selfie Ryan selected as photo #
 
 There are no external images, fonts, scripts, cookies, analytics, forms, API calls, or backend/database dependencies. Its text does not reveal the private archive or promise working collection features. All visible content works without JavaScript.
 
-Ryan requested a more celebratory palette after reviewing the photo, then shared that Kevin's favorite color is maroon and Mel's is green. The current design pairs deep-maroon typography and stamp with forest-green highlights, a warm-ivory background, soft rose/sage glows, and muted-gold ornamentation. Their names on the photo card carry the two colors. The photo remains unchanged. This palette is for the temporary page, not an approved replacement for the full application's design system.
+Ryan requested a more celebratory palette after reviewing the photo. On October 15, Ryan clarified that Kevin's favorite colors are greens and Mel's is maroon; the earlier attribution was reversed. The current temporary-page design pairs deep-maroon typography and stamp with forest-green highlights, a warm-ivory background, soft rose/sage glows, and muted-gold ornamentation. Their names on the photo card carry the two colors. The photo remains unchanged. This palette is for the temporary page; the full application's guest wedding theme is recorded in the [guest polish verification](../product/guest-page-polish-verification.md).
 
 The HTML includes `noindex, nofollow`, and `robots.txt` asks crawlers not to crawl the page. These are indexing preferences, not access controls: a published page remains public.
 
