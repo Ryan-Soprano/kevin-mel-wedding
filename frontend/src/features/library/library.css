@@ -6,3 +6,32 @@
 .tag-name-form > button, .tag-search > button, .library-tag-search > button, .memory-tag-search > button { justify-self: start; }
 .tag-recovery, .tag-tombstone, .memory-tags { padding: 16px; border: 1px solid var(--color-border); border-radius: 8px; }
 .memory-tags { margin: 24px 0; }
+
+.private-inbox .library-filters { margin: 0; }
+.private-inbox .library-filters .guest-help { margin: 10px 0 0; }
+.private-inbox .library-tag-filter { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px; padding: 16px; border-radius: 12px; background: var(--inbox-soft, #f0f3ed); }
+.private-inbox .library-tag-filter p { margin: 0; }
+.private-inbox .library-tag-search,
+.private-inbox .tag-search,
+.private-inbox .tag-name-form { grid-template-columns: minmax(0, 1fr) auto; align-items: end; margin: 0; }
+.private-inbox .tag-name-form { max-width: 650px; }
+.private-inbox .library-tag-search > button,
+.private-inbox .tag-search > button,
+.private-inbox .tag-name-form > button { margin: 0; }
+.private-inbox .library .inbox-card h3,
+.private-inbox .tags .inbox-card h3 { margin: 0 0 10px; font-size: 1.15rem; font-weight: 650; line-height: 1.45; }
+.private-inbox .library-result-meta { margin: 0 0 14px; color: var(--color-muted); font-size: 0.85rem; line-height: 1.65; }
+.private-inbox .library-result-date { margin: 0 0 8px; color: var(--color-muted); font-size: 0.82rem; line-height: 1.6; }
+.private-inbox .library-result .inbox-excerpt,
+.private-inbox .tags .inbox-card .inbox-excerpt { margin-top: 12px; }
+.private-inbox .library-tag-choices .inbox-card > p { color: var(--color-muted); font-size: 0.875rem; line-height: 1.6; }
+.private-inbox .tags .tag-recovery { display: block; margin: 0; }
+.private-inbox .tags .tag-recovery .archive-panel-content { display: grid; gap: 16px; }
+.private-inbox .tags .tag-recovery .archive-panel-content > * { margin: 0; }
+
+@media (max-width: 600px) {
+  .private-inbox .library-tag-search,
+  .private-inbox .tag-search,
+  .private-inbox .tag-name-form { grid-template-columns: minmax(0, 1fr); }
+  .private-inbox .library-tag-filter { align-items: flex-start; }
+}

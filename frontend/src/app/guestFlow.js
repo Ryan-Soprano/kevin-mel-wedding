@@ -23,6 +23,12 @@ export function hasUnfinishedWork(flow) {
 
 export function guestFlowReducer(flow, action) {
   switch (action.type) {
+    case "NAVIGATE":
+      if (navigationLocked(flow) || !["welcome", "choose", "done", ...MEMORY_TYPES].includes(action.screen)
+        || (action.screen === "audio" && !flow.audioEnabled)) return flow;
+      return { ...flow, screen: action.screen,
+        started: MEMORY_TYPES.includes(action.screen) && !flow.started.includes(action.screen)
+          ? [...flow.started, action.screen] : flow.started };
     case "CHOOSE":
       if (navigationLocked(flow)) return flow;
       return { ...flow, screen: "choose" };

@@ -85,3 +85,37 @@ test("enabled audio preserves its stopped draft and locks navigation during reco
   assert.equal(hasUnfinishedWork(saved), false);
   assert.equal(guestFlowReducer(saved, { type: "FINISHED", kind: "audio" }).screen, "done");
 });
+
+test("history NAVIGATE preserves form ownership and flags while starting each newly visited form once", () => {
+  let flow = report(select(createGuestFlow({ audioEnabled: true }), "note"), "note", { hasDraft: true });
+  const forms = flow.forms, note = flow.forms.note;
+  for (const screen of ["choose", "photos", "welcome", "audio", "note", "done", "photos"]) {
+    flow = guestFlowReducer(flow, { type: "NAVIGATE", screen });
+    assert.equal(flow.screen, screen); assert.equal(flow.forms, forms); assert.equal(flow.forms.note, note);
+    assert.equal(flow.forms.note.hasDraft, true); assert.equal(hasUnfinishedWork(flow), true);
+  }
+  assert.deepEqual(flow.started, ["note", "photos", "audio"]);
+});
+
+test("history NAVIGATE rejects unknown screens and disabled audio without changing ownership", () => {
+  const flow = select(createGuestFlow(), "note");
+  for (const screen of ["audio", "inbox", "review", "", null, undefined]) {
+    assert.equal(guestFlowReducer(flow, { type: "NAVIGATE", screen }), flow);
+  }
+});
+
+test("history NAVIGATE cannot leave a busy or unconfirmed form or reset a completed form", () => {
+  for (const kind of ["note", "photos", "audio"]) {
+    for (const state of [{ busy: true }, { pending: true }]) {
+      const flow = report(select(createGuestFlow({ audioEnabled: true }), kind), kind, state);
+      for (const screen of ["welcome", "choose", "done", "note", "photos", "audio"]) {
+        assert.equal(guestFlowReducer(flow, { type: "NAVIGATE", screen }), flow);
+      }
+    }
+    const saved = report(select(createGuestFlow({ audioEnabled: true }), kind), kind, { complete: true });
+    const choices = guestFlowReducer(saved, { type: "NAVIGATE", screen: "choose" });
+    const revisited = guestFlowReducer(choices, { type: "NAVIGATE", screen: kind });
+    assert.equal(revisited.forms, saved.forms); assert.equal(revisited.forms[kind].complete, true);
+    assert.equal(hasUnfinishedWork(revisited), false); assert.deepEqual(revisited.started, [kind]);
+  }
+});

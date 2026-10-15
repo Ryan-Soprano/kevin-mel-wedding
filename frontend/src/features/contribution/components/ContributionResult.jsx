@@ -14,8 +14,10 @@ export default function ContributionResult({ view, privateArchive, resultHeading
     <section className="note-result" aria-labelledby="result-heading">
       <h2 id="result-heading" ref={resultHeading} tabIndex={-1}>{copy.resultTitle}</h2>
       <p>{copy.resultDescription}</p>
-      <button type="button" className="button-secondary" onClick={view.actions.finish}>{copy.finishLabel}</button>
-      <button type="button" onClick={view.actions.shareAnother}>{getContributionShareLabel(view.hasShellActions)}</button>
+      <div className="note-actions">
+        <button type="button" className="button-secondary" onClick={view.actions.finish}>{copy.finishLabel}</button>
+        <button type="button" onClick={view.actions.shareAnother}>{getContributionShareLabel(view.hasShellActions)}</button>
+      </div>
     </section>
   );
 }

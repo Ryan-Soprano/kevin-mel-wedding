@@ -22,6 +22,7 @@ test("actual Library/Tags views expose literal filters, partial dates, bounded p
     const { default: MemoryTags } = await server.ssrLoadModule("/src/features/library/components/MemoryTags.jsx");
     const render = (Component, state, locked = false) => renderToStaticMarkup(createElement(Component, { state, busy: false, locked, actions }));
     const empty = render(Library, initialLibrary()); assert.match(empty, /No matching memories/); assert.match(empty, /Reset library search/); assert.match(empty, /Literal words or characters/);
+    assert.match(empty, /each memory’s sharing choice/); assert.match(empty, /role="status"[^>]*>[\s\S]*No matching memories/);
     for (const label of ["Search text", "Memory type", "Review status", "Memory date precision", "Memory date from year (inclusive)", "Memory date to year (inclusive)"]) assert.equal(empty.includes(label), true);
     const memory = { ...MEMORY_DETAIL, title: "<Private title>", guestName: "Synthetic Guest", memoryDate: "2024-03", datePrecision: "MONTH" };
     const results = render(Library, { ...initialLibrary(), items: [memory, { ...MEDIA_DETAIL, source: "COUPLE", guestName: null, title: null }], nextCursor: "opaque-next", cursors: [null, "opaque-current"] });
@@ -32,6 +33,7 @@ test("actual Library/Tags views expose literal filters, partial dates, bounded p
     assert.match(chooser, /Created Oct 10, 2026, 8:00 AM EDT/);
     const failure = render(Library, { ...initialLibrary(), filters: { ...initialLibrary().filters, q: "Applied search" }, error: "These live results changed." }); assert.match(failure, /value="Applied search"/); assert.match(failure, /Load library first page/);
     const tagEmpty = render(Tags, initialTags()); assert.match(tagEmpty, /Create a tag/); assert.match(tagEmpty, /Tag names may repeat/); assert.match(tagEmpty, /Search tag names/);
+    assert.match(tagEmpty, /Tagging does not change who can see a memory/); assert.doesNotMatch(tagEmpty, /Nothing here is published/);
     const tagDetail = render(Tags, { ...initialTags(), view: "detail", tag: TAG, members: [{ memory }], nextCursor: "opaque-next", cursors: [null, "opaque-current"] }); assert.match(tagDetail, /Save tag name/); assert.match(tagDetail, /Remove from tag/); assert.match(tagDetail, /Next tag page/); assert.match(tagDetail, /Guest contribution/); assert.doesNotMatch(tagDetail, /<img|<audio|<video/);
     assert.match(tagDetail, /Saved on: Oct 24, 2026, 2:30 PM EDT · Eastern/); assert.doesNotMatch(tagDetail, /Chicago|CDT|CST/);
     const tombstone = render(Tags, { ...initialTags(), view: "detail", tag: { ...TAG, name: null, memberCount: 0, deletedAt: TAG.updatedAt } }); assert.match(tombstone, /Deleted tag/); assert.match(tombstone, /original files remain/); assert.doesNotMatch(tombstone, /Save tag name|Add memories/);
