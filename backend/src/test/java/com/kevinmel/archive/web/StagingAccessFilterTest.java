@@ -8,6 +8,8 @@ import java.util.Base64;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.web.filter.ForwardedHeaderFilter;
@@ -16,7 +18,7 @@ class StagingAccessFilterTest {
     private static final String USER = "operator-test";
     private static final String PASSWORD = "synthetic-test-password-0123456789";
     private static final String ORIGIN = "https://staging.test";
-    private final StagingAccessFilter filter = new StagingAccessFilter(USER, PASSWORD, ORIGIN);
+    private final StagingAccessFilter filter = new StagingAccessFilter(true, USER, PASSWORD, ORIGIN);
 
     @Test void onlyGetHealthBypassesAuthentication() throws Exception {
         var health = request("GET", "/api/health", false, null);
@@ -48,14 +50,119 @@ class StagingAccessFilterTest {
 
     @Test void invalidOrMissingConfigurationFailsClosed() {
         for (String password : new String[]{"", " ".repeat(24), "too-short", "x".repeat(257), PASSWORD + "\n"}) {
-            assertThatThrownBy(() -> new StagingAccessFilter(USER, password, ORIGIN)).isInstanceOf(IllegalStateException.class);
+            assertThatThrownBy(() -> new StagingAccessFilter(true, USER, password, ORIGIN)).isInstanceOf(IllegalStateException.class);
         }
         for (String username : new String[]{"", " ", "user:name", "user\nname"}) {
-            assertThatThrownBy(() -> new StagingAccessFilter(username, PASSWORD, ORIGIN)).isInstanceOf(IllegalStateException.class);
+            assertThatThrownBy(() -> new StagingAccessFilter(true, username, PASSWORD, ORIGIN)).isInstanceOf(IllegalStateException.class);
         }
         for (String origin : new String[]{"", "http://staging.test", ORIGIN + "/", ORIGIN + "?x=1", "https://user@staging.test"}) {
-            assertThatThrownBy(() -> new StagingAccessFilter(USER, PASSWORD, origin)).isInstanceOf(IllegalStateException.class);
+            assertThatThrownBy(() -> new StagingAccessFilter(true, USER, PASSWORD, origin)).isInstanceOf(IllegalStateException.class);
         }
+    }
+
+    @Test
+    void springConfigurationDefaultsToAdmissionAndRequiresCredentialsUnlessExplicitlyDisabled() {
+        var configuration = new ApplicationContextRunner()
+                .withInitializer(context -> context.getEnvironment().setActiveProfiles("staging"))
+                .withUserConfiguration(StagingAccessConfiguration.class)
+                .withPropertyValues("MEMORY_ARCHIVE_STAGING_ORIGIN=" + ORIGIN);
+
+        configuration.run(context -> {
+            assertThat(context).hasFailed();
+            assertThat(context.getStartupFailure())
+                    .hasRootCauseInstanceOf(IllegalStateException.class);
+        });
+        configuration.withPropertyValues("MEMORY_ARCHIVE_STAGING_BASIC_AUTH_ENABLED=true").run(context -> {
+            assertThat(context).hasFailed();
+            assertThat(context.getStartupFailure())
+                    .hasRootCauseInstanceOf(IllegalStateException.class);
+        });
+        configuration.withPropertyValues("MEMORY_ARCHIVE_STAGING_BASIC_AUTH_ENABLED=false").run(context -> {
+            assertThat(context).hasNotFailed();
+            assertThat(context).hasSingleBean(FilterRegistrationBean.class);
+        });
+    }
+
+    @Test
+    void malformedAuthFlagFailsSpringStartupInsteadOfSilentlyOpeningTheSite() {
+        var configuration = new ApplicationContextRunner()
+                .withInitializer(context -> context.getEnvironment().setActiveProfiles("staging"))
+                .withUserConfiguration(StagingAccessConfiguration.class)
+                .withPropertyValues(
+                        "MEMORY_ARCHIVE_STAGING_ORIGIN=" + ORIGIN,
+                        "MEMORY_ARCHIVE_STAGING_USERNAME=" + USER,
+                        "MEMORY_ARCHIVE_STAGING_PASSWORD=" + PASSWORD);
+        for (String flag : new String[]{"not-a-boolean", ""}) {
+            configuration.withPropertyValues("MEMORY_ARCHIVE_STAGING_BASIC_AUTH_ENABLED=" + flag).run(context -> {
+                assertThat(context).hasFailed();
+                assertThat(context.getStartupFailure())
+                        .hasRootCauseInstanceOf(IllegalArgumentException.class);
+            });
+        }
+    }
+
+    @Test
+    void explicitlyDisabledAdmissionAllowsGuestRoutesWithoutCredentialsOrChallenge() throws Exception {
+        var publicAccess = new StagingAccessFilter(false, null, null, ORIGIN);
+        for (String path : new String[]{"/", "/assets/app.js", "/api/contributions"}) {
+            var result = pass(publicAccess, request("GET", path, true, null));
+            assertThat(result.passed()).isTrue();
+            assertThat(result.response().getHeader("WWW-Authenticate")).isNull();
+            assertThat(result.response().getHeader("Cache-Control")).isEqualTo("no-store");
+            assertThat(result.response().getHeader("X-Content-Type-Options")).isEqualTo("nosniff");
+            assertThat(result.response().getHeaders("Vary")).contains("Authorization");
+        }
+        var invalidCredentials = pass(publicAccess, request("POST", "/api/contributions", true, "Basic !!!"));
+        assertThat(invalidCredentials.passed()).isTrue();
+        assertThat(invalidCredentials.response().getHeader("WWW-Authenticate")).isNull();
+    }
+
+    @Test
+    void disabledAdmissionStillRequiresHttpsAndTheExactApprovedOrigin() throws Exception {
+        var publicAccess = new StagingAccessFilter(false, "", "", ORIGIN);
+        var insecure = pass(publicAccess, request("GET", "/", false, null));
+        assertThat(insecure.passed()).isFalse();
+        assertThat(insecure.response().getStatus()).isEqualTo(403);
+        assertThat(insecure.response().getContentAsString()).contains("STAGING_HTTPS_REQUIRED");
+        assertThat(insecure.response().getHeader("WWW-Authenticate")).isNull();
+
+        var wrongOrigin = request("POST", "/api/contributions", true, null);
+        wrongOrigin.setServerName("unapproved.test");
+        var rejected = pass(publicAccess, wrongOrigin);
+        assertThat(rejected.passed()).isFalse();
+        assertThat(rejected.response().getStatus()).isEqualTo(403);
+        assertThat(rejected.response().getContentAsString()).contains("STAGING_ORIGIN_INVALID");
+        assertThat(rejected.response().getHeader("WWW-Authenticate")).isNull();
+
+        for (String origin : new String[]{"", "http://staging.test", ORIGIN + "/", ORIGIN + "?x=1"}) {
+            assertThatThrownBy(() -> new StagingAccessFilter(false, null, null, origin))
+                    .isInstanceOf(IllegalStateException.class);
+        }
+    }
+
+    @Test
+    void disabledAdmissionRetainsForwardedHttpsAndDownstreamCrossSiteRejection() throws Exception {
+        var publicAccess = new StagingAccessFilter(false, null, null, ORIGIN);
+        var forwarded = new ForwardedHeaderFilter();
+        var request = request("POST", "/api/contributions", false, null);
+        request.addHeader("X-Forwarded-Proto", "https");
+        request.addHeader("X-Forwarded-Host", "staging.test");
+        request.addHeader("X-Forwarded-Port", "443");
+        request.addHeader("Origin", ORIGIN);
+        var passed = new AtomicBoolean();
+        forwarded.doFilter(request, new MockHttpServletResponse(), (req, res) ->
+                publicAccess.doFilter(req, res, (inner, response) -> {
+                    RequestOrigin.requireSameOrigin((jakarta.servlet.http.HttpServletRequest) inner);
+                    passed.set(true);
+                }));
+        assertThat(passed).isTrue();
+
+        var crossSite = request("POST", "/api/contributions", true, null);
+        crossSite.addHeader("Origin", "https://other.test");
+        assertThatThrownBy(() -> publicAccess.doFilter(crossSite, new MockHttpServletResponse(), (req, res) ->
+                RequestOrigin.requireSameOrigin((jakarta.servlet.http.HttpServletRequest) req)))
+                .isInstanceOfSatisfying(ApiException.class, failure ->
+                        assertThat(failure.code()).isEqualTo("ORIGIN_INVALID"));
     }
 
     @Test void trustedProxyHttpsPreservesSameOriginButSpoofedHostAndCrossSiteFail() throws Exception {
@@ -98,9 +205,13 @@ class StagingAccessFilterTest {
         return request;
     }
     private Result pass(MockHttpServletRequest request) throws Exception {
+        return pass(filter, request);
+    }
+
+    private Result pass(StagingAccessFilter access, MockHttpServletRequest request) throws Exception {
         var response = new MockHttpServletResponse();
         var passed = new AtomicBoolean();
-        filter.doFilter(request, response, (req, res) -> passed.set(true));
+        access.doFilter(request, response, (req, res) -> passed.set(true));
         return new Result(passed.get(), response);
     }
     private record Result(boolean passed, MockHttpServletResponse response) {}

@@ -1,6 +1,7 @@
 package com.kevinmel.archive.web;
 
 import org.springframework.context.annotation.Profile;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.CacheControl;
@@ -9,9 +10,13 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/** Disposable local-only recorder preparation. The staging admission filter remains mandatory. */
+/** Disposable recorder preparation, available only while staging operator admission is enabled. */
 @RestController
 @Profile("staging")
+@ConditionalOnProperty(
+        name = "MEMORY_ARCHIVE_STAGING_BASIC_AUTH_ENABLED",
+        havingValue = "true",
+        matchIfMissing = true)
 public class StagingAudioSpikeController {
     @GetMapping({"/staging/audio", "/staging/audio/"})
     ResponseEntity<Resource> index() { return file("index.html", "text/html;charset=UTF-8"); }

@@ -67,3 +67,63 @@ class LocalAudioSpikeExclusionTest {
         }
     }
 }
+
+@WebMvcTest(controllers = StagingAudioSpikeController.class, properties = {
+        "MEMORY_ARCHIVE_STAGING_BASIC_AUTH_ENABLED=false",
+        "MEMORY_ARCHIVE_STAGING_ORIGIN=https://spike.test",
+        "logging.level.org.springframework.boot.security.autoconfigure.UserDetailsServiceAutoConfiguration=ERROR"})
+@ActiveProfiles("staging")
+@Import({SecurityConfiguration.class, SecurityErrorWriter.class, StagingAccessConfiguration.class})
+class PublicStagingAudioSpikeExclusionTest {
+    @Autowired MockMvc mvc;
+    @Autowired ApplicationContext context;
+    @MockitoBean ArchiveAccountRepository accounts;
+    @MockitoBean ArchiveAccessPolicy policy;
+
+    private static MockHttpServletRequestBuilder publicRequest(String path) {
+        return get(path).secure(true).with(request -> {
+            request.setScheme("https");
+            request.setServerName("spike.test");
+            request.setServerPort(443);
+            return request;
+        });
+    }
+
+    @Test
+    void disablingBrowserAdmissionRemovesEveryDisposableProbeRoute() throws Exception {
+        assertThat(context.getBeansOfType(StagingAudioSpikeController.class)).isEmpty();
+        for (String path : new String[]{
+                "/staging/audio",
+                "/staging/audio/",
+                "/staging/audio/recorder.js",
+                "/staging/audio/probe-model.js",
+                "/staging/audio/style.css"}) {
+            var response = mvc.perform(publicRequest(path))
+                    .andExpect(status().isNotFound())
+                    .andExpect(header().doesNotExist("WWW-Authenticate"))
+                    .andExpect(header().string("Cache-Control", "no-store"))
+                    .andReturn().getResponse();
+            assertThat(response.getContentType()).isNotEqualTo("text/html");
+            assertThat(response.getContentAsString()).doesNotContain(
+                    "<html", "Synthetic staging route fixture", "MediaRecorder", "default-src");
+        }
+    }
+
+    @Test
+    void publicStagingStillDeniesAnonymousPrivateArchiveRoutesWithoutABrowserChallenge() throws Exception {
+        for (String path : new String[]{
+                "/api/memories",
+                "/api/memories/11111111-1111-4111-8111-111111111111/playback",
+                "/api/albums",
+                "/api/timeline",
+                "/api/library",
+                "/api/tags",
+                "/api/exports"}) {
+            mvc.perform(publicRequest(path))
+                    .andExpect(status().isUnauthorized())
+                    .andExpect(jsonPath("$.error.code").value("AUTH_REQUIRED"))
+                    .andExpect(header().doesNotExist("WWW-Authenticate"))
+                    .andExpect(header().string("Cache-Control", "no-store"));
+        }
+    }
+}
