@@ -15,17 +15,23 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import org.springframework.web.util.UriComponentsBuilder;
 
 final class StagingAccessFilter extends OncePerRequestFilter {
+    private final boolean basicAuthenticationEnabled;
     private final byte[] credentialDigest;
     private final String expectedOrigin;
 
-    StagingAccessFilter(String username, String password, String origin) {
-        if (username == null || username.isBlank() || username.length() > 64
-                || username.contains(":") || username.chars().anyMatch(Character::isISOControl)
-                || password == null || password.isBlank() || password.length() < 24 || password.length() > 256
-                || password.chars().anyMatch(Character::isISOControl)) {
-            throw new IllegalStateException("Staging requires a username and a password of 24–256 characters.");
+    StagingAccessFilter(boolean basicAuthenticationEnabled, String username, String password, String origin) {
+        this.basicAuthenticationEnabled = basicAuthenticationEnabled;
+        if (basicAuthenticationEnabled) {
+            if (username == null || username.isBlank() || username.length() > 64
+                    || username.contains(":") || username.chars().anyMatch(Character::isISOControl)
+                    || password == null || password.isBlank() || password.length() < 24 || password.length() > 256
+                    || password.chars().anyMatch(Character::isISOControl)) {
+                throw new IllegalStateException("Staging requires a username and a password of 24–256 characters.");
+            }
+            credentialDigest = digest((username + ":" + password).getBytes(StandardCharsets.UTF_8));
+        } else {
+            credentialDigest = new byte[0];
         }
-        credentialDigest = digest((username + ":" + password).getBytes(StandardCharsets.UTF_8));
         try {
             URI parsed = URI.create(origin);
             if (!"https".equals(parsed.getScheme()) || parsed.getHost() == null || parsed.getUserInfo() != null
@@ -57,8 +63,7 @@ final class StagingAccessFilter extends OncePerRequestFilter {
             reject(response, 403, "STAGING_ORIGIN_INVALID", "Open the approved HTTPS test address.");
             return;
         }
-        String authorization = request.getHeader("Authorization");
-        if (!authorized(authorization)) {
+        if (basicAuthenticationEnabled && !authorized(request.getHeader("Authorization"))) {
             response.setHeader("WWW-Authenticate", "Basic realm=\"Memory Archive staging\", charset=\"UTF-8\"");
             reject(response, 401, "STAGING_AUTH_REQUIRED", "Sign in to this test environment.");
             return;
