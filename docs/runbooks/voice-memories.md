@@ -8,12 +8,22 @@ there is no transcription, editing or public playback.
 
 ## Admission and runtime
 
-Audio remains disabled by default while AUD-01 physical phone/browser acceptance
-is deferred. Build the guest UI with `VITE_AUDIO_ENABLED=true` only for a deliberate
-synthetic test. Enable new server audio admission with
+On October 14, 2026, Ryan explicitly requested that the audio option be made
+available on the existing Render service. This supersedes the October 9 deferral
+for audio enablement; physical-device acceptance and live audio verification
+remain separately tracked.
+
+Both gates retain explicit opt-in defaults. Build the guest and private creation
+UI with `VITE_AUDIO_ENABLED=true`, and enable new server audio admission with
 `MEMORY_ARCHIVE_AUDIO_ENABLED=true`; private storage must also be configured and
-enabled. The build flag is public configuration, never a secret. The Docker build
-accepts `--build-arg VITE_AUDIO_ENABLED=true`; its default is `false`.
+enabled, uploads unpaused, and reservation capacity available. The build flag is
+public configuration, never a secret. The Docker build accepts
+`--build-arg VITE_AUDIO_ENABLED=true`; its default is `false`. Rebuild the frontend
+when changing this flag; a runtime-only change cannot expose the audio option.
+
+The October 14 Render configuration enables both flags. Configuration and a
+successful deployment do not establish a recorded clip's upload, finalization or
+private playback; record those results separately when verified.
 
 The runtime needs `ffmpeg` and `ffprobe`. The Docker image and Linux CI install
 the Ubuntu package. Local tests also require both executables on PATH, or explicit
@@ -73,9 +83,11 @@ retry identity, gated admission, authenticated playback, review and audio
 export/restore/deletion replay. They establish implementation behavior and do not
 replace physical device or real-R2 acceptance.
 
-Before opening audio collection, record AUD-01 device/browser evidence for actual
-microphone permission, interruptions, stop/replay, native files, container/codec
-compatibility, and the full phone recording → saved receipt → private playback or
-download → export byte comparison. Verify real R2 exact-size signing, CORS,
-expiry/recovery, inaccessible public objects, capacity and hosted decoder deadlines.
-No physical-phone test, provider change or deployment is claimed by this slice.
+The October 14 enablement instruction does not complete AUD-01 device/browser
+acceptance. Record actual microphone permission, interruptions, stop/replay,
+native files, container/codec compatibility, and the full phone recording → saved
+receipt → private playback or download → export byte comparison. Verify real R2
+exact-size signing, CORS, expiry/recovery, inaccessible public objects, capacity
+and hosted decoder deadlines. Physical-phone and live audio IO passes remain
+unclaimed until that evidence exists; the historical automated verification
+record remains unchanged.

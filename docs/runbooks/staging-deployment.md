@@ -117,7 +117,7 @@ After approval, Ryan performs or explicitly directs these steps:
 4. Set the health-check path to `/api/health`. Confirm the selected commit and perform the approved **manual deployment**. Keep automatic deployment disabled while acceptance, memory sizing and migration/rollback safety are being proved. Do not create deployment hooks or attach the public wedding domain during this stage.
 5. Confirm the gate and same-origin UI/API checks below. Then add this exact HTTPS origin to the private **test** R2 bucket CORS allowlist, preserving the approved local origins. Use only `PUT`, `GET`, `HEAD`, `Content-Type` and the approved exact origins; AUTH-02 playback needs browser GET. Use [private photo storage setup](private-photo-storage.md) for bucket privacy, token scope and lifecycle; a wildcard or public bucket is not a fix for CORS.
 
-| Server environment variable | Required value / entry method |
+| Service environment variable | Required value / entry method |
 |---|---|
 | `SPRING_PROFILES_ACTIVE` | `staging` (also the image default; retain it explicitly in the service settings) |
 | `MEMORY_ARCHIVE_ENVIRONMENT` | `staging`; never label this test database as production |
@@ -132,11 +132,19 @@ After approval, Ryan performs or explicitly directs these steps:
 | `MEMORY_ARCHIVE_STAGING_USERNAME` | Temporary operator/tester admission name |
 | `MEMORY_ARCHIVE_STAGING_PASSWORD` | Unique password-manager-generated 24–256 character password, entered privately |
 | `MEMORY_ARCHIVE_STORAGE_ENABLED` | `true` only after the private test bucket/token/CORS are ready |
+| `VITE_AUDIO_ENABLED` | `true` for the October 14 voice-memory enablement; public Docker build argument, requiring a frontend rebuild |
+| `MEMORY_ARCHIVE_AUDIO_ENABLED` | `true` to admit new voice memories at runtime; private storage must be enabled and uploads unpaused |
 | `MEMORY_ARCHIVE_R2_ENDPOINT` | `https://YOUR_32_HEX_ACCOUNT_ID.r2.cloudflarestorage.com`; no bucket suffix |
 | `MEMORY_ARCHIVE_R2_BUCKET` | Approved synthetic-only test bucket name |
 | `MEMORY_ARCHIVE_R2_ACCESS_KEY_ID` | Test-bucket-scoped Object Read & Write access key, entered privately |
 | `MEMORY_ARCHIVE_R2_SECRET_ACCESS_KEY` | Corresponding secret, entered privately |
 | `JAVA_TOOL_OPTIONS` | For the separately approved 2 GB plan, the locally measured candidate is `-Xms64m -Xmx1536m -XX:+ExitOnOutOfMemoryError`; verify hosted memory/headroom before accepting capacity |
+
+Render passes `VITE_AUDIO_ENABLED` to the Docker build. Set both audio flags before
+rebuilding and deploying; a runtime-only change cannot expose the voice option.
+Both default to `false` when omitted. Ryan's October 14 instruction enables audio
+on the existing service; see the [voice-memory runbook](voice-memories.md) for
+formats, recording/upload behavior and the remaining device/storage checks.
 
 The staging DB settings are mandatory; there is no localhost fallback in that profile. A Render `postgresql://user:password@…` connection string is not a JDBC URL and must not be pasted into `MEMORY_ARCHIVE_DB_URL`. Render's internal TLS supports `sslmode=require`; do not claim certificate verification from that setting. Put no secret in `VITE_*`, Git, Notion, screenshots, commands with literal passwords, build arguments or copied logs. `.env` is not automatically loaded. Flyway applies the reviewed V1–V5 migrations to this separate test database at startup; never rewrite applied migrations or run a database reset against retained evidence.
 

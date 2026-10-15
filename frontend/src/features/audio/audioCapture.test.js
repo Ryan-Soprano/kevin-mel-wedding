@@ -126,11 +126,33 @@ test("local validation bounds input, checks real decoded duration, preserves byt
   for (const seconds of [0, Infinity, 120.001]) {
     duration = seconds; await assert.rejects(validateAudioFile(clip, { AudioContextType: Context }), AudioCaptureError);
   }
-  for (const bad of [new File([], "empty.webm", { type: "audio/webm" }), new File([clip], "video.mp4", { type: "video/mp4" }),
+  for (const bad of [new File([], "empty.webm", { type: "audio/webm" }), new File([clip], "mismatched.ogg", { type: "video/mp4" }),
     new File([new Uint8Array(25_000_001)], "large.ogg", { type: "audio/ogg" })]) {
     await assert.rejects(validateAudioFile(bad, { AudioContextType: Context }), { code: "FILE_INVALID" });
   }
   assert.equal(contexts, 4); assert.equal(closed, 4);
+});
+
+test("a browser-labeled WebM reaches ready with canonical audio metadata and unchanged original bytes", async () => {
+  const original = new File(["synthetic audio-only fixture"], "browser-labeled.webm", { type: "video/webm" });
+  let decoded, closed = 0;
+  class Context {
+    decodeAudioData(bytes) { decoded = bytes; return Promise.resolve({ duration: 3 }); }
+    close() { closed++; }
+  }
+  const f = fixture({ validate: file => validateAudioFile(file, { AudioContextType: Context }) });
+  await f.capture.useFile(original);
+  const ready = f.capture.getSnapshot();
+  assert.equal(ready.phase, "ready");
+  assert.equal(ready.clip.file.type, "audio/webm");
+  assert.equal(ready.clip.file.name, original.name);
+  assert.equal(ready.clip.durationSeconds, 3);
+  assert.equal(original.type, "video/webm");
+  assert.deepEqual(new Uint8Array(decoded), new Uint8Array(await original.arrayBuffer()));
+  assert.deepEqual(new Uint8Array(await ready.clip.file.arrayBuffer()), new Uint8Array(await original.arrayBuffer()));
+  assert.equal(f.created[0], ready.clip.file);
+  assert.equal(closed, 1);
+  f.capture.dispose();
 });
 
 test("local decoder timeout settles even if decoding or context cleanup never settles", async () => {
