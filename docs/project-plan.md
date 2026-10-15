@@ -140,6 +140,8 @@ On October 15, 2026, Ryan granted standing authority to manage this project end 
 
 Proceed autonomously with repository changes, dependencies, CI/CD, GitHub branches, commits, pushes, pull requests, reviews, conflict resolution and merges, plus related project implementation and routine operation or deployment of existing services. Explain significant decisions and report verification without pausing for routine approval. Complete review and required checks before merging.
 
+**Standing PR merge rule (Ryan, October 15):** merge completed pull requests automatically once all required CI checks pass for the current PR head and GitHub AI/Copilot review has no unresolved actionable findings. Check AI reviews, inline threads and PR comments before merging. Investigate and resolve identified issues first, then verify checks and findings against the latest head again. An earlier commit's passing checks do not satisfy this gate. No additional approval from Ryan is needed.
+
 This supersedes earlier hands-on setup and separate routine implementation/deployment approval requirements in repository documentation. Existing budget commitments, private-data safeguards, Kevin and Melanie's moderation/publication ownership, and destructive-data protections remain in force. Tool-enforced environment permissions still apply.
 
 ## Material change log
