@@ -2,7 +2,7 @@ export const MAX_AUDIO_BYTES = 25_000_000;
 export const MAX_AUDIO_SECONDS = 120;
 export const AUDIO_CONTENT_TYPES = new Set(["audio/webm", "audio/ogg", "audio/mp4"]);
 const AUDIO_EXTENSIONS = new Map([
-  [".webm", "audio/webm"], [".ogg", "audio/ogg"], [".oga", "audio/ogg"],
+  [".webm", "audio/webm"], [".ogg", "audio/ogg"], [".oga", "audio/ogg"], [".opus", "audio/ogg"],
   [".m4a", "audio/mp4"], [".mp4", "audio/mp4"],
 ]);
 const FILE_MIME_ALIASES = new Map([

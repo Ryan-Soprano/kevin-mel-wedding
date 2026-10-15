@@ -11,6 +11,7 @@ test("file selection recognizes browser container labels and M4A aliases without
     ["clip.oga", "application/x-ogg", "audio/ogg"],
     ["clip.ogg", "video/ogg", "audio/ogg"],
     ["clip.ogg", "audio/x-ogg", "audio/ogg"],
+    ["clip.opus", "audio/ogg", "audio/ogg"],
     ["clip.m4a", "audio/x-m4a", "audio/mp4"],
     ["clip.M4A", "audio/m4a", "audio/mp4"],
     ["clip.m4a", "audio/x-mp4", "audio/mp4"],
@@ -27,7 +28,7 @@ test("file selection recognizes browser container labels and M4A aliases without
 test("missing or generic file labels require a recognized container extension", () => {
   for (const type of ["", "application/octet-stream", "binary/octet-stream", "application/binary"]) {
     for (const [name, expected] of [["clip.webm", "audio/webm"], ["clip.ogg", "audio/ogg"],
-      ["clip.oga", "audio/ogg"], ["clip.m4a", "audio/mp4"], ["clip.mp4", "audio/mp4"]]) {
+      ["clip.oga", "audio/ogg"], ["clip.opus", "audio/ogg"], ["clip.m4a", "audio/mp4"], ["clip.mp4", "audio/mp4"]]) {
       assert.equal(audioFileContentType(new File(["synthetic clip"], name, { type })), expected);
     }
     for (const name of ["clip", "clip.bin", "clip.mp3", "clip.wav", "clip.webm.exe"]) {
@@ -50,5 +51,5 @@ test("conflicting container labels and unsupported file types cannot be inferred
 });
 
 test("the file picker includes supported extensions and no broad audio or video wildcard", () => {
-  assert.deepEqual(AUDIO_ACCEPT.split(","), ["audio/webm", "audio/ogg", "audio/mp4", ".webm", ".ogg", ".oga", ".m4a", ".mp4"]);
+  assert.deepEqual(AUDIO_ACCEPT.split(","), ["audio/webm", "audio/ogg", "audio/mp4", ".webm", ".ogg", ".oga", ".opus", ".m4a", ".mp4"]);
 });
