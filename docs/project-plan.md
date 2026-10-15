@@ -98,7 +98,7 @@ The full rationale and acceptance notes live in the Notion **Decisions** view.
 - **D-06 — Contribution, memory, media, and lifecycle model:** preserve contribution grouping while reviewing items individually; new items are private and pending; keep/archive/delete and publication are separate states.
 - **D-07 — Budget and recovery:** comfortable baseline $15/month plus domain, warning at $25, intervention at $40, conservative original-media ceiling 7.5 GB, wedding database RPO five minutes/RTO one hour, and 30-day contribution-bearing backup retention.
 - **D-08 — Schedule and operators:** rehearsal October 17, freeze October 20, wedding October 24, and archive handoff/collection-close target October 31. The October 31 milestone does not prevent earlier couple collaboration or synthetic testing. Ryan is the sole privileged wedding operator.
-- Learning and provisioning guardrail: explain each component and tradeoff, agree on the choice, give Ryan a small hands-on setup task, then review it. Do not provision infrastructure or deploy unless Ryan explicitly requests it.
+- Learning workflow: explain significant components and tradeoffs and report verification. The [October 15 standing authorization](#standing-project-authorization) supersedes earlier hands-on setup and routine approval requirements.
 
 ### Evidence-gated decisions
 
@@ -133,6 +133,14 @@ The [v1 API contract](api/v1/README.md) and adapters support durable notes, grou
 **Shared-file etiquette:** discuss changes to build files, lockfiles, shared styles/components, API contracts, migrations, and deployment configuration before editing them simultaneously. New feature branches use `feature/<description>`, for example `feature/photo-previews` or `feature/persist-messages`. Preserve existing branches. Keep a pull request focused on one Notion issue or a small explicitly linked set, and add its URL to the issue.
 
 **Visible development checkout (Ryan's request, October 9):** make future code edits directly in `F:\Projects\Kevin-Mel-Wedding-Site\kevin-mel-wedding` on feature branches so Ryan sees them in VS Code as they happen. Check for user edits before switching branches or applying changes. Pull requests still provide review before merge; do not use a separate managed worktree for ordinary implementation in this project.
+
+### Standing project authorization
+
+On October 15, 2026, Ryan granted standing authority to manage this project end to end: “You have absolute control to do all things related to GitHub, modify the repository, and anything else you need. No need to ask for approval on this project.”
+
+Proceed autonomously with repository changes, dependencies, CI/CD, GitHub branches, commits, pushes, pull requests, reviews, conflict resolution and merges, plus related project implementation and routine operation or deployment of existing services. Explain significant decisions and report verification without pausing for routine approval. Complete review and required checks before merging.
+
+This supersedes earlier hands-on setup and separate routine implementation/deployment approval requirements in repository documentation. Existing budget commitments, private-data safeguards, Kevin and Melanie's moderation/publication ownership, and destructive-data protections remain in force. Tool-enforced environment permissions still apply.
 
 ## Material change log
 

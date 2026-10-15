@@ -41,7 +41,7 @@ function getNavigationHelp(locked, complete) {
     return "Keep this page open until your submission is confirmed. Use the retry controls below if needed.";
   }
   if (complete) {
-    return "Your memory is saved. Choose Done or Share another memory below to finish.";
+    return "Your memory is saved. Return to our photos or share another memory below.";
   }
   return null;
 }
@@ -103,7 +103,8 @@ export default function App({
   );
 
   useEffect(() => {
-    heading.current?.focus();
+    heading.current?.focus({ preventScroll: true });
+    window.scrollTo({ top: 0, behavior: "instant" });
   }, [flow.screen]);
 
   useEffect(() => {
@@ -173,6 +174,8 @@ export default function App({
         )}
       </header>
 
+      {welcome && <CoupleScrapbook />}
+
       {(welcome || flow.screen === "choose") && (
         <section
           className={`guest-choices${welcome ? " guest-choices--welcome" : ""}`}
@@ -215,6 +218,7 @@ export default function App({
           <p className="guest-help guest-privacy">
             Sent privately to Kevin and Melanie. They choose which memories to share.
           </p>
+          {welcome && unfinished && <p className="guest-draft-notice" role="status">You have an unfinished memory here. Choose its memory type above to continue before closing this page.</p>}
           {!welcome && (
             <button
               type="button"
@@ -227,7 +231,6 @@ export default function App({
         </section>
       )}
 
-      {welcome && <CoupleScrapbook />}
       {welcome && <GuestGallery />}
       {welcome && (
         <Suspense fallback={null}>
@@ -286,6 +289,7 @@ export default function App({
               onFlowStateChange={reportAudio}
               onDone={audioDone}
               onShareAnother={anotherAudio}
+              onWriteNote={() => dispatch({ type: "SELECT", kind: "note" })}
             />
           </Suspense>
         </div>
@@ -310,6 +314,7 @@ export default function App({
               ? "Continue or share another memory"
               : "Share another memory"}
           </button>
+          <button type="button" className="button-secondary" onClick={() => dispatch({ type: "NAVIGATE", screen: "welcome" })}>Back to our photos</button>
         </section>
       )}
     </main>

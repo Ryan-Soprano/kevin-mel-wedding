@@ -93,6 +93,7 @@ test("direct note form exposes send, private copy, validation descriptions, pend
     assert.match(success, />Write another note</);
     const shellSuccess = render(ContributionResult, { view: { ...successView, hasShellActions: true }, privateArchive: false });
     assert.match(shellSuccess, />Share another memory</);
+    assert.match(shellSuccess, />Back to our photos</);
     assert.doesNotMatch(shellSuccess, /Write another note/);
     const privateSuccess = render(ContributionResult, { view: successView, privateArchive: true });
     assert.match(privateSuccess, /Your note is saved in your private archive/);

@@ -1,8 +1,8 @@
 .couple-scrapbook {
-  max-width: 940px;
-  margin: 44px auto 0;
-  padding: 26px 12px 10px;
-  border-block: 1px solid var(--guest-parchment);
+  max-width: 1000px;
+  margin: 0 auto 32px;
+  padding: 0 0 20px;
+  border-bottom: 1px solid var(--guest-parchment);
 }
 
 .couple-scrapbook-heading {
@@ -24,8 +24,8 @@
   display: grid;
   grid-template-columns: 0.75fr 1fr 1.1fr 1fr 0.75fr;
   align-items: center;
-  gap: 12px;
-  max-width: 800px;
+  gap: 10px;
+  max-width: 920px;
   margin: 0 auto;
   padding: 6px;
 }
@@ -112,14 +112,14 @@
 
 @media (max-width: 680px) {
   .couple-scrapbook {
-    margin-top: 30px;
-    padding: 24px 0 8px;
+    margin: 0 -10px 28px;
+    padding: 0 0 20px;
   }
 
   .couple-scrapbook-photos {
     grid-template-columns: repeat(6, minmax(0, 1fr));
     gap: 14px 8px;
-    max-width: 450px;
+    max-width: 500px;
   }
 
   .scrapbook-photo {

@@ -22,7 +22,7 @@ Kevin and Melanie already know about the project and help shape it. Include them
 - **Understand the project:** open the [Notion project home](https://app.notion.com/p/3dad9739c6bc81ff89cbd713cddf08d1?pvs=204) and read the [project plan](docs/project-plan.md) for scope, accepted architecture, module boundaries, and collaboration conventions.
 - **Run the code:** use the local-development instructions below.
 
-This is a learning project. Explain and agree on infrastructure, dependencies, and CI/CD before Ryan performs each hands-on setup step. Do not automatically create provider accounts, connect services, provision infrastructure, add dependencies, configure CI/CD, or deploy application changes without Ryan's explicit request.
+This is a learning project with [standing autonomous project authorization](docs/project-plan.md#standing-project-authorization). Explain significant technical choices and report verification; proceed with project work without routine approval requests.
 
 ## Local development
 
@@ -149,7 +149,7 @@ The form now lets guests write, review, edit, send, and finish a note. It shows 
 
 The independent **Share photos** form accepts one to five original JPEG/PNG/WebP files, up to 10 MB each, with one optional name and a caption per photo. It preserves the original files, SHA-256 checksums, ordered item IDs and one contribution retry key until confirmed. Each row shows preparation, upload, verification, saved or failed status; the result reports the confirmed count accurately when only part of the batch succeeds. A successful PUT alone never produces saved confirmation. Deliberate retry checks the receipt and retained grant before sending bytes again, skips saved siblings and can target a single unsaved photo. Metadata stays locked while the result is uncertain. A known verification rejection permits retry of the same original bytes or an explicit new batch once every unsaved item is known rejected. Keep the page open until confirmed; refresh/tab closure does not retain files or retry state. HEIC remains unavailable; audio uses its separate admission gate. See [MED-02 verification](docs/product/med02-verification.md) for timeout/recovery behavior and the deferred phone/provider checks.
 
-The guest shell now starts with an invitation and one memory choice at a time. Notes and photos both support review, **Done** and **Share another memory**; audio is hidden unless its build gate is enabled. Back preserves visited forms and drafts, while submission/uncertain recovery locks navigation. A saved result never silently becomes a new submission. The note request has a 30-second deadline and retains its original key after timeout. See [UX-01 verification](docs/product/ux01-verification.md) for the behavior and remaining device/release checks.
+The guest welcome places its five-photo scrapbook above direct memory choices, with the full gallery below. Notes send directly, photos include review, and confirmed results offer **Back to our photos** or **Share another memory**; audio appears only when its build gate is enabled. Photo and voice forms share the note form's card treatment. Back preserves visited forms and drafts, while submission/uncertain recovery locks navigation. A saved result never silently becomes a new submission. The note request has a 30-second deadline and retains its original key after timeout. See the [guest polish verification](docs/product/guest-page-polish-verification.md) and [UX-01 verification](docs/product/ux01-verification.md) for behavior and remaining device/release checks.
 
 ### Private account access
 
@@ -258,7 +258,7 @@ V4 adds disabled-by-default private accounts and credential versions; V5 adds du
 | [docs/project-plan.md](docs/project-plan.md) | Product scope, accepted architecture, and collaboration conventions |
 | [Feature tracker.md](<Feature tracker.md>) | Migration pointer to Notion; do not maintain task status here |
 
-Work in small, explained increments. Claim work in Notion and use `feature/<description>` for new feature branches. The current branch does not assign tasks. Ryan granted standing autonomous project authority on October 9: implement, verify, commit, push, open pull requests and merge after review and passing checks. On October 14 he explicitly requested audio availability on the existing Render service, superseding the earlier audio-enablement deferral. Keep remaining device acceptance and unrelated hosting/spending restrictions in force unless separately authorized.
+Work in small, explained increments. Claim work in Notion and use `feature/<description>` for new feature branches. The current branch does not assign tasks. Ryan expanded his October 9 autonomous-work authorization on October 15 to cover the complete GitHub workflow, repository changes and related project work without routine approval requests. Follow the [standing project authorization](docs/project-plan.md#standing-project-authorization), including review, passing checks, existing budgets and privacy safeguards. The October 14 audio-enablement request remains in force; outstanding physical-device and release evidence still needs verification.
 
 ## Where information belongs
 

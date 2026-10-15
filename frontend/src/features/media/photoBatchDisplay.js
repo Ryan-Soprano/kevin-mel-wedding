@@ -4,14 +4,14 @@ const STATUS_LABELS = {
 };
 const GUEST_COPY = {
   title: "Share photos",
-  introduction: "Send up to five original JPEG, PNG, or WebP photos, up to 10 MB each. They stay private for Kevin and Melanie.",
+  introduction: "A favorite moment, a candid smile, or a little glimpse of the day.",
   reviewTitle: "Ready to send your photos?",
-  reviewDescription: "Only Kevin and Melanie can review these photos when their archive is ready. They will not appear publicly.",
-  sendLabel: "Send photos", finishLabel: "Done",
+  reviewDescription: "Your photos go privately to Kevin and Melanie. Keep this page open until they’re saved.",
+  sendLabel: "Send photos", finishLabel: "Back to our photos",
 };
 const PRIVATE_COPY = {
   title: "Add photos",
-  introduction: "Add up to five original JPEG, PNG, or WebP photos, up to 10 MB each, to your private archive.",
+  introduction: "Keep a few favorite moments together in your private archive.",
   reviewTitle: "Ready to save your photos privately?",
   reviewDescription: "These originals will be kept in your private archive. Add a title, description and date to each after saving.",
   sendLabel: "Save photos privately", finishLabel: "View added memory",
@@ -45,7 +45,7 @@ export function getPhotoBatchSummary({ busy, activeItem, savedCount, totalCount,
     return "Preparing your photo batch…";
   }
   if (retained) return `${savedCount} of ${totalCount} photos saved privately.`;
-  return "Choose your photos and add optional captions before saving.";
+  return "";
 }
 
 export function getPhotoBatchGuestName(privateArchive, guestName) {

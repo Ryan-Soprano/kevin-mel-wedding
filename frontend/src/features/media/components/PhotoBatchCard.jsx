@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   getPhotoRetryChoiceLabel,
   getPhotoStatusText,
@@ -43,6 +44,7 @@ export default function PhotoBatchCard({
   onCaptionRef,
   onToggleRetry,
 }) {
+  const [captionExpanded, setCaptionExpanded] = useState(Boolean(photo.caption));
   const captionId = prefix + "-caption-" + photo.id;
   const stateId = prefix + "-state-" + photo.id;
   const filenameId = prefix + "-filename-" + photo.id;
@@ -58,31 +60,37 @@ export default function PhotoBatchCard({
       <span id={filenameId} className="visually-hidden">
         Photo {index + 1}: {photo.file.name}
       </span>
-      <label htmlFor={captionId}>
-        Caption for photo {index + 1} (optional)
-      </label>
-      <textarea
-        id={captionId}
-        rows={2}
-        maxLength={500}
-        value={photo.caption || ""}
-        disabled={locked}
-        ref={(node) => onCaptionRef(photo.id, node)}
-        onChange={(event) => onCaptionChange(photo.id, event.target.value)}
-        aria-invalid={invalid}
-        aria-describedby={description}
-      />
-      {error && (
-        <p id={captionId + "-error"} className="form-error">
-          {error}
-        </p>
-      )}
-      <p
+      <details className="photo-caption" open={captionExpanded || Boolean(error)}
+        onToggle={event => setCaptionExpanded(event.currentTarget.open)}>
+        <summary>
+          {locked ? "Caption" : photo.caption ? "Edit caption" : "Add a caption"}
+          {!locked && <span className="photo-caption__optional"> (optional)</span>}
+        </summary>
+        <div className="photo-caption__body">
+          <label className="visually-hidden" htmlFor={captionId}>Caption for photo {index + 1} (optional)</label>
+          <textarea
+            id={captionId}
+            rows={2}
+            maxLength={500}
+            value={photo.caption || ""}
+            placeholder="A little context for this moment…"
+            disabled={locked}
+            ref={(node) => onCaptionRef(photo.id, node)}
+            onChange={(event) => onCaptionChange(photo.id, event.target.value)}
+            aria-invalid={invalid}
+            aria-describedby={description}
+          />
+          {error && (
+            <p id={captionId + "-error"} className="form-error">{error}</p>
+          )}
+        </div>
+      </details>
+      {item && <p
         id={stateId}
         className={`photo-batch-state photo-batch-state--${item?.status || "queued"}`}
       >
         {getPhotoStatusText(item)}
-      </p>
+      </p>}
       {item?.status === "rejected" && (
         <p className="photo-batch-help">
           Retry this original photo, or deliberately start a new batch to choose

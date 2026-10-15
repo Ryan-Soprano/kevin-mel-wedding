@@ -83,7 +83,7 @@ export default function CoupleScrapbook() {
             <WelcomePhoto
               photo={selection.photo}
               alt={selection.alt}
-              sizes="(max-width: 680px) 30vw, 200px"
+              sizes="(max-width: 680px) 33vw, 220px"
             />
           </figure>
         ))}
@@ -96,7 +96,7 @@ export default function CoupleScrapbook() {
         type="button"
         onClick={() => document.getElementById("share-wedding-memory")?.focus()}
       >
-        Add your own memory <span aria-hidden="true">↑</span>
+        Add your own memory <span aria-hidden="true">↓</span>
       </button>
     </section>
   );

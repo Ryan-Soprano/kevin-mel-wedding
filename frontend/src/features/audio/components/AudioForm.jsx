@@ -22,18 +22,20 @@ const time = seconds => `${Math.floor(seconds / 60)}:${String(seconds % 60).padS
 
 export default function AudioForm({
   createCapture = createAudioCapture, createSubmission = createAudioSubmission,
-  active = true, onFlowStateChange, onDone, onShareAnother, privateArchive = false, onDialogStateChange,
+  active = true, onFlowStateChange, onDone, onShareAnother, onWriteNote, privateArchive = false, onDialogStateChange,
 } = {}) {
   const prefix = `audio-${useId()}`;
   const captureFactory = useRef(createCapture), submissionFactory = useRef(createSubmission);
   const capture = useRef(null), submission = useRef(null), mounted = useRef(false), sending = useRef(false);
   const audio = useRef(null), startButton = useRef(null), result = useRef(null), errorNotice = useRef(null);
+  const captionInput = useRef(null);
   const pausePreview = useCallback(() => audio.current?.pause(), []);
   const [snapshot, setSnapshot] = useState(INITIAL);
   const [guestName, setGuestName] = useState(""), [caption, setCaption] = useState("");
   const [busy, setBusy] = useState(false), [pending, setPending] = useState(false), [saved, setSaved] = useState(false);
   const [failed, setFailed] = useState(false), [retryAfter, setRetryAfter] = useState(0);
   const [progress, setProgress] = useState(""), [error, setError] = useState("");
+  const [captionError, setCaptionError] = useState("");
 
   useEffect(() => {
     mounted.current = true;
@@ -69,7 +71,11 @@ export default function AudioForm({
     if (!active) { pausePreview(); capture.current?.interrupt(); }
   }, [active, pausePreview]);
   useEffect(() => { if (active && saved) result.current?.focus(); }, [active, saved]);
-  useEffect(() => { if (active && error) errorNotice.current?.focus(); }, [active, error]);
+  useEffect(() => {
+    if (!active || !error) return;
+    if (captionError) captionInput.current?.focus();
+    else errorNotice.current?.focus();
+  }, [active, error, captionError]);
   useEffect(() => {
     if (!retryAfter || busy) return;
     const timer = setTimeout(() => {
@@ -83,7 +89,7 @@ export default function AudioForm({
     if (sending.current || recordingBusy) return;
     if (!snapshot.clip) { setError("Record or choose an audio clip before saving."); return; }
     audio.current?.pause();
-    sending.current = true; setBusy(true); setError("");
+    sending.current = true; setBusy(true); setError(""); setCaptionError("");
     const current = submission.current;
     try {
       await current.submit({ ...snapshot.clip, guestName: privateArchive ? null : guestName, caption }, message => {
@@ -92,6 +98,7 @@ export default function AudioForm({
       if (mounted.current && submission.current === current) setSaved(true);
     } catch (failure) {
       if (mounted.current && submission.current === current) {
+        setCaptionError(failure.fieldErrors?.["items[0].caption"] ?? "");
         setError(failure.code === "VALIDATION_FAILED" ? failure.message
           : failure.code === "INVALID_MEDIA" ? "This original clip could not be accepted. Choose another clip or record again."
             : failure.status === 429 || (failure.status === 503 && failure.retryAfterSeconds > 0)
@@ -109,7 +116,7 @@ export default function AudioForm({
   function reset() {
     audio.current?.pause();
     submission.current?.startAnother(); capture.current?.discard();
-    setGuestName(""); setCaption(""); setError(""); setProgress("");
+    setGuestName(""); setCaption(""); setCaptionError(""); setError(""); setProgress("");
     setBusy(false); setPending(false); setSaved(false); setFailed(false); setRetryAfter(0);
   }
   function finish(callback) { const receipt = submission.current?.receipt; reset(); callback?.(receipt); }
@@ -125,69 +132,87 @@ export default function AudioForm({
     audio.current?.pause(); setError(""); void capture.current?.useFile(file);
   }
   const captureError = snapshot.errorCode ? CAPTURE_MESSAGES[snapshot.errorCode] ?? CAPTURE_MESSAGES.RECORDER_ERROR : null;
+  const recordingStatus = snapshot.phase === "requesting" ? "Waiting for microphone permission…"
+    : snapshot.phase === "recording" ? "Recording. Tap Stop when you’re finished."
+      : snapshot.phase === "stopping" ? "Finishing the recording…"
+        : snapshot.phase === "checking" ? "Checking your clip…" : "";
   return (
-    <section className="audio-memory" aria-labelledby={`${prefix}-title`}>
-      <h2 id={`${prefix}-title`}>{privateArchive ? "Add a voice memory" : "Share a voice memory"}</h2>
-      <p>Record up to two minutes. Listen before sending.</p>
-      <p className="guest-help">{privateArchive ? "Your recording starts private in your archive." : "Sent privately to Kevin and Melanie. They may choose to share it."}</p>
-      <form onSubmit={submit} noValidate aria-label="Share a voice memory" aria-busy={busy || recordingBusy}>
-        {!saved && (
-          <div className="audio-memory-actions">
-            {snapshot.supported && snapshot.phase !== "recording" && <button ref={startButton} type="button" disabled={locked || recordingBusy}
-              onClick={() => void startRecording()}>{snapshot.clip ? "Re-record" : "Start recording"}</button>}
-            {snapshot.phase === "recording" && <button type="button" onClick={() => capture.current?.stop()}>Stop recording</button>}
-            {snapshot.clip && !locked && <button type="button" className="button-secondary" onClick={discard}>Discard clip</button>}
-          </div>
-        )}
-        {snapshot.phase === "unsupported" && <p>Recording is unavailable in this browser. Choose an audio file below or use Write a message from memory choices.</p>}
-        {snapshot.phase === "requesting" && <p role="status">Waiting for microphone permission…</p>}
-        {snapshot.phase === "recording" && <p role="status">Recording · {time(snapshot.elapsedSeconds)} / 2:00. Recording stops automatically just before two minutes.</p>}
-        {snapshot.phase === "stopping" && <p role="status">Finishing the recording…</p>}
-        {snapshot.phase === "checking" && <p role="status">Checking the clip for playback and length…</p>}
-        {captureError && <p className="form-error" role="alert">{captureError} Nothing was uploaded.</p>}
-        <div>
-          <label htmlFor={`${prefix}-file`}>Or upload an audio file</label>
-          <input id={`${prefix}-file`} type="file" accept={AUDIO_ACCEPT} disabled={locked || recordingBusy} onChange={choose}
-            onClick={() => onDialogStateChange?.(true)} onCancel={() => onDialogStateChange?.(false)} />
-          <details className="guest-help audio-memory-help">
-            <summary>Audio formats and recording help</summary>
-            <p>Choose one WebM, Ogg, or M4A/MP4 audio file up to two minutes and 25 MB.</p>
-            <p>WebM and Ogg must contain Opus audio; M4A/MP4 must contain AAC audio. Video and other formats are not accepted.</p>
-            <p>Microphone access is requested only when you choose Start recording. An interrupted recording is discarded.</p>
-          </details>
-        </div>
-        {snapshot.clip && (
-          <div className="audio-memory-preview">
-            <h3>Listen to your clip</h3>
-            <audio ref={audio} controls preload="metadata" src={snapshot.clip.url} aria-label="Your voice memory preview" />
-            <p>{snapshot.clip.file.name} · {Math.ceil(snapshot.clip.durationSeconds)} seconds</p>
-            <p className="guest-help">Make sure your message can be heard. You can discard or re-record before saving.</p>
-          </div>
-        )}
-        {!privateArchive && <div>
-          <label htmlFor={`${prefix}-name`}>Your name for this clip (optional)</label>
-          <input id={`${prefix}-name`} autoComplete="name" maxLength={100} disabled={locked || recordingBusy} value={guestName} onChange={event => setGuestName(event.target.value)} />
-        </div>}
-        <div>
-          <label htmlFor={`${prefix}-caption`}>Caption (optional)</label>
-          <textarea id={`${prefix}-caption`} rows={2} maxLength={500} disabled={locked || recordingBusy} value={caption} onChange={event => setCaption(event.target.value)} />
-        </div>
-        <p role="status" aria-live="polite">{progress}</p>
-        {error && <p ref={errorNotice} tabIndex={-1} className="form-error" role="alert">{error}</p>}
+    <section className="audio-memory" aria-label={privateArchive ? "Add a voice memory" : "Share a voice memory"}>
+      <h2 className={privateArchive ? undefined : "visually-hidden"}>{privateArchive ? "Add a voice memory" : "Share a voice memory"}</h2>
+      <form className="memory-form audio-compose" onSubmit={submit} noValidate aria-label="Share a voice memory" aria-busy={busy}>
         {saved ? (
-          <div>
-            <h3 ref={result} tabIndex={-1}>{privateArchive ? "Your voice memory was saved in your private archive." : "Your voice memory was saved privately for Kevin and Melanie."}</h3>
+          <div className="memory-success">
+            <h3 ref={result} tabIndex={-1}>{privateArchive ? "Your voice memory was saved in your private archive." : "Thank you for sharing your voice."}</h3>
+            {!privateArchive && <p>Your message is saved privately for Kevin and Melanie to listen to and treasure.</p>}
             <div className="audio-memory-actions">
-              <button type="button" onClick={() => finish(onDone)}>{privateArchive ? "View added memory" : "Done"}</button>
+              <button type="button" onClick={() => finish(onDone)}>{privateArchive ? "View added memory" : "Back to our photos"}</button>
               <button type="button" className="button-secondary" onClick={() => finish(onShareAnother)}>Share another memory</button>
             </div>
           </div>
         ) : (
           <>
-            {pending && <p>We are keeping this original clip and its submission together for a safe retry. Refreshing or closing the page loses this unfinished work.</p>}
-            <button type="submit" disabled={busy || recordingBusy || !snapshot.clip || retryAfter > 0}>
-              {busy ? "Saving audio…" : retryAfter > 0 ? `Wait ${retryAfter} seconds before retrying` : pending ? "Retry this original clip" : "Save voice memory"}
-            </button>
+            <p className="memory-form-introduction">{privateArchive ? "Add a voice message to your private archive." : "A favorite memory, a little advice, or a wish for the two of us. We’d love to hear it in your voice."}</p>
+            <div className={`audio-recording-panel${snapshot.phase === "recording" ? " is-recording" : ""}`}>
+              <span className="audio-recording-icon" aria-hidden="true"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" focusable="false"><rect x="9" y="2" width="6" height="12" rx="3" /><path d="M5 10v1a7 7 0 0 0 14 0v-1M12 18v4M8 22h8" /></svg></span>
+              <h3>{snapshot.phase === "recording" ? "Recording your message" : snapshot.clip ? "Your voice memory is ready" : "A few words from the heart"}</h3>
+              {snapshot.phase === "recording" ? (
+                <>
+                  <p className="audio-recording-timer" aria-label={`${time(snapshot.elapsedSeconds)} of two minutes`}>{time(snapshot.elapsedSeconds)} <span>/ 2:00</span></p>
+                  <p className="guest-help">Recording stops automatically just before two minutes.</p>
+                </>
+              ) : <p className="guest-help">{snapshot.clip ? "Listen below before you send it." : "Take your time. You have up to two minutes."}</p>}
+              <div className="audio-recording-actions">
+                {snapshot.supported && snapshot.phase !== "recording" && <button ref={startButton} type="button" disabled={locked || recordingBusy}
+                  onClick={() => void startRecording()}>{snapshot.clip ? "Record again" : "Start recording"}</button>}
+                {snapshot.phase === "recording" && <button type="button" className="audio-stop-button" onClick={() => capture.current?.stop()}><span aria-hidden="true">■</span> Stop recording</button>}
+              </div>
+              <p className="audio-capture-status" role="status" aria-live="polite">{recordingStatus}</p>
+              {!snapshot.clip && snapshot.phase !== "recording" && snapshot.phase !== "unsupported" && <p className="guest-help">We’ll ask for microphone access when you start.</p>}
+            </div>
+            {snapshot.phase === "unsupported" && <p className="guest-help">Recording is unavailable in this browser. You can upload an audio file below.</p>}
+            {captureError && <p className="form-error" role="alert">{captureError} Nothing was uploaded.</p>}
+            {(snapshot.phase === "unsupported" || captureError) && onWriteNote && <button type="button" className="button-secondary audio-note-fallback" disabled={locked || recordingBusy} onClick={onWriteNote}>Write a message instead</button>}
+            {snapshot.clip && (
+              <div className="audio-memory-preview">
+                <h3>Listen to your message</h3>
+                <audio ref={audio} controls preload="metadata" src={snapshot.clip.url} aria-label="Your voice memory preview" />
+                <p className="guest-help">{snapshot.clip.file.name} · {time(Math.ceil(snapshot.clip.durationSeconds))}</p>
+                {!locked && <button type="button" className="button-secondary" onClick={discard}>Discard clip</button>}
+              </div>
+            )}
+            <details className="audio-file-option" open={snapshot.phase === "unsupported" ? true : undefined}>
+              <summary>Upload an existing audio file instead</summary>
+              <div>
+                <label htmlFor={`${prefix}-file`}>Choose an audio file</label>
+                <input id={`${prefix}-file`} type="file" accept={AUDIO_ACCEPT} disabled={locked || recordingBusy} onChange={choose}
+                  aria-describedby={`${prefix}-file-help`} onClick={() => onDialogStateChange?.(true)} onCancel={() => onDialogStateChange?.(false)} />
+                <p id={`${prefix}-file-help`} className="guest-help">Up to two minutes and 25 MB. WebM or Ogg with Opus audio, or M4A/MP4 with AAC audio. Video and other formats aren’t supported.</p>
+                <p className="guest-help">Microphone access is requested only when you choose Start recording. An interrupted recording is discarded.</p>
+              </div>
+            </details>
+            <div className="memory-optional-fields">
+              {!privateArchive && <div>
+                <label htmlFor={`${prefix}-name`}>Your name (optional)</label>
+                <input id={`${prefix}-name`} autoComplete="name" maxLength={100} disabled={locked || recordingBusy} value={guestName} onChange={event => setGuestName(event.target.value)} />
+              </div>}
+              <details className="memory-caption-option" open={captionError ? true : undefined}>
+                <summary>Add a caption (optional)</summary>
+                <label className="visually-hidden" htmlFor={`${prefix}-caption`}>Caption (optional)</label>
+                <textarea ref={captionInput} id={`${prefix}-caption`} rows={2} maxLength={500} placeholder="A little context for your message…" disabled={locked || recordingBusy} value={caption}
+                  aria-invalid={Boolean(captionError)} aria-describedby={captionError ? `${prefix}-caption-error` : undefined}
+                  onChange={event => { setCaption(event.target.value); setCaptionError(""); }} />
+                {captionError && <p id={`${prefix}-caption-error`} className="form-error">{captionError}</p>}
+              </details>
+            </div>
+            <p className="audio-submit-status" role="status" aria-live="polite">{progress}</p>
+            {error && <p ref={errorNotice} tabIndex={-1} className="form-error" role="alert">{error}</p>}
+            {pending && <p className="memory-pending">Your original clip is kept here for a safe retry. Keep this page open until it’s saved.</p>}
+            <div className="memory-form-footer">
+              <p className="memory-privacy"><svg width="17" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false"><path d="M7 10V7a5 5 0 0 1 10 0v3M6 10h12v11H6zM12 14v3" /></svg>{privateArchive ? "Your recording starts private in your archive." : "Sent privately to Kevin and Melanie. They may choose to share it."}</p>
+              <button type="submit" disabled={busy || recordingBusy || !snapshot.clip || retryAfter > 0}>
+                {busy ? "Saving audio…" : retryAfter > 0 ? `Wait ${retryAfter} seconds before retrying` : pending ? "Retry this original clip" : privateArchive ? "Save voice memory" : "Send voice memory"}
+              </button>
+            </div>
             {failed && <button type="button" className="button-secondary" disabled={busy || retryAfter > 0} onClick={reset}>Choose or record another clip</button>}
           </>
         )}

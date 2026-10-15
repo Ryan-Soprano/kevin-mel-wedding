@@ -7,15 +7,16 @@ export default function PhotoBatchReview({ view, privateArchive, reviewHeading, 
   let progress = "";
   if (busy) progress = "Preparing your original photos…";
   return (
-    <section className="photo-submission photo-batch note-review" aria-labelledby={prefix + "-review"} aria-busy={busy}>
+    <section className="photo-submission photo-batch memory-form note-review" aria-labelledby={prefix + "-review"} aria-busy={busy}>
       <h2 ref={reviewHeading} id={prefix + "-review"} tabIndex={-1}>{copy.reviewTitle}</h2>
       {!privateArchive && <p>From: {reviewData.guestName ?? "Name not provided"}</p>}
-      <ul className="photo-grid photo-grid--batch">
+      <ul className="photo-grid photo-grid--batch photo-grid--compact">
         {photos.map((photo, index) => (
-          <li key={photo.id} className="photo-card">
-            <PhotoPreview file={photo.file} alt={`Photo ${index + 1}`} />
-            <div className="photo-batch-card">
-              <p className="note-review__message">{reviewData.items[index].caption ?? "No caption provided"}</p>
+          <li key={photo.id} className="photo-card photo-card--compact">
+            <div className="photo-card__preview"><PhotoPreview file={photo.file} alt={`Photo ${index + 1}`} /></div>
+            <div className="photo-card__content">
+              <div className="photo-card__heading"><span>Photo {index + 1}</span></div>
+              {reviewData.items[index].caption && <p className="photo-review-caption">{reviewData.items[index].caption}</p>}
             </div>
           </li>
         ))}

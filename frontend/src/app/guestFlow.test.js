@@ -59,11 +59,11 @@ for (const kind of ["note", "photos"]) {
     }
   });
 
-  test(`${kind}: resolved success permits Done or another type without stale draft flags`, () => {
+  test(`${kind}: confirmed success returns to photos or another type without stale draft flags`, () => {
     const flow = report(select(createGuestFlow(), kind), kind, { complete: true, hasDraft: true });
     assert.equal(navigationLocked(flow), false);
     assert.equal(hasUnfinishedWork(flow), false);
-    for (const [type, screen] of [["FINISHED", "done"], ["ANOTHER", "choose"]]) {
+    for (const [type, screen] of [["FINISHED", "welcome"], ["ANOTHER", "choose"]]) {
       const next = guestFlowReducer(flow, { type, kind });
       assert.equal(next.screen, screen);
       assert.equal(next.forms[kind].hasDraft, false);
@@ -102,7 +102,7 @@ test("enabled audio preserves its stopped draft and locks navigation during reco
   }
   const saved = report(flow, "audio", { complete: true, hasDraft: true });
   assert.equal(hasUnfinishedWork(saved), false);
-  assert.equal(guestFlowReducer(saved, { type: "FINISHED", kind: "audio" }).screen, "done");
+  assert.equal(guestFlowReducer(saved, { type: "FINISHED", kind: "audio" }).screen, "welcome");
 });
 
 test("history NAVIGATE preserves form ownership and flags while starting each newly visited form once", () => {

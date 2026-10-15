@@ -128,9 +128,10 @@ test("real public gallery immediately renders one accessible slide with navigati
     const landing = renderToStaticMarkup(createElement(App, { audioEnabled: false }));
     const scrapbookStart = landing.indexOf('class="couple-scrapbook"');
     const galleryStart = landing.indexOf('class="guest-gallery"');
-    assert.ok(scrapbookStart > landing.indexOf('id="share-wedding-memory"'));
+    const shareStart = landing.indexOf('id="share-wedding-memory"');
+    assert.ok(scrapbookStart < shareStart);
     assert.ok(galleryStart > scrapbookStart);
-    const scrapbook = landing.slice(scrapbookStart, galleryStart);
+    const scrapbook = landing.slice(scrapbookStart, shareStart);
     assert.match(scrapbook, /id="couple-scrapbook"/);
     for (const photoId of [15, 90, 148]) {
       const selected = couplePhotos.find(photo => photo.id === photoId);
@@ -154,7 +155,7 @@ test("real public gallery immediately renders one accessible slide with navigati
     assert.equal((landing.match(/class="memory-choice memory-choice--/g) ?? []).length, 2);
     for (const label of ["Add photos", "Write a message", "Caught a good moment?", "Tell us a story."]) {
       assert.ok(landing.includes(label), `welcome directly offers ${label}`);
-      assert.ok(landing.indexOf(label) < scrapbookStart);
+      assert.ok(landing.indexOf(label) > scrapbookStart);
       assert.ok(landing.indexOf(label) < landing.indexOf("guest-gallery-photo"));
     }
     assert.match(landing, /A little love for/);
@@ -164,7 +165,7 @@ test("real public gallery immediately renders one accessible slide with navigati
     const withAudio = renderToStaticMarkup(createElement(App, { audioEnabled: true }));
     assert.equal((withAudio.match(/class="memory-choice memory-choice--/g) ?? []).length, 3);
     assert.ok(withAudio.indexOf("Record a message") < withAudio.indexOf("guest-gallery-photo"));
-    assert.ok(withAudio.indexOf("Record a message") < withAudio.indexOf('class="couple-scrapbook"'));
+    assert.ok(withAudio.indexOf("Record a message") > withAudio.indexOf('class="couple-scrapbook"'));
     assert.match(withAudio, /Record or upload a clip/);
     assert.doesNotMatch(landing, /Browse Kevin and Melanie|Skip photos and share a memory|favourite/);
     assert.match(landing, /Sent privately to Kevin and Melanie. They choose which memories to share/);

@@ -63,16 +63,17 @@ test("real batch presentation keeps retained originals locked, exposes deliberat
     let factoryCalls = 0, flowReports = 0;
     const initialProps = { createSubmission: () => { factoryCalls++; }, onFlowStateChange: () => { flowReports++; } };
     const picker = render(PhotoPicker, { photos: f.photos, idPrefix: "selected-photos" });
-    assert.match(picker, /aria-label="Select photo 1, test-0.png, for removal"/);
+    assert.match(picker, /aria-label="Remove photo 1, test-0.png"/);
+    assert.doesNotMatch(picker, /type="checkbox"|Select photos to remove|Remove selected photos/);
     assert.doesNotMatch(picker, /photo-card__filename/);
     const guest = render(PhotoBatchForm, initialProps);
     assert.match(guest, />Share photos</);
-    assert.match(guest, /Your name for this batch/);
+    assert.match(guest, /Your name \(optional\)/);
     assert.match(guest, /accept="image\/jpeg,image\/png,image\/webp" multiple=""/);
     assert.match(guest, />Review photos</);
     const privateInitial = render(PhotoBatchForm, { ...initialProps, privateArchive: true });
     assert.match(privateInitial, />Add photos</);
-    assert.doesNotMatch(privateInitial, /Your name for this batch/);
+    assert.doesNotMatch(privateInitial, /Your name \(optional\)/);
     assert.equal(factoryCalls, 0, "server rendering does not create coordinators");
     assert.equal(flowReports, 0, "flow reporting remains effect-owned");
 
@@ -80,10 +81,10 @@ test("real batch presentation keeps retained originals locked, exposes deliberat
     assert.match(review, /Ready to send your photos\?/);
     assert.match(review, /From: Guest &lt;visitor&gt;/);
     assert.match(review, /First &lt;caption&gt;/);
-    assert.match(review, /No caption provided/);
+    assert.doesNotMatch(review, /No caption provided/);
     assert.match(review, /alt="Photo 1"/);
     assert.doesNotMatch(review, /photo-card__filename|test-0\.png/);
-    assert.match(review, /class="note-review__message"><\/p>/, "an intentionally empty caption does not gain a fallback");
+    assert.equal((review.match(/class="photo-review-caption"/g) ?? []).length, 1, "only a nonempty caption needs extra review copy");
     assert.match(review, />Send photos</);
     assert.match(review, /role="status" aria-live="polite" aria-atomic="true"/);
     const privateReview = render(PhotoBatchReview, { view, privateArchive: true });
@@ -102,6 +103,7 @@ test("real batch presentation keeps retained originals locked, exposes deliberat
     assert.match(retained, /<input id="batch-check-name"[^>]*disabled=""[^>]*value="Test Guest"/);
     assert.match(retained, /<textarea[^>]*disabled=""/);
     assert.match(retained, /<input[^>]*type="file"[^>]*disabled=""/);
+    assert.doesNotMatch(retained, /class="photo-card__remove"/, "retained originals cannot be removed during an uncertain result");
     assert.match(retained, /2 of 3 photos are confirmed saved/);
     assert.match(retained, /disabled="">Retry selected photos/);
     assert.doesNotMatch(retained, />Review photos<|Start a new batch/);
@@ -117,6 +119,7 @@ test("real batch presentation keeps retained originals locked, exposes deliberat
     assert.match(waitingCard, /class="visually-hidden">Photo 2: test-1\.png<\/span>/);
     assert.doesNotMatch(waitingCard, /photo-card__filename/);
     assert.match(waitingCard, /aria-invalid="true"/);
+    assert.match(waitingCard, /<details class="photo-caption" open="">/, "caption validation stays visible for error focus");
     assert.match(waitingCard, new RegExp(`aria-describedby="batch-check-filename-${f.photos[1].id} batch-check-caption-${f.photos[1].id}-error"`));
     assert.match(waitingCard, /Select photo 2 to retry \(wait 5 seconds\)/);
     assert.match(waitingCard, /type="checkbox" disabled=""[^>]*checked=""/);
@@ -135,14 +138,14 @@ test("real batch presentation keeps retained originals locked, exposes deliberat
 
     const finishedView = { ...view, complete: true, selectedEligible: [], shellActions: true, snapshot: { ...partial, canStartAnother: true } };
     const guestFinished = render(PhotoBatchActions, { view: finishedView, privateArchive: false });
-    assert.match(guestFinished, />Done</);
+    assert.match(guestFinished, />Back to our photos</);
     assert.match(guestFinished, />Share another memory</);
     assert.doesNotMatch(guestFinished, /Retry selected|Share another batch|Start a new batch/);
     const privateFinished = render(PhotoBatchActions, { view: finishedView, privateArchive: true });
     assert.match(privateFinished, />View added memory</);
     const standaloneFinished = render(PhotoBatchActions, { view: { ...finishedView, shellActions: false }, privateArchive: false });
     assert.match(standaloneFinished, />Share another batch</);
-    assert.doesNotMatch(standaloneFinished, />Done<|>Share another memory</);
+    assert.doesNotMatch(standaloneFinished, />Back to our photos<|>Share another memory</);
     const rejectedActions = render(PhotoBatchActions, { view: { ...view, retryCandidates: [], snapshot: { ...partial, canStartAnother: true } }, privateArchive: false });
     assert.match(rejectedActions, />Start a new batch</);
     assert.match(rejectedActions, /abandons the rejected remainder/);
