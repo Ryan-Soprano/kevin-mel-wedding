@@ -1,124 +1,104 @@
-import { useEffect, useRef, useState } from "react";
-import { normalizeLibraryQuery, normalizeTagName } from "../libraryFilters.js";
-import { memoryTime } from "../../inbox/memoryDisplay.js";
-import { ArchiveActions, ArchiveEmpty, ArchiveIntro, ArchivePagination, ArchivePanel, ArchiveScreen } from "../../inbox/components/ArchiveLayout.jsx";
+import {
+  ArchiveIntro,
+  ArchivePanel,
+  ArchiveScreen,
+} from "../../inbox/components/ArchiveLayout.jsx";
+import { useTags } from "../hooks/useTags.js";
+import { getTagsFeedback } from "../tagDisplay.js";
+import TagList from "./TagList.jsx";
+import TagNameForm from "./TagNameForm.jsx";
+import TagDetail from "./TagDetail.jsx";
+import TagSelector from "./TagSelector.jsx";
+import TagsRecovery, { TagMutationRecovery } from "./TagsRecovery.jsx";
+import TagPaging from "./TagPaging.jsx";
 import "../library.css";
 
-const LABELS = { KEEP: "Kept", PENDING: "Pending", ARCHIVED: "Archived" };
-const TYPES = { TEXT: "Written note", PHOTO: "Photo", AUDIO: "Voice memory" };
-const heading = memory => memory.title ?? (memory.source === "COUPLE" ? "Couple memory" : `From ${memory.guestName ?? "Name not provided"}`);
-
-function MemorySummary({ memory }) {
-  return <>
-    <h3>{heading(memory)}</h3>
-    <p className="library-result-meta">{TYPES[memory.memoryType]} · {LABELS[memory.reviewStatus]} · {memory.source === "COUPLE" ? "Couple memory" : `Guest contribution · From ${memory.guestName ?? "Name not provided"}`}</p>
-    {memory.memoryDate && <p className="library-result-date">Memory date: {memory.memoryDate}</p>}
-    <p className="library-result-date">Saved on: {memoryTime(memory.createdAt)} · Eastern</p>
-    <p className="inbox-excerpt">{memory.memoryType === "TEXT" ? memory.textContent.slice(0, 180) : memory.caption ?? memory.media.originalFilename}</p>
-  </>;
+function TagsContent({ view, cancelDelete, deleteTrigger }) {
+  switch (view.state.view) {
+    case "list":
+      return <TagList view={view} />;
+    case "create":
+      return (
+        <ArchivePanel
+          title="Create a tag"
+          description="Choose a label that will help you find these memories again."
+        >
+          <TagNameForm view={view} mode="create" />
+        </ArchivePanel>
+      );
+    case "detail":
+      return (
+        <TagDetail
+          view={view}
+          cancelDelete={cancelDelete}
+          deleteTrigger={deleteTrigger}
+        />
+      );
+    case "select":
+      return <TagSelector view={view} />;
+    default:
+      return null;
+  }
 }
 
 export default function Tags({ state, busy, locked, actions }) {
-  const [name, setName] = useState(state.tag?.name ?? "");
-  const [q, setQ] = useState(state.q);
-  const [originalName, setOriginalName] = useState("");
-  const [error, setError] = useState(null);
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  const feedback = useRef(null);
-  const cancelDelete = useRef(null);
-  const deleteTrigger = useRef(null), restoreDeleteFocus = useRef(false);
-  useEffect(() => { if (error || state.mutation.error || state.notice || state.error) feedback.current?.focus(); },
-    [error, state.mutation.error, state.notice, state.error]);
-  const disabled = busy || locked;
-  useEffect(() => { if (confirmDelete) cancelDelete.current?.focus(); else if (restoreDeleteFocus.current && !disabled) { restoreDeleteFocus.current = false; deleteTrigger.current?.focus(); } }, [confirmDelete, disabled]);
-  function submitName(event) {
-    event.preventDefault();
-    try {
-      const normalized = normalizeTagName(name); setError(null);
-      void (state.view === "create" ? actions.create(normalized) : actions.rename(normalized));
-    } catch (failure) { setError(failure.message); }
-  }
-  function retry() {
-    try { setError(null); void actions.retry(state.mutation.needsName ? normalizeTagName(originalName) : undefined); }
-    catch (failure) { setError(failure.message); }
-  }
-  return <ArchiveScreen className="tags" label="Private tags" busy={busy}>
-    <ArchiveIntro actions={<>
-      <button className="button-secondary" type="button" disabled={disabled} onClick={actions.inbox}>Back to inbox</button>
-      {state.view !== "list" && <button className="button-secondary" type="button" disabled={disabled} onClick={() => actions.list("")}>All tags</button>}
-    </>}>
-      <p>Give your memories private labels, such as people, places or occasions. One memory can have several tags. Tagging does not change who can see a memory.</p>
-    </ArchiveIntro>
-    {(error || state.error || state.mutation.error || state.notice) && <p ref={feedback} tabIndex={-1}
-      className={error || state.error || state.mutation.error ? "form-error" : "inbox-review-notice"}
-      role={error || state.error || state.mutation.error ? "alert" : "status"}>{error ?? state.error ?? state.mutation.error ?? state.notice}</p>}
-    {locked && <ArchivePanel title="Confirm your tag change" className="tag-recovery">
-      <p>Keep this page open while the change is pending or unconfirmed. Other changes, navigation and sign-out are paused.</p>
-      {["saving", "loading"].includes(state.mutation.phase) && <p role="status">{state.mutation.phase === "saving" ? "Saving tag change…" : "Checking the current tag…"}</p>}
-      {["uncertain", "conflict", "csrf"].includes(state.mutation.phase) && <>
-        <ArchiveActions><button type="button" disabled={busy} onClick={() => actions.reload(state.mutation.phase === "csrf")}>{state.mutation.phase === "csrf" ? "Refresh session and current tag" : "Reload current tag"}</button></ArchiveActions>
-        {state.mutation.canRetry && <>
-          {state.mutation.needsName && <div><label htmlFor="tag-original-name">Original tag name</label>
-            <input id="tag-original-name" value={originalName} maxLength={200} onChange={event => setOriginalName(event.target.value)} disabled={busy} />
-            <p className="guest-help">The hidden name draft was cleared. Re-enter the same name to retry the original change.</p></div>}
-          <ArchiveActions><button className="button-secondary" type="button" disabled={busy} onClick={retry}>Retry this same tag change</button></ArchiveActions>
-        </>}
-      </>}
-    </ArchivePanel>}
-    {state.view === "list" && <ArchivePanel title="Your tags" actions={<button type="button" disabled={disabled} onClick={actions.beginCreate}>Create a tag</button>}>
-      <form className="tag-search" onSubmit={event => { event.preventDefault(); try { setError(null); void actions.list(normalizeLibraryQuery(q)); } catch (failure) { setError(failure.message); } }}>
-        <div><label htmlFor="tag-query">Search tag names</label><input id="tag-query" type="search" value={q} maxLength={200} disabled={disabled} onChange={event => setQ(event.target.value)} /></div><button type="submit" disabled={disabled}>Search tags</button>
-      </form><p className="guest-help">Tag names may repeat. Each entry is a separate tag. Newest tags appear first.</p>
-      {busy ? <p role="status">Loading tags…</p> : !state.error && state.items.length === 0 ? <ArchiveEmpty icon="tags" title="No tags yet">Create one for your wedding, a trip or an anniversary.</ArchiveEmpty>
-        : <ul className="inbox-list tag-list">{state.items.map(tag => <li key={tag.tagId} className="inbox-card">
-          <h3>{tag.name}</h3><p className="library-result-meta">{tag.memberCount} {tag.memberCount === 1 ? "memory" : "memories"} · Couple only</p>
-          <button type="button" disabled={disabled} onClick={() => actions.open(tag.tagId)} aria-label={`Open tag ${tag.name}`}>Open tag</button>
-        </li>)}</ul>}
-    </ArchivePanel>}
-    {state.view === "create" && <ArchivePanel title="Create a tag" description="Choose a label that will help you find these memories again."><form className="tag-name-form" onSubmit={submitName} aria-label="Create a private tag">
-      <div><label htmlFor="tag-name">Tag name</label>
-      <input id="tag-name" value={name} maxLength={200} onChange={event => setName(event.target.value)} required disabled={disabled} /></div>
-      <button type="submit" disabled={disabled}>Create tag</button>
-    </form></ArchivePanel>}
-    {state.view === "detail" && state.tag && (state.tag.deletedAt !== null
-      ? <ArchivePanel title="Deleted tag" className="tag-tombstone"><p>This tag was deleted. Its memories and original files remain in your archive. Deleting a tag does not move memories to Recently deleted.</p></ArchivePanel>
-      : <>
-        <ArchivePanel title={state.tag.name} description={`${state.tag.memberCount} ${state.tag.memberCount === 1 ? "memory" : "memories"} · Couple only`}>
-        <form className="tag-name-form" onSubmit={submitName} aria-label="Rename this tag">
-          <div><label htmlFor="tag-name">Tag name</label><input id="tag-name" value={name} maxLength={200} onChange={event => setName(event.target.value)} required disabled={disabled} /></div>
-          <button type="submit" disabled={disabled}>Save tag name</button>
-        </form>
-        <ArchiveActions><button type="button" disabled={disabled} onClick={() => actions.select("KEEP")}>Add memories</button>
-          <button ref={deleteTrigger} className="button-secondary" type="button" disabled={disabled} onClick={() => setConfirmDelete(true)}>Delete tag…</button></ArchiveActions>
-        {confirmDelete && !locked && <div className="inbox-delete-confirmation" role="group" aria-labelledby="tag-delete-title">
-          <h3 id="tag-delete-title">Delete this tag?</h3><p>Only this tag and its membership will be removed. Every memory and original file stays in your archive.</p>
-          <ArchiveActions><button ref={cancelDelete} className="button-secondary" type="button" disabled={busy} onClick={() => { restoreDeleteFocus.current = true; setConfirmDelete(false); }}>Cancel tag deletion</button>
-            <button type="button" disabled={busy} onClick={() => { setConfirmDelete(false); void actions.delete(); }}>Confirm delete tag</button></ArchiveActions>
-        </div>}
-        </ArchivePanel>
-        <ArchivePanel title="Tagged memories">
-        {busy && !state.members.length ? <p role="status">Loading tag memories…</p> : !state.error && !locked && !state.members.length ? <ArchiveEmpty icon="tags" title="This tag is empty">Add memories from your private archive.</ArchiveEmpty>
-          : <ol className="inbox-list tag-members">{state.members.map(item => <li key={item.memory.memoryId} className="inbox-card tag-member">
-            <MemorySummary memory={item.memory} /><ArchiveActions>
-              <button type="button" disabled={disabled} onClick={() => actions.openMemory(item.memory.memoryId)} aria-label={`Open memory ${heading(item.memory)}`}>Open memory</button>
-              <button className="button-secondary" type="button" disabled={disabled} onClick={() => actions.remove(item.memory.memoryId)} aria-label={`Remove ${heading(item.memory)} from tag`}>Remove from tag</button>
-            </ArchiveActions>
-          </li>)}</ol>}
-        <p className="guest-help">Removing a memory here preserves it in your archive. Deleting a memory from its detail removes it from every tag; restoring it to the inbox does not add it back.</p>
-        </ArchivePanel>
-      </>)}
-    {state.view === "select" && state.tag && <ArchivePanel title={<>Add memories to {state.tag.name}</>} actions={<button className="button-secondary" type="button" disabled={disabled} onClick={() => actions.open(state.tag.tagId)}>Back to tag</button>}>
-      <nav className="inbox-filters" aria-label="Available memory review status">{Object.entries(LABELS).map(([status, label]) => <button key={status} className="button-secondary" type="button"
-        disabled={disabled} aria-pressed={state.selectorStatus === status} onClick={() => actions.select(status)}>{label}</button>)}</nav>
-      {busy ? <p role="status">Loading available memories…</p> : !state.error && !state.candidates.length ? <ArchiveEmpty icon="library" title={`No completed ${LABELS[state.selectorStatus].toLowerCase()} memories on this page`} />
-        : <ul className="inbox-list tag-candidates">{state.candidates.map(memory => <li key={memory.memoryId} className="inbox-card">
-          <MemorySummary memory={memory} /><button type="button" disabled={disabled} onClick={() => actions.add(memory.memoryId)} aria-label={`Add ${heading(memory)} to tag`}>Add to tag</button>
-        </li>)}</ul>}
-      <p className="guest-help">Completed notes, photos and voice memories can belong to several tags. Adding an existing member keeps one copy in this tag.</p>
-    </ArchivePanel>}
-    {state.error && <button type="button" disabled={disabled} onClick={() => state.view === "list" ? actions.list()
-      : state.requestedId ? actions.open(state.requestedId) : actions.list()}>Reload tag first page</button>}
-    {["list", "detail", "select"].includes(state.view) && !state.tag?.deletedAt && <ArchivePagination previousLabel="Previous tag page" nextLabel="Next tag page" page={state.cursors.length}
-      disabled={disabled || Boolean(state.error)} canPrevious={state.cursors.length > 1} canNext={Boolean(state.nextCursor)} onPrevious={() => actions.page(false)} onNext={() => actions.page(true)} />}
-  </ArchiveScreen>;
+  const { view, feedback, cancelDelete, deleteTrigger } = useTags({
+    state,
+    busy,
+    locked,
+    actions,
+  });
+  const notice = getTagsFeedback(view.error, state);
+  return (
+    <ArchiveScreen className="tags" label="Private tags" busy={busy}>
+      <ArchiveIntro
+        actions={
+          <>
+            <button
+              className="button-secondary"
+              type="button"
+              disabled={view.disabled}
+              onClick={actions.inbox}
+            >
+              Back to inbox
+            </button>
+            {state.view !== "list" && (
+              <button
+                className="button-secondary"
+                type="button"
+                disabled={view.disabled}
+                onClick={view.handlers.listAll}
+              >
+                All tags
+              </button>
+            )}
+          </>
+        }
+      >
+        <p>
+          Give your memories private labels, such as people, places or occasions.
+          One memory can have several tags. Tagging does not change who can see
+          a memory.
+        </p>
+      </ArchiveIntro>
+      {notice.visible && (
+        <p
+          ref={feedback}
+          tabIndex={-1}
+          className={notice.className}
+          role={notice.role}
+        >
+          {notice.text}
+        </p>
+      )}
+      <TagMutationRecovery view={view} />
+      <TagsContent
+        view={view}
+        cancelDelete={cancelDelete}
+        deleteTrigger={deleteTrigger}
+      />
+      <TagsRecovery view={view} />
+      <TagPaging view={view} />
+    </ArchiveScreen>
+  );
 }
