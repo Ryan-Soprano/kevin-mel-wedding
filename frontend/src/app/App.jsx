@@ -17,7 +17,6 @@ import {
 } from "./guestFlow.js";
 import GuestGallery from "../features/guestGallery/GuestGallery.jsx";
 import CoupleScrapbook from "../features/guestGallery/CoupleScrapbook.jsx";
-import CoupleStories from "../features/guestGallery/CoupleStories.jsx";
 import MemoryChoice from "../shared/components/MemoryChoice.jsx";
 import { useGuestHistory } from "./useGuestHistory.js";
 import "../styles/guest.css";
@@ -167,43 +166,32 @@ export default function App({
 
         {welcome && <CoupleScrapbook />}
         {welcome && (
-          <section className="guest-invitation" aria-label="Share a memory">
+          <div className="guest-invitation">
             <p className="guest-invitation-copy">
               A favorite photo. A good story.<br />
               A little love for their next chapter.
             </p>
-            <button
-              type="button"
-              className="guest-share-button"
-              onClick={() => dispatch({ type: "CHOOSE" })}
-            >
-              Share a memory <span aria-hidden="true">↗</span>
-            </button>
-            <p className="guest-invitation-help">
-              No account needed. Your name is optional.<br />
-              Sent privately to Kevin and Melanie.
-            </p>
-            {unfinished && (
-              <p className="guest-draft-notice" role="status">
-                You have an unfinished memory here. Open Share a memory, then choose
-                its memory type to continue before closing this page.
-              </p>
-            )}
-          </section>
+          </div>
         )}
       </div>
 
-      {flow.screen === "choose" && (
+      {(welcome || flow.screen === "choose") && (
         <section
-          className="guest-choices"
+          className={`guest-choices${welcome ? " guest-choices--welcome" : ""}`}
           aria-labelledby="share-wedding-memory"
         >
           <div className="guest-choices-heading">
             <h2 id="share-wedding-memory" tabIndex={-1}>
-              Choose a memory
+              {welcome ? "Share a memory" : "Choose a memory"}
             </h2>
             <p className="guest-help">No account needed. Your name is optional.</p>
           </div>
+          {welcome && unfinished && (
+            <p className="guest-draft-notice" role="status">
+              You have an unfinished memory here. Choose its memory type below to
+              continue before closing this page.
+            </p>
+          )}
           <div className={`memory-choices${flow.audioEnabled ? " memory-choices--three" : ""}`}>
             <MemoryChoice
               kind="photos"
@@ -235,17 +223,18 @@ export default function App({
           <p className="guest-help guest-privacy">
             Sent privately to Kevin and Melanie. They choose which memories to share.
           </p>
-          <button
-            type="button"
-            className="button-secondary"
-            onClick={() => dispatch({ type: "BACK" })}
-          >
-            Back to welcome
-          </button>
+          {!welcome && (
+            <button
+              type="button"
+              className="button-secondary"
+              onClick={() => dispatch({ type: "BACK" })}
+            >
+              Back to welcome
+            </button>
+          )}
         </section>
       )}
 
-      {welcome && <CoupleStories />}
       {welcome && <GuestGallery deferInitialPhoto />}
       {welcome && (
         <Suspense fallback={null}>
