@@ -36,6 +36,9 @@ export default function PhotoBatchCompose({ view, privateArchive, onDialogStateC
           renderPhoto={(photo, index) => <PhotoBatchCard photo={photo} index={index} prefix={prefix} item={byId.get(photo.id)}
             locked={locked} busy={busy} globalWait={globalWait} error={fields[photo.id]} selected={selectedRetry.has(photo.id)}
             onCaptionChange={actions.changeCaption} onCaptionRef={actions.registerCaptionInput} onToggleRetry={actions.toggleRetry} />} />
+        {!privateArchive && photos.length > 0 && !retained && (
+          <p className="guest-help">Not sent yet. Keep this page open—refreshing or closing can clear your selection.</p>
+        )}
         {!privateArchive && <BatchGuestName prefix={prefix} guestName={guestName} error={fields.name} locked={locked} onChange={actions.changeName} nameInput={nameInput} />}
         <p role="status" aria-live="polite" aria-atomic="true" className={summary ? "photo-batch-summary" : "visually-hidden"}>{summary}</p>
         {error && <p ref={errorNotice} className="form-error" role="alert" tabIndex={-1}>{error}</p>}

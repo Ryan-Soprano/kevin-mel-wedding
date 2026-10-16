@@ -13,6 +13,7 @@ import {
   createGuestFlow,
   guestFlowReducer,
   hasUnfinishedWork,
+  MEMORY_TYPES,
   navigationLocked,
 } from "./guestFlow.js";
 import GuestGallery from "../features/guestGallery/GuestGallery.jsx";
@@ -58,6 +59,9 @@ export default function App({
   );
   useGuestHistory(flow, dispatch);
   const heading = useRef(null);
+  const choices = useRef(null);
+  const previousScreen = useRef("welcome");
+  const homeReturn = useRef({ kind: null, scrollY: null, showOpening: false });
   const started = new Set(flow.started);
   const locked = navigationLocked(flow);
   const unfinished = hasUnfinishedWork(flow);
@@ -79,15 +83,15 @@ export default function App({
     [],
   );
   const noteDone = useCallback(
-    () => dispatch({ type: "FINISHED", kind: "note" }),
+    () => { homeReturn.current.showOpening = true; dispatch({ type: "FINISHED", kind: "note" }); },
     [],
   );
   const photosDone = useCallback(
-    () => dispatch({ type: "FINISHED", kind: "photos" }),
+    () => { homeReturn.current.showOpening = true; dispatch({ type: "FINISHED", kind: "photos" }); },
     [],
   );
   const audioDone = useCallback(
-    () => dispatch({ type: "FINISHED", kind: "audio" }),
+    () => { homeReturn.current.showOpening = true; dispatch({ type: "FINISHED", kind: "audio" }); },
     [],
   );
   const anotherNote = useCallback(
@@ -104,6 +108,24 @@ export default function App({
   );
 
   useEffect(() => {
+    const previous = previousScreen.current;
+    previousScreen.current = flow.screen;
+    if (MEMORY_TYPES.includes(flow.screen)) homeReturn.current.kind = flow.screen;
+    if (flow.screen === "welcome") {
+      const { kind, scrollY, showOpening } = homeReturn.current;
+      homeReturn.current.showOpening = false;
+      if (previous !== "welcome" && !showOpening) {
+        const target = choices.current?.querySelector(`.memory-choice--${kind}`)
+          ?? choices.current?.querySelector("h2");
+        target?.focus({ preventScroll: true });
+        window.scrollTo({ top: scrollY ?? choices.current?.offsetTop ?? 0, behavior: "instant" });
+        const bounds = target?.getBoundingClientRect();
+        if (bounds && (bounds.top < 0 || bounds.bottom > window.innerHeight)) {
+          target.scrollIntoView({ block: "nearest", behavior: "instant" });
+        }
+        return;
+      }
+    }
     heading.current?.focus({ preventScroll: true });
     window.scrollTo({ top: 0, behavior: "instant" });
   }, [flow.screen]);
@@ -120,7 +142,6 @@ export default function App({
 
   const title = {
     welcome: "A little love for Kevin & Melanie",
-    choose: "What would you like to share?",
     note: "A note for Kevin and Melanie",
     photos: "Photos for Kevin and Melanie",
     audio: "A voice memory for Kevin and Melanie",
@@ -145,6 +166,11 @@ export default function App({
     "Continue your voice memory",
     "Record a message",
   );
+
+  function openMemory(kind) {
+    homeReturn.current = { kind, scrollY: window.scrollY, showOpening: false };
+    dispatch({ type: "SELECT", kind });
+  }
 
   return (
     <main className={`guest-page guest-page--${flow.screen}`}>
@@ -175,21 +201,22 @@ export default function App({
         )}
       </div>
 
-      {(welcome || flow.screen === "choose") && (
+      {welcome && (
         <section
-          className={`guest-choices${welcome ? " guest-choices--welcome" : ""}`}
+          ref={choices}
+          className="guest-choices guest-choices--welcome"
           aria-labelledby="share-wedding-memory"
         >
           <div className="guest-choices-heading">
             <h2 id="share-wedding-memory" tabIndex={-1}>
-              {welcome ? "Share a memory" : "Choose a memory"}
+              Share a memory
             </h2>
             <p className="guest-help">No account needed. Your name is optional.</p>
           </div>
-          {welcome && unfinished && (
+          {unfinished && (
             <p className="guest-draft-notice" role="status">
               You have an unfinished memory here. Choose its memory type below to
-              continue before closing this page.
+              continue. Refreshing or closing this page can clear unsent drafts.
             </p>
           )}
           <div className={`memory-choices${flow.audioEnabled ? " memory-choices--three" : ""}`}>
@@ -197,7 +224,7 @@ export default function App({
               kind="photos"
               prompt="Caught a good moment?"
               title={photosChoiceLabel}
-              onClick={() => dispatch({ type: "SELECT", kind: "photos" })}
+              onClick={() => openMemory("photos")}
             >
               A favorite snapshot or a few from the day. Up to 5 photos · 10 MB each.
             </MemoryChoice>
@@ -205,7 +232,7 @@ export default function App({
               kind="note"
               prompt="Tell us a story."
               title={noteChoiceLabel}
-              onClick={() => dispatch({ type: "SELECT", kind: "note" })}
+              onClick={() => openMemory("note")}
             >
               A good memory, a little advice, or a wish for what’s next.
             </MemoryChoice>
@@ -214,7 +241,7 @@ export default function App({
                 kind="audio"
                 prompt="Leave a little love."
                 title={audioChoiceLabel}
-                onClick={() => dispatch({ type: "SELECT", kind: "audio" })}
+                onClick={() => openMemory("audio")}
               >
                 Say it in your own voice. Record or upload a clip up to two minutes.
               </MemoryChoice>
@@ -223,15 +250,6 @@ export default function App({
           <p className="guest-help guest-privacy">
             Sent privately to Kevin and Melanie. They choose which memories to share.
           </p>
-          {!welcome && (
-            <button
-              type="button"
-              className="button-secondary"
-              onClick={() => dispatch({ type: "BACK" })}
-            >
-              Back to welcome
-            </button>
-          )}
         </section>
       )}
 
@@ -253,7 +271,7 @@ export default function App({
             aria-describedby={locked ? "guest-navigation-help" : undefined}
             onClick={() => dispatch({ type: "BACK" })}
           >
-            Back to memory choices
+            <span aria-hidden="true">← </span>Back to home
           </button>
           {navigationHelp && (
             <p id="guest-navigation-help" className="guest-help">
@@ -313,12 +331,12 @@ export default function App({
           ) : (
             <p>You can close this page, or share another memory.</p>
           )}
-          <button type="button" onClick={() => dispatch({ type: "CHOOSE" })}>
+          <button type="button" onClick={() => dispatch({ type: "BACK" })}>
             {unfinished
               ? "Continue or share another memory"
               : "Share another memory"}
           </button>
-          <button type="button" className="button-secondary" onClick={() => dispatch({ type: "NAVIGATE", screen: "welcome" })}>Back to our photos</button>
+          <button type="button" className="button-secondary" onClick={() => { homeReturn.current.showOpening = true; dispatch({ type: "NAVIGATE", screen: "welcome" }); }}>Back to our photos</button>
         </section>
       )}
     </main>

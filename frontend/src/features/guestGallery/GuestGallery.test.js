@@ -116,6 +116,7 @@ test("real public gallery immediately renders one accessible slide with navigati
     assert.ok(thumbnails[1].includes(couplePhotos[1].smallSrc), "thumbnail uses the smaller public copy when available");
     assert.match(overview, /aria-label="View photo 24 of 218:/);
     assert.doesNotMatch(overview, /aria-label="View photo 25 of 218:/);
+    assert.doesNotMatch(overview, /<span aria-hidden="true">\d+<\/span>/, "thumbnail numbers stay in accessible labels without visible badges");
     assert.match(overview, /Showing 24 of 218 photos/);
     assert.match(overview, /Show 24 more photos/);
     assert.equal((renderOverview(48).match(/<img\b/g) ?? []).length, 48);

@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { couplePhotos } from "./photos.js";
 import { startSlideshow } from "./slideshow.js";
+import { observeMorePhotos } from "./thumbnailLoading.js";
 import "./guestGallery.css";
 
 const SIZES = "(max-width: 480px) calc(100vw - 74px), (max-width: 1100px) calc(90vw - 26px), 962px";
@@ -45,9 +46,17 @@ function Photo({ photo, index, total, deferLoading = false }) {
   );
 }
 
-export function GalleryThumbnails({ photos, visibleCount, onOpen, onMore }) {
+export function GalleryThumbnails({ photos, visibleCount, onOpen, onMore, onAutomaticMore }) {
   const shown = Math.min(visibleCount, photos.length);
   const remaining = Math.min(THUMBNAIL_BATCH, photos.length - shown);
+  const hasMore = remaining > 0;
+  const loadTrigger = useRef(null);
+
+  useEffect(() => {
+    if (!hasMore) return;
+    return observeMorePhotos(loadTrigger.current, onAutomaticMore);
+  }, [hasMore, onAutomaticMore]);
+
   return (
     <div className="guest-gallery-overview" id="couple-gallery-thumbnails">
       <p className="guest-gallery-overview-help">Choose a photo to see it in full.</p>
@@ -69,12 +78,11 @@ export function GalleryThumbnails({ photos, visibleCount, onOpen, onMore }) {
                 loading="lazy"
                 decoding="async"
               />
-              <span aria-hidden="true">{photoIndex + 1}</span>
             </button>
           </li>
         ))}
       </ol>
-      <div className="guest-gallery-overview-footer">
+      <div className="guest-gallery-overview-footer" ref={loadTrigger}>
         <p className="guest-gallery-position" role="status">Showing {shown} of {photos.length} photos</p>
         {remaining > 0 && (
           <button type="button" className="button-secondary" onClick={onMore}>
@@ -103,6 +111,9 @@ export default function GuestGallery({ photos = couplePhotos, deferInitialPhoto 
   );
   const rotating = playing && !hovered && !reducedMotion && view !== "grid";
   const currentIndex = index % (photos.length || 1);
+  const appendPhotos = useCallback(() => {
+    setVisibleCount((count) => Math.min(count + THUMBNAIL_BATCH, photos.length));
+  }, [photos.length]);
 
   useEffect(() => {
     if (!rotating || photos.length < 2) return;
@@ -146,7 +157,7 @@ export default function GuestGallery({ photos = couplePhotos, deferInitialPhoto 
 
   function showMore() {
     pendingFocus.current = { id: `couple-gallery-thumbnail-${visibleCount}` };
-    setVisibleCount((count) => count + THUMBNAIL_BATCH);
+    appendPhotos();
   }
 
   function navigate(event) {
@@ -186,6 +197,7 @@ export default function GuestGallery({ photos = couplePhotos, deferInitialPhoto 
           visibleCount={visibleCount}
           onOpen={openPhoto}
           onMore={showMore}
+          onAutomaticMore={appendPhotos}
         />
       ) : (
         <>

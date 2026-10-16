@@ -32,7 +32,7 @@ export function guestFlowReducer(flow, action) {
     case "NAVIGATE":
       if (
         navigationLocked(flow) ||
-        !["welcome", "choose", "done", ...MEMORY_TYPES].includes(
+        !["welcome", "done", ...MEMORY_TYPES].includes(
           action.screen,
         ) ||
         (action.screen === "audio" && !flow.audioEnabled)
@@ -47,9 +47,6 @@ export function guestFlowReducer(flow, action) {
             ? [...flow.started, action.screen]
             : flow.started,
       };
-    case "CHOOSE":
-      if (navigationLocked(flow)) return flow;
-      return { ...flow, screen: "choose" };
     case "SELECT":
       if (
         !MEMORY_TYPES.includes(action.kind) ||
@@ -68,7 +65,7 @@ export function guestFlowReducer(flow, action) {
       if (navigationLocked(flow)) return flow;
       return {
         ...flow,
-        screen: MEMORY_TYPES.includes(flow.screen) ? "choose" : "welcome",
+        screen: "welcome",
       };
     case "FORM_STATE": {
       if (!MEMORY_TYPES.includes(action.kind)) return flow;
@@ -87,7 +84,7 @@ export function guestFlowReducer(flow, action) {
         return flow;
       return {
         ...flow,
-        screen: action.type === "FINISHED" ? "welcome" : "choose",
+        screen: "welcome",
         forms: { ...flow.forms, [action.kind]: emptyForm() },
       };
     default:
