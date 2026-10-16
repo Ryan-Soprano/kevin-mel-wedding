@@ -19,6 +19,8 @@ export function attachGuestHistory({
   const screens = new Map();
   let active = null;
   let disposed = false;
+  const previousScrollRestoration = historyImpl.scrollRestoration;
+  if (previousScrollRestoration !== undefined) historyImpl.scrollRestoration = "manual";
 
   function saveActiveHomeView() {
     const destination = active && screens.get(active.key);
@@ -61,6 +63,14 @@ export function attachGuestHistory({
   sync(getFlow().screen);
   return {
     sync,
-    dispose() { disposed = true; screens.clear(); eventTarget.removeEventListener("popstate", pop); },
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+      screens.clear();
+      eventTarget.removeEventListener("popstate", pop);
+      if (previousScrollRestoration !== undefined && historyImpl.scrollRestoration === "manual") {
+        historyImpl.scrollRestoration = previousScrollRestoration;
+      }
+    },
   };
 }

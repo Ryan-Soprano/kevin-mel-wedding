@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { attachGuestHistory } from "./guestHistory.js";
 import { createGuestFlow, guestFlowReducer, hasUnfinishedWork } from "./guestFlow.js";
 
-function fixture({ audioEnabled = true, getHomeView, restoreHomeView } = {}) {
+function fixture({ audioEnabled = true, getHomeView, restoreHomeView, scrollRestoration = "auto" } = {}) {
   let flow = createGuestFlow({ audioEnabled }), recording, serial = 0, position = -1;
   const events = new EventTarget(), entries = [], writes = [], movements = [], navigations = [];
   function pop(state) {
@@ -12,6 +12,7 @@ function fixture({ audioEnabled = true, getHomeView, restoreHomeView } = {}) {
     events.dispatchEvent(event);
   }
   const history = {
+    scrollRestoration,
     get state() { return structuredClone(entries[position]); },
     replaceState(state, title, ...url) {
       if (position < 0) position = 0;
@@ -276,6 +277,35 @@ test("locked, malformed, current and foreign pops do not capture or restore home
     for (const entry of f.entries) assert.deepEqual(Object.keys(entry), ["owner", "key", "index"]);
     assert.doesNotMatch(JSON.stringify(f.entries), /homeView|kind|scrollY|showOpening|photos/);
   } finally { f.recording.dispose(); }
+});
+
+test("guest history owns manual viewport restoration while attached and restores the prior browser mode", () => {
+  for (const previousMode of ["auto", "manual"]) {
+    const f = fixture({ scrollRestoration: previousMode });
+    try {
+      assert.equal(f.history.scrollRestoration, "manual");
+      f.update({ type: "SELECT", kind: "photos" });
+      f.history.go(-1); f.history.go(1);
+      assert.equal(f.history.scrollRestoration, "manual", "native scrolling cannot compete with guest view restoration");
+    } finally { f.recording.dispose(); }
+    assert.equal(f.history.scrollRestoration, previousMode);
+  }
+});
+
+test("disposing guest history does not overwrite a newer owner's scroll restoration mode", () => {
+  const f = fixture({ scrollRestoration: "manual" });
+  f.history.scrollRestoration = "auto";
+  f.recording.dispose();
+  assert.equal(f.history.scrollRestoration, "auto", "a changed mode belongs to its newer owner");
+});
+
+test("repeated disposal cannot overwrite manual scrolling adopted by a later owner", () => {
+  const f = fixture();
+  f.recording.dispose();
+  assert.equal(f.history.scrollRestoration, "auto");
+  f.history.scrollRestoration = "manual";
+  f.recording.dispose();
+  assert.equal(f.history.scrollRestoration, "manual", "the first disposal relinquished ownership");
 });
 
 test("history writes only opaque ownership keys and disposal ignores old or foreign navigation", () => {

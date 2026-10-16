@@ -64,7 +64,14 @@ export default function App({
   const homeReturn = useRef({ kind: null, scrollY: null, showOpening: false });
   const [homeRevision, setHomeRevision] = useState(0);
   const previousHomeRevision = useRef(0);
-  const getHomeView = useCallback(() => homeReturn.current, []);
+  const getHomeView = useCallback(() => ({
+    ...homeReturn.current,
+    // A browser traversal can leave home without another memory-button click.
+    // During a form transition, keep the position captured before its DOM replaced home.
+    scrollY: flow.screen === "welcome" ? window.scrollY : homeReturn.current.scrollY,
+    showOpening: homeReturn.current.showOpening
+      && (flow.screen !== "welcome" || window.scrollY <= 0),
+  }), [flow.screen]);
   const restoreHomeView = useCallback((view) => {
     homeReturn.current = view ?? { kind: null, scrollY: null, showOpening: true };
     setHomeRevision((revision) => revision + 1);
@@ -132,7 +139,7 @@ export default function App({
         target?.focus({ preventScroll: true });
         window.scrollTo({ top: scrollY ?? choices.current?.offsetTop ?? 0, behavior: "instant" });
         const bounds = target?.getBoundingClientRect();
-        if (bounds && (bounds.top < 0 || bounds.bottom > window.innerHeight)) {
+        if (!restoredHome && bounds && (bounds.top < 0 || bounds.bottom > window.innerHeight)) {
           target.scrollIntoView({ block: "nearest", behavior: "instant" });
         }
         return;
@@ -265,12 +272,13 @@ export default function App({
         </section>
       )}
 
-      {welcome && <GuestGallery deferInitialPhoto />}
-      {welcome && (
+      {/* Retain the home album and loaded public content so history restores the page guests left. */}
+      <div hidden={!welcome}>
+        <GuestGallery deferInitialPhoto active={welcome} />
         <Suspense fallback={null}>
-          <PublicMemories />
+          <PublicMemories active={welcome} />
         </Suspense>
-      )}
+      </div>
 
       {(flow.screen === "note" ||
         flow.screen === "photos" ||

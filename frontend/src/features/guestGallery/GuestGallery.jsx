@@ -95,7 +95,7 @@ export function GalleryThumbnails({ photos, visibleCount, onOpen, onMore, onAuto
 }
 
 /** Deliberately public couple photos; never reads the private archive or uploads. */
-export default function GuestGallery({ photos = couplePhotos, deferInitialPhoto = false }) {
+export default function GuestGallery({ photos = couplePhotos, deferInitialPhoto = false, active = true }) {
   const [index, setIndex] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [hovered, setHovered] = useState(false);
@@ -109,7 +109,7 @@ export default function GuestGallery({ photos = couplePhotos, deferInitialPhoto 
     prefersReducedMotion,
     () => false,
   );
-  const rotating = playing && !hovered && !reducedMotion && view !== "grid";
+  const rotating = active && playing && !hovered && !reducedMotion && view !== "grid";
   const currentIndex = index % (photos.length || 1);
   const appendPhotos = useCallback(() => {
     setVisibleCount((count) => Math.min(count + THUMBNAIL_BATCH, photos.length));
@@ -197,7 +197,7 @@ export default function GuestGallery({ photos = couplePhotos, deferInitialPhoto 
           visibleCount={visibleCount}
           onOpen={openPhoto}
           onMore={showMore}
-          onAutomaticMore={appendPhotos}
+          onAutomaticMore={active ? appendPhotos : undefined}
         />
       ) : (
         <>
