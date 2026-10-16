@@ -39,7 +39,10 @@ function getChoiceLabel(form, savedLabel, draftLabel, emptyLabel) {
   return emptyLabel;
 }
 
-function getNavigationHelp(locked, complete) {
+function getNavigationHelp(locked, complete, capturing) {
+  if (capturing) {
+    return "Keep this page open while recording or checking your clip. Nothing is sent until you choose Send voice memory.";
+  }
   if (locked) {
     return "Keep this page open until your submission is confirmed. Use the retry controls below if needed.";
   }
@@ -84,6 +87,7 @@ export default function App({
   const navigationHelp = getNavigationHelp(
     locked,
     flow.forms[flow.screen]?.complete,
+    flow.forms[flow.screen]?.capturing,
   );
   const reportNote = useCallback(
     (state) => dispatch({ type: "FORM_STATE", kind: "note", state }),
@@ -191,6 +195,14 @@ export default function App({
     dispatch({ type: "SELECT", kind });
   }
 
+  function returnToSharing(event) {
+    const target = choices.current?.querySelector("h2");
+    if (!target) return;
+    event.preventDefault();
+    target.focus({ preventScroll: true });
+    target.scrollIntoView({ block: "start", behavior: "instant" });
+  }
+
   return (
     <main className={`guest-page guest-page--${flow.screen}`}>
       <div className={welcome ? "guest-opening" : undefined}>
@@ -274,7 +286,7 @@ export default function App({
 
       {/* Retain the home album and loaded public content so history restores the page guests left. */}
       <div hidden={!welcome}>
-        <GuestGallery deferInitialPhoto active={welcome} />
+        <GuestGallery deferInitialPhoto active={welcome} onBackToSharing={returnToSharing} />
         <Suspense fallback={null}>
           <PublicMemories active={welcome} />
         </Suspense>

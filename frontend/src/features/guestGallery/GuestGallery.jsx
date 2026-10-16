@@ -95,7 +95,7 @@ export function GalleryThumbnails({ photos, visibleCount, onOpen, onMore, onAuto
 }
 
 /** Deliberately public couple photos; never reads the private archive or uploads. */
-export default function GuestGallery({ photos = couplePhotos, deferInitialPhoto = false, active = true }) {
+export default function GuestGallery({ photos = couplePhotos, deferInitialPhoto = false, active = true, onBackToSharing }) {
   const [index, setIndex] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [hovered, setHovered] = useState(false);
@@ -274,6 +274,13 @@ export default function GuestGallery({ photos = couplePhotos, deferInitialPhoto 
             {view === "viewer" ? "Back to thumbnails" : `Browse all ${photos.length} photos`}
           </button>
         </div>
+      )}
+      {onBackToSharing && (
+        <p className="guest-gallery-return">
+          <a href="#share-wedding-memory" onClick={onBackToSharing}>
+            <span aria-hidden="true">↑</span> Back to sharing
+          </a>
+        </p>
       )}
     </section>
   );

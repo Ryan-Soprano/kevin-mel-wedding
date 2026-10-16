@@ -64,7 +64,7 @@ export default function AudioForm({
   const locked = busy || pending || saved;
   const reportFlow = useEffectEvent(state => onFlowStateChange?.(state));
   useEffect(() => {
-    reportFlow({ busy: busy || recordingBusy, pending,
+    reportFlow({ busy: busy || recordingBusy, capturing: recordingBusy, pending,
       hasDraft: Boolean(snapshot.clip || guestName || caption || recordingBusy), complete: saved });
   }, [busy, recordingBusy, pending, snapshot.clip, guestName, caption, saved]);
   useEffect(() => {
@@ -162,11 +162,12 @@ export default function AudioForm({
                 </>
               ) : <p className="guest-help">{snapshot.clip ? "Listen below before you send it." : "Take your time. You have up to two minutes."}</p>}
               <div className="audio-recording-actions">
-                {snapshot.supported && snapshot.phase !== "recording" && <button ref={startButton} type="button" disabled={locked || recordingBusy}
+                {snapshot.supported && snapshot.phase !== "recording" && <button ref={startButton} type="button" disabled={locked || recordingBusy} aria-describedby={`${prefix}-recording-help`}
                   onClick={() => void startRecording()}>{snapshot.clip ? "Record again" : "Start recording"}</button>}
-                {snapshot.phase === "recording" && <button type="button" className="audio-stop-button" onClick={() => capture.current?.stop()}><span aria-hidden="true">■</span> Stop recording</button>}
+                {snapshot.phase === "recording" && <button type="button" className="audio-stop-button" aria-describedby={`${prefix}-recording-help`} onClick={() => capture.current?.stop()}><span aria-hidden="true">■</span> Stop recording</button>}
               </div>
               <p className="audio-capture-status" role="status" aria-live="polite">{recordingStatus}</p>
+              {snapshot.supported && <p id={`${prefix}-recording-help`} className="guest-help">While recording, keep this page open and your phone unlocked. Switching apps or locking the phone discards the unfinished recording.</p>}
               {!snapshot.clip && snapshot.phase !== "recording" && snapshot.phase !== "unsupported" && <p className="guest-help">We’ll ask for microphone access when you start.</p>}
             </div>
             {snapshot.phase === "unsupported" && <p className="guest-help">Recording is unavailable in this browser. You can upload an audio file below.</p>}
@@ -187,7 +188,6 @@ export default function AudioForm({
                 <input id={`${prefix}-file`} type="file" accept={AUDIO_ACCEPT} disabled={locked || recordingBusy} onChange={choose}
                   aria-describedby={`${prefix}-file-help`} onClick={() => onDialogStateChange?.(true)} onCancel={() => onDialogStateChange?.(false)} />
                 <p id={`${prefix}-file-help`} className="guest-help">Up to two minutes and 25 MB. WebM or Ogg with Opus audio, or M4A/MP4 with AAC audio. Video and other formats aren’t supported.</p>
-                <p className="guest-help">Microphone access is requested only when you choose Start recording. An interrupted recording is discarded.</p>
               </div>
             </details>
             <div className="memory-optional-fields">
