@@ -63,6 +63,7 @@ export default function App({
   );
   const heading = useRef(null);
   const choices = useRef(null);
+  const homeAlbum = useRef(null);
   const previousScreen = useRef("welcome");
   const homeReturn = useRef({ kind: null, scrollY: null, showOpening: false });
   const [homeRevision, setHomeRevision] = useState(0);
@@ -101,18 +102,13 @@ export default function App({
     (state) => dispatch({ type: "FORM_STATE", kind: "audio", state }),
     [],
   );
-  const noteDone = useCallback(
-    () => { homeReturn.current.showOpening = true; dispatch({ type: "FINISHED", kind: "note" }); },
-    [],
-  );
-  const photosDone = useCallback(
-    () => { homeReturn.current.showOpening = true; dispatch({ type: "FINISHED", kind: "photos" }); },
-    [],
-  );
-  const audioDone = useCallback(
-    () => { homeReturn.current.showOpening = true; dispatch({ type: "FINISHED", kind: "audio" }); },
-    [],
-  );
+  const finishMemory = useCallback((kind) => {
+    homeReturn.current = { kind, scrollY: null, showOpening: false, target: "gallery" };
+    dispatch({ type: "FINISHED", kind });
+  }, []);
+  const noteDone = useCallback(() => finishMemory("note"), [finishMemory]);
+  const photosDone = useCallback(() => finishMemory("photos"), [finishMemory]);
+  const audioDone = useCallback(() => finishMemory("audio"), [finishMemory]);
   const anotherNote = useCallback(
     () => dispatch({ type: "ANOTHER", kind: "note" }),
     [],
@@ -134,9 +130,22 @@ export default function App({
     if (MEMORY_TYPES.includes(flow.screen)) {
       homeReturn.current.kind = flow.screen;
       homeReturn.current.showOpening = false;
+      delete homeReturn.current.target;
     }
     if (flow.screen === "welcome") {
-      const { kind, scrollY, showOpening } = homeReturn.current;
+      const { kind, scrollY, showOpening, target: destination } = homeReturn.current;
+      if ((previous !== "welcome" || restoredHome) && destination === "gallery") {
+        const target = homeAlbum.current?.querySelector("#couple-gallery");
+        if (target) {
+          target.focus({ preventScroll: true });
+          if (restoredHome && scrollY != null) {
+            window.scrollTo({ top: scrollY, behavior: "instant" });
+          } else {
+            target.scrollIntoView({ block: "start", behavior: "instant" });
+          }
+          return;
+        }
+      }
       if ((previous !== "welcome" || restoredHome) && !showOpening) {
         const target = choices.current?.querySelector(`.memory-choice--${kind}`)
           ?? choices.current?.querySelector("h2");
@@ -201,6 +210,7 @@ export default function App({
     event.preventDefault();
     target.focus({ preventScroll: true });
     target.scrollIntoView({ block: "start", behavior: "instant" });
+    homeReturn.current = { kind: null, scrollY: window.scrollY, showOpening: false };
   }
 
   return (
@@ -285,7 +295,7 @@ export default function App({
       )}
 
       {/* Retain the home album and loaded public content so history restores the page guests left. */}
-      <div hidden={!welcome}>
+      <div ref={homeAlbum} hidden={!welcome}>
         <GuestGallery deferInitialPhoto active={welcome} onBackToSharing={returnToSharing} />
         <Suspense fallback={null}>
           <PublicMemories active={welcome} />
@@ -368,7 +378,7 @@ export default function App({
               ? "Continue or share another memory"
               : "Share another memory"}
           </button>
-          <button type="button" className="button-secondary" onClick={() => { homeReturn.current.showOpening = true; dispatch({ type: "NAVIGATE", screen: "welcome" }); }}>Back to our photos</button>
+          <button type="button" className="button-secondary" onClick={() => { homeReturn.current = { kind: null, scrollY: null, showOpening: false, target: "gallery" }; dispatch({ type: "NAVIGATE", screen: "welcome" }); }}>Back to our photos</button>
         </section>
       )}
     </main>

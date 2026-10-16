@@ -6,6 +6,7 @@ function copyHomeView(view) {
     kind: MEMORY_TYPES.includes(view.kind) ? view.kind : null,
     scrollY: Number.isFinite(view.scrollY) ? view.scrollY : null,
     showOpening: view.showOpening === true,
+    ...(view.target === "gallery" ? { target: "gallery" } : {}),
   };
 }
 
