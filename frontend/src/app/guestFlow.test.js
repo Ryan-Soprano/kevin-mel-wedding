@@ -65,7 +65,7 @@ for (const kind of kinds) {
     for (const type of ["FINISHED", "ANOTHER"]) {
       const next = guestFlowReducer(flow, { type, kind });
       assert.equal(next.screen, "welcome");
-      assert.deepEqual(next.forms[kind], { busy: false, pending: false, hasDraft: false, complete: false });
+      assert.deepEqual(next.forms[kind], { busy: false, capturing: false, pending: false, hasDraft: false, complete: false });
       assert.equal(next.forms[otherKind], otherForm);
       assert.equal(next.forms[otherKind].hasDraft, true);
       assert.equal(next.started, started);
@@ -83,6 +83,30 @@ test("same state reports are stable and inactive success callbacks cannot change
   assert.equal(report(flow, "photos", {}), flow);
   assert.equal(guestFlowReducer(flow, { type: "FINISHED", kind: "note" }), flow);
   assert.equal(guestFlowReducer(flow, { type: "ANOTHER", kind: "audio" }), flow);
+});
+
+test("audio capture and submission reports keep their own guidance state without releasing navigation locks", () => {
+  let flow = select(createGuestFlow({ audioEnabled: true }), "audio");
+  const started = flow.started;
+  flow = report(flow, "audio", { busy: true, capturing: true, hasDraft: true });
+  assert.equal(flow.forms.audio.capturing, true);
+  assert.equal(navigationLocked(flow), true);
+  assert.equal(guestFlowReducer(flow, { type: "BACK" }), flow);
+  assert.equal(hasUnfinishedWork(flow), true);
+
+  flow = report(flow, "audio", { hasDraft: true });
+  assert.equal(flow.forms.audio.capturing, false, "a ready or interrupted recording no longer shows capture guidance");
+  assert.equal(navigationLocked(flow), false);
+  assert.equal(flow.started, started);
+  assert.equal(hasUnfinishedWork(flow), true);
+
+  flow = report(flow, "audio", { busy: true, hasDraft: true });
+  assert.equal(flow.forms.audio.capturing, false, "sending retains submission guidance");
+  assert.equal(navigationLocked(flow), true);
+  flow = report(flow, "audio", { pending: true, hasDraft: true });
+  assert.equal(flow.forms.audio.capturing, false, "an uncertain submission retains retry guidance");
+  assert.equal(navigationLocked(flow), true);
+  assert.equal(guestFlowReducer(flow, { type: "SELECT", kind: "note" }), flow);
 });
 
 test("history NAVIGATE preserves form ownership and flags while starting each newly visited form once", () => {

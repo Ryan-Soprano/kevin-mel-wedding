@@ -2,6 +2,7 @@ export const MEMORY_TYPES = Object.freeze(["note", "photos", "audio"]);
 
 const emptyForm = () => ({
   busy: false,
+  capturing: false,
   pending: false,
   hasDraft: false,
   complete: false,

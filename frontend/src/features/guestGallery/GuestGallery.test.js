@@ -134,6 +134,7 @@ test("real public gallery immediately renders one accessible slide with navigati
     const landingImages = landing.match(/<img\b[^>]*>/g) ?? [];
     assert.equal(landingImages.filter(image => image.includes('fetchPriority="high"')).length, 1, "only the opening photo gets high download priority");
     const galleryImage = landing.slice(galleryStart).match(/<img\b[^>]*>/)?.[0];
+    assert.match(landing.slice(galleryStart), /<a href="#share-wedding-memory"[^>]*>[\s\S]*?Back to sharing<\/a>/);
     assert.match(galleryImage, /loading="lazy"/);
     assert.match(galleryImage, /fetchPriority="auto"/);
     const landingPreloads = (landing.match(/<link\b[^>]*>/g) ?? []).filter(link => link.includes('as="image"'));
