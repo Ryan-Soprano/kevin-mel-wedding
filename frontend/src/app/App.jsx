@@ -5,6 +5,7 @@ import {
   useEffect,
   useReducer,
   useRef,
+  useState,
 } from "react";
 import ContributionForm from "../features/contribution/components/ContributionForm.jsx";
 import PhotoBatchForm from "../features/media/components/PhotoBatchForm.jsx";
@@ -57,11 +58,18 @@ export default function App({
     { audioEnabled },
     createGuestFlow,
   );
-  useGuestHistory(flow, dispatch);
   const heading = useRef(null);
   const choices = useRef(null);
   const previousScreen = useRef("welcome");
   const homeReturn = useRef({ kind: null, scrollY: null, showOpening: false });
+  const [homeRevision, setHomeRevision] = useState(0);
+  const previousHomeRevision = useRef(0);
+  const getHomeView = useCallback(() => homeReturn.current, []);
+  const restoreHomeView = useCallback((view) => {
+    homeReturn.current = view ?? { kind: null, scrollY: null, showOpening: true };
+    setHomeRevision((revision) => revision + 1);
+  }, []);
+  useGuestHistory(flow, dispatch, { getHomeView, restoreHomeView });
   const started = new Set(flow.started);
   const locked = navigationLocked(flow);
   const unfinished = hasUnfinishedWork(flow);
@@ -110,11 +118,15 @@ export default function App({
   useEffect(() => {
     const previous = previousScreen.current;
     previousScreen.current = flow.screen;
-    if (MEMORY_TYPES.includes(flow.screen)) homeReturn.current.kind = flow.screen;
+    const restoredHome = homeRevision !== previousHomeRevision.current;
+    previousHomeRevision.current = homeRevision;
+    if (MEMORY_TYPES.includes(flow.screen)) {
+      homeReturn.current.kind = flow.screen;
+      homeReturn.current.showOpening = false;
+    }
     if (flow.screen === "welcome") {
       const { kind, scrollY, showOpening } = homeReturn.current;
-      homeReturn.current.showOpening = false;
-      if (previous !== "welcome" && !showOpening) {
+      if ((previous !== "welcome" || restoredHome) && !showOpening) {
         const target = choices.current?.querySelector(`.memory-choice--${kind}`)
           ?? choices.current?.querySelector("h2");
         target?.focus({ preventScroll: true });
@@ -128,7 +140,7 @@ export default function App({
     }
     heading.current?.focus({ preventScroll: true });
     window.scrollTo({ top: 0, behavior: "instant" });
-  }, [flow.screen]);
+  }, [flow.screen, homeRevision]);
 
   useEffect(() => {
     if (!unfinished) return;

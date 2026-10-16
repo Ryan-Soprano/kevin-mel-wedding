@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { attachGuestHistory } from "./guestHistory.js";
 import { createGuestFlow, guestFlowReducer, hasUnfinishedWork } from "./guestFlow.js";
 
-function fixture({ audioEnabled = true } = {}) {
+function fixture({ audioEnabled = true, getHomeView, restoreHomeView } = {}) {
   let flow = createGuestFlow({ audioEnabled }), recording, serial = 0, position = -1;
   const events = new EventTarget(), entries = [], writes = [], movements = [], navigations = [];
   function pop(state) {
@@ -35,7 +35,7 @@ function fixture({ audioEnabled = true } = {}) {
   }
   recording = attachGuestHistory({ getFlow: () => flow, navigate(screen) {
     navigations.push(screen); update({ type: "NAVIGATE", screen });
-  }, eventTarget: events, historyImpl: history, randomId: () => "opaque-" + ++serial });
+  }, getHomeView, restoreHomeView, eventTarget: events, historyImpl: history, randomId: () => "opaque-" + ++serial });
   return { recording, history, entries, writes, movements, navigations, pop, update, flow: () => flow };
 }
 
@@ -183,6 +183,101 @@ test("a current-entry pop never calls history.go(0) or navigates while a submiss
   } finally { f.recording.dispose(); }
 });
 
+test("each welcome history entry restores its own copied choice and viewport before navigation", () => {
+  let view = { kind: "photos", scrollY: 780, showOpening: false };
+  const restored = [], navigationCounts = [];
+  const f = fixture({
+    getHomeView: () => view,
+    restoreHomeView(next) {
+      restored.push({ ...next });
+      navigationCounts.push(f.navigations.length);
+      view = next;
+    },
+  });
+  try {
+    f.update({ type: "SELECT", kind: "photos" });
+    f.update({ type: "FORM_STATE", kind: "photos", state: { hasDraft: true } });
+    f.update({ type: "BACK" });
+    // Mutating the same App ref for another selection must not change the first entry.
+    Object.assign(view, { kind: "note", scrollY: 1040 });
+    f.update({ type: "SELECT", kind: "note" });
+    f.update({ type: "FORM_STATE", kind: "note", state: { hasDraft: true } });
+    f.update({ type: "BACK" });
+    Object.assign(view, { kind: "audio", scrollY: 1320 });
+    f.update({ type: "SELECT", kind: "audio" });
+    const forms = f.flow().forms, started = f.flow().started, writes = f.writes.length;
+
+    f.history.go(-3);
+    assert.equal(f.flow().screen, "welcome");
+    assert.deepEqual(view, { kind: "note", scrollY: 1040, showOpening: false });
+    f.history.go(-2); // Welcome to an older welcome entry, without a screen change.
+    assert.equal(f.flow().screen, "welcome");
+    assert.deepEqual(view, { kind: "photos", scrollY: 780, showOpening: false });
+    f.history.go(2);
+    assert.deepEqual(view, { kind: "note", scrollY: 1040, showOpening: false });
+    f.history.go(2);
+    assert.deepEqual(view, { kind: "audio", scrollY: 1320, showOpening: false });
+    assert.deepEqual(restored, [
+      { kind: "note", scrollY: 1040, showOpening: false },
+      { kind: "photos", scrollY: 780, showOpening: false },
+      { kind: "note", scrollY: 1040, showOpening: false },
+      { kind: "audio", scrollY: 1320, showOpening: false },
+    ]);
+    assert.deepEqual(navigationCounts, [0, 1, 2, 3], "view metadata is restored before dispatching each home navigation");
+    assert.equal(f.flow().forms, forms); assert.equal(f.flow().started, started);
+    assert.equal(f.flow().forms.photos.hasDraft, true); assert.equal(f.flow().forms.note.hasDraft, true);
+    assert.equal(f.writes.length, writes);
+  } finally { f.recording.dispose(); }
+});
+
+test("opening-top intent survives browser Back and Forward and restored objects cannot mutate stored entries", () => {
+  let view = { kind: "photos", scrollY: 780, showOpening: false };
+  const f = fixture({ getHomeView: () => view, restoreHomeView(next) { view = next; } });
+  try {
+    f.update({ type: "SELECT", kind: "photos" });
+    f.update({ type: "FORM_STATE", kind: "photos", state: { complete: true } });
+    Object.assign(view, { scrollY: 0, showOpening: true });
+    f.update({ type: "FINISHED", kind: "photos" });
+    f.history.go(-1);
+    assert.equal(f.flow().screen, "photos");
+    Object.assign(view, { kind: "note", scrollY: 999, showOpening: false });
+    f.history.go(1);
+    assert.equal(f.flow().screen, "welcome");
+    assert.deepEqual(view, { kind: "photos", scrollY: 0, showOpening: true });
+    f.history.go(-1);
+    // App can reuse and mutate the restored ref while another entry is active.
+    Object.assign(view, { kind: "audio", scrollY: 1111, showOpening: false });
+    f.history.go(1);
+    assert.deepEqual(view, { kind: "photos", scrollY: 0, showOpening: true });
+    assert.equal(f.flow().forms.photos.complete, false, "revisiting history cannot undo the confirmed reset");
+  } finally { f.recording.dispose(); }
+});
+
+test("locked, malformed, current and foreign pops do not capture or restore home metadata", () => {
+  const view = { kind: "photos", scrollY: 780, showOpening: false };
+  let captures = 0, restores = 0;
+  const f = fixture({
+    getHomeView() { captures++; return view; },
+    restoreHomeView() { restores++; },
+  });
+  try {
+    const welcome = f.history.state;
+    f.update({ type: "SELECT", kind: "photos" });
+    f.update({ type: "FORM_STATE", kind: "photos", state: { pending: true } });
+    const baseline = captures;
+    f.pop(f.history.state);
+    f.pop({ ...welcome, index: 999 });
+    f.pop({ ...welcome, owner: "foreign-owner" });
+    f.pop({ ...welcome, key: "unknown-key" });
+    f.history.go(-1);
+    assert.equal(f.flow().screen, "photos");
+    assert.equal(captures, baseline); assert.equal(restores, 0);
+    assert.deepEqual(f.movements, [-1, 1]);
+    for (const entry of f.entries) assert.deepEqual(Object.keys(entry), ["owner", "key", "index"]);
+    assert.doesNotMatch(JSON.stringify(f.entries), /homeView|kind|scrollY|showOpening|photos/);
+  } finally { f.recording.dispose(); }
+});
+
 test("history writes only opaque ownership keys and disposal ignores old or foreign navigation", () => {
   const f = fixture();
   f.update({ type: "SELECT", kind: "note" });
@@ -191,7 +286,7 @@ test("history writes only opaque ownership keys and disposal ignores old or fore
   for (const value of [null, {}, { ...entry, owner: "foreign-owner" }, { ...entry, key: "unknown-key" }]) f.pop(value);
   assert.equal(f.flow(), before); assert.deepEqual(f.navigations, []);
   for (const value of f.entries) assert.deepEqual(Object.keys(value), ["owner", "key", "index"]);
-  assert.doesNotMatch(JSON.stringify(f.entries), /screen|forms|started|note|photos|audio|hasDraft|pending|csrf|message|file|receipt|retry/i);
+  assert.doesNotMatch(JSON.stringify(f.entries), /screen|forms|started|note|photos|audio|hasDraft|pending|csrf|message|file|receipt|retry|homeView|scrollY|showOpening/i);
   assert.deepEqual(f.writes.map(write => write.title), ["", ""]);
   assert.ok(f.writes.every(write => write.url.length === 0), "screen history does not change or embed data in the address");
   f.recording.dispose(); f.recording.dispose();

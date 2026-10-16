@@ -1,22 +1,42 @@
-import { navigationLocked } from "./guestFlow.js";
+import { MEMORY_TYPES, navigationLocked } from "./guestFlow.js";
 
-/** History remembers screen names only. Drafts and retry keys stay in mounted forms. */
+function copyHomeView(view) {
+  if (!view || typeof view !== "object") return null;
+  return {
+    kind: MEMORY_TYPES.includes(view.kind) ? view.kind : null,
+    scrollY: Number.isFinite(view.scrollY) ? view.scrollY : null,
+    showOpening: view.showOpening === true,
+  };
+}
+
+/** Screen/view metadata stays in memory. History stores only opaque ownership keys. */
 export function attachGuestHistory({
   getFlow, navigate, eventTarget = window, historyImpl = window.history,
   randomId = () => crypto.randomUUID(),
+  getHomeView = () => null, restoreHomeView = () => {},
 }) {
   const owner = randomId();
   const screens = new Map();
   let active = null;
   let disposed = false;
 
+  function saveActiveHomeView() {
+    const destination = active && screens.get(active.key);
+    if (destination?.screen === "welcome") destination.homeView = copyHomeView(getHomeView());
+  }
+
   function sync(screen) {
     if (disposed || (active && screens.get(active.key)?.screen === screen)) return;
+    saveActiveHomeView();
     const entry = { owner, key: randomId(), index: active ? active.index + 1 : 0 };
     if (active) {
       for (const [key, destination] of screens) if (destination.index > active.index) screens.delete(key);
     }
-    screens.set(entry.key, { screen, index: entry.index });
+    screens.set(entry.key, {
+      screen,
+      index: entry.index,
+      ...(screen === "welcome" ? { homeView: copyHomeView(getHomeView()) } : {}),
+    });
     if (active) historyImpl.pushState(entry, "");
     else historyImpl.replaceState(entry, "");
     active = entry;
@@ -31,7 +51,9 @@ export function attachGuestHistory({
       historyImpl.go(active.index - entry.index);
       return;
     }
+    saveActiveHomeView();
     active = entry;
+    if (destination.screen === "welcome") restoreHomeView(copyHomeView(destination.homeView));
     navigate(destination.screen);
   }
 
