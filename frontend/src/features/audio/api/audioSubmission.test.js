@@ -14,6 +14,8 @@ const grant = { ...UPLOAD_GRANT, headers: { "Content-Type": "audio/webm" } };
 const unknown = () => new ApiError("Unconfirmed", { code: "NETWORK_ERROR", unknownOutcome: true });
 const turn = () => new Promise(resolve => setImmediate(resolve));
 
+function deferred() { let resolve; const promise = new Promise(yes => { resolve = yes; }); return { promise, resolve }; }
+
 function fixture(overrides = {}) {
   const calls = []; let current = pending, hashes = 0, ids = 0;
   const api = {
@@ -39,6 +41,35 @@ test("repeated save taps share one original and immutable metadata; only a verif
   assert.equal(f.calls[0][1].items[0].caption, "Voice caption");
   await f.submission.submit(raw); assert.equal(f.calls.length, 4);
   f.submission.startAnother(); assert.equal(f.submission.retained, false);
+});
+
+test("preparing audio keeps its frozen original metadata when caller input changes during hashing", async () => {
+  const hashing = deferred(), digestStarted = deferred(), hashedFiles = [], creates = [];
+  const mutableRaw = { ...raw };
+  const f = fixture({ digest: retainedFile => { hashedFiles.push(retainedFile); digestStarted.resolve(); return hashing.promise; },
+    api: { createMediaContribution: async (...args) => { creates.push(args); if (creates.length === 1) throw unknown(); return pending; } } });
+  try {
+    const request = f.submission.submit(mutableRaw);
+    await digestStarted.promise;
+    Object.assign(mutableRaw, { file: new File(["different audio"], "changed.ogg", { type: "audio/ogg" }),
+      durationSeconds: 4, guestName: "Changed guest", caption: "Changed caption" });
+    hashing.resolve("d".repeat(64));
+    await assert.rejects(request, { unknownOutcome: true });
+    assert.equal(f.submission.pending, true);
+    await f.submission.submit({ ...raw });
+
+    assert.deepEqual(creates[0][0], { guestName: "Guest", memoryType: "AUDIO", items: [{
+      clientItemId: IDS.clientItem, originalFilename: file.name, declaredContentType: file.type,
+      byteSize: file.size, checksumSha256: "d".repeat(64), caption: "Voice caption", durationSeconds: 2.5,
+    }] });
+    assert.deepEqual(creates[1][0], creates[0][0]);
+    assert.equal(creates[1][1].idempotencyKey, creates[0][1].idempotencyKey);
+    assert.deepEqual(hashedFiles, [file]);
+    assert.equal(f.ids, 2);
+    assert.equal(f.calls.find(call => call[0] === "upload")[2], file);
+    assert.equal(f.submission.complete, true);
+    assert.ok(Object.isFrozen(creates[0][0]) && Object.isFrozen(creates[0][0].items) && Object.isFrozen(creates[0][0].items[0]));
+  } finally { hashing.resolve("d".repeat(64)); f.submission.dispose(); }
 });
 
 test("lost create response reuses key, IDs, duration, checksum and metadata and refuses draft replacement", async () => {
@@ -122,18 +153,42 @@ test("server gate/capacity and shared-network delays retain clip and identity wi
   }
 });
 
-test("timeout marks an unknown mutation, aborts transport, and reconciles its late receipt on retry", async () => {
-  const timers = new Map(); let timerId = 0, signal;
+test("timeout ignores a late receipt and checks the same identity only after a deliberate retry", async () => {
+  const timers = new Map(), lateReceipt = deferred(); let timerId = 0, signal;
   const f = fixture({ setTimeoutImpl: callback => { const id = ++timerId; timers.set(id, callback); return id; },
-    clearTimeoutImpl: id => timers.delete(id), api: { createMediaContribution: async (_body, options) => {
-      signal = options.signal; return new Promise(() => {});
+    clearTimeoutImpl: id => timers.delete(id), api: { createMediaContribution: async (...args) => {
+      f.calls.push(["create", ...args]); signal = args[1].signal; return lateReceipt.promise;
     } } });
   const request = f.submission.submit(raw); await turn(); assert.equal(timers.size, 1);
   [...timers.values()][0](); await assert.rejects(request, { code: "REQUEST_TIMED_OUT", unknownOutcome: true });
   assert.equal(signal.aborted, true); assert.equal(f.submission.pending, true);
-  f.api.createMediaContribution = async () => done;
+  lateReceipt.resolve(done); await turn();
+  assert.equal(f.submission.complete, false); assert.equal(f.submission.receipt, null);
+  assert.deepEqual(f.calls.map(call => call[0]), ["create"]);
+  f.api.createMediaContribution = async (...args) => { f.calls.push(["create", ...args]); return done; };
   await f.submission.submit(raw); assert.equal(f.submission.complete, true); assert.equal(f.hashes, 1); assert.equal(f.ids, 2);
+  assert.deepEqual(f.calls[1][1], f.calls[0][1]);
+  assert.equal(f.calls[1][2].idempotencyKey, f.calls[0][2].idempotencyKey);
+  assert.equal(timers.size, 0); f.submission.dispose();
 });
+
+for (const cancellation of ["timeout", "disposal"]) {
+  test(`late audio digest after ${cancellation} cannot create an intent or network request`, async () => {
+    const timers = new Map(), lateDigest = deferred(), digestStarted = deferred(); let timerId = 0, hashes = 0;
+    const f = fixture({ digest: () => { hashes++; digestStarted.resolve(); return lateDigest.promise; },
+      setTimeoutImpl: callback => { const id = ++timerId; timers.set(id, callback); return id; },
+      clearTimeoutImpl: id => timers.delete(id) });
+    const request = f.submission.submit(raw); await digestStarted.promise;
+    if (cancellation === "timeout") [...timers.values()][0]();
+    else f.submission.dispose();
+    await assert.rejects(request, { code: cancellation === "timeout" ? "REQUEST_TIMED_OUT" : "REQUEST_ABORTED", unknownOutcome: false });
+    lateDigest.resolve("e".repeat(64)); await turn();
+    assert.equal(hashes, 1); assert.equal(f.ids, 0); assert.equal(f.calls.length, 0);
+    assert.equal(f.submission.retained, false); assert.equal(f.submission.pending, false);
+    assert.equal(f.submission.complete, false); assert.equal(f.submission.receipt, null);
+    assert.equal(timers.size, 0); f.submission.dispose();
+  });
+}
 
 test("invalid metadata is rejected before hashing, IDs or network and disposal cancels pending confirmation", async () => {
   const f = fixture();
@@ -142,10 +197,12 @@ test("invalid metadata is rejected before hashing, IDs or network and disposal c
     assert.throws(() => f.submission.submit(invalid), { code: "VALIDATION_FAILED" });
   }
   assert.equal(f.hashes, 0); assert.equal(f.ids, 0); assert.equal(f.calls.length, 0);
-  let signal;
-  f.api.createMediaContribution = async (_body, options) => { signal = options.signal; return new Promise(() => {}); };
+  let signal; const lateReceipt = deferred();
+  f.api.createMediaContribution = async (_body, options) => { signal = options.signal; return lateReceipt.promise; };
   const request = f.submission.submit(raw); await turn(); f.submission.dispose();
   await assert.rejects(request, { code: "REQUEST_ABORTED" }); assert.equal(signal.aborted, true);
+  lateReceipt.resolve(done); await turn();
+  assert.equal(f.submission.complete, false); assert.equal(f.submission.receipt, null); assert.equal(f.calls.length, 0);
   assert.equal(f.submission.retained, false); assert.throws(() => f.submission.submit(raw), { code: "REQUEST_ABORTED" });
 });
 

@@ -6,14 +6,44 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { createServer } from "vite";
 import react from "@vitejs/plugin-react";
 import { audioCollectionEnabled } from "../../audio/audioConstraints.js";
+import { getAudioCaptionError } from "../../audio/hooks/useAudioForm.js";
+import { createApiClient } from "../../../shared/api/apiClient.js";
+import { normalizeMediaContribution } from "../../../shared/api/archiveApi.js";
 import { initialTags } from "../../library/api/tagActions.js";
-import { MEMORY_DETAIL, MEDIA_DETAIL } from "../../../shared/api/v1/fixtures.js";
+import { AUDIO_REQUEST, MEMORY_DETAIL, MEDIA_DETAIL } from "../../../shared/api/v1/fixtures.js";
 
 function createViewServer() {
   return createServer({ configFile: false, logLevel: "silent", root: fileURLToPath(new URL("../../../../", import.meta.url)),
     plugins: [react()], server: { middlewareMode: true, hmr: false, watch: null }, appType: "custom",
     optimizeDeps: { noDiscovery: true, include: [] } });
 }
+
+test("audio caption errors select the exact field from native local and decoded API validation arrays", async () => {
+  const message = "Correct this voice caption.";
+  const client = createApiClient({ fetchImpl: async () => new Response(JSON.stringify({ error: {
+    code: "VALIDATION_FAILED", message: "Check the highlighted fields.", fieldErrors: [
+      { field: "guestName", code: "SIZE", message: "Check your name." },
+      { field: "items[1].caption", code: "INVALID_MEDIA", message: "Another item's caption." },
+      { field: "items[0].caption", code: "INVALID_MEDIA", message },
+    ],
+  } }), { status: 400, headers: { "Content-Type": "application/json" } }) });
+  await assert.rejects(client.request("/api/contributions"), failure => {
+    assert.equal(failure.name, "ApiError");
+    assert.equal(getAudioCaptionError(failure), message);
+    return true;
+  });
+  assert.throws(() => normalizeMediaContribution({ ...AUDIO_REQUEST,
+    items: [{ ...AUDIO_REQUEST.items[0], caption: "x".repeat(501) }],
+  }), failure => {
+    assert.equal(getAudioCaptionError(failure), "Captions must be 500 characters or fewer.");
+    return true;
+  });
+  for (const failure of [undefined, {}, { fieldErrors: [] }, { fieldErrors: { "items[0].caption": message } },
+    { fieldErrors: [null, { field: "items[0].caption", message: 42 }] },
+    { fieldErrors: [{ field: "items[0].caption.extra", message }] }]) {
+    assert.equal(getAudioCaptionError(failure), "");
+  }
+});
 
 test("voice form server rendering preserves guest/private fields without constructing capture or submission owners", async () => {
   const server = await createViewServer();
@@ -48,8 +78,8 @@ test("audio composer preserves recording guidance, fallback, retained-clip locks
     const view = {
       prefix: "voice-contract", snapshot: { phase: "idle", supported: true, clip: null, errorCode: null, elapsedSeconds: 0 },
       guestName: "Synthetic guest", caption: "Synthetic caption", busy: false, pending: false, saved: false,
-      failed: false, retryAfter: 0, progress: "", error: "", captionError: "", recordingBusy: false, locked: false,
-      actions: Object.fromEntries(["submit", "reset", "startRecording", "stopRecording", "discard", "choose", "finish", "shareAnother", "changeGuestName", "changeCaption"].map(name => [name, noop])),
+      failed: false, retryAfter: 0, progress: "", error: "", captionError: "", captionExpanded: false, recordingBusy: false, locked: false,
+      actions: Object.fromEntries(["submit", "reset", "startRecording", "stopRecording", "discard", "choose", "finish", "shareAnother", "changeGuestName", "changeCaption", "toggleCaption"].map(name => [name, noop])),
     };
     const render = patch => renderToStaticMarkup(createElement(AudioCompose, {
       view: { ...view, ...patch }, privateArchive: false, onWriteNote: noop,
@@ -75,10 +105,14 @@ test("audio composer preserves recording guidance, fallback, retained-clip locks
     assert.match(pending, /disabled="">Wait 3 seconds before retrying/);
     assert.doesNotMatch(pending, /Discard clip/);
 
-    const invalidCaption = render({ snapshot: { ...view.snapshot, phase: "ready", clip }, captionError: "Check the caption", error: "Check the highlighted field" });
+    const invalidCaption = render({ snapshot: { ...view.snapshot, phase: "ready", clip }, captionError: "Check the caption", captionExpanded: true, error: "Check the highlighted field" });
     assert.match(invalidCaption, /<details class="memory-caption-option" open=""/);
     assert.match(invalidCaption, /aria-invalid="true" aria-describedby="voice-contract-caption-error"/);
     assert.match(invalidCaption, /id="voice-contract-caption-error"[^>]*>Check the caption/);
+    const correctedCaption = render({ snapshot: { ...view.snapshot, phase: "ready", clip }, caption: "Corrected caption", captionExpanded: true });
+    assert.match(correctedCaption, /<details class="memory-caption-option" open=""/);
+    assert.match(correctedCaption, /aria-invalid="false"/);
+    assert.doesNotMatch(correctedCaption, /voice-contract-caption-error|role="alert"/);
   } finally { await server.close(); }
 });
 

@@ -17,7 +17,7 @@ const time = seconds => `${Math.floor(seconds / 60)}:${String(seconds % 60).padS
 
 export default function AudioCompose({ view, privateArchive, onWriteNote, onDialogStateChange, audio, startButton, errorNotice, captionInput }) {
   const { prefix, snapshot, guestName, caption, busy, pending, failed, retryAfter,
-    progress, error, captionError, recordingBusy, locked, actions } = view;
+    progress, error, captionError, captionExpanded, recordingBusy, locked, actions } = view;
   const captureError = snapshot.errorCode ? CAPTURE_MESSAGES[snapshot.errorCode] ?? CAPTURE_MESSAGES.RECORDER_ERROR : null;
   const recordingStatus = snapshot.phase === "requesting" ? "Waiting for microphone permission…"
     : snapshot.phase === "recording" ? "Recording. Tap Stop when you’re finished."
@@ -69,7 +69,7 @@ export default function AudioCompose({ view, privateArchive, onWriteNote, onDial
           <label htmlFor={`${prefix}-name`}>Your name (optional)</label>
           <input id={`${prefix}-name`} autoComplete="name" maxLength={100} disabled={locked || recordingBusy} value={guestName} onChange={event => actions.changeGuestName(event.target.value)} />
         </div>}
-        <details className="memory-caption-option" open={captionError ? true : undefined}>
+        <details className="memory-caption-option" open={captionExpanded} onToggle={event => actions.toggleCaption(event.currentTarget.open)}>
           <summary>Add a caption (optional)</summary>
           <label className="visually-hidden" htmlFor={`${prefix}-caption`}>Caption (optional)</label>
           <textarea ref={captionInput} id={`${prefix}-caption`} rows={2} maxLength={500} placeholder="A little context for your message…" disabled={locked || recordingBusy} value={caption}

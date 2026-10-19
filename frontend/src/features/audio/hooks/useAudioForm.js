@@ -2,6 +2,13 @@ import { useCallback, useEffect, useEffectEvent, useId, useRef, useState } from 
 
 const INITIAL = { phase: "idle", supported: false, clip: null, errorCode: null, elapsedSeconds: 0 };
 const CAPTURE_BUSY = new Set(["requesting", "recording", "stopping", "checking"]);
+
+export function getAudioCaptionError(failure) {
+  if (!Array.isArray(failure?.fieldErrors)) return "";
+  const message = failure.fieldErrors.find(field => field?.field === "items[0].caption")?.message;
+  return typeof message === "string" ? message : "";
+}
+
 export function useAudioForm({
   createCapture, createSubmission, active, onFlowStateChange, onDone, onShareAnother, privateArchive, onDialogStateChange,
 }) {
@@ -17,6 +24,7 @@ export function useAudioForm({
   const [failed, setFailed] = useState(false), [retryAfter, setRetryAfter] = useState(0);
   const [progress, setProgress] = useState(""), [error, setError] = useState("");
   const [captionError, setCaptionError] = useState("");
+  const [captionExpanded, setCaptionExpanded] = useState(false);
 
   useEffect(() => {
     mounted.current = true;
@@ -79,7 +87,9 @@ export function useAudioForm({
       if (mounted.current && submission.current === current) setSaved(true);
     } catch (failure) {
       if (mounted.current && submission.current === current) {
-        setCaptionError(failure.fieldErrors?.["items[0].caption"] ?? "");
+        const captionFailure = getAudioCaptionError(failure);
+        setCaptionError(captionFailure);
+        if (captionFailure) setCaptionExpanded(true);
         setError(failure.code === "VALIDATION_FAILED" ? failure.message
           : failure.code === "INVALID_MEDIA" ? "This original clip could not be accepted. Choose another clip or record again."
             : failure.status === 429 || (failure.status === 503 && failure.retryAfterSeconds > 0)
@@ -97,7 +107,7 @@ export function useAudioForm({
   function reset() {
     audio.current?.pause();
     submission.current?.startAnother(); capture.current?.discard();
-    setGuestName(""); setCaption(""); setCaptionError(""); setError(""); setProgress("");
+    setGuestName(""); setCaption(""); setCaptionError(""); setCaptionExpanded(false); setError(""); setProgress("");
     setBusy(false); setPending(false); setSaved(false); setFailed(false); setRetryAfter(0);
   }
   function finish(callback) { const receipt = submission.current?.receipt; reset(); callback?.(receipt); }
@@ -117,14 +127,15 @@ export function useAudioForm({
     audio, startButton, result, errorNotice, captionInput,
     view: {
       prefix, snapshot, guestName, caption, busy, pending, saved, failed, retryAfter,
-      progress, error, captionError, recordingBusy, locked,
+      progress, error, captionError, captionExpanded, recordingBusy, locked,
       actions: {
         submit, reset, startRecording, discard, choose,
         finish: () => finish(onDone),
         shareAnother: () => finish(onShareAnother),
         stopRecording: () => capture.current?.stop(),
         changeGuestName: setGuestName,
-        changeCaption: value => { setCaption(value); setCaptionError(""); },
+        changeCaption: value => { setCaption(value); setCaptionError(""); setError(""); },
+        toggleCaption: setCaptionExpanded,
       },
     },
   };
