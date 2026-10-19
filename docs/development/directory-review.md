@@ -718,10 +718,14 @@ temporary harness is preserved outside frontend source. All 17 source hashes
 snapshot; guest-flow source remains byte-identical. No new tracked test files,
 production modules or dependencies are added.
 
-The full suite, lint and build also pass on a separate intended-source copy
-created from the committed baseline plus the export changes. A concurrent
-contribution-form hook edit is preserved outside this patch and excluded from
-that copy. The export/adapter hashes match both verification copies.
+The full suite, lint and build also pass on a separate copy containing the
+export changes over the committed baseline. The final delivery additionally
+includes the two existing contribution files from `5741362`: expanded display/
+hook formatting and extraction of the existing submit-failure handler. Review
+confirms unchanged ownership guards, validation and retry behavior. All 551
+tests, lint and build pass again with those changes included in the same branch.
+The export/adapter hashes match both verification copies; this small readability
+change does not mark the contribution directory reviewed again.
 
 Ignored reports and logs are under `logs/export-directory-review.local/`.
 These frontend checks do not repeat real backend/ZIP/provider acceptance or

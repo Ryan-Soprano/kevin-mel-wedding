@@ -155,10 +155,13 @@ is preserved outside frontend source. All 17 recorded source hashes match the
 verified snapshot; guest-flow source remains byte-identical. Ignored evidence
 is under `logs/export-directory-review.local/`.
 
-The full 551-test suite, lint and build were also repeated successfully in an
-intended-source copy of the committed baseline plus the export patch. Its 17
-source hashes match the working-copy verification. A concurrent contribution
-hook edit stays outside this delivery and is preserved in the main checkout.
+The full 551-test suite, lint and build also pass in a separate copy containing
+the export patch over the committed baseline; its 17 source hashes match.
+The final combined delivery includes two existing contribution files from
+`5741362`, expanding formatting and extracting the existing submit-failure
+handler. Independent review confirms unchanged ownership, validation, retry and
+completion behavior. All 551 tests, lint and build pass again on that combined
+branch. The contribution changes remain in this same pull request.
 
 This review supplements the historical real-backend ZIP evidence above; it does
 not repeat backend/provider, archive-content, hosted-capacity, physical-device,
