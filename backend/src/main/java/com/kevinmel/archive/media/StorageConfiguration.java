@@ -16,25 +16,61 @@ import com.kevinmel.archive.web.ApiException;
 public class StorageConfiguration {
     @Bean
     @ConditionalOnMissingBean(Clock.class)
-    Clock archiveClock() { return Clock.systemUTC(); }
+    Clock archiveClock() {
+        return Clock.systemUTC();
+    }
 
     @Bean
     @ConditionalOnProperty(name = "archive.storage.enabled", havingValue = "false", matchIfMissing = true)
     ObjectStorage disabledStorage() {
         return new ObjectStorage() {
-            public void requireAvailable() { throw unavailable(); }
-            public UploadGrant authorize(UUID id, String key, String type, long byteSize, Instant expiry) { throw unavailable(); }
-            public ReadGrant authorizeRead(String key, String type, long size, Instant expiry) { throw privateMediaUnavailable(); }
-            public Optional<byte[]> read(String key, int max) { throw unavailable(); }
-            public void publish(String key, byte[] bytes, String type) { throw unavailable(); }
+            public void requireAvailable() {
+                throw unavailable();
+            }
+
+            public UploadGrant authorize(
+                    UUID id,
+                    String key,
+                    String type,
+                    long byteSize,
+                    Instant expiry) {
+                throw unavailable();
+            }
+
+            public ReadGrant authorizeRead(
+                    String key,
+                    String type,
+                    long size,
+                    Instant expiry) {
+                throw privateMediaUnavailable();
+            }
+
+            public Optional<byte[]> read(
+                    String key,
+                    int max) {
+                throw unavailable();
+            }
+
+            public void publish(
+                    String key,
+                    byte[] bytes,
+                    String type) {
+                throw unavailable();
+            }
         };
     }
 
     static ApiException unavailable() {
-        return new ApiException(503, "MEDIA_UNAVAILABLE", "Photo storage is unavailable. Keep your photo and try again later.");
+        return new ApiException(
+                503,
+                "MEDIA_UNAVAILABLE",
+                "Photo storage is unavailable. Keep your photo and try again later.");
     }
 
     static ApiException privateMediaUnavailable() {
-        return new ApiException(503, "MEDIA_UNAVAILABLE", "The saved memory is temporarily unavailable. Please try again later.");
+        return new ApiException(
+                503,
+                "MEDIA_UNAVAILABLE",
+                "The saved memory is temporarily unavailable. Please try again later.");
     }
 }

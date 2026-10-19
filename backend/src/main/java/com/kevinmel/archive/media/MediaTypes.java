@@ -10,11 +10,14 @@ public final class MediaTypes {
     public static final Set<String> PHOTO_TYPES = Set.of("image/jpeg", "image/png", "image/webp");
     public static final Set<String> AUDIO_TYPES = Set.of("audio/webm", "audio/ogg", "audio/mp4");
 
-    private MediaTypes() {}
+    private MediaTypes() {
+    }
 
     public static boolean validTypeAndSize(String type, long size) {
-        return type != null && size > 0 && (PHOTO_TYPES.contains(type) && size <= PHOTO_MAX_BYTES
-                || AUDIO_TYPES.contains(type) && size <= AUDIO_MAX_BYTES);
+        return type != null
+                && size > 0
+                && (PHOTO_TYPES.contains(type) && size <= PHOTO_MAX_BYTES
+                        || AUDIO_TYPES.contains(type) && size <= AUDIO_MAX_BYTES);
     }
 
     public static int maxBytesForMemoryType(String memoryType) {
@@ -26,7 +29,9 @@ public final class MediaTypes {
     }
 
     public static boolean audioMetadataMatches(String type, String container, String codec, long durationMs) {
-        if (durationMs < 1 || durationMs > AUDIO_MAX_DURATION_MS || type == null) return false;
+        if (durationMs < 1 || durationMs > AUDIO_MAX_DURATION_MS || type == null) {
+            return false;
+        }
         return switch (type) {
             case "audio/webm" -> "webm".equals(container) && "opus".equals(codec);
             case "audio/ogg" -> "ogg".equals(container) && "opus".equals(codec);
