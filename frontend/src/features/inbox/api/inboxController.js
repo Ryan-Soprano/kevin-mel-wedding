@@ -28,7 +28,8 @@ export function createInboxController({
     photo: idlePhoto(), review: idleReview(), shareLink: idleShareLink(), metadata: idleMetadata(), albums: initialAlbums(), albumReturnId: null,
     timeline: initialTimeline(), timelineReturnId: null, library: initialLibrary(), libraryReturn: false,
     tags: initialTags(), tagReturnId: null, export: initialExport(), notice: null, pageResetVersion: 0, logoutUnconfirmed: false });
-  let generation = 0, operation = null, disposed = false, inboxDirty = false;
+  let generation = 0, operation = null, disposed = false, cancelling = false, inboxDirty = false;
+  let cancellingLogout = false;
   let suspended = false, resuming = null, rechecking = null;
   let notifying = false, notifyAgain = false, batchDepth = 0;
   const listeners = new Set();
@@ -69,20 +70,31 @@ export function createInboxController({
     finally { if (--batchDepth === 0) notify(); }
   }
 
-  function cancel() {
-    generation++;
-    operation?.controller.abort(interrupted());
+  function cancel(purpose = null) {
+    const owner = ++generation;
+    if (cancelling) return owner;
+    // Abort and resource cleanup can call back synchronously. Detach ownership
+    // and block replacement intents until all of this cleanup has finished.
+    const previousOperation = operation, previousCheck = rechecking;
     operation = null;
-    rechecking?.op.controller.abort(interrupted());
     rechecking = null;
-    revokePhoto();
-    exports.revokeDownload();
+    cancelling = true;
+    // pagehide can interrupt sign-out before start() installs its operation.
+    cancellingLogout = purpose === "logout" || previousOperation?.purpose === "logout";
+    try {
+      previousOperation?.controller.abort(interrupted());
+      previousCheck?.op.controller.abort(interrupted());
+      revokePhoto();
+      exports.revokeDownload();
+    } finally { cancelling = false; cancellingLogout = false; }
+    return owner;
   }
 
   function start(patch, purpose = null) {
-    if (disposed) return null;
-    cancel();
-    const current = { generation, controller: new AbortController(), purpose };
+    if (disposed || cancelling) return null;
+    const owner = cancel(purpose);
+    if (disposed || generation !== owner) return null;
+    const current = { generation: owner, controller: new AbortController(), purpose };
     operation = current;
     publish({ busy: true, error: null, photo: idlePhoto(), shareLink: idleShareLink(), ...(patch.phase === "export" ? {} : exports.leave()), ...patch });
     return current;
@@ -180,7 +192,7 @@ export function createInboxController({
   const { photo, revokePhoto } = createInboxMedia({ api, fetchImpl, createObjectURL, revokeObjectURL, now, digest, photoTimeoutMs,
     publish, bounded, assertCurrent, isCurrent: current, authFailure });
   const mutations = createMemoryMutationActions({ api, getState: () => state, publish, start, bounded, run, assertCurrent,
-    isCurrent: current, authFailure, apiTimeoutMs, isDisposed: () => disposed, isSuspended: () => suspended,
+    isCurrent: current, authFailure, apiTimeoutMs, isDisposed: () => disposed || cancelling, isSuspended: () => suspended,
     otherLocked: () => albums.locked() || timeline.locked() || tags.locked() || exports.locked(),
     markInboxDirty: () => { inboxDirty = true; }, refreshMemoryTags, clearMemoryTags: () => tags.clearMemoryPresentation(), photo,
     detailContext: () => ({ phase: "detail", albumReturnId: albums.returnId(), timelineReturnId: timeline.returnId(), tagReturnId: tags.returnId() }),
@@ -189,31 +201,31 @@ export function createInboxController({
   const albums = createAlbumActions({ api, getState: () => state, publish,
     start: patch => start({ ...patch, timeline: initialTimeline(), ...timeline.clearNavigation(), library: initialLibrary(), ...library.clearNavigation(), tags: initialTags(), ...tags.clearNavigation() }), bounded, run, assertCurrent, isCurrent: current,
     authFailure, freeze: frozenCopy,
-    canNavigate: () => !disposed && !suspended && Boolean(state.session?.authenticated) && state.phase !== "create" && !mutations.locked() && !timeline.locked() && !tags.locked() && !exports.locked(),
+    canNavigate: () => !disposed && !cancelling && !suspended && Boolean(state.session?.authenticated) && state.phase !== "create" && !mutations.locked() && !timeline.locked() && !tags.locked() && !exports.locked(),
     openMemory: (id, options) => controller.openMemory(id, options), nameFingerprint: albumNameFingerprint,
   });
   const timeline = createTimelineActions({ api, getState: () => state, publish,
     start: patch => start({ ...patch, albums: initialAlbums(), ...albums.clearNavigation(), library: initialLibrary(), ...library.clearNavigation(), tags: initialTags(), ...tags.clearNavigation() }), bounded, run, assertCurrent, isCurrent: current,
     authFailure, freeze: frozenCopy,
-    canNavigate: () => !disposed && !suspended && Boolean(state.session?.authenticated) && state.phase !== "create" && !mutations.locked() && !albums.locked() && !tags.locked() && !exports.locked(),
+    canNavigate: () => !disposed && !cancelling && !suspended && Boolean(state.session?.authenticated) && state.phase !== "create" && !mutations.locked() && !albums.locked() && !tags.locked() && !exports.locked(),
     openMemory: (id, options) => controller.openMemory(id, options), fieldsFingerprint: timelineFieldsFingerprint,
   });
   const library = createLibraryActions({ api, getState: () => state, publish,
     start: patch => start({ ...patch, albums: initialAlbums(), ...albums.clearNavigation(), timeline: initialTimeline(), ...timeline.clearNavigation(), tags: initialTags(), ...tags.clearNavigation() }),
     bounded, run, assertCurrent, authFailure, freeze: frozenCopy,
-    canNavigate: () => !disposed && !suspended && Boolean(state.session?.authenticated) && state.phase !== "create" && !mutations.locked() && !albums.locked() && !timeline.locked() && !tags.locked() && !exports.locked(),
+    canNavigate: () => !disposed && !cancelling && !suspended && Boolean(state.session?.authenticated) && state.phase !== "create" && !mutations.locked() && !albums.locked() && !timeline.locked() && !tags.locked() && !exports.locked(),
     openMemory: (id, options) => controller.openMemory(id, options),
   });
   const tags = createTagActions({ api, getState: () => state, publish,
     start: patch => start(patch.phase === "detail" ? patch : { ...patch, albums: initialAlbums(), ...albums.clearNavigation(), timeline: initialTimeline(), ...timeline.clearNavigation(), library: initialLibrary(), ...library.clearNavigation() }),
     bounded, run, assertCurrent, isCurrent: current, authFailure, freeze: frozenCopy,
-    canNavigate: () => !disposed && !suspended && Boolean(state.session?.authenticated) && state.phase !== "create" && !mutations.locked() && !albums.locked() && !timeline.locked() && !exports.locked(),
+    canNavigate: () => !disposed && !cancelling && !suspended && Boolean(state.session?.authenticated) && state.phase !== "create" && !mutations.locked() && !albums.locked() && !timeline.locked() && !exports.locked(),
     openMemory: (id, options) => controller.openMemory(id, options), nameFingerprint: tagNameFingerprint,
   });
   const exports = createExportActions({ api, getState: () => state, publish,
     start: patch => start({ ...patch, albums: initialAlbums(), ...albums.clearNavigation(), timeline: initialTimeline(), ...timeline.clearNavigation(), library: initialLibrary(), ...library.clearNavigation(), tags: initialTags(), ...tags.clearNavigation() }),
     bounded, run, assertCurrent, isCurrent: current, authFailure, freeze: frozenCopy, createObjectURL, revokeObjectURL, now,
-    canNavigate: () => !disposed && !suspended && Boolean(state.session?.authenticated) && state.phase !== "create" && !mutations.locked() && !albums.locked() && !timeline.locked() && !tags.locked(),
+    canNavigate: () => !disposed && !cancelling && !suspended && Boolean(state.session?.authenticated) && state.phase !== "create" && !mutations.locked() && !albums.locked() && !timeline.locked() && !tags.locked(),
   });
   const controller = {
     loadExport: () => exports.loadExport(), createExport: () => exports.createExport(), checkExport: options => exports.checkExport(options),
@@ -261,27 +273,32 @@ export function createInboxController({
       return () => listeners.delete(listener);
     },
     beginCreation() {
-      if (disposed || suspended || state.busy || !state.session?.authenticated || mutations.locked() || albums.locked() || timeline.locked() || tags.locked() || exports.locked()) return state;
-      cancel(); inboxDirty = true;
+      if (disposed || cancelling || suspended || state.busy || !state.session?.authenticated || mutations.locked() || albums.locked() || timeline.locked() || tags.locked() || exports.locked()) return state;
+      const owner = cancel();
+      if (disposed || generation !== owner) return state;
+      inboxDirty = true;
       publish({ phase: "create", detail: null, items: EMPTY_ITEMS, nextCursor: null, photo: idlePhoto(), notice: null, error: null });
       return state;
     },
     getCreationApi() {
       const owner = generation;
       return createCoupleSubmissionApi({ api, getSession: () => state.session,
-        isCurrent: () => !disposed && !suspended && generation === owner && state.phase === "create",
-        onAccessFailure: failure => { cancel(); authFailure(failure); },
+        isCurrent: () => !disposed && !cancelling && !suspended && generation === owner && state.phase === "create",
+        onAccessFailure: failure => {
+          const owner = cancel();
+          if (!disposed && generation === owner) authFailure(failure);
+        },
       });
     },
     creationComplete(receipt) {
-      if (state.phase !== "create" || !state.session?.authenticated || !receipt?.memories?.length) return Promise.resolve(state);
+      if (disposed || cancelling || state.phase !== "create" || !state.session?.authenticated || !receipt?.memories?.length) return Promise.resolve(state);
       inboxDirty = true;
       return controller.openMemory(receipt.memories[0].memoryId);
     },
     suspend() {
       if (disposed || (suspended && !resuming)) return state;
       mutations.suspend();
-      const logoutUnconfirmed = state.logoutUnconfirmed || operation?.purpose === "logout";
+      const logoutUnconfirmed = state.logoutUnconfirmed || operation?.purpose === "logout" || cancellingLogout;
       suspended = true;
       resuming = null;
       cancel();
@@ -300,7 +317,7 @@ export function createInboxController({
       return state;
     },
     resume() {
-      if (disposed || !suspended) return Promise.resolve(state);
+      if (disposed || cancelling || !suspended) return Promise.resolve(state);
       if (resuming) return resuming;
       if (state.logoutUnconfirmed) { suspended = false; return controller.logout(); }
       const op = start({ phase: "checking", session: null, items: EMPTY_ITEMS, nextCursor: null, detail: null, notice: null });
@@ -339,7 +356,7 @@ export function createInboxController({
     recheckSession() {
       // A foreground access check must not replace the view, revoke a loaded
       // photo, or interrupt a save. Saves already validate access on the server.
-      if (disposed || suspended || !state.session?.authenticated || state.busy
+      if (disposed || cancelling || suspended || !state.session?.authenticated || state.busy
         || mutations.locked() || albums.locked() || timeline.locked() || tags.locked() || exports.locked()) {
         return Promise.resolve(state);
       }
@@ -349,12 +366,14 @@ export function createInboxController({
         try {
           const session = sessionCopy(await bounded(op, signal => api.getSession({ signal })));
           if (!session.authenticated) {
-            cancel();
+            const owner = cancel();
+            if (disposed || generation !== owner) return state;
             clearPrivate({ phase: "login", busy: false, error: "Your session has expired. Sign in again to view the archive." });
           } else publish({ session });
         } catch (failure) {
           if (!current(op)) return state;
-          cancel();
+          const owner = cancel();
+          if (disposed || generation !== owner) return state;
           if (!authFailure(failure)) clearPrivate({ phase: "unavailable", busy: false,
             error: "Archive access could not be checked. Try checking access again." });
         } finally {
@@ -366,6 +385,7 @@ export function createInboxController({
       return completion;
     },
     loadSession() {
+      if (disposed || cancelling) return Promise.resolve(state);
       if (suspended) return controller.resume();
       if (mutations.locked() || albums.locked() || timeline.locked() || tags.locked() || exports.locked()) return Promise.resolve(state);
       if (state.logoutUnconfirmed) return controller.logout();
@@ -379,6 +399,7 @@ export function createInboxController({
       });
     },
     login(credentials) {
+      if (disposed || cancelling) return Promise.resolve(state);
       if (mutations.locked() || albums.locked() || timeline.locked() || tags.locked() || exports.locked()) return Promise.resolve(state);
       const op = start({ phase: "login", session: null, items: EMPTY_ITEMS, nextCursor: null, detail: null, notice: null, logoutUnconfirmed: false });
       return run(op, async () => {
@@ -398,6 +419,7 @@ export function createInboxController({
       });
     },
     logout() {
+      if (disposed || cancelling) return Promise.resolve(state);
       if (mutations.locked() || albums.locked() || timeline.locked() || tags.locked() || exports.locked()) return Promise.resolve(state);
       albums.clear();
       timeline.clear();
@@ -412,19 +434,20 @@ export function createInboxController({
         error: "Sign-out could not be confirmed. Private content is hidden here. Retry signing out before leaving a shared device." }));
     },
     loadInbox(reviewStatus = "PENDING", cursor = null) {
-      if (!state.session?.authenticated || disposed || mutations.locked() || albums.locked() || timeline.locked() || tags.locked() || exports.locked()) return Promise.resolve(state);
+      if (!state.session?.authenticated || disposed || cancelling || mutations.locked() || albums.locked() || timeline.locked() || tags.locked() || exports.locked()) return Promise.resolve(state);
       const albumNavigation = albums.clearNavigation();
       const timelineNavigation = timeline.clearNavigation();
       const libraryNavigation = library.clearNavigation(), tagNavigation = tags.clearNavigation();
       const changed = reviewStatus !== state.reviewStatus;
       const op = start({ phase: "inbox", reviewStatus, detail: null, notice: null, albums: initialAlbums(), timeline: initialTimeline(), library: initialLibrary(), tags: initialTags(), ...albumNavigation, ...timelineNavigation, ...libraryNavigation, ...tagNavigation,
+        ...(cursor === null ? { pageResetVersion: state.pageResetVersion + 1 } : {}),
         ...(changed ? { items: EMPTY_ITEMS, nextCursor: null } : {}) });
       return run(op, () => page(op, reviewStatus, cursor), failure => {
         if (!authFailure(failure)) publish({ error: "Your inbox could not be loaded. Try loading it again." });
       });
     },
     openMemory(id, { albumId = null, eventId = null, libraryReturn = false, tagId = null } = {}) {
-      if (!state.session?.authenticated || disposed || mutations.locked() || albums.locked() || timeline.locked() || tags.locked() || exports.locked()) return Promise.resolve(state);
+      if (!state.session?.authenticated || disposed || cancelling || mutations.locked() || albums.locked() || timeline.locked() || tags.locked() || exports.locked()) return Promise.resolve(state);
       // Publish the requested memory and its return context as one destination.
       const op = batchPublication(() => {
         albums.memoryContext(albumId);
@@ -450,19 +473,20 @@ export function createInboxController({
       });
     },
     backToInbox() {
-      if (disposed || !state.session?.authenticated || mutations.locked() || albums.locked() || timeline.locked() || tags.locked() || exports.locked()) return state;
+      if (disposed || cancelling || !state.session?.authenticated || mutations.locked() || albums.locked() || timeline.locked() || tags.locked() || exports.locked()) return state;
       if (albums.hasReturn()) return albums.returnToAlbum();
       if (timeline.hasReturn()) return timeline.returnToEvent();
       if (tags.hasReturn()) return tags.returnToTag();
       if (library.hasReturn()) return library.returnToLibrary();
       if (inboxDirty) return controller.loadInbox(state.reviewStatus);
-      cancel();
+      const owner = cancel();
+      if (disposed || generation !== owner) return state;
       publish({ phase: "inbox", busy: false, error: null, detail: null, photo: idlePhoto(), notice: null });
       return state;
     },
     retryPhoto() {
       if (state.phase !== "detail" || !["PHOTO", "AUDIO"].includes(state.detail?.memoryType) || state.detail.reviewStatus === "DELETE"
-        || !state.session?.authenticated || disposed || mutations.locked() || albums.locked() || timeline.locked() || tags.locked() || exports.locked()) return Promise.resolve(state);
+        || !state.session?.authenticated || disposed || cancelling || mutations.locked() || albums.locked() || timeline.locked() || tags.locked() || exports.locked()) return Promise.resolve(state);
       const detail = state.detail;
       const op = start({ phase: "detail", detail });
       return run(op, () => photo(op, detail), failure => {
@@ -480,6 +504,7 @@ export function createInboxController({
     reloadMetadata(...args) { return mutations.reloadMetadata(...args); },
     dispose() {
       if (disposed) return;
+      disposed = true;
       cancel();
       mutations.dispose();
       inboxDirty = false;
@@ -491,7 +516,6 @@ export function createInboxController({
         timeline: initialTimeline(), timelineReturnId: null, library: initialLibrary(), libraryReturn: false, tags: initialTags(), tagReturnId: null, export: initialExport(), notice: null, busy: false, error: null });
       suspended = true;
       resuming = null;
-      disposed = true;
       listeners.clear();
     },
   };

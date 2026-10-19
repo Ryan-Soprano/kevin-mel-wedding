@@ -28,15 +28,42 @@ export function useInboxController(createController) {
   const factory = useRef(createController);
   const controller = useRef(null);
   const navigationOwner = useRef(null);
-  const beforeAction = useCallback(() => navigationOwner.current?.cancelRestore(), []);
+  const inboxFocus = useRef(null);
+  const cancelInboxFocus = useCallback(() => { inboxFocus.current = null; }, []);
+  const beforeAction = useCallback(() => {
+    cancelInboxFocus();
+    navigationOwner.current?.cancelRestore();
+  }, [cancelInboxFocus]);
+  const requestInbox = useCallback((status, cursor = null) => {
+    beforeAction();
+    const owner = controller.current;
+    if (!owner) return;
+    inboxFocus.current = owner;
+    return owner.loadInbox(status, cursor);
+  }, [beforeAction]);
   const intentionalDialog = useRef(false);
   const setDialogState = useCallback(value => { intentionalDialog.current = value; }, []);
-  const actions = useInboxActions(controller, beforeAction);
+  const actions = useInboxActions(controller, beforeAction, requestInbox);
   const audioPlayback = useRef(null);
+  const setAudioPlayback = useCallback((element, expectedUrl) => {
+    if (audioPlayback.current !== element) stopAudioPlayback(audioPlayback.current);
+    audioPlayback.current = element;
+    if (!element) return;
+    const next = controller.current?.getSnapshot();
+    if (next?.phase !== "detail" || !next.session?.authenticated || next.detail?.memoryType !== "AUDIO"
+      || next.detail.reviewStatus === "DELETE" || isInboxLocked(next) || next.photo.phase !== "ready" || next.photo.url !== expectedUrl) {
+      stopAudioPlayback(element);
+      return;
+    }
+    // StrictMode detaches and reattaches the same DOM node without rewriting
+    // unchanged props. Restore only the source this current owner verified.
+    if (element.getAttribute("src") !== expectedUrl) element.setAttribute("src", expectedUrl);
+  }, []);
   const clearPlayback = useCallback(() => stopAudioPlayback(audioPlayback.current), []);
   const pausePlayback = useCallback(() => {
+    cancelInboxFocus();
     try { audioPlayback.current?.pause(); } catch { /* A window switch must preserve the loaded audio source. */ }
-  }, []);
+  }, [cancelInboxFocus]);
   const heading = useRef(null);
   const deleteButton = useRef(null);
   const cancelDelete = useRef(null);
@@ -68,6 +95,7 @@ export function useInboxController(createController) {
       isCreationBlocked: () => Boolean(creationRef.current?.busy || creationRef.current?.pending),
       hasCreationDraft: () => Boolean(creationRef.current?.hasDraft && !creationRef.current?.complete),
       onBlocked: () => setNavigationNotice("Finish or confirm the current save before leaving this screen."),
+      onNavigate: cancelInboxFocus,
     });
     navigationOwner.current = navigation;
     let pageVersion = current.getSnapshot().pageResetVersion;
@@ -92,6 +120,7 @@ export function useInboxController(createController) {
       onDialogEnd: () => { intentionalDialog.current = false; },
       onPause: pausePlayback,
       onHide: () => {
+        cancelInboxFocus();
         intentionalDialog.current = false;
         clearPlayback();
         setUsername("");
@@ -103,6 +132,7 @@ export function useInboxController(createController) {
     if (document.visibilityState === "hidden") current.suspend();
     else void current.loadSession();
     return () => {
+      cancelInboxFocus();
       clearPlayback();
       navigation.dispose();
       if (navigationOwner.current === navigation) navigationOwner.current = null;
@@ -111,13 +141,20 @@ export function useInboxController(createController) {
       unsubscribe();
       current.dispose();
     };
-  }, [clearPlayback, pausePlayback, updatePages]);
+  }, [cancelInboxFocus, clearPlayback, pausePlayback, updatePages]);
 
   useEffect(() => {
     heading.current?.focus();
   }, [snapshot.phase, snapshot.detail?.memoryId, snapshot.albums?.view, snapshot.albums?.album?.albumId,
     snapshot.timeline?.view, snapshot.timeline?.event?.eventId, snapshot.library?.view,
     snapshot.tags?.view, snapshot.tags?.tag?.tagId]);
+
+  useEffect(() => {
+    const owner = inboxFocus.current;
+    if (!owner || snapshot.busy || snapshot !== owner.getSnapshot()) return;
+    inboxFocus.current = null;
+    if (controller.current === owner && snapshot.phase === "inbox" && snapshot.session?.authenticated) heading.current?.focus();
+  }, [snapshot]);
 
   const reviewLocked = isInboxLocked(snapshot) || (snapshot.phase === "create"
     && Boolean(creationState?.busy || creationState?.pending));
@@ -175,24 +212,20 @@ export function useInboxController(createController) {
 
   function filter(status) {
     if (reviewLocked) return;
-    beforeAction();
-    updatePages([null]);
-    void controller.current?.loadInbox(status);
+    void requestInbox(status);
   }
 
   function nextPage() {
     if (snapshot.busy || reviewLocked || snapshot.error || !snapshot.nextCursor) return;
-    beforeAction();
     updatePages([...pagesRef.current, snapshot.nextCursor]);
-    void controller.current?.loadInbox(snapshot.reviewStatus, snapshot.nextCursor);
+    void requestInbox(snapshot.reviewStatus, snapshot.nextCursor);
   }
 
   function previousPage() {
     if (snapshot.busy || reviewLocked || snapshot.error || pages.length < 2) return;
-    beforeAction();
     const previous = pages.slice(0, -1);
     updatePages(previous);
-    void controller.current?.loadInbox(snapshot.reviewStatus, previous.at(-1));
+    void requestInbox(snapshot.reviewStatus, previous.at(-1));
   }
 
   function changeReview(status, visibility) {
@@ -212,7 +245,7 @@ export function useInboxController(createController) {
   }
 
   return {
-    heading, audioPlayback, deleteButton, cancelDelete, reviewFeedback,
+    heading, audioPlayback: setAudioPlayback, deleteButton, cancelDelete, reviewFeedback,
     view: {
       snapshot, actions, reviewLocked, setDialogState, setCreationState, navigationNotice,
       logout, retryAccess, pages, filter, nextPage, previousPage,

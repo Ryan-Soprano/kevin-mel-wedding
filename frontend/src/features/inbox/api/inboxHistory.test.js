@@ -14,7 +14,7 @@ function fixture(api) {
   const actualController = api ? createInboxController({ api }) : null;
   let state = actualController?.getSnapshot() ?? { ...empty, phase: "inbox", session: clone(COUPLE_SESSION) }, recording, serial = 0;
   const events = new EventTarget(), entries = [], calls = [], movements = [];
-  let position = -1, blocked = 0, pages = [null], creationBlocked = false, draft = false, discard = false;
+  let position = -1, blocked = 0, navigations = 0, pages = [null], creationBlocked = false, draft = false, discard = false;
   const emitPop = value => {
     const event = new Event("popstate"); Object.defineProperty(event, "state", { value: clone(value) }); events.dispatchEvent(event);
   };
@@ -34,11 +34,11 @@ function fixture(api) {
     showAlbumSelector: async (status, cursor, stack) => { calls.push(["album-select", status, cursor, stack]); return set({ albums: { ...state.albums, view: "select", selectorStatus: status, cursors: stack } }); },
     beginAlbumCreation: async () => { calls.push(["album-create"]); return set({ phase: "albums", albums: { ...empty.albums, view: "create" } }); },
     loadTimeline: async (filters, cursor, stack) => { calls.push(["timeline", filters, cursor, stack]); return set({ phase: "timeline", timeline: { ...empty.timeline, filters, cursors: stack } }); },
-    openTimelineEvent: async (id, cursor, stack) => { calls.push(["event", id, cursor, stack]); return set({ phase: "timeline", timeline: { ...empty.timeline, view: "detail", event: { eventId: id }, cursors: stack } }); },
+    openTimelineEvent: async (id, cursor, stack) => { calls.push(["event", id, cursor, stack]); return set({ phase: "timeline", timeline: { ...empty.timeline, filters: state.timeline.filters, view: "detail", event: { eventId: id }, cursors: stack } }); },
     showTimelineSelector: async (status, cursor, stack) => { calls.push(["event-select", status, cursor, stack]); return set({ timeline: { ...state.timeline, view: "select", selectorStatus: status, cursors: stack } }); },
     beginTimelineCreation: async () => { calls.push(["event-create"]); return set({ phase: "timeline", timeline: { ...empty.timeline, view: "create" } }); },
     loadTags: async (q, cursor, stack) => { calls.push(["tags", q, cursor, stack]); return set({ phase: "tags", tags: { ...empty.tags, q, cursors: stack } }); },
-    openTag: async (id, cursor, stack) => { calls.push(["tag", id, cursor, stack]); return set({ phase: "tags", tags: { ...empty.tags, view: "detail", tag: { tagId: id }, cursors: stack } }); },
+    openTag: async (id, cursor, stack) => { calls.push(["tag", id, cursor, stack]); return set({ phase: "tags", tags: { ...empty.tags, q: state.tags.q, view: "detail", tag: { tagId: id }, cursors: stack } }); },
     showTagSelector: async (status, cursor, stack) => { calls.push(["tag-select", status, cursor, stack]); return set({ tags: { ...state.tags, view: "select", selectorStatus: status, cursors: stack } }); },
     beginTagCreation: async () => { calls.push(["tag-create"]); return set({ phase: "tags", tags: { ...empty.tags, view: "create" } }); },
     loadLibrary: async (filters, cursor, stack) => { calls.push(["library", filters, cursor, stack]); return set({ phase: "library", library: { ...empty.library, filters, cursors: stack } }); },
@@ -55,11 +55,11 @@ function fixture(api) {
   recording = attachInboxHistory({ controller, eventTarget: events, historyImpl: history,
     getInboxPages: () => pages, setInboxPages: value => { pages = value; }, randomId: () => "opaque-" + ++serial,
     isCreationBlocked: () => creationBlocked, hasCreationDraft: () => draft, confirmDiscard: () => discard,
-    onBlocked: () => { blocked++; } });
+    onBlocked: () => { blocked++; }, onNavigate: () => { navigations++; } });
   const unsubscribe = actualController?.subscribe(next => { state = next; recording.sync(next); });
   recording.sync(state);
   return { controller, recording, history, events, entries, calls, movements, empty, set,
-    setPages: value => { pages = value; }, getPages: () => pages, blocked: () => blocked,
+    setPages: value => { pages = value; }, getPages: () => pages, blocked: () => blocked, navigations: () => navigations,
     creation: (busy, hasDraft, confirm = false) => { creationBlocked = busy; draft = hasDraft; discard = confirm; },
     pop: emitPop,
     dispose() { unsubscribe?.(); recording.dispose(); actualController?.dispose(); },
@@ -258,8 +258,10 @@ test("creator pending work blocks traversal and an ordinary draft requires delib
     assert.deepEqual(f.history.state, entry); assert.deepEqual(f.calls, []);
     f.creation(false, true, false); f.history.go(-1); await turn();
     assert.deepEqual(f.history.state, entry); assert.deepEqual(f.calls, []);
+    assert.equal(f.navigations(), 0, "blocked traversal retains the current presentation owner");
     f.creation(false, true, true); f.history.go(-1); await turn();
     assert.deepEqual(f.calls, [["inbox", "PENDING", null]]);
+    assert.equal(f.navigations(), 1, "accepted traversal cancels prior presentation focus intent");
   } finally { f.recording.dispose(); }
 });
 
@@ -290,6 +292,97 @@ for (const [phase, idField, recordField, open, select] of [
     } finally { f.recording.dispose(); }
   });
 }
+
+for (const phase of ["timeline", "tags"]) {
+  for (const view of ["detail", "select"]) {
+    test(`${phase} ${view} traversal restores the original list context before its parent`, async () => {
+      const f = fixture();
+      const filters = { fromYear: 2025, toYear: 2025, datePrecision: "YEAR" }, q = "private-family-query";
+      const record = phase === "timeline" ? "event" : "tag", idField = phase === "timeline" ? "eventId" : "tagId";
+      const parent = phase === "timeline" ? "event" : "tag", pages = [null, "private-member-page"];
+      try {
+        f.set({ phase, [phase]: { ...f.empty[phase], view, [record]: { [idField]: IDS.contribution },
+          ...(phase === "timeline" ? { filters } : { q }), cursors: pages, selectorStatus: "ARCHIVED" } });
+        f.set({ phase: "inbox", [phase]: clone(f.empty[phase]) });
+        f.history.go(-1); await turn();
+        assert.deepEqual(f.calls, [[phase, phase === "timeline" ? filters : q, null, [null]],
+          [parent, IDS.contribution, view === "select" ? null : pages.at(-1), view === "select" ? [null] : pages],
+          ...(view === "select" ? [[`${parent}-select`, "ARCHIVED", pages.at(-1), pages]] : [])]);
+        assert.deepEqual(phase === "timeline" ? f.controller.getSnapshot().timeline.filters : f.controller.getSnapshot().tags.q,
+          phase === "timeline" ? filters : q);
+        assert.doesNotMatch(JSON.stringify(f.entries), /private-family-query|private-member-page|fromYear/);
+        f.calls.length = 0;
+        f.set({ phase: "inbox" }); f.history.go(-1); await turn();
+        assert.equal(f.calls[0][0], parent, "unchanged list context needs no extra read");
+      } finally { f.dispose(); }
+    });
+  }
+
+  test(`cancelling ${phase} context restoration prevents its later parent read`, async () => {
+    const f = fixture();
+    let finish;
+    try {
+      f.set({ phase, [phase]: { ...f.empty[phase], view: "detail",
+        ...(phase === "timeline" ? { event: { eventId: IDS.contribution }, filters: { fromYear: 2025, toYear: 2025, datePrecision: "ALL" } }
+          : { tag: { tagId: IDS.contribution }, q: "private-query" }) } });
+      f.set({ phase: "inbox", [phase]: clone(f.empty[phase]) });
+      f.controller[phase === "timeline" ? "loadTimeline" : "loadTags"] = () => {
+        f.calls.push(["held-context"]); return new Promise(resolve => { finish = resolve; });
+      };
+      f.history.go(-1); await turn();
+      f.recording.cancelRestore(); await f.controller.loadInbox("KEEP", null);
+      finish(); await turn();
+      assert.deepEqual(f.calls, [["held-context"], ["inbox", "KEEP", null]]);
+      assert.equal(f.controller.getSnapshot().phase, "inbox");
+    } finally { finish?.(); f.dispose(); }
+  });
+}
+
+test("memory history retains a matching tag parent after memory-tag controls replace its presentation", async () => {
+  const reads = [];
+  const tag = { tagId: IDS.contribution, revision: 1 };
+  const f = fixture({
+    getSession: async () => clone(COUPLE_SESSION),
+    listMemories: async () => ({ items: [], nextCursor: null }),
+    listTags: async options => { reads.push(["tags", options.q]); return { items: [], nextCursor: null }; },
+    listTagMembers: async (id, options) => { reads.push(["tag", id, options.cursor ?? null]); return { tag, items: [], nextCursor: null }; },
+    getMemory: async id => ({ ...MEMORY_DETAIL, memoryId: id }),
+    listMemoryTags: async () => ({ items: [], nextCursor: null }),
+  });
+  try {
+    await f.controller.loadSession(); await f.controller.loadTags("private-family-query");
+    await f.controller.openTag(tag.tagId, "private-member-page", [null, "private-member-page"]);
+    await f.controller.openTagMemory(IDS.text);
+    assert.equal(f.controller.getSnapshot().tags.tag, null, "memory tag controls no longer hold their parent detail");
+    await f.controller.chooseMemoryTag("different-picker-query");
+    await f.controller.loadInbox();
+    reads.length = 0;
+    f.history.go(-1); await turn();
+    assert.deepEqual(reads.slice(0, 2), [["tags", "private-family-query"], ["tag", tag.tagId, "private-member-page"]]);
+    assert.equal(f.controller.getSnapshot().detail.memoryId, IDS.text);
+    assert.equal(f.controller.getSnapshot().tagReturnId, tag.tagId);
+    assert.equal(f.controller.getSnapshot().tags.q, "different-picker-query", "the memory picker restores its own query separately");
+    await f.controller.backToInbox();
+    assert.equal(f.controller.getSnapshot().phase, "tags");
+    assert.equal(f.controller.getSnapshot().tags.tag.tagId, tag.tagId);
+    assert.doesNotMatch(JSON.stringify(f.entries), /private-family-query|private-member-page|different-picker-query/);
+  } finally { f.dispose(); }
+});
+
+test("a memory return context cannot inherit a different tag's query or member page", async () => {
+  const f = fixture();
+  try {
+    f.set({ phase: "tags", tags: { ...f.empty.tags, view: "detail", tag: { tagId: IDS.contribution },
+      q: "unrelated-tag-query", cursors: [null, "unrelated-member-page"] } });
+    await f.controller.openMemory(IDS.text, { tagId: IDS.key });
+    f.set({ phase: "inbox", tags: clone(f.empty.tags) });
+    f.calls.length = 0;
+    f.history.go(-1); await turn();
+    assert.deepEqual(f.calls[0], ["tag", IDS.key, null, [null]]);
+    assert.equal(f.calls.some(call => JSON.stringify(call).includes("unrelated-")), false);
+    assert.equal(f.controller.getSnapshot().tagReturnId, IDS.key);
+  } finally { f.dispose(); }
+});
 
 test("memory history rebuilds the private library origin and tag-picker page from metadata", async () => {
   const f = fixture();

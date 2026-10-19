@@ -1,9 +1,13 @@
+import { useCallback } from "react";
 import { getAudioLabel, getPhotoAlt } from "../inboxDisplay.js";
 
 function OriginalPreview({ memory, url, audioPlayback }) {
+  const attachAudio = useCallback(element => {
+    if (typeof audioPlayback === "function") audioPlayback(element, url);
+  }, [audioPlayback, url]);
   if (memory.memoryType === "AUDIO") {
     return (
-      <audio ref={audioPlayback} className="inbox-audio" controls preload="metadata" src={url} aria-label={getAudioLabel(memory)}>
+      <audio ref={attachAudio} className="inbox-audio" controls preload="metadata" src={url} aria-label={getAudioLabel(memory)}>
         <track kind="captions" src="data:text/vtt,WEBVTT" srcLang="en" label="Captions" />
       </audio>
     );

@@ -246,3 +246,100 @@ the production build against a clean snapshot of the same frontend source.
 Independent review found no actionable issues. No new test files were added.
 GitHub CI was queued during the reported Actions incident; local verification
 does not establish passing CI or a fresh configured review for the follow-up.
+
+## Private inbox decisions — October 19, 2026
+
+This batch reviews all 38 tracked files under `features/inbox/`, including
+their existing tests, styles and consumers. Its baseline is `0d567d8`, the
+latest PR #68 follow-up, whose tree is unchanged in merge `b0618f3`.
+Inbox work is kept on `feature/private-inbox-review` and targets that merged baseline.
+
+| File in `features/inbox/` | Decision and reason |
+|---|---|
+| `api/inboxController.js` | Fix: fence synchronous cancellation callbacks, preserve interrupted sign-out intent, and reset shell cursors on explicit first-page reads. |
+| `api/inboxController.test.js` | Extend: reproduce cancellation reentry, lifecycle precedence, interrupted sign-out and first-page/cached-page return behavior. |
+| `api/inboxControllerCompatibility.test.js` | Keep: verifies public controller compatibility with existing archive consumers. |
+| `api/inboxForegroundAccess.test.js` | Keep: foreground access checks preserve valid current work and clear expired private state. |
+| `api/memoryMutationActions.js` | Fix: metadata responses must preserve the captured audience at the expected revision; later reconciled revisions remain authoritative. |
+| `api/inboxState.js` | Keep: frozen initial values, recursive presentation copies and filtered session fields have cohesive consumers. |
+| `api/inboxMedia.js` | Keep: verify policy, HTTPS grants, bounded streamed bytes and checksum before creating an owned Blob URL. |
+| `api/coupleSubmissionApi.js` | Keep: authenticated routes, current-session CSRF and stale-facade rejection remain separate from storage-grant recovery. |
+| `api/coupleMemories.test.js` | Extend: real-decoder metadata audience regressions complement retained-original, authenticated creation and recovery checks. |
+| `api/inboxAudio.test.js` | Clarify the deferred-response test description; its body does not claim a stalled-stream test. Existing controller tests cover stream cancellation. |
+| `api/inboxHistory.js` | Fix: retain timeline/tag return context and matching tag-parent navigation metadata; cancel obsolete restoration and pending focus. |
+| `api/inboxHistory.test.js` | Extend: nested filter/query/page restoration, matching parent identity, cancelled intermediate reads and navigation notification. |
+| `api/inboxPrivacyLifecycle.js` | Keep: pagehide clears presentation; ordinary hidden/blur events pause audio and preserve drafts. Visible return rechecks access. |
+| `api/inboxPrivacyLifecycle.test.js` | Keep: verifies those distinct lifecycle paths and listener cleanup. |
+| `hooks/useInboxController.js` | Fix: own deliberate paging/filter/retry settlement focus and native audio teardown, including development replay and direct unmount. |
+| `hooks/useInboxActions.js` | Simplify ownership: reuse the hook's deliberate inbox-request path for retry while keeping stable current-owner adapters. |
+| `components/Inbox.jsx` | Keep: composes the authenticated shell, global feedback and screen adapters. |
+| `components/InboxScreens.jsx` | Keep: access precedence and explicit feature-specific reset keys preserve current owners. |
+| `components/InboxScreens.test.js` | Keep: meaningful access and editor-reset boundary assertions. |
+| `components/InboxAccess.jsx` | Keep: native login fields and explicit unconfirmed-logout recovery remain cohesive. |
+| `components/InboxList.jsx` | Keep: bounded page replacement, status filters, safe labels and explicit requested-page retry remain the presentation contract. |
+| `components/MemoryDetail.jsx` | Keep: composes immutable originals, revision-keyed metadata, tags, review and recovery context. |
+| `components/MemoryMedia.jsx` | Fix: bind the verified URL to a stable audio callback so development replay can restore only the current owner's source; retain original/download availability rules. |
+| `components/MemoryReview.jsx` | Keep: deliberate audience choices, link replacement, recovery locks and identity-bound deletion confirmation remain explicit. |
+| `components/MemoryReview.test.js` | Keep: checks supported actions and locks across every review state. |
+| `components/MemoryMetadataEditor.jsx` | Keep: local editable fields normalize before save and remain locked during uncertain recovery. |
+| `components/AddMemory.jsx` | Fix: deliberate type selection and starting another memory move focus to a connected named group; initial mount does not steal focus. |
+| `components/AddMemory.test.js` | Keep: existing form and screen contracts; mounted checks verify the changed client focus behavior. |
+| `components/ArchiveLayout.jsx` | Keep: small shared presentation components have active archive consumers. |
+| `inboxDisplay.js` | Keep: small label, lock and return-context helpers remain used by the inbox and archive modules. |
+| `memoryMetadata.js` | Keep: exact fields, raw Unicode/length limits and Gregorian date precision match the API contract. |
+| `memoryMetadata.test.js` | Keep: covers precision, leap boundaries and validation before normalization. |
+| `memoryDisplay.js` | Keep: one cached formatter consistently applies the documented Eastern display timezone. |
+| `memoryDisplay.test.js` | Keep: UTC date changes and both daylight-saving transitions remain covered. |
+| `audioPlayback.js` | Keep: native pause/source removal/load cleanup is the shared release operation. |
+| `audioPlayback.test.js` | Keep: verifies cleanup order and continuation after pause failure. |
+| `inbox.css` | Simplify: remove the unused `.inbox-review .button-danger` selector; active delete-confirmation styling is retained. |
+| `archiveLayout.css` | Keep: responsive shared archive styles have active consumers. |
+
+The cancellation defect was reproduced with a synchronous abort callback that
+opened a replacement read: its late result could enter controller state after
+sign-out. Cancellation now detaches prior operations before external cleanup,
+blocks replacement work during cleanup and preserves the reserved generation.
+Lifecycle suspension/disposal supersedes older continuations, while normal
+publication callbacks still give the newest selection ownership. Interrupted
+sign-out remains unconfirmed until restoration completes server invalidation.
+
+The metadata check is malformed-response hardening: editing metadata must not
+accept an audience change at that edit's expected revision. No server-side
+publication defect was observed. Reloading a legitimately newer revision still
+adopts its current audience without attributing another user's change.
+
+History retains only disposable navigation metadata; browser history still
+contains opaque ownership keys. Restoring a nested timeline/tag route reloads
+its list context only when that context changed, before reading its parent.
+Late or cancelled intermediate reads cannot continue navigation.
+
+One separate tag-actions follow-up remains for the library review: opening the
+memory tag picker changes `tags.q`; direct **Back to tag → All tags** can then
+use the picker query instead of the original tag-list query. The inbox history
+fix preserves browser traversal metadata but does not change those feature
+actions. Albums, timeline, library and export have not been marked fully
+reviewed by this inbox batch.
+
+## Private inbox verification
+
+The initial inbox baseline passes 148 existing tests. The final source passes
+all **167 inbox tests** and **532 frontend tests**, with no skips, plus ESLint
+and the production build on Node 24.16.0. No test files were added. New cases
+live in the existing controller, history and couple-memory suites.
+
+Mounted Chromium in React StrictMode at 1280, 390 and 320 px passes **125
+assertions**. Before/after checks reproduce the old page-label mismatch,
+keyboard focus loss and detached audio source. The final run verifies cached
+detail returns, first-page feature/creation returns, native Back/Forward,
+failed-page retry, filters, cancelled focus intent, all three creation choices,
+starting another note, native audio teardown and unchanged-source rerenders.
+Desktop/narrow screenshots were inspected. Synthetic content and transports
+made no provider requests; no page errors or horizontal overflow were observed.
+Browser/server resources are closed, and temporary browser fixtures were
+preserved under ignored logs outside the frontend source directory.
+
+Independent final reviews found no actionable issues in the controller,
+metadata, history, focus or audio changes. Ryan's guest-flow refactor remains
+byte-identical. Reports and source hashes remain under
+`logs/private-inbox-review.local/`. Device, real-provider and hosted acceptance,
+plus final-head CI/configured review, remain separate gates.

@@ -78,7 +78,7 @@ test("audio review/delete revokes preview immediately; deleted audio has no gran
   assert.equal(f.calls.filter(call => call[0] === "playback").length, 2);
 });
 
-test("suspending during private audio body read prevents stale preview creation even if transport ignores abort", async () => {
+test("suspending before the private audio response arrives prevents stale preview creation even if transport ignores abort", async () => {
   let finish;
   const delayed = new Promise(resolve => { finish = resolve; });
   const f = fixture({ fetchImpl: () => delayed }); await f.controller.loadSession();

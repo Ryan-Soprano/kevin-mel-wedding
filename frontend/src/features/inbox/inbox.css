@@ -298,7 +298,6 @@
 .inbox-context > summary:focus-visible { outline: 3px solid var(--color-primary); outline-offset: 3px; }
 .inbox-context[open] { display: grid; gap: 16px; }
 
-.inbox-review .button-danger,
 .inbox-delete-confirmation button:last-child { background: #944838; color: white; }
 
 .inbox-metadata form { display: grid; gap: 8px; }

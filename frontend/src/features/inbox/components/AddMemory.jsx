@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import ContributionForm from "../../contribution/components/ContributionForm.jsx";
 import PhotoBatchForm from "../../media/components/PhotoBatchForm.jsx";
 import AudioForm from "../../audio/components/AudioForm.jsx";
@@ -22,6 +22,9 @@ export default function AddMemory({
   audioEnabled = false,
 }) {
   const api = useRef(null);
+  const choices = useRef(null);
+  const compose = useRef(null);
+  const focusRequest = useRef(undefined);
   const [choice, setChoice] = useState(null);
   const [flow, setFlow] = useState({
     busy: false,
@@ -41,6 +44,13 @@ export default function AddMemory({
     () => () => onNavigationStateChange?.(null),
     [onNavigationStateChange],
   );
+  useLayoutEffect(() => {
+    if (focusRequest.current !== choice) return;
+    focusRequest.current = undefined;
+    // Only a deliberate type change owns focus; initial mount and later form updates do not.
+    const target = choice ? compose.current : choices.current;
+    if (target?.isConnected) target.focus();
+  }, [choice]);
   useEffect(() => {
     api.current = getApi();
   }, [getApi]);
@@ -54,7 +64,12 @@ export default function AddMemory({
     return () => window.removeEventListener("beforeunload", leaving);
   }, [flow.hasDraft, flow.pending]);
   useEffect(() => () => onDialogStateChange?.(false), [onDialogStateChange]);
+  function choose(kind) {
+    focusRequest.current = kind;
+    setChoice(kind);
+  }
   function another() {
+    focusRequest.current = null;
     reportFlow({
       busy: false,
       pending: false,
@@ -98,18 +113,18 @@ export default function AddMemory({
         </p>
       </ArchiveIntro>
       {!choice && (
-        <div className="memory-choices" aria-label="Memory type">
+        <div ref={choices} className="memory-choices" role="group" aria-label="Memory type" tabIndex={-1}>
           <MemoryChoice
             kind="note"
             title="Write a note"
-            onClick={() => setChoice("TEXT")}
+            onClick={() => choose("TEXT")}
           >
             Save a story, a thought, or a favorite moment.
           </MemoryChoice>
           <MemoryChoice
             kind="photos"
             title="Add photos"
-            onClick={() => setChoice("PHOTO")}
+            onClick={() => choose("PHOTO")}
           >
             Keep up to 5 original photos together with your memories.
           </MemoryChoice>
@@ -117,32 +132,37 @@ export default function AddMemory({
             <MemoryChoice
               kind="audio"
               title="Add a voice memory"
-              onClick={() => setChoice("AUDIO")}
+              onClick={() => choose("AUDIO")}
             >
               Record a moment in your own words.
             </MemoryChoice>
           )}
         </div>
       )}
-      {choice === "TEXT" && (
-        <ContributionForm
-          {...props}
-          createSubmission={() => createTextSubmission({ api: api.current })}
-        />
-      )}
-      {choice === "PHOTO" && (
-        <PhotoBatchForm
-          {...props}
-          createSubmission={() =>
-            createPhotoBatchSubmission({ api: api.current })
-          }
-        />
-      )}
-      {audioEnabled && choice === "AUDIO" && (
-        <AudioForm
-          {...props}
-          createSubmission={() => createAudioSubmission({ api: api.current })}
-        />
+      {choice && (
+        <div ref={compose} role="group" tabIndex={-1}
+          aria-label={choice === "TEXT" ? "Write a private note" : choice === "PHOTO" ? "Add private photos" : "Add a voice memory"}>
+          {choice === "TEXT" && (
+            <ContributionForm
+              {...props}
+              createSubmission={() => createTextSubmission({ api: api.current })}
+            />
+          )}
+          {choice === "PHOTO" && (
+            <PhotoBatchForm
+              {...props}
+              createSubmission={() =>
+                createPhotoBatchSubmission({ api: api.current })
+              }
+            />
+          )}
+          {audioEnabled && choice === "AUDIO" && (
+            <AudioForm
+              {...props}
+              createSubmission={() => createAudioSubmission({ api: api.current })}
+            />
+          )}
+        </div>
       )}
     </ArchiveScreen>
   );

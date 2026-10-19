@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 
 /** Stable adapters read the current owner only when an action is invoked. */
-export function useInboxActions(controller, beforeAction) {
+export function useInboxActions(controller, beforeAction, requestInbox) {
   return useMemo(() => {
     const call = (method, ...args) => { beforeAction(); return controller.current?.[method](...args); };
     const backToInbox = () => call("backToInbox");
@@ -28,7 +28,7 @@ export function useInboxActions(controller, beforeAction) {
         create: () => call("beginCreation"),
         export: () => call("loadExport"),
         openMemory: id => call("openMemory", id),
-        reloadInbox: (status, cursor) => call("loadInbox", status, cursor),
+        reloadInbox: requestInbox,
       },
       creation: {
         getApi: () => call("getCreationApi"),
@@ -110,5 +110,5 @@ export function useInboxActions(controller, beforeAction) {
         started: () => call("exportDownloadStarted"),
       },
     };
-  }, [controller, beforeAction]);
+  }, [controller, beforeAction, requestInbox]);
 }

@@ -76,6 +76,15 @@ The completed frontend run passes **231 tests**, zero failures/skips, plus ESLin
 
 `attachInboxPrivacyLifecycle` handles pagehide, document-hidden and window-blur events. The UI synchronously flushes clearing of the current session, private rows/detail/photo/notice, login fields, deletion confirmation and page cursors; the controller cancels its generation and revokes owned Blob URLs. A pageshow, visible-document or focus return rechecks the current session before fetching new inbox/current-memory content. Hidden documents do not resume. Expired/anonymous or denied access cannot restore earlier private state, and an unconfirmed logout still requires invalidation recovery.
 
+Current behavior checked during the October 19 inbox review differs from that
+October 9 lifecycle baseline: `pagehide` synchronously clears private presentation
+and suspends the controller. Window blur or a hidden document pauses audio while
+preserving the current view and drafts. A visible-document, focus or pageshow
+return resumes a suspended controller or rechecks foreground access; hidden
+documents do not resume. Ordinary window switches therefore preserve typed
+credentials and unfinished work. The existing lifecycle and foreground-access
+tests cover these distinct paths.
+
 Suspending an unfinished requested sign-out also marks logout unconfirmed, even before a transport error/timeout arrives. Returning resolves that earlier sign-out through fresh-session/invalidation recovery before any private content can load; the old logout response cannot revive content. A dedicated regression covers a hanging sign-out interrupted by lifecycle hiding.
 
 The review workflow normally locks navigation/sign-out while a mutation is pending or uncertain. Lifecycle suspension still hides its private content and retains only four primitive action fields: memory ID, expected revision, original status and intended status. On return it checks fresh access and reconciles the current memory; it does not automatically resend an uncertain change. Manual same-action recovery uses the fresh session token, and a late old response cannot restore the suspended content. New regressions cover this path, anonymous/403 returns, failed-access recovery, stale completion and event hookup/cleanup.
