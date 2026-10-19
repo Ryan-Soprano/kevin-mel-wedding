@@ -1,3 +1,6 @@
+import { getTimelineFilterErrors } from "../timeline/timelineDisplay.js";
+import { normalizeLibraryQuery } from "./libraryFilters.js";
+
 export const LIBRARY_MEMORY_TYPES = {
   ALL: "All memory types",
   TEXT: "Written notes",
@@ -19,6 +22,44 @@ export const LIBRARY_DATE_PRECISIONS = {
   MONTH: "Month and year",
   DAY: "Exact day",
 };
+
+export function getLibraryQueryError(value) {
+  try {
+    normalizeLibraryQuery(value);
+    return null;
+  } catch (failure) {
+    return failure.message;
+  }
+}
+
+export function getLibraryFilterErrors({
+  q,
+  type,
+  status,
+  precision,
+  fromYear,
+  toYear,
+}) {
+  const errors = {};
+  const queryError = getLibraryQueryError(q);
+  if (queryError) {
+    errors.q = queryError;
+  }
+  if (!Object.hasOwn(LIBRARY_MEMORY_TYPES, type)) {
+    errors.memoryType = "Choose a valid memory type.";
+  }
+  if (!Object.hasOwn(LIBRARY_REVIEW_STATUSES, status)) {
+    errors.reviewStatus = "Choose a valid review status.";
+  }
+  return {
+    ...errors,
+    ...getTimelineFilterErrors({ fromYear, toYear, precision }),
+  };
+}
+
+export function getLibraryFeedback(error, state) {
+  return state.error ?? error;
+}
 
 export function getLibraryMemoryHeading(memory) {
   if (memory.title != null) {

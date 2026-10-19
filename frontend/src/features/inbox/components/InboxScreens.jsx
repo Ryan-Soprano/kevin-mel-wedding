@@ -63,13 +63,29 @@ function TimelineScreen({ view }) {
 function LibraryScreen({ view }) {
   const { library: state, busy } = view.snapshot;
   const key = `${state.view}:${JSON.stringify(state.filters)}:${state.tagQuery}:${state.formResetVersion}`;
-  return <Library key={key} state={state} busy={busy} locked={view.reviewLocked} actions={view.actions.library} />;
+  return (
+    <Library
+      editorKey={key}
+      state={state}
+      busy={busy}
+      locked={view.reviewLocked}
+      actions={view.actions.library}
+    />
+  );
 }
 
 function TagsScreen({ view }) {
   const { tags: state, busy } = view.snapshot;
   const key = `${state.view}:${state.tag?.tagId ?? "new"}:${state.tag?.revision ?? "new"}:${state.q}`;
-  return <Tags key={key} state={state} busy={busy} locked={view.reviewLocked} actions={view.actions.tags} />;
+  return (
+    <Tags
+      editorKey={key}
+      state={state}
+      busy={busy}
+      locked={view.reviewLocked}
+      actions={view.actions.tags}
+    />
+  );
 }
 
 function ExportScreen({ view }) {

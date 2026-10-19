@@ -162,3 +162,63 @@ backend-focused and package logs. These local notes-only browser fixtures do not
 repeat provider/original-file or hosted acceptance. Physical devices, screen
 readers, native hidden-tab behavior and actual browser zoom remain separate.
 Full final-head CI and review status belong in the pull request and Notion task.
+
+## Library directory review — 2026-10-19
+
+This methodical review starts on `feature/library-directory-review` from
+`68b5ea4`, which includes merged albums PR #70 and reviewed timeline commit
+`3d7dafd`. Timeline PR #71 must merge before this Library change.
+
+Returning from a memory's tag picker now restores the matching parent tag
+catalogue query. The explicit **All tags** action still clears the search;
+these are separate navigation choices. The mock tag server also clamps each
+changed tag's timestamp to its previous value when the clock moves backward,
+matching the per-tag backend rule. Genuine no-ops retain timestamps and tokens;
+this does not introduce the timeline's global action clock.
+
+Library filters, tag names/search and exact-name recovery now associate local
+validation with the relevant controls. Correcting a field clears its local
+error without hiding current server feedback. One shared read-focus hook serves
+Library, Tags and memory-tag attachment views. Deliberate paging/search/reload
+focus survives the existing editor resets; applied filters, chooser cancellation,
+cursor stacks and draft reset identities remain intact. Blur, private hiding,
+history traversal or moving focus to another interactive control cancels late
+focus. A closed memory-details disclosure is not reopened by a late response.
+`pagehide` still clears search text, fields, cards and drafts; resuming private
+content requires a fresh access check.
+
+Memory-tag writes only attach or remove existing tags. Their unreachable
+duplicate name-entry recovery form was removed; attachment recovery keeps its
+busy-only controls and explicit undefined retry payload. Real create/rename
+recovery remains in Tags, including deliberate exact-name retry after hiding.
+Original content, files, memory dates, saved times and sharing choices remain
+unchanged. No tracked test files or dependencies were added.
+
+Final focused verification passes **30 tests**: 18 API, 11 presentation and one
+shared inbox adapter case. All **541 frontend tests** pass with zero skips;
+ESLint, the production build and diff checks pass on Node 24.16.0.
+
+Mounted StrictMode Chromium rehearsals pass **352 assertions** at 1280, 390 and
+320 px: 149 Library and 203 Tags/MemoryTags checks, using actual components,
+the inbox controller and synthetic JSON mock adapters. Bounded result/member/
+picker pages, filter and query reset boundaries, partner revision reload,
+associated errors and correction, delete cancellation, tombstones, closed
+disclosures and late responses are covered. Hidden rename recovery suppresses
+wrong-name writes and accepts the exact original name. Hidden attachment
+recovery reloads and deliberately retries without a name, retaining the shared
+write fence. Each fixture's 25 original synthetic note records remain identical
+as JSON.
+
+Both runs report no page errors, external requests or horizontal overflow.
+Representative desktop and narrow validation/recovery screenshots were inspected;
+owned browser/server resources are closed. The temporary harness is preserved
+outside frontend source. Source hashes for all 28 current library files and the
+three integration files are recorded; guest-flow source remains byte-identical.
+Independent API/UI/integration reviews found no remaining actionable issues.
+Ignored reports, source hashes and check logs are under
+`logs/library-directory-review.local/`.
+
+These frontend checks supplement earlier backend evidence; they do not repeat
+real backend/provider acceptance or establish physical-device, screen-reader,
+BFCache or hosted behavior. Final-head CI and configured review remain separate
+after pull-request creation.

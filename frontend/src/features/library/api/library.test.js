@@ -250,3 +250,106 @@ test("memory-tag unknown outcome survives hide as opaque identity and reads befo
   await c.openTag(tag.tagId); await api.login({ username: "synthetic", password: "synthetic" }, await options(api)); await c.renameTag("CSRF rejected name"); assert.equal(c.getSnapshot().tags.mutation.phase, "csrf");
   await c.reloadTagMutation({ refreshSession: true }); assert.equal(c.getSnapshot().tags.tag.name, tag.name); assert.equal(c.getSnapshot().tags.mutation.phase, "idle"); c.dispose();
 });
+
+test(
+  "direct memory return restores the parent tag query while an explicit all-tags request clears it",
+  async () => {
+    const api = await signedMock();
+    const parent = await directTag(api, id(1), "Parent archive label");
+    const picker = await directTag(api, id(3), "Picker label");
+    await api.attachTag(
+      parent.tagId,
+      MEMORY_DETAIL.memoryId,
+      await options(api, parent),
+    );
+    const controller = await entered(api);
+    try {
+      await controller.loadTags("Parent archive");
+      await controller.openTag(parent.tagId);
+      await controller.openTagMemory(MEMORY_DETAIL.memoryId);
+      await controller.chooseMemoryTag("Picker");
+      assert.equal(controller.getSnapshot().tags.q, "Picker");
+
+      await controller.changeMemoryTag(picker.tagId);
+      await controller.backToInbox();
+      const returned = controller.getSnapshot();
+      assert.equal(returned.phase, "tags");
+      assert.equal(returned.tags.tag.tagId, parent.tagId);
+      assert.equal(returned.tags.q, "Parent archive");
+
+      await controller.loadTags();
+      assert.equal(controller.getSnapshot().tags.q, "Parent archive");
+      assert.deepEqual(
+        controller.getSnapshot().tags.items.map(tag => tag.tagId),
+        [parent.tagId],
+      );
+
+      await controller.loadTags("");
+      assert.equal(controller.getSnapshot().tags.q, "");
+      assert.equal(controller.getSnapshot().tags.items.length, 2);
+
+      await controller.loadTags("Parent archive");
+      await controller.openTag(parent.tagId);
+      await controller.openTagMemory(MEMORY_DETAIL.memoryId);
+      await controller.chooseMemoryTag("Picker");
+      controller.suspend();
+      assert.equal(
+        JSON.stringify(controller.getSnapshot()).includes("Parent archive"),
+        false,
+      );
+      await controller.resume();
+      await controller.backToInbox();
+      assert.equal(controller.getSnapshot().tags.q, "");
+    } finally {
+      controller.dispose();
+    }
+  },
+);
+
+test(
+  "mock tag changes clamp their own timestamps after clock rollback without backdating existing tags",
+  async () => {
+    let at = Date.parse("2026-10-19T16:00:00Z");
+    const api = await signedMock({
+      now: () => at,
+    });
+    const original = await directTag(api);
+
+    at += 60_000;
+    const later = await api.renameTag(
+      original.tagId,
+      "Later name",
+      await options(api, original),
+    );
+    assert.ok(Date.parse(later.updatedAt) > Date.parse(original.createdAt));
+
+    at -= 120_000;
+    const renamed = await api.renameTag(
+      original.tagId,
+      "Renamed after clock rollback",
+      await options(api, later),
+    );
+    assert.equal(renamed.createdAt, original.createdAt);
+    assert.equal(renamed.updatedAt, later.updatedAt);
+    assert.notEqual(renamed.revision, later.revision);
+
+    const noop = await api.renameTag(
+      original.tagId,
+      renamed.name,
+      await options(api, renamed),
+    );
+    assert.deepEqual(noop, renamed);
+
+    const independent = await directTag(api, id(3), "Independent new tag");
+    assert.equal(independent.createdAt, new Date(at).toISOString());
+
+    const deleted = await api.deleteTag(
+      original.tagId,
+      await options(api, renamed),
+    );
+    assert.equal(deleted.updatedAt, later.updatedAt);
+    assert.equal(deleted.deletedAt, later.updatedAt);
+    assert.equal(deleted.name, null);
+    assert.deepEqual(await api.getTag(original.tagId), deleted);
+  },
+);

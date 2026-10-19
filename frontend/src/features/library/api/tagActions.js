@@ -12,6 +12,7 @@ const fingerprint = async name => [...new Uint8Array(await crypto.subtle.digest(
 export function createTagActions({ api, getState, publish, start, bounded, run, assertCurrent,
   isCurrent, authFailure, freeze, canNavigate, openMemory, randomId = () => crypto.randomUUID(), nameFingerprint = fingerprint }) {
   let intent = null, inFlight = null, uncertain = false, returnTagId = null, hiddenTagId = null;
+  let returnTagQuery = "";
   const state = () => getState().tags;
   const set = patch => publish({ tags: Object.freeze({ ...state(), ...patch }) });
   const mutation = (phase, error = null, canRetry = false) => Object.freeze({ phase, error, canRetry,
@@ -125,12 +126,30 @@ export function createTagActions({ api, getState, publish, start, bounded, run, 
   const actions = {
     locked: () => intent !== null,
     hasPending: () => intent !== null || hiddenTagId !== null,
-    clear() { intent = null; inFlight = null; uncertain = false; returnTagId = null; hiddenTagId = null; },
-    clearNavigation() { returnTagId = null; hiddenTagId = null; return { tagReturnId: null }; },
-    memoryContext(tagId) { returnTagId = tagId; publish({ tagReturnId: tagId }); },
+    clear() {
+      intent = null;
+      inFlight = null;
+      uncertain = false;
+      returnTagId = null;
+      returnTagQuery = "";
+      hiddenTagId = null;
+    },
+    clearNavigation() {
+      returnTagId = null;
+      returnTagQuery = "";
+      hiddenTagId = null;
+      return { tagReturnId: null };
+    },
+    memoryContext(tagId) {
+      returnTagId = tagId;
+      returnTagQuery = tagId && state().tag?.tagId === tagId ? state().q : "";
+      publish({ tagReturnId: tagId });
+    },
     hasReturn: () => returnTagId !== null,
     returnId: () => returnTagId,
-    returnToTag() { return actions.openTag(returnTagId); },
+    returnToTag() {
+      return actions.openTag(returnTagId, null, [null], returnTagQuery);
+    },
     suspend() {
       if (intent && ["create", "rename"].includes(intent.kind) && intent.nameHash === null) intent = null;
       hiddenTagId = intent?.tagId ?? returnTagId
@@ -141,6 +160,7 @@ export function createTagActions({ api, getState, publish, start, bounded, run, 
         intent = Object.freeze({ ...intent, name: null });
       }
       inFlight = null;
+      returnTagQuery = "";
       return { tags: Object.freeze({ ...initialTags(), mutation: intent ? mutation("uncertain") : idle() }) };
     },
     async resume(op) {
@@ -165,15 +185,25 @@ export function createTagActions({ api, getState, publish, start, bounded, run, 
     loadTags(q = state().q, cursor = null, cursors = [null]) {
       if (!visible()) return Promise.resolve(getState());
       returnTagId = null;
+      returnTagQuery = "";
       const query = normalizeLibraryQuery(q);
       const op = start(base({ view: "list", q: query, items: EMPTY, tag: null, members: EMPTY, candidates: EMPTY, nextCursor: null, cursors: freeze(cursors) }));
       return run(op, () => actions.readList(op, cursor, cursors), readFailure);
     },
-    openTag(tagId, cursor = null, cursors = [null]) {
+    openTag(tagId, cursor = null, cursors = [null], q = state().q) {
       if (!visible() || !tagId) return Promise.resolve(getState());
       returnTagId = null;
-      const op = start(base({ view: "detail", requestedId: tagId, tag: state().tag?.tagId === tagId ? state().tag : null,
-        members: EMPTY, candidates: EMPTY, nextCursor: null, cursors: freeze(cursors) }));
+      returnTagQuery = "";
+      const op = start(base({
+        view: "detail",
+        q,
+        requestedId: tagId,
+        tag: state().tag?.tagId === tagId ? state().tag : null,
+        members: EMPTY,
+        candidates: EMPTY,
+        nextCursor: null,
+        cursors: freeze(cursors),
+      }));
       return run(op, () => members(op, tagId, cursor, cursors), readFailure);
     },
     beginTagCreation() {

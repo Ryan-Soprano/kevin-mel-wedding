@@ -29,7 +29,14 @@ function MemoryContents({ state, locked, actions, audioPlayback, reviewControls,
         <summary>Memory details and tags</summary>
         <MemoryMetadataEditor key={`${memory.memoryId}:${memory.revision}`} memory={memory}
           state={state.metadata} busy={state.busy} locked={locked} onSave={actions.metadata.save} onReload={actions.metadata.reload} onRetry={actions.metadata.retry} />
-        <MemoryTags key={`${memory.memoryId}:${state.tags.view}:${state.tags.q}`} state={state.tags} busy={state.busy} locked={locked} actions={actions.memoryTags} />
+        <MemoryTags
+          key={memory.memoryId}
+          editorKey={`${memory.memoryId}:${state.tags.view}:${state.tags.q}`}
+          state={state.tags}
+          busy={state.busy}
+          locked={locked}
+          actions={actions.memoryTags}
+        />
       </details>}
     </>
   );
