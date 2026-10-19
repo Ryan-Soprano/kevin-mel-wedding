@@ -150,3 +150,99 @@ Source hashes match the tested snapshot; the separate `guestFlow.js` working
 edit is preserved and excluded. Ignored inventory, reports and logs are under
 `logs/media-contribution-review.local/`. This review does not establish device,
 assistive-technology, real-provider persistence or hosted acceptance.
+
+## Guest navigation and public content decisions — October 19, 2026
+
+This batch reviewed all 21 code, style and test files under `app/`,
+`features/guestGallery/` and `features/sharing/`, plus 405 tracked WebP assets.
+Its baseline includes the completed media cleanup and Ryan's committed
+`guestFlow` refactor. The new review preserves that refactor.
+
+| File in `app/` | Decision and reason |
+|---|---|
+| `App.jsx` | Keep: composes guest navigation, retained forms/gallery and distinct completion destinations. Focus and history restoration remain cohesive. |
+| `Root.jsx` | Keep: shared routes precede inbox/guest routing, tokens come from the fragment, and ID/token keys remount shared-page owners. |
+| `guestFlow.js` | Keep Ryan's refactor: extracted helpers preserve navigation gates, started-form identity and active-form-only completion resets. |
+| `guestFlow.test.js` | Keep: verifies the reducer's navigation, locks, reporting and completion contract. |
+| `guestHistory.js` | Keep: validates owner/key/index entries, retains sanitized home views in memory and rejects stale/foreign traversal before callbacks. |
+| `guestHistory.test.js` | Keep: covers retained drafts, locked navigation, browser traversal, home focus and scroll restoration. |
+| `useGuestHistory.js` | Keep: current effect callbacks and one disposable history owner avoid stale subscriptions. |
+| `weddingJourneyIntegration.test.js` | Keep: exercises real JSON adapters and coordinators through a synthetic journey without claiming DOM/provider acceptance. |
+
+The `done` destination remains part of the tested reducer/history interface even
+though current form completion callbacks return home. Removing its view would
+require a separate compatibility decision.
+
+| File in `features/guestGallery/` | Decision and reason |
+|---|---|
+| `CoupleScrapbook.jsx` | Keep: the native modal handles focus containment, Escape, opener restoration and unmount cleanup. |
+| `GuestGallery.jsx` | Fix: pause passive loading while its Show-more control has focus, preserving that control until deliberate activation. |
+| `GuestGallery.test.js` | Keep: manifest, asset and render contracts verify the approved content and presentation boundaries. |
+| `guestGallery.css` | Keep: gallery bounds, thumbnails and controls have active consumers. |
+| `coupleScrapbook.css` | Keep: responsive portrait/dialog styles remain scoped. |
+| `photos.js` | Keep: all 218 approved photo descriptors, order, original paths and responsive variants are intact. |
+| `slideshow.js` | Keep: visibility and cleanup behavior support deliberate playback and reduced-motion controls. |
+| `thumbnailLoading.js` | Fix: allow the existing observer to pause loading for focused manual controls while retaining one batch per approach. |
+| `thumbnailLoading.test.js` | Extend the existing file with focused-control, reentry and late-observation coverage. |
+
+Automatic scrolling still loads thumbnails in batches of 24. The focus guard
+pauses only while Show more has focus; explicit activation uses the existing
+focus-to-first-new-thumbnail behavior. Changing focus does not recreate the
+observer or load every batch while the footer remains visible.
+
+The asset audit found 218 originals and 183 responsive variants, with exact
+manifest coverage, valid dimensions/metadata-free WebP chunks, no missing paths
+and no byte-identical duplicate groups. All 401 active asset hashes are unchanged.
+Remove the four unreferenced arch/globe welcome variants (338,118 bytes) left by
+the retired collage; they have no runtime, build or script consumers. Historical
+verification notes and a negative rendering assertion mention their old names.
+This is a structural audit, not renewed visual/content or device acceptance.
+
+| File in `features/sharing/` | Decision and reason |
+|---|---|
+| `SharedMemories.jsx` | Fix: retain the loaded public page during paging/failure, announce request state, keep recovery controls and manage active-only focus after a user request settles. |
+| `sharingApi.js` | Fix: canonicalize accepted UUIDs for requests and response/link identity comparisons; retain capability, private-field and wrong-ID rejection. |
+| `sharing.test.js` | Extend the existing file with UUID and retained-page/recovery presentation contracts. Mounted checks verify the actual request/focus transitions. |
+| `sharing.css` | Keep: public card/media wrapping and layout rules have active consumers. |
+
+Native transport cancellation, per-ID/token route ownership and cached home
+content already have defined boundaries; no broader request-lifecycle rewrite
+is justified by this review. The next batch is the private inbox, followed by
+the remaining private archive directories.
+
+## Public-content verification
+
+The initial focused baseline passed 58 tests. After the fixes, the intended
+snapshot passes all **512 frontend tests**, ESLint and the production build on
+Node 24.16.0, with no skips or new test files. Existing gallery and sharing suites
+pass seven and eight focused tests respectively. Independent source review of
+the app/history, gallery/focus and sharing/recovery boundaries found no remaining
+actionable issues.
+
+Mounted Chromium at 1280, 390 and 320 px passes **97 gallery assertions** and
+**111 sharing assertions**. Gallery checks reproduce the old final-batch focus
+loss, then verify retained focus, ordinary passive loading/reentry, deliberate
+manual loading, native modal/keyboard return, reduced motion, timers and cleanup.
+Sharing checks use actual native JSON fetch with synthetic responses to verify
+retained pages, retry/newest recovery, duplicate paging, loading/error status and
+active-only focus. Leaving and returning before settlement cancels old focus
+intent. Initial loading and reactivation do not steal focus. Desktop/narrow
+screenshots were inspected and no runtime errors were observed.
+
+All 401 active image hashes and Ryan's guest-flow refactor match the review
+baseline. Browser/server resources are closed; ignored inventories and reports
+remain under `logs/public-flow-review.local/`. These frontend checks make no
+device, assistive-technology, backend/provider persistence or deployment claim.
+
+PR #68's configured review identified a remaining UUID-case mismatch: link
+creation accepted a mixed-case response but returned it unchanged, causing the
+inbox's identity check to reject a successful result. The API now returns the
+canonical memory ID and URL UUID while preserving the validated capability token
+exactly. An existing-suite regression reproduces the failure through the real
+API decoder and inbox controller before the fix and passes afterward.
+
+The follow-up passes all **513 frontend tests** with no skips, plus ESLint and
+the production build against a clean snapshot of the same frontend source.
+Independent review found no actionable issues. No new test files were added.
+GitHub CI was queued during the reported Actions incident; local verification
+does not establish passing CI or a fresh configured review for the follow-up.

@@ -1,6 +1,7 @@
 /** Load one batch each time the gallery footer comes into view. */
 export function observeMorePhotos(target, onMore, {
   IntersectionObserverImpl = globalThis.IntersectionObserver,
+  shouldLoad = () => true,
 } = {}) {
   if (!target || typeof onMore !== "function" || typeof IntersectionObserverImpl !== "function") {
     return () => {};
@@ -18,7 +19,7 @@ export function observeMorePhotos(target, onMore, {
         // Appending can leave the footer visible on a large screen. Wait for
         // another approach instead of loading every photo in one burst.
         inside = true;
-        onMore();
+        if (shouldLoad()) onMore();
       }
     }
   }, { rootMargin: "0px 0px 320px 0px", threshold: 0 });

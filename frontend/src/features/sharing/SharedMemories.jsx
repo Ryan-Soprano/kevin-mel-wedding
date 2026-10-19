@@ -46,32 +46,67 @@ function SharedMemory({ memory, token, api, active = true }) {
   </article>;
 }
 
+export function PublicMemoriesView({ state, active = true, api, showNewest, onRetry, onNewest, onMore, headingRef, statusRef }) {
+  if (!state.visible) return null;
+  return <section className="shared-memories" aria-label="Memories shared by Kevin and Melanie">
+    <p className="guest-couple">From the vault</p>
+    <h2 ref={headingRef} tabIndex={-1}>Memories Kevin and Melanie have shared</h2>
+    <p className="guest-help">These memories were chosen by Kevin and Melanie to share publicly. New contributions go to their private vault.</p>
+    {(state.loading || state.error) && <p ref={statusRef} role="status" aria-live="polite" aria-atomic="true" tabIndex={-1}>
+      {state.loading ? "Loading shared memories…" : "Shared memories couldn’t be loaded."}
+      {!state.loading && state.error && state.items.length > 0 && " Your current page is still here."}
+    </p>}
+    {!state.loading && !state.error && state.items.length === 0 && <p>No more shared memories here.</p>}
+    <div className="shared-memory-list" aria-busy={state.loading}>{state.items.map(memory => <SharedMemory key={memory.memoryId} memory={memory} api={api} active={active} />)}</div>
+    <div className="shared-pagination">
+      {state.error && <button type="button" className="button-secondary" disabled={state.loading} onClick={onRetry}>Try again</button>}
+      {showNewest && <button type="button" className="button-secondary" disabled={state.loading} onClick={onNewest}>Back to newest memories</button>}
+      {!state.error && state.nextCursor && <button type="button" className="button-secondary" disabled={state.loading} onClick={onMore}>More shared memories</button>}
+    </div>
+  </section>;
+}
+
 export function PublicMemories({ active = true } = {}) {
   const api = useMemo(() => createSharingApi(), []);
-  const [state, setState] = useState({ items: [], cursor: null, loading: true, error: false });
-  const [cursor, setCursor] = useState(null);
-  const [attempt, setAttempt] = useState(0);
+  const [state, setState] = useState({ items: [], nextCursor: null, pageCursor: null, loading: true, error: false, visible: false });
+  const [request, setRequest] = useState({ cursor: null });
+  const busy = useRef(true);
+  const focusAfterLoad = useRef(false);
+  const heading = useRef(null);
+  const status = useRef(null);
   useEffect(() => {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 30_000);
-    let active = true;
-    api.listPublicMemories({ cursor, signal: controller.signal }).then(page => {
-      if (active) setState({ items: page.items, cursor: page.nextCursor, loading: false, error: false });
-    }).catch(() => { if (active) setState({ items: [], cursor: null, loading: false, error: true }); });
-    return () => { active = false; clearTimeout(timer); controller.abort(); };
-  }, [api, cursor, attempt]);
-  if (state.loading || (!state.error && state.items.length === 0 && cursor === null)) return null;
-  return <section className="shared-memories" aria-label="Memories shared by Kevin and Melanie" aria-busy={state.loading}>
-    <p className="guest-couple">From the vault</p>
-    <h2>Memories Kevin and Melanie have shared</h2>
-    <p className="guest-help">These memories were chosen by Kevin and Melanie to share publicly. New contributions go to their private vault.</p>
-    {state.error ? <><p>Shared memories couldn’t be loaded.</p><button type="button" className="button-secondary" onClick={() => setAttempt(value => value + 1)}>Try again</button></>
-      : <>{state.items.length === 0 && <p>No more shared memories here.</p>}<div className="shared-memory-list">{state.items.map(memory => <SharedMemory key={memory.memoryId} memory={memory} api={api} active={active} />)}</div>
-        <div className="shared-pagination">
-          {cursor && <button type="button" className="button-secondary" onClick={() => { setState(value => ({ ...value, loading: true })); setCursor(null); }}>Back to newest memories</button>}
-          {state.cursor && <button type="button" className="button-secondary" onClick={() => { setState(value => ({ ...value, loading: true })); setCursor(state.cursor); }}>More shared memories</button>}
-        </div></>}
-  </section>;
+    let current = true;
+    api.listPublicMemories({ cursor: request.cursor, signal: controller.signal }).then(page => {
+      if (!current) return;
+      busy.current = false;
+      setState(previous => ({ items: page.items, nextCursor: page.nextCursor, pageCursor: request.cursor,
+        loading: false, error: false, visible: previous.visible || page.items.length > 0 || request.cursor !== null }));
+    }).catch(() => {
+      if (!current) return;
+      busy.current = false;
+      setState(previous => ({ ...previous, loading: false, error: true, visible: true }));
+    }).finally(() => clearTimeout(timer));
+    return () => { current = false; clearTimeout(timer); controller.abort(); };
+  }, [api, request]);
+  useEffect(() => {
+    if (!active) { focusAfterLoad.current = false; return; }
+    if (state.loading || !focusAfterLoad.current) return;
+    focusAfterLoad.current = false;
+    (state.error ? status : heading).current?.focus();
+  }, [state, active]);
+  function loadPage(cursor) {
+    if (busy.current) return;
+    busy.current = true;
+    focusAfterLoad.current = active;
+    setState(previous => ({ ...previous, loading: true }));
+    setRequest({ cursor });
+  }
+  return <PublicMemoriesView state={state} active={active} api={api}
+    showNewest={request.cursor !== null || state.pageCursor !== null}
+    onRetry={() => loadPage(request.cursor)} onNewest={() => loadPage(null)} onMore={() => loadPage(state.nextCursor)}
+    headingRef={heading} statusRef={status} />;
 }
 
 export default function SharedMemoryPage({ memoryId, token }) {
