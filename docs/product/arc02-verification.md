@@ -73,6 +73,21 @@ This frontend review supplements the earlier real-backend rehearsal; it does
 not rerun that acceptance or establish device/provider behavior. Final-head
 CI/configured review remains required after PR creation.
 
+## October 19, 2026 — timeline review focus follow-up
+
+The timeline directory review separately reproduced an album page response
+taking focus from Sign out while the window remained active. The same narrow
+focus-in cancellation now applies to both features: another interactive control
+cancels pending result/feedback focus, while expected remount gaps and
+programmatic destination headings remain allowed. This follow-up is on the
+timeline review branch; albums PR #70 retains its original head and checks.
+
+The combined source passes 536 frontend tests, lint and production build.
+The album browser matrix passes 194 assertions, including late success and
+failure after within-window focus movement, at 1280, 390 and 320 px. All 21
+synthetic original memory records remain identical as JSON. This supplements
+the earlier album evidence without repeating backend/provider acceptance.
+
 ## Retained acceptance
 
 This is local engineering verification ahead of Kevin and Melanie's real onboarding and feedback. REV-01/REV-03 acceptance remains open. Physical phones/tablets, assistive technology, actual hidden-tab/BFCache behavior, native dialogs, live-provider originals and hosted capacity/network/recovery acceptance remain open. Controlled blur/resume and synthetic storage do not establish those behaviors. Audio was disabled in the original fixture; current audio settings and acceptance are recorded in the [voice memory runbook](../runbooks/voice-memories.md).

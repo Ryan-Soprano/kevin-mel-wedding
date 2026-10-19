@@ -24,16 +24,27 @@ export function useAlbumPagingFocus({ state, busy, locked }) {
         cancel();
       }
     };
+    const focusElsewhere = (event) => {
+      const next = event.target;
+      if (
+        intent.current && next !== target.current
+        && (next?.tabIndex >= 0 || next?.isContentEditable)
+      ) {
+        cancel();
+      }
+    };
     window.addEventListener("blur", cancel);
     window.addEventListener("pagehide", cancel);
     window.addEventListener("popstate", cancel);
     document.addEventListener("visibilitychange", hidden);
+    document.addEventListener("focusin", focusElsewhere);
     return () => {
       cancel();
       window.removeEventListener("blur", cancel);
       window.removeEventListener("pagehide", cancel);
       window.removeEventListener("popstate", cancel);
       document.removeEventListener("visibilitychange", hidden);
+      document.removeEventListener("focusin", focusElsewhere);
     };
   }, [cancel]);
 

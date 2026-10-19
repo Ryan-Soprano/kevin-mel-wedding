@@ -300,6 +300,39 @@ not. This behavior was reproduced separately before the fix.
 Existing delete-cancel restoration and visible-but-disabled confirmation
 behavior remain intact. This integration check is not a second inbox review.
 
+## Timeline verification
+
+The initial 18 timeline tests passed. The mock regression run reproduced both
+defects before the fixes; all 17 API cases now pass. The changed timeline and
+inbox adapter suites pass **21 focused tests**. Initial standalone verification
+passed 534 frontend tests, lint and build on Node 24.16.0.
+
+The branch then integrated reviewed albums commit `4ddd361` locally, preserving
+both features' editor-reset assertions in the shared adapter test. Albums PR
+#70's head remains unchanged. A narrow album follow-up applies the same
+interactive-focus cancellation after a separate browser reproduction confirmed
+that defect there too. This branch is intended to follow PR #70's merge.
+
+Final combined verification passes **536 frontend tests**, with zero skips,
+ESLint and the production build. Mounted actual components, inbox controller and
+JSON mock adapters in StrictMode pass **254 timeline assertions** and **194
+album assertions** at 1280, 390 and 320 px. They cover chronology/unknown dates,
+partial-date filters, paging, partner revision/filter resets, input correction,
+late success/failure after blur or focus movement, linking/no-ops, deletion and
+pagehide recovery with deliberate exact four-field retry. Both fixtures retain
+all 21 original synthetic memory records unchanged as JSON. Desktop/narrow
+validation and recovery screenshots were inspected; no page errors, external
+requests or horizontal overflow were observed.
+
+Independent API/mock, UI/focus, integration and documentation reviews found no
+remaining actionable issues. Ryan's guest-flow source stays byte-identical.
+No tracked test files or dependencies were added. Browser/server resources are
+closed; fixtures, reports and source hashes are preserved under ignored
+`logs/timeline-directory-review.local/`. Fixture selector/ordering corrections
+are excluded from passing metrics. These frontend checks supplement prior
+backend evidence and do not establish real provider/device/hosted acceptance.
+Final-head CI/configured review remains required after PR creation.
+
 ## Private inbox decisions — October 19, 2026
 
 This batch reviews all 38 tracked files under `features/inbox/`, including
