@@ -838,3 +838,61 @@ formatting edits are preserved and excluded from this frontend delivery. These
 checks do not repeat backend persistence, provider, physical-device or assistive-
 technology acceptance. Final-head CI/configured review remains required after
 Ryan creates the PR. The next directory is `frontend/src/shared/components/`.
+
+## Shared components decisions — October 19, 2026
+
+This batch starts from shared API `889033b` on
+`feature/shared-components-directory-review`. The baseline inventory contains
+exactly two tracked files. Shared API PR 74 has since merged as main `d759119`;
+its source tree matches this batch's starting commit. This branch's remaining
+diff against main contains only the component cleanup and these review notes.
+
+| File in `shared/components/` | Decision and reason |
+|---|---|
+| `MemoryChoice.jsx` | Simplify: expand dense icon and button JSX into the surrounding multiline style. Keep the native button, three static icons, visible content, optional prompt, callback and native disabled prop. Rendered markup is unchanged. |
+| `.gitkeep` | Simplify: remove the whitespace-only placeholder now that the directory contains a tracked component. |
+
+The two live consumers are guest `App.jsx` and private `AddMemory.jsx`. Both use
+the note/photo/audio kinds and own their audio gate and navigation. The guest
+consumer supplies prompts and draft/completion titles; `guestHistory.js` uses
+the existing kind classes to restore home focus. The private consumer omits
+prompts, preserves initial focus, and deliberately focuses the selected compose
+group or the memory-type group after sharing another memory. Root/inbox routing,
+relevant global/guest/private styles and existing consumer/history tests were
+also inspected. The development preview does not consume this component.
+
+No correctness defect or measured efficiency problem was found. The component
+has no asynchronous work or resource ownership to extract, and the static icon
+map already avoids rebuilding icon definitions per render. Additional state,
+memoization, validation or an expanded prop API would add unnecessary machinery.
+No consumer or stylesheet change, dependency, production module or tracked test
+file is introduced. This batch does not mark the styles directory reviewed.
+
+## Shared components verification — October 19, 2026
+
+On Node **24.21.0** / npm **11.19.0**, the four existing focused consumer,
+reducer and history suites pass **54 tests**. All **566 frontend tests** pass
+with zero failures or skips; ESLint, production build and diff checks pass. The
+build retains its existing large-chunk advisory. Independent before/after
+verification compares **18 identical server-rendered outputs** across all three
+kinds, prompt presence and omitted/false/true disabled values, with **198 total
+assertions** including prop/callback contracts. Independent source review found
+no remaining actionable issues.
+
+Mounted StrictMode Chromium checks pass **56 assertions** at **1280, 390 and
+320 px**. They cover Enter/Space activation without parent-form submission,
+disabled tab skipping, visible keyboard outline, hidden decorative SVGs, audio
+gating, guest draft/completion titles and restored focus, and private type,
+completion and share-another focus. Both actual consumers are mounted with
+synthetic receipts; microphone permission and backend/storage writes are not
+part of this check. Final card-width/touch-target and overflow checks pass;
+desktop and narrow screenshots were inspected. Misleading preliminary screenshot
+captures were replaced without a production or fixture source change. The final
+browser console has no warnings or errors.
+
+Ignored evidence, baseline/final source hashes and the ready PR description are
+under `logs/shared-components-directory-review.local/`. Owned browser/server
+resources are closed after verification. Concurrent backend edits stay excluded.
+Physical-device, assistive-technology and provider acceptance remain separate;
+final-head CI/configured review is required after Ryan creates the PR. The next
+directory is `frontend/src/styles/`.
