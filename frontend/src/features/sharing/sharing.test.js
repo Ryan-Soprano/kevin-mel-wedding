@@ -1,5 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { fileURLToPath } from "node:url";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { createServer } from "vite";
+import react from "@vitejs/plugin-react";
 import { createApiClient } from "../../shared/api/apiClient.js";
 import { createArchiveApi, decodeReceipt } from "../../shared/api/archiveApi.js";
 import { COUPLE_SESSION, IDS, MEMORY_DETAIL, TEXT_RECEIPT } from "../../shared/api/v1/fixtures.js";
@@ -34,6 +39,79 @@ test("guest sharing APIs carry private capability only for the selected memory a
   assert.throws(() => api.getSharedMemory(IDS.text, { token: "bad\nvalue" }), TypeError);
   const wrong = createSharingApi({ client: createApiClient({ fetchImpl: async () => response({ ...shared, memoryId: IDS.photo }) }) });
   await assert.rejects(wrong.getSharedMemory(IDS.text), { code: "CONTRACT_MISMATCH" });
+});
+
+test("sharing APIs canonicalize UUID case for reads, playback and link identity without accepting another memory", async () => {
+  const id = "abcdefab-cdef-4abc-8def-abcdefabcdef";
+  const mixed = "AbCdEfAb-cDeF-4aBc-8dEf-AbCdEfAbCdEf";
+  const calls = [];
+  const memory = { ...shared, memoryId: id };
+  const playback = { url: "https://media.example.test/synthetic-original", expiresAt: "2099-01-01T00:00:00Z" };
+  const link = { memoryId: id, revision: 3, url: `/shared/${id}#token=${token}` };
+  const api = createArchiveApi({ client: createApiClient({ fetchImpl: async (path, options) => {
+    calls.push({ path, options });
+    return path.includes("/share-link") ? response(link, { ETag: '"3"' })
+      : response(path.includes("/playback") ? playback : memory);
+  } }) });
+  for (const supplied of [id.toUpperCase(), mixed]) {
+    assert.deepEqual(await api.getSharedMemory(supplied, { token }), memory);
+    assert.deepEqual(await api.getSharedPlayback(supplied, { token }), playback);
+    assert.deepEqual(await api.createShareLink(supplied, { revision: 2, csrfToken: COUPLE_SESSION.csrfToken }), link);
+  }
+  assert.deepEqual(calls.map(call => call.path), Array.from({ length: 2 }, () => [
+    `/api/shared-memories/${id}?token=${token}`, `/api/shared-memories/${id}/playback?token=${token}`, `/api/memories/${id}/share-link`,
+  ]).flat());
+  const mixedResponse = createArchiveApi({ client: createApiClient({ fetchImpl: async (path) => path.includes("/share-link")
+    ? response({ ...link, memoryId: mixed, url: `/shared/${mixed}#token=${token}` }, { ETag: '"3"' })
+    : response({ ...memory, memoryId: mixed }) }) });
+  assert.equal((await mixedResponse.getSharedMemory(id.toUpperCase())).memoryId, mixed);
+  assert.equal((await mixedResponse.createShareLink(id.toUpperCase(), { revision: 2, csrfToken: COUPLE_SESSION.csrfToken })).url, `/shared/${mixed}#token=${token}`);
+  const wrongMemory = createSharingApi({ client: createApiClient({ fetchImpl: async () => response(shared) }) });
+  await assert.rejects(wrongMemory.getSharedMemory(mixed), { code: "CONTRACT_MISMATCH" });
+  for (const changed of [{ memoryId: IDS.photo }, { url: `/shared/${IDS.photo}#token=${token}` },
+    { url: `/shared/${id}#token=${token}&other=value` }, { url: `https://example.test/shared/${id}#token=${token}` }]) {
+    const wrongLink = createArchiveApi({ client: createApiClient({ fetchImpl: async () => response({ ...link, ...changed }, { ETag: '"3"' }) }) });
+    await assert.rejects(wrongLink.createShareLink(mixed, { revision: 2, csrfToken: COUPLE_SESSION.csrfToken }), { code: "CONTRACT_MISMATCH" });
+  }
+});
+
+test("public memory pages retain content and usable recovery controls across loading, errors and empty results", async () => {
+  // SSR covers the real view contract; the mounted browser check covers request
+  // transitions, duplicate paging, focus and active/inactive settlement.
+  const server = await createServer({ configFile: false, logLevel: "silent", root: fileURLToPath(new URL("../../../", import.meta.url)),
+    plugins: [react()], server: { middlewareMode: true, hmr: false, watch: null }, appType: "custom", optimizeDeps: { noDiscovery: true, include: [] } });
+  try {
+    const { PublicMemoriesView } = await server.ssrLoadModule("/src/features/sharing/SharedMemories.jsx");
+    const state = { items: [shared], nextCursor: "next-page", pageCursor: null, loading: false, error: false, visible: true };
+    const render = (changes = {}, props = {}) => renderToStaticMarkup(createElement(PublicMemoriesView, {
+      state: { ...state, ...changes }, showNewest: true, ...props,
+    }));
+    assert.equal(render({ visible: false }), "", "initial loading and initially empty public feeds stay unobtrusive");
+    const pending = render({ loading: true });
+    assert.match(pending, /A lovely &lt;memory&gt;/);
+    assert.match(pending, /role="status" aria-live="polite" aria-atomic="true"/);
+    assert.match(pending, /Loading shared memories…/);
+    assert.match(pending, /class="shared-memory-list" aria-busy="true"/);
+    assert.match(pending, /disabled="">Back to newest memories/);
+    assert.match(pending, /disabled="">More shared memories/);
+    assert.doesNotMatch(pending, /No more shared memories|couldn’t be loaded/);
+    const failed = render({ error: true });
+    assert.match(failed, /A lovely &lt;memory&gt;/);
+    assert.match(failed, /Shared memories couldn’t be loaded\. Your current page is still here\./);
+    assert.match(failed, /role="status"[^>]*tabindex="-1"/);
+    assert.match(failed, /<button[^>]*>Try again<\/button>/);
+    assert.match(failed, /<button[^>]*>Back to newest memories<\/button>/);
+    assert.doesNotMatch(failed, /disabled=""|More shared memories|No more shared memories/);
+    const retrying = render({ error: true, loading: true });
+    assert.match(retrying, /A lovely &lt;memory&gt;/);
+    assert.match(retrying, /Loading shared memories…/);
+    assert.match(retrying, /disabled="">Try again/);
+    assert.doesNotMatch(retrying, /couldn’t be loaded|current page is still here/);
+    const empty = render({ items: [], nextCursor: null });
+    assert.match(empty, /No more shared memories here\./);
+    assert.match(empty, /Back to newest memories/);
+    assert.match(empty, /<h2 tabindex="-1">Memories Kevin and Melanie have shared<\/h2>/);
+  } finally { await server.close(); }
 });
 
 test("sharing changes require exact audience confirmation and retain CSRF/revision checks", async () => {

@@ -45,3 +45,32 @@ test("manual loading remains available without an observer or automatic loading 
   observeMorePhotos({}, undefined, { IntersectionObserverImpl: unexpectedObserver })();
   assert.equal(loads, 0);
 });
+
+test("a focused manual control pauses passive loading without resetting the approach subscription", () => {
+  const target = {};
+  let notify, focused = true, loads = 0, observations = 0, disconnects = 0;
+  const stop = observeMorePhotos(target, () => loads++, {
+    shouldLoad: () => !focused,
+    IntersectionObserverImpl: class {
+      constructor(callback) { notify = callback; }
+      observe(element) { assert.equal(element, target); observations++; }
+      disconnect() { disconnects++; }
+    },
+  });
+  notify([{ target, isIntersecting: true }]);
+  assert.equal(loads, 0, "passive loading cannot remove the focused manual control");
+  focused = false;
+  notify([{ target, isIntersecting: true }]);
+  assert.equal(loads, 0, "a paused approach remains consumed while the footer stays visible");
+  notify([{ target, isIntersecting: false }, { target, isIntersecting: true }]);
+  assert.equal(loads, 1, "a later approach can load once focus has left the manual control");
+  focused = true;
+  notify([{ target, isIntersecting: false }, { target, isIntersecting: true }]);
+  assert.equal(loads, 1);
+  assert.equal(observations, 1, "changing focus does not create a new subscription");
+  stop();
+  focused = false;
+  notify([{ target, isIntersecting: false }, { target, isIntersecting: true }]);
+  assert.equal(loads, 1, "cleanup blocks late observations even after focus changes");
+  assert.equal(disconnects, 1);
+});

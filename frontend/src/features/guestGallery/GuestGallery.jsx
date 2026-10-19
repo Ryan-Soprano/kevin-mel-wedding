@@ -51,10 +51,13 @@ export function GalleryThumbnails({ photos, visibleCount, onOpen, onMore, onAuto
   const remaining = Math.min(THUMBNAIL_BATCH, photos.length - shown);
   const hasMore = remaining > 0;
   const loadTrigger = useRef(null);
+  const moreButton = useRef(null);
 
   useEffect(() => {
     if (!hasMore) return;
-    return observeMorePhotos(loadTrigger.current, onAutomaticMore);
+    return observeMorePhotos(loadTrigger.current, onAutomaticMore, {
+      shouldLoad: () => moreButton.current !== document.activeElement,
+    });
   }, [hasMore, onAutomaticMore]);
 
   return (
@@ -85,7 +88,7 @@ export function GalleryThumbnails({ photos, visibleCount, onOpen, onMore, onAuto
       <div className="guest-gallery-overview-footer" ref={loadTrigger}>
         <p className="guest-gallery-position" role="status">Showing {shown} of {photos.length} photos</p>
         {remaining > 0 && (
-          <button type="button" className="button-secondary" onClick={onMore}>
+          <button ref={moreButton} type="button" className="button-secondary" onClick={onMore}>
             Show {remaining} more photos
           </button>
         )}
