@@ -52,7 +52,6 @@
   text-wrap: balance;
 }
 
-.guest-ampersand { color: var(--guest-wine); font-style: italic; }
 .guest-invitation { text-align: center; }
 
 .guest-invitation-copy {

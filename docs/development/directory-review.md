@@ -896,3 +896,89 @@ resources are closed after verification. Concurrent backend edits stay excluded.
 Physical-device, assistive-technology and provider acceptance remain separate;
 final-head CI/configured review is required after Ryan creates the PR. The next
 directory is `frontend/src/styles/`.
+
+## Styles decisions — October 19, 2026
+
+This batch starts from shared-components `c8c5a4d` on
+`feature/styles-directory-review`. All ten tracked files, including font binaries
+and provenance documentation, were reviewed with their consumers. Latest fetched
+main remains `d759119`; merge the shared-components PR before this styles PR so
+the final diff against main contains only this batch.
+
+| File in `styles/` | Decision and reason |
+|---|---|
+| `global.css` | Simplify: remove unused legacy note-preview, single-photo selection/filename and guest-choice rules, plus unused members of grouped selectors. Keep native controls, hidden content, active preview images, batch/retry states and responsive base layout. |
+| `guest.css` | Simplify: remove unused welcome-title/names/introduction and audio-help selectors, including their mobile rules. Remove two note declarations already overridden by later rules of equal specificity. Preserve active guest variants and unscoped shared styles used by private creation. |
+| `guestWelcome.css` | Simplify: remove the exact ampersand declaration already supplied by `guest.css`. Keep the actual welcome layout, typography overrides and desktop/mobile breakpoints. |
+| `guestFonts.css` | Correct the license-location comment to `public/licenses/fonts/`. Keep the four local faces, regular/italic and variable-weight declarations, and `font-display: swap`. |
+| `tokens.css` | Keep: all nine base color tokens have active consumers; guest overrides stay scoped to the guest page. |
+| `fonts/README.md` | Keep: local font provenance, static/variable descriptions, system fallbacks and public deployment-license paths match the files and consumers. |
+| `fonts/fraunces-latin.woff2` | Keep: metadata declares Fraunces regular 400, matching guest heading use and its local face. |
+| `fonts/fraunces-italic-latin.woff2` | Keep: metadata declares Fraunces italic 400, matching the ampersand and prompt treatment. |
+| `fonts/manrope-latin.woff2` | Keep: the variable weight axis covers 200–800, matching the declared guest body/control family. |
+| `fonts/caveat-latin.woff2` | Keep: metadata declares Caveat regular 400, used by the actual scrapbook caption. |
+
+Consumer tracing covers the production entry/Root, guest App, shared memory
+choices, guest gallery/scrapbook, contribution, photo and audio screens, private
+Inbox/AddMemory and the separate development PreviewApp. Generated screen/kind
+classes remain live. `PhotoPreview` still uses `.photo-card__image`, and
+`PhotoPicker` still supports its standalone/default grid. Filename text remains
+available through current accessible labels; the removed filename class is
+already absent from the actual component markup. Private creation imports
+`guest.css` without depending on the welcome overrides, so these layers retain
+their current responsibilities.
+
+No live correctness defect or measured runtime-efficiency problem was found.
+The change removes obsolete/ineffective declarations without redesigning the
+site or claiming a runtime performance gain. New or rewritten code follows the
+expanded formatting preference; untouched CSS is not reformatted wholesale.
+No component logic, feature stylesheet, dependency, production module or tracked
+test file is added or changed.
+
+## Styles verification — October 19, 2026
+
+On Node **24.21.0** / npm **11.19.0**, the focused existing consumer/reducer/
+history baseline passes **54 tests**, and all **566 frontend tests** pass with
+zero failures or skips. ESLint, production build and diff checks pass. An initial
+sandboxed baseline hit a Vite dependency-cache rename permission error; the run
+with the required local permissions passed. The build retains its existing
+large-chunk advisory. Independent source review confirms every removed selector
+is unused, duplicated or already overridden, with no actionable findings.
+
+Before/after mounted StrictMode Chromium checks capture **48 equivalent views**
+at **1280, 801, 800, 799, 390 and 320 px**. Across guest home/note/photo/audio,
+private creation, populated guest/private presentation specimens and the actual
+development preview, all **46 captured computed-style properties** and element
+width/height/x-position match for **3,684 compared nodes**. No checked view has
+horizontal overflow. This includes the existing 800 px welcome/card breakpoint
+boundary; distinct guest and private layouts remain intentional.
+
+A further **25 interaction assertions** cover all four loaded local faces,
+keyboard card/summary/file-panel outlines, empty-note validation and completion,
+home/private-compose focus, long original filenames/captions, photo previews and
+retry checkboxes, disabled/invalid fields, synthetic recording presentation,
+tabular timer numerals, audio disclosure and private token/font scope. Final
+console warnings/errors are absent; representative narrow screenshots were
+inspected. Recording/clip specimens use injected presentation props, not actual
+microphone capture or playback acceptance. Synthetic note receipts do not write
+to a backend or storage provider. Existing reduced-motion rules remain intact.
+
+Local WOFF2 directory/Brotli/table metadata checks validate lengths, family,
+style, weight and representative character coverage for all four unchanged
+assets. All four built font files and three deployed OFL license texts match
+their source bytes. These checks verify local assets and delivery, not an
+independent upstream provenance signature.
+
+All **566 tests**, lint and build also pass in an ignored intended-source copy
+created from `c8c5a4d` plus only the four stylesheet changes. Dependencies are
+linked locally while Vite caches stay separate. This check excludes concurrently
+edited gallery tests and newly added gallery assets; it does not validate that
+separate gallery work. All ten styles/typography hashes match the browser/test
+snapshot. The delivery source and documentation hashes are retained locally.
+
+Ignored baseline/final captures, font metadata, asset checks, source hashes,
+logs and the ready PR description are under `logs/styles-directory-review.local/`.
+Owned browser/server resources are closed; concurrent backend and gallery edits/
+assets stay excluded. Physical-device, assistive-technology, provider and hosted acceptance
+remain separate. Final-head CI/configured review is required after Ryan creates
+the PR. The next directory is `frontend/src/dev/`.
