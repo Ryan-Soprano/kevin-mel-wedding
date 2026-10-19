@@ -91,3 +91,32 @@ exact-size signing, CORS, expiry/recovery, inaccessible public objects, capacity
 and hosted decoder deadlines. Physical-phone and live audio IO passes remain
 unclaimed until that evidence exists; the historical automated verification
 record remains unchanged.
+
+## Audio form structure and local verification — October 19, 2026
+
+`AudioForm` keeps the public prop defaults, form shell and saved result.
+`useAudioForm` owns the existing capture/submission references, effects, draft
+state, retry locks, interruption and completion actions. `AudioCompose` renders
+the unsaved controls without adding a DOM wrapper. The controller bodies and
+their ordering were moved intact; capture, validation and upload coordinators
+retain their existing implementations.
+
+An isolated intended source snapshot passes all **504 frontend tests**, ESLint
+and the production build on Node 24.16.0. Two cases added to the existing private
+creation test file cover controller-free server rendering, private attribution,
+recording guidance, fallback controls, retained-clip locks and caption ARIA. No
+new test files were added. Independent source review found no actionable issue.
+
+Headless Chromium compares the merged baseline and refactored component using
+deterministic injected capture/submission owners at 1280, 390 and 320 px widths.
+All **36 mounted cases**, **422 assertions** and **18 baseline comparisons** pass,
+covering normalized DOM, controls, focus and lifecycle traces across capture,
+fallback, recovery, guest/private completion and hide/unmount states. The run
+records 198 snapshots and 18 screenshots; desktop and narrow samples were
+visually inspected. Another 107 ownership/completion/source audit checks pass;
+all 144 factory owners are disposed exactly once. Source hashes remain stable,
+including the separate `guestFlow.js` edit excluded from this increment. Reports
+and harnesses remain ignored under `logs/audio-form-refactor.local/` and
+`frontend/audio-form-refactor.local/`; owned browser/server resources are closed.
+These component checks use synthetic owners and make no microphone, codec,
+upload, persistence, physical-device or provider acceptance claim.

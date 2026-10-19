@@ -15,6 +15,73 @@ function createViewServer() {
     optimizeDeps: { noDiscovery: true, include: [] } });
 }
 
+test("voice form server rendering preserves guest/private fields without constructing capture or submission owners", async () => {
+  const server = await createViewServer();
+  try {
+    const { default: AudioForm } = await server.ssrLoadModule("/src/features/audio/components/AudioForm.jsx");
+    const noController = () => assert.fail("server rendering cannot acquire a microphone or submission owner");
+    for (const privateArchive of [false, true]) {
+      const markup = renderToStaticMarkup(createElement(AudioForm, {
+        privateArchive, createCapture: noController, createSubmission: noController,
+      }));
+      assert.match(markup, /Choose an audio file/);
+      assert.match(markup, /Add a caption \(optional\)/);
+      assert.match(markup, /type="submit" disabled=""/);
+      assert.doesNotMatch(markup, /<audio|Stop recording|memory-success/);
+      if (privateArchive) {
+        assert.match(markup, /Add a voice memory/);
+        assert.match(markup, /Your recording starts private in your archive/);
+        assert.doesNotMatch(markup, /Your name \(optional\)/);
+      } else {
+        assert.match(markup, /Your name \(optional\)/);
+        assert.match(markup, /Sent privately to Kevin and Melanie/);
+      }
+    }
+  } finally { await server.close(); }
+});
+
+test("audio composer preserves recording guidance, fallback, retained-clip locks and caption accessibility", async () => {
+  const server = await createViewServer();
+  try {
+    const { default: AudioCompose } = await server.ssrLoadModule("/src/features/audio/components/AudioCompose.jsx");
+    const noop = () => {};
+    const view = {
+      prefix: "voice-contract", snapshot: { phase: "idle", supported: true, clip: null, errorCode: null, elapsedSeconds: 0 },
+      guestName: "Synthetic guest", caption: "Synthetic caption", busy: false, pending: false, saved: false,
+      failed: false, retryAfter: 0, progress: "", error: "", captionError: "", recordingBusy: false, locked: false,
+      actions: Object.fromEntries(["submit", "reset", "startRecording", "stopRecording", "discard", "choose", "finish", "shareAnother", "changeGuestName", "changeCaption"].map(name => [name, noop])),
+    };
+    const render = patch => renderToStaticMarkup(createElement(AudioCompose, {
+      view: { ...view, ...patch }, privateArchive: false, onWriteNote: noop,
+    }));
+    const recording = render({ snapshot: { ...view.snapshot, phase: "recording", elapsedSeconds: 65 }, recordingBusy: true });
+    assert.match(recording, /aria-label="1:05 of two minutes"/);
+    assert.match(recording, /aria-describedby="voice-contract-recording-help"/);
+    assert.match(recording, /id="voice-contract-recording-help"/);
+    assert.match(recording, /phone unlocked/);
+    assert.match(recording, /Stop recording/);
+    assert.doesNotMatch(recording, /Start recording/);
+
+    const unsupported = render({ snapshot: { ...view.snapshot, phase: "unsupported", supported: false } });
+    assert.match(unsupported, /Recording is unavailable/);
+    assert.match(unsupported, /Write a message instead/);
+    assert.match(unsupported, /<details class="audio-file-option" open=""/);
+
+    const clip = { url: "blob:synthetic-voice", file: { name: "synthetic.webm" }, durationSeconds: 6.2 };
+    const pending = render({ snapshot: { ...view.snapshot, phase: "ready", clip }, pending: true, locked: true, retryAfter: 3 });
+    assert.match(pending, /<audio[^>]*src="blob:synthetic-voice"/);
+    assert.match(pending, /synthetic.webm · 0:07/);
+    assert.match(pending, /Your original clip is kept here for a safe retry/);
+    assert.match(pending, /disabled="">Wait 3 seconds before retrying/);
+    assert.doesNotMatch(pending, /Discard clip/);
+
+    const invalidCaption = render({ snapshot: { ...view.snapshot, phase: "ready", clip }, captionError: "Check the caption", error: "Check the highlighted field" });
+    assert.match(invalidCaption, /<details class="memory-caption-option" open=""/);
+    assert.match(invalidCaption, /aria-invalid="true" aria-describedby="voice-contract-caption-error"/);
+    assert.match(invalidCaption, /id="voice-contract-caption-error"[^>]*>Check the caption/);
+  } finally { await server.close(); }
+});
+
 test("private creator view hides voice collection behind the exact existing audio build gate", async () => {
   // SSR renders real React markup through installed Vite tooling. No DOM,
   // browser, microphone permission or codec acceptance is claimed here.
