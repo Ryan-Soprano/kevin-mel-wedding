@@ -136,6 +136,104 @@ class DatabaseMigrationTest {
         assertThat(throttleAttempts(accountKey)).isEqualTo(1);
     }
 
+    @Test
+    void deniedPeerReservationsPruneAtMostOneThousandExpiredBucketsAndPreserveCurrentLimits() {
+        String accountKey = "a".repeat(64);
+        String peerKey = "b".repeat(64);
+        String freshKey = "c".repeat(64);
+        String expiredPrefix = "d".repeat(32);
+        jdbcClient.sql("""
+                INSERT INTO archive_login_throttle (bucket_key, attempts)
+                VALUES (:peer, 30), (:fresh, 7)
+                """)
+                .param("peer", peerKey)
+                .param("fresh", freshKey)
+                .update();
+        jdbcClient.sql("""
+                INSERT INTO archive_login_throttle (bucket_key, window_started_at, attempts)
+                SELECT :prefix || lpad(to_hex(value), 32, '0'),
+                    CURRENT_TIMESTAMP - INTERVAL '2 days', 1
+                FROM generate_series(1, 1005) value
+                """)
+                .param("prefix", expiredPrefix)
+                .update();
+
+        assertThat(loginThrottle.reserve(List.of(accountKey, peerKey))).isFalse();
+        assertThat(jdbcClient.sql("""
+                SELECT count(*)
+                FROM archive_login_throttle
+                WHERE bucket_key LIKE :prefix
+                """)
+                .param("prefix", expiredPrefix + "%")
+                .query(Long.class)
+                .single()).isEqualTo(5);
+        assertThat(jdbcClient.sql("""
+                SELECT count(*)
+                FROM archive_login_throttle
+                WHERE bucket_key = :account
+                """)
+                .param("account", accountKey)
+                .query(Long.class)
+                .single()).isZero();
+        assertThat(throttleAttempts(peerKey)).isEqualTo(30);
+        assertThat(throttleAttempts(freshKey)).isEqualTo(7);
+
+        assertThat(loginThrottle.reserve(List.of(accountKey, peerKey))).isFalse();
+        assertThat(jdbcClient.sql("""
+                SELECT count(*)
+                FROM archive_login_throttle
+                WHERE bucket_key LIKE :prefix
+                """)
+                .param("prefix", expiredPrefix + "%")
+                .query(Long.class)
+                .single()).isZero();
+        assertThat(jdbcClient.sql("""
+                SELECT count(*)
+                FROM archive_login_throttle
+                WHERE bucket_key = :account
+                """)
+                .param("account", accountKey)
+                .query(Long.class)
+                .single()).isZero();
+        assertThat(throttleAttempts(peerKey)).isEqualTo(30);
+        assertThat(throttleAttempts(freshKey)).isEqualTo(7);
+    }
+
+    @Test
+    void deniedAccountReservationsPruneExpiredBucketsWithoutResettingPeerOrAccountCounts() {
+        String accountKey = "a".repeat(64);
+        String peerKey = "b".repeat(64);
+        String freshKey = "c".repeat(64);
+        String expiredKey = "d".repeat(64);
+        jdbcClient.sql("""
+                INSERT INTO archive_login_throttle (bucket_key, attempts)
+                VALUES (:account, 5), (:peer, 2), (:fresh, 7)
+                """)
+                .param("account", accountKey)
+                .param("peer", peerKey)
+                .param("fresh", freshKey)
+                .update();
+        jdbcClient.sql("""
+                INSERT INTO archive_login_throttle (bucket_key, window_started_at, attempts)
+                VALUES (:expired, CURRENT_TIMESTAMP - INTERVAL '2 days', 1)
+                """)
+                .param("expired", expiredKey)
+                .update();
+
+        assertThat(loginThrottle.reserve(List.of(accountKey, peerKey))).isFalse();
+        assertThat(jdbcClient.sql("""
+                SELECT count(*)
+                FROM archive_login_throttle
+                WHERE bucket_key = :expired
+                """)
+                .param("expired", expiredKey)
+                .query(Long.class)
+                .single()).isZero();
+        assertThat(throttleAttempts(peerKey)).isEqualTo(3);
+        assertThat(throttleAttempts(accountKey)).isEqualTo(5);
+        assertThat(throttleAttempts(freshKey)).isEqualTo(7);
+    }
+
     private int throttleAttempts(String key) {
         return jdbcClient.sql("SELECT attempts FROM archive_login_throttle WHERE bucket_key = :key")
                 .param("key", key).query(Integer.class).single();

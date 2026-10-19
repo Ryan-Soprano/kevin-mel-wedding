@@ -251,6 +251,12 @@ logout, and review require X-CSRF-Token from current session. Missing/invalid to
 Login rotates session ID/token; logout invalidates both. GET session after logout/
 token expiry. Tokens are unpredictable, at least 16 characters, without header controls.
 
+`POST /api/session` accepts at most **4,096 UTF-8 bytes**, including JSON syntax
+and whitespace. After CSRF and route authorization pass, known-length and
+streamed bodies exceeding this limit return `413 PAYLOAD_TOO_LARGE` before JSON
+parsing, throttle reservation or credential verification. The exact limit remains
+accepted for a valid login envelope.
+
 The session cookie is `MEMORY_ARCHIVE_SESSION`, `HttpOnly`, `SameSite=Lax`, and limited to cookie-based tracking with a 30-minute idle timeout. The production profile adds `Secure`. Production startup requires the production environment/profile to agree, an explicit HTTPS `archive.public-origin`, and an operator-supplied login-throttle secret of at least 32 UTF-8 bytes. Same-origin checks apply to login/logout, and the guest contribution routes retain their independent JSON/origin/retry-capability protections.
 
 Login accepts exactly string `username` and `password` fields. Unknown/disabled accounts and wrong passwords return the same 401 INVALID_CREDENTIALS; valid credentials without couple authority or an open reveal gate return 403 ARCHIVE_UNAVAILABLE. Only enabled COUPLE identities can establish an authenticated session, and production restricts them to `kevin` and `melanie`. Operator/developer roles grant no couple access. The reveal default is closed; local/staging synthetic couple login requires explicit reveal configuration.

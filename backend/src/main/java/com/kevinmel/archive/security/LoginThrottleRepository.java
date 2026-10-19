@@ -11,13 +11,16 @@ import org.springframework.transaction.annotation.Transactional;
 public class LoginThrottleRepository {
     private final JdbcClient jdbc;
 
-    public LoginThrottleRepository(JdbcClient jdbc) { this.jdbc = jdbc; }
+    public LoginThrottleRepository(JdbcClient jdbc) {
+        this.jdbc = jdbc;
+    }
 
     @Transactional
     public boolean reserve(List<String> keys) {
         // Reserve the address first: a blocked address cannot create unlimited username rows.
-        if (!reserveBucket(keys.get(1), 30)) return false;
-        if (!reserveBucket(keys.get(0), 5)) return false;
+        boolean admitted = reserveBucket(keys.get(1), 30)
+                && reserveBucket(keys.get(0), 5);
+        // Bounded maintenance must also run when a peer or username is already blocked.
         jdbc.sql("""
                 WITH expired AS (
                     SELECT bucket_key FROM archive_login_throttle
@@ -28,7 +31,7 @@ public class LoginThrottleRepository {
                 WHERE bucket.bucket_key = expired.bucket_key
                 """)
                 .update();
-        return true;
+        return admitted;
     }
 
     private boolean reserveBucket(String key, int limit) {
@@ -45,6 +48,11 @@ public class LoginThrottleRepository {
                 WHERE archive_login_throttle.window_started_at <= CURRENT_TIMESTAMP - INTERVAL '15 minutes'
                    OR archive_login_throttle.attempts < :limit
                 RETURNING bucket_key
-                """).param("key", key).param("limit", limit).query(String.class).optional().isPresent();
+                """)
+                .param("key", key)
+                .param("limit", limit)
+                .query(String.class)
+                .optional()
+                .isPresent();
     }
 }

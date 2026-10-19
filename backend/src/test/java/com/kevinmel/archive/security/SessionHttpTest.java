@@ -6,7 +6,9 @@ import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -350,6 +352,58 @@ class SessionHttpTest {
         error(mvc.perform(contract(mutation(post("/api/session"), anonymous, anonymous.token(), ORIGIN), "1")
                 .contentType(MediaType.TEXT_PLAIN).content(loginBody(USERNAME, PASSWORD))), 400, "VALIDATION_FAILED");
         verify(accounts, never()).findByUsername(anyString());
+    }
+
+    @Test
+    void oversizedKnownAndChunkedLoginBodiesAreRejectedBeforeCredentialWork() throws Exception {
+        String credentials = loginBody(USERNAME, PASSWORD);
+        String body = credentials + " ".repeat(4_097 - credentials.length());
+        assertThat(body.getBytes(StandardCharsets.UTF_8)).hasSize(4_097);
+
+        for (boolean chunked : List.of(false, true)) {
+            var anonymous = anonymous();
+            var result = error(
+                    mvc.perform(loginRequestBody(anonymous, body, chunked)),
+                    413,
+                    "PAYLOAD_TOO_LARGE");
+
+            assertThat(result.getResponse().getContentAsString())
+                    .doesNotContain(USERNAME, PASSWORD);
+        }
+
+        verifyNoInteractions(throttles, accounts);
+    }
+
+    @Test
+    void exactLoginBodyLimitStillAcceptsValidCredentialsWithEitherLengthMode() throws Exception {
+        String credentials = loginBody(USERNAME, PASSWORD);
+        String body = credentials + " ".repeat(4_096 - credentials.length());
+        assertThat(body.getBytes(StandardCharsets.UTF_8)).hasSize(4_096);
+
+        for (boolean chunked : List.of(false, true)) {
+            var anonymous = anonymous();
+            mvc.perform(loginRequestBody(anonymous, body, chunked))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.authenticated").value(true))
+                    .andExpect(jsonPath("$.user.displayName").value("Synthetic Couple"));
+        }
+    }
+
+    @Test
+    void loginBodyLimitCountsUtf8BytesBeforeCheckingPasswordLength() throws Exception {
+        String body = loginBody(USERNAME, "\u00e9".repeat(2_048));
+        assertThat(body.length()).isLessThan(4_096);
+        assertThat(body.getBytes(StandardCharsets.UTF_8).length).isGreaterThan(4_096);
+
+        for (boolean chunked : List.of(false, true)) {
+            var anonymous = anonymous();
+            error(
+                    mvc.perform(loginRequestBody(anonymous, body, chunked)),
+                    413,
+                    "PAYLOAD_TOO_LARGE");
+        }
+
+        verifyNoInteractions(throttles, accounts);
     }
 
     @Test
@@ -817,6 +871,30 @@ class SessionHttpTest {
     private ResultActions login(SessionState session, String username, String password) throws Exception {
         return mvc.perform(contract(mutation(post("/api/session"), session, session.token(), ORIGIN), "1")
                 .contentType(MediaType.APPLICATION_JSON).content(loginBody(username, password)));
+    }
+
+    private static MockHttpServletRequestBuilder loginRequestBody(
+            SessionState session,
+            String body,
+            boolean chunked) {
+        var request = contract(
+                mutation(post("/api/session"), session, session.token(), ORIGIN),
+                "1")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body.getBytes(StandardCharsets.UTF_8));
+
+        if (chunked) {
+            request.header("Transfer-Encoding", "chunked");
+            request.with(original -> {
+                // MockMvc does not decode a wire transfer; model the container's unknown length.
+                var withoutLength = spy(original);
+                doReturn(-1).when(withoutLength).getContentLength();
+                doReturn(-1L).when(withoutLength).getContentLengthLong();
+                return withoutLength;
+            });
+        }
+
+        return request;
     }
 
     private String loginBody(String username, String password) {
