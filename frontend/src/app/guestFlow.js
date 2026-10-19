@@ -28,66 +28,62 @@ export function hasUnfinishedWork(flow) {
   );
 }
 
+function canNavigate(flow, screen) {
+  const validScreen = ["welcome", "done", ...MEMORY_TYPES].includes(screen);
+  const audioAllowed = screen !== "audio" || flow.audioEnabled;
+  return !navigationLocked(flow) && validScreen && audioAllowed;
+}
+
+function markStarted(flow, screen) {
+  if (!MEMORY_TYPES.includes(screen) || flow.started.includes(screen))
+    return flow.started;
+  return [...flow.started, screen];
+}
+
+function navigate(flow, screen) {
+  if (!canNavigate(flow, screen)) return flow;
+  return { ...flow, screen, started: markStarted(flow, screen) };
+}
+
+function selectMemory(flow, kind) {
+  if (!MEMORY_TYPES.includes(kind)) return flow;
+  return navigate(flow, kind);
+}
+
+function updateForm(flow, action) {
+  if (!MEMORY_TYPES.includes(action.kind)) return flow;
+  const previous = flow.forms[action.kind];
+  const next = Object.fromEntries(
+    Object.keys(previous).map((key) => [key, Boolean(action.state[key])]),
+  );
+  const unchanged = Object.keys(previous).every((key) => previous[key] === next[key]);
+  if (unchanged) return flow;
+  return { ...flow, forms: { ...flow.forms, [action.kind]: next } };
+}
+
+function finishMemory(flow, kind) {
+  if (kind !== flow.screen || !MEMORY_TYPES.includes(kind)) return flow;
+  return {
+    ...flow,
+    screen: "welcome",
+    forms: { ...flow.forms, [kind]: emptyForm() },
+  };
+}
+
 export function guestFlowReducer(flow, action) {
   switch (action.type) {
     case "NAVIGATE":
-      if (
-        navigationLocked(flow) ||
-        !["welcome", "done", ...MEMORY_TYPES].includes(
-          action.screen,
-        ) ||
-        (action.screen === "audio" && !flow.audioEnabled)
-      )
-        return flow;
-      return {
-        ...flow,
-        screen: action.screen,
-        started:
-          MEMORY_TYPES.includes(action.screen) &&
-          !flow.started.includes(action.screen)
-            ? [...flow.started, action.screen]
-            : flow.started,
-      };
+      return navigate(flow, action.screen);
     case "SELECT":
-      if (
-        !MEMORY_TYPES.includes(action.kind) ||
-        (action.kind === "audio" && !flow.audioEnabled) ||
-        navigationLocked(flow)
-      )
-        return flow;
-      return {
-        ...flow,
-        screen: action.kind,
-        started: flow.started.includes(action.kind)
-          ? flow.started
-          : [...flow.started, action.kind],
-      };
+      return selectMemory(flow, action.kind);
     case "BACK":
-      if (navigationLocked(flow)) return flow;
-      return {
-        ...flow,
-        screen: "welcome",
-      };
-    case "FORM_STATE": {
-      if (!MEMORY_TYPES.includes(action.kind)) return flow;
-      const previous = flow.forms[action.kind];
-      const next = Object.fromEntries(
-        Object.keys(previous).map((key) => [key, Boolean(action.state[key])]),
-      );
-      if (Object.keys(previous).every((key) => previous[key] === next[key]))
-        return flow;
-      return { ...flow, forms: { ...flow.forms, [action.kind]: next } };
-    }
+      return navigationLocked(flow) ? flow : { ...flow, screen: "welcome" };
+    case "FORM_STATE":
+      return updateForm(flow, action);
     case "FINISHED":
     case "ANOTHER":
       // Only forms invoke these callbacks after confirming and resetting their receipts.
-      if (action.kind !== flow.screen || !MEMORY_TYPES.includes(action.kind))
-        return flow;
-      return {
-        ...flow,
-        screen: "welcome",
-        forms: { ...flow.forms, [action.kind]: emptyForm() },
-      };
+      return finishMemory(flow, action.kind);
     default:
       return flow;
   }
