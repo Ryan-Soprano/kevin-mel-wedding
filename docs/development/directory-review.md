@@ -1317,8 +1317,10 @@ Backend JAR packaging passes after the full suite (`-DskipTests package`). All
 package test classes are absent. Independent final source/documentation review
 and diff checks pass. The isolated backend contains all **217 baseline paths**
 plus exactly the six reviewed Java edits, and all **nine visible scope hashes**
-match the tested copy. All **211 unrelated dirty/untracked paths** retain their
-entry hashes/existence. No tracked test is added or changed.
+match the tested copy. At the preservation checkpoint, all **211 unrelated
+dirty/untracked paths** matched their entry hashes/existence. Subsequent
+concurrent gallery updates remain outside this delivery. No
+tracked test is added or changed.
 
 Ignored inventories, baseline/final logs, AST/negative controls, disassemblies,
 class/source hashes, shutdown dump/cleanup evidence and ready PR description are
