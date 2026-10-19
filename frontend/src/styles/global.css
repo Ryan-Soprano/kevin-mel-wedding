@@ -59,15 +59,6 @@ form {
   margin: 0;
 }
 
-.note-review__message {
-  padding: 16px;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: 8px;
-  background: var(--color-surface);
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
 .note-actions {
   display: flex;
   flex-wrap: wrap;
@@ -208,45 +199,11 @@ button:focus-visible {
     box-shadow 150ms ease;
 }
 
-.photo-card--selected {
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 2px rgb(64 87 71 / 20%);
-}
-
-.photo-card__label {
-  position: relative;
-  display: block;
-  margin: 0;
-  cursor: pointer;
-}
-
 .photo-card__image {
   display: block;
   width: 100%;
   aspect-ratio: 1;
   object-fit: cover;
-}
-
-.photo-card__checkbox {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  z-index: 1;
-  display: block;
-  width: 15px;
-  height: 15px;
-  margin: 0;
-  padding: 0;
-  accent-color: var(--color-primary);
-  cursor: pointer;
-}
-
-.photo-remove-button {
-  width: 100%;
-}
-
-.photo-remove-button:disabled {
-  cursor: not-allowed;
 }
 
 /* Multi-photo form: allow long original names and captions to reflow at narrow widths. */
@@ -273,7 +230,6 @@ button:focus-visible {
   outline: none;
 }
 
-.guest-welcome,
 .guest-choices,
 .guest-finished,
 .guest-navigation {
@@ -282,10 +238,8 @@ button:focus-visible {
   min-width: 0;
 }
 
-.guest-welcome > button,
 .guest-finished > button,
-.guest-navigation > button,
-.guest-choices > .button-secondary {
+.guest-navigation > button {
   width: fit-content;
   max-width: 100%;
 }
@@ -296,27 +250,13 @@ button:focus-visible {
   overflow-wrap: anywhere;
 }
 
-.guest-choice {
-  display: grid;
-  gap: 8px;
-  padding: 20px;
-  text-align: left;
-  overflow-wrap: anywhere;
-}
-
-.guest-choice__title {
-  font-size: 1.25rem;
-  font-weight: 650;
-}
-
 .guest-navigation {
   margin-bottom: 28px;
 }
 
 .photo-picker,
 .photo-batch p,
-.photo-batch h3,
-.photo-card__filename {
+.photo-batch h3 {
   overflow-wrap: anywhere;
 }
 
@@ -329,23 +269,8 @@ button:focus-visible {
   border: 1px solid var(--color-border-subtle);
 }
 
-.photo-grid--batch .photo-card--selected {
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 2px rgb(64 87 71 / 20%);
-}
-
 .photo-batch-card {
   padding: 12px;
-}
-
-.photo-card__filename {
-  margin: 0 0 12px;
-  padding: 8px;
-  font-weight: 600;
-}
-
-.photo-batch-card .photo-card__filename {
-  padding: 0;
 }
 
 .photo-batch-card textarea {
