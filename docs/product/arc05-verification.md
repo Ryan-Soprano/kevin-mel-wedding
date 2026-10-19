@@ -98,3 +98,70 @@ Ignored local evidence is under `logs/export-refactor.local/`:
 `native-1c40fa5d-5133-4b0b-ae66-232ff9889cc0/summary.json` and the frontend,
 backend-focused and package logs. The earlier ARC-05 evidence above remains
 separate from this refactor verification.
+
+## Export directory review — 2026-10-19
+
+Reviewed all 16 existing files in `frontend/src/features/export/` with callers,
+the portable-export contract and backend behavior. Per-file keep/fix decisions
+are in `docs/development/directory-review.md`. The review began at `6de44fa`
+with the reviewed library work; merged library PR #72/main `8900222` was then
+integrated as `926e423` after verifying its baseline source was identical.
+
+Mounted before checks reproduced four UI defects at all three widths: part and
+warning paging lost focus, a late read failure stole focus after blur, an empty
+non-first warning page lost its Previous control, and an old cancellation
+confirmation appeared on a new job. The existing hook now owns distinct
+one-shot status/part/warning destinations and ties cancellation/Keep restoration
+to the matching active job. Lifecycle changes or interactive focus movement
+cancel delayed focus. Empty warning tails keep their destination, message and
+Previous control. Original coordinator, request identities, retries, page
+commits and native save anchor remain unchanged.
+
+The exported binary helper now snapshots validated size, checksum and filename
+before asynchronous work. Two delayed caller-mutation regressions failed before
+the fix and pass afterward. The live inbox already deep-freezes its descriptor;
+this hardens direct API callers without changing archive bytes or integrity
+rules. Six mock regressions failed against the old source, and a further
+read-admission timing case failed before its follow-up. The mock now scopes
+cursors to job/route, matches page validation order, clears terminal content,
+fails pending attempts, preserves terminal reasons, bounds activity expiry,
+enforces preparation order/busy states and prevents late digest completion from
+reviving cancelled work. It retains its intentionally tiny ZIP and simplified
+worker/provider model.
+
+Final verification passes **37 focused tests** (31 API, five presentation and
+one inbox adapter case) and all **551 frontend tests**, with zero skips. ESLint,
+production build and diff checks pass on Node 24.16.0. Existing test files were
+extended; terminal fixtures now follow the content-free backend contract. No
+tracked test files, production modules or dependencies were added. Independent
+API/UI/integration reviews found no remaining actionable issues.
+
+Mounted StrictMode Chromium passes **239 assertions** at 1280, 390 and 320 px,
+using the actual Inbox controller, JSON adapters and synthetic job/page fixtures.
+It covers both paging families and failures, retained page state, empty tails,
+status focus, late success/failure, expiry/new-job cancellation, explicit
+same-identity recovery, integrity rejection, byte progress, verified native
+download links and owned Blob cleanup. All 25 synthetic original note records
+stay identical as JSON. Three browser-saved **22-byte empty ZIP fixtures** match
+their expected length and SHA-256; they do not contain or verify portable
+archive contents. Ordinary save-related blur retains the ready part; leaving or
+hiding revokes every owned Blob URL, and resume checks the same job without
+restoring its link.
+
+No page errors, external requests or horizontal overflow were reported.
+Representative desktop/narrow warning, confirmation and prepared-download
+screenshots were inspected. Browser/server resources are closed and the harness
+is preserved outside frontend source. All 17 recorded source hashes match the
+verified snapshot; guest-flow source remains byte-identical. Ignored evidence
+is under `logs/export-directory-review.local/`.
+
+The full 551-test suite, lint and build were also repeated successfully in an
+intended-source copy of the committed baseline plus the export patch. Its 17
+source hashes match the working-copy verification. A concurrent contribution
+hook edit stays outside this delivery and is preserved in the main checkout.
+
+This review supplements the historical real-backend ZIP evidence above; it does
+not repeat backend/provider, archive-content, hosted-capacity, physical-device,
+screen-reader or native save-dialog acceptance. ARC-05's retained acceptance
+remains separate. Final-head CI and configured review are required after Ryan
+creates the pull request.

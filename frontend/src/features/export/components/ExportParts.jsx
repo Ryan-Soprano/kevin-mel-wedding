@@ -40,7 +40,7 @@ function ExportPart({ part, view }) {
   );
 }
 
-export default function ExportParts({ view }) {
+export default function ExportParts({ view, pageTarget }) {
   const {
     state,
     disabled,
@@ -51,6 +51,13 @@ export default function ExportParts({ view }) {
       title="ZIP parts"
       description="Save each original part before preparing the next. Prepare the final index last."
     >
+      <h3
+        ref={pageTarget}
+        tabIndex={-1}
+        className="visually-hidden"
+      >
+        ZIP parts · Page {state.partCursors.length}
+      </h3>
       <ol className="inbox-list export-parts">
         {state.parts.map((part) => (
           <ExportPart key={part.partNumber} part={part} view={view} />

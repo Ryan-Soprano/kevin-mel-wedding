@@ -75,6 +75,26 @@ const readyDownload = {
   totalBytes: 1024,
 };
 
+function terminalJob(state) {
+  return {
+    ...job,
+    state,
+    capturedAt: null,
+    totalMemories: 0,
+    totalOriginals: 0,
+    totalOriginalBytes: 0,
+    originalPartCount: 0,
+    indexPartNumber: null,
+    processedOriginalParts: 0,
+    availableOriginals: 0,
+    unavailableOriginals: 0,
+    complete: false,
+    indexNeedsRefresh: false,
+    preparedPart: null,
+    excludedCounts: {},
+  };
+}
+
 const actions = Object.fromEntries([
   "inbox", "create", "check", "prepare", "cancel",
   "retry", "page", "download", "started",
@@ -150,6 +170,15 @@ test("actual export view gives explicit bounded parts, honest missing/excluded/e
     assert.match(warnings, /Final index and offline reader/);
     assert.match(warnings, /Only one prepared ZIP/);
     assert.match(warnings, /Check export progress/);
+    assert.match(
+      warnings,
+      /<h3[^>]*tab[Ii]ndex="-1"[^>]*class="visually-hidden">Export progress · Ready with original-file warnings<\/h3>/,
+    );
+    assert.match(warnings, /class="visually-hidden">ZIP parts · Page 1<\/h3>/);
+    assert.match(
+      warnings,
+      /class="visually-hidden">Original-file warnings · Page 1<\/h3>/,
+    );
     assert.match(warnings, /App restart/);
     assert.match(warnings, /30 minutes/);
     assert.match(warnings, /Created <time dateTime="2026-10-10T12:00:00Z">Oct 10, 2026, 8:00 AM EDT<\/time> · Eastern/);
@@ -185,31 +214,71 @@ test("actual export view gives explicit bounded parts, honest missing/excluded/e
     assert.match(recovery, /disabled=""[^>]*>Back to inbox/);
     assert.doesNotMatch(recovery, /Prepare archive export/);
 
-    const expired = render({ job: { ...job, state: "EXPIRED" }, unavailable: true });
+    const expired = render({ job: terminalJob("EXPIRED") });
     assert.match(expired, /Start a new export/);
     assert.doesNotMatch(expired, /Load and verify ZIP part|Prepare this part/);
   });
 });
 
-test("terminal jobs retain summaries and issue paging while active controls obey busy and lock gates", async () => {
+test("an empty non-first warning page retains its destination and previous-page recovery", async () => {
+  await withExportView(render => {
+    const state = {
+      job,
+      parts,
+      issues: [],
+      issueCursors: [null, "previous-warning-page"],
+      issuesNextCursor: null,
+    };
+    const emptyTail = render(state);
+    assert.match(emptyTail, /aria-label="Unavailable export originals"/);
+    assert.match(emptyTail, /class="visually-hidden">Original-file warnings · Page 2<\/h3>/);
+    assert.match(emptyTail, /role="status">No original-file warnings on this page\.<\/p>/);
+    assert.match(emptyTail, /<button[^>]*>Previous export warnings<\/button>/);
+    assert.doesNotMatch(emptyTail, /disabled=""[^>]*>Previous export warnings/);
+    assert.match(emptyTail, /disabled=""[^>]*>Next export warnings/);
+
+    const firstEmpty = render({ ...state, issueCursors: [null] });
+    assert.doesNotMatch(firstEmpty, /aria-label="Unavailable export originals"/);
+
+    const failedRead = render({ ...state, error: "The requested page could not be loaded." });
+    assert.match(failedRead, /role="alert"[^>]*>The requested page could not be loaded\./);
+    assert.match(failedRead, /class="visually-hidden">ZIP parts · Page 1<\/h3>/);
+    assert.match(failedRead, /class="visually-hidden">Original-file warnings · Page 2<\/h3>/);
+    assert.doesNotMatch(failedRead, /Page [12] could not be loaded/);
+
+    const busy = render(state, { busy: true });
+    assert.match(busy, /disabled=""[^>]*>Previous export warnings/);
+    assert.match(busy, /No original-file warnings on this page/);
+  });
+});
+
+test("terminal jobs are content-free while active warning pages and controls retain their gates", async () => {
   await withExportView(render => {
     for (const state of ["FAILED", "STALE", "CANCELLED", "EXPIRED"]) {
       const terminal = render({
-        job: { ...job, state, preparedPart },
-        parts,
-        issues,
-        issueCursors: [null, "previous"],
-        issuesNextCursor: "next",
+        job: terminalJob(state),
       });
       assert.match(terminal, /Start a new export/);
-      assert.match(terminal, /completed memories/);
-      assert.match(terminal, /Original-file warnings/);
-      assert.match(terminal, /Previous export warnings/);
-      assert.match(terminal, /Page 2/);
+      assert.match(terminal, /<strong>0<\/strong> completed memories/);
+      assert.doesNotMatch(terminal, /Original-file warnings|Previous export warnings|Next ZIP parts/);
       assert.doesNotMatch(terminal, /Load and verify ZIP part|Prepare this part/);
       assert.doesNotMatch(terminal, /Check export progress|Cancel export…/);
       assert.doesNotMatch(terminal, /Current inactivity deadline|Only one prepared ZIP/);
+      assert.doesNotMatch(terminal, /Archive captured|Excluded from this capture|This export is incomplete/);
     }
+
+    const warningPage = render({
+      job,
+      parts,
+      issues,
+      issueCursors: [null, "previous"],
+      issuesNextCursor: "next",
+    });
+    assert.match(warningPage, /Original-file warnings/);
+    assert.match(warningPage, /Previous export warnings/);
+    assert.match(warningPage, /Page 2/);
+    assert.doesNotMatch(warningPage, /disabled=""[^>]*>Previous export warnings/);
+    assert.doesNotMatch(warningPage, /disabled=""[^>]*>Next export warnings/);
 
     for (const options of [
       { busy: true, locked: false },

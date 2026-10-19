@@ -6,11 +6,16 @@ import { setImmediate } from "node:timers";
 import { createArchiveApi } from "../../../shared/api/archiveApi.js";
 import { createApiClient, ApiError } from "../../../shared/api/apiClient.js";
 import { createMockArchiveApi } from "../../../shared/api/mockArchiveApi.js";
-import { COUPLE_SESSION, MEMORY_DETAIL } from "../../../shared/api/v1/fixtures.js";
+import {
+  COUPLE_SESSION,
+  MEDIA_DETAIL,
+  MEMORY_DETAIL,
+} from "../../../shared/api/v1/fixtures.js";
 import { createInboxController } from "../../inbox/api/inboxController.js";
 import { decodeExportStatus } from "./exportApi.js";
 import { initialExport } from "./exportActions.js";
 import { fetchExportPart, MAX_EXPORT_DOWNLOAD_BYTES } from "./exportDownload.js";
+import { createMockExportServer } from "./mockExportServer.js";
 
 // Synthetic transport/controller fixtures. Actual production ZIP structure,
 // original bytes and offline reader are verified by the packaged rehearsal.
@@ -47,6 +52,58 @@ test("binary malformed headers, short/long streams and actual checksum mismatch 
     await assert.rejects(() => fetchExportPart(PATH, PART, { fetchImpl: async () => binary(body, headers) }), e => e.code === "EXPORT_INTEGRITY");
   }
 });
+test("binary download retains its initial descriptor across a deferred fetch", async () => {
+  const expected = { ...PART };
+  const response = deferred();
+  const dispatched = deferred();
+  const progress = [];
+  const downloading = fetchExportPart(PATH, expected, {
+    fetchImpl() {
+      dispatched.resolve();
+      return response.promise;
+    },
+    onProgress(received, total) {
+      progress.push([received, total]);
+    },
+  });
+  await dispatched.promise;
+  Object.assign(expected, {
+    byteSize: PART.byteSize + 1,
+    sha256: "f".repeat(64),
+    filename: "replacement.zip",
+  });
+  response.resolve(binary());
+
+  const blob = await downloading;
+  assert.deepEqual(Buffer.from(await blob.arrayBuffer()), Buffer.from(bytes));
+  assert.deepEqual(progress.at(-1), [PART.byteSize, PART.byteSize]);
+  assert.equal(expected.filename, "replacement.zip");
+  assert.equal(Object.isFrozen(expected), false);
+});
+
+test("binary checksum target cannot be replaced while its digest is pending", async () => {
+  const expected = { ...PART };
+  const tampered = bytes.slice();
+  tampered[0] ^= 0xff;
+  const actualChecksum = createHash("sha256").update(tampered).digest("hex");
+  const digest = deferred();
+  const hashing = deferred();
+  const downloading = fetchExportPart(PATH, expected, {
+    fetchImpl: async () => binary(tampered),
+    digest(retainedBytes) {
+      assert.deepEqual(Buffer.from(retainedBytes), Buffer.from(tampered));
+      hashing.resolve();
+      return digest.promise;
+    },
+  });
+  await hashing.promise;
+  expected.sha256 = actualChecksum;
+  digest.resolve(actualChecksum);
+
+  await assert.rejects(downloading, failure => failure.code === "EXPORT_INTEGRITY");
+  assert.equal(expected.sha256, actualChecksum);
+});
+
 test("binary expiry/busy/auth structured errors stay read failures and abort cancels an owned stream and late checksum", async () => {
   for (const [status, code] of [[401, "AUTH_REQUIRED"], [403, "ARCHIVE_UNAVAILABLE"], [409, "EXPORT_PART_UNAVAILABLE"], [410, "EXPORT_UNAVAILABLE"], [429, "RATE_LIMITED"]]) {
     await assert.rejects(() => fetchExportPart(PATH, PART, { fetchImpl: async () => new Response(JSON.stringify({ error: { code, message: "Untrusted private diagnostic" } }), { status, headers: { "Content-Type": "application/json", "Retry-After": "2" } }) }), e => e.status === status && e.code === code && e.retryAfterSeconds === 2 && !e.message.includes("Untrusted"));
@@ -266,4 +323,196 @@ test("a throttled retry cannot erase an earlier unknown action and its Retry-Aft
   api.getExportAttempt = (...args) => { checks++; return check(...args); };
   await f.c.prepareExportPart(1); await f.c.checkExport(); assert.equal(f.c.getSnapshot().export.mutation.canRetry, true); await f.c.retryExportAction(); assert.equal(f.c.getSnapshot().export.mutation.phase, "uncertain");
   await f.c.checkExport(); assert.equal(checks, 1); assert.equal(attempts, 2); clock += 3000; await f.c.checkExport(); assert.equal(checks, 2); assert.equal(f.c.getSnapshot().export.mutation.canRetry, true); f.c.dispose();
+});
+
+function rawExportServer(now = () => Date.parse("2026-10-19T18:00:00Z")) {
+  let sequence = 100;
+  const reply = (value, status = 200, headers = {}) => new Response(
+    JSON.stringify(value),
+    { status, headers: { "Content-Type": "application/json", ...headers } },
+  );
+  const server = createMockExportServer({
+    getSession: () => COUPLE_SESSION,
+    getScenario: () => "success",
+    getMemories: () => [MEMORY_DETAIL, MEDIA_DETAIL],
+    nextId: () => id(sequence++),
+    now,
+    reply,
+    failure: (code, message, status, headers = {}) => reply(
+      { error: { code, message, fieldErrors: [] } },
+      status,
+      headers,
+    ),
+  });
+  return (path, method = "GET", extraHeaders = {}) => server.handle(
+    new URL(path, "https://synthetic.example.test"),
+    method,
+    new Headers({ "X-CSRF-Token": COUPLE_SESSION.csrfToken, ...extraHeaders }),
+    null,
+  );
+}
+
+async function rawReadyExport(request, exportId = id(1)) {
+  const path = "/api/exports/" + exportId;
+  const created = await request(path, "PUT", { "If-None-Match": "*" });
+  assert.equal(created.status, 202);
+  return (await request(path)).json();
+}
+
+test("mock export pages scope cursors to their job and route and validate limits before missing jobs", async () => {
+  const request = rawExportServer();
+  await rawReadyExport(request);
+  const first = await (await request("/api/exports/" + id(1) + "/parts?limit=1")).json();
+  assert.equal(first.items.length, 1);
+  assert.equal(typeof first.nextCursor, "string");
+  const wrongRoute = await request(
+    "/api/exports/" + id(1) + "/issues?cursor=" + encodeURIComponent(first.nextCursor),
+  );
+  assert.equal(wrongRoute.status, 400);
+  assert.equal((await wrongRoute.json()).error.code, "INVALID_CURSOR");
+
+  await rawReadyExport(request, id(2));
+  const wrongJob = await request(
+    "/api/exports/" + id(2) + "/parts?cursor=" + encodeURIComponent(first.nextCursor),
+  );
+  assert.equal(wrongJob.status, 400);
+  assert.equal((await wrongJob.json()).error.code, "INVALID_CURSOR");
+  for (const kind of ["parts", "issues"]) {
+    const badLimit = await request("/api/exports/" + id(99) + "/" + kind + "?limit=0");
+    assert.equal(badLimit.status, 400);
+    assert.equal((await badLimit.json()).error.code, "VALIDATION_FAILED");
+    const malformed = await request("/api/exports/" + id(1) + "/" + kind + "?cursor=bad");
+    assert.equal(malformed.status, 400);
+    assert.equal((await malformed.json()).error.code, "INVALID_CURSOR");
+  }
+  const last = await (await request(
+    "/api/exports/" + id(1) + "/parts?limit=1&cursor=" + encodeURIComponent(first.nextCursor),
+  )).json();
+  assert.equal(last.items[0].kind, "INDEX");
+  assert.equal(last.nextCursor, null);
+});
+
+test("mock cancellation clears captured progress and pages and resolves every running attempt as failed", async () => {
+  const request = rawExportServer();
+  await rawReadyExport(request);
+  await request("/api/exports/" + id(1) + "/parts/1/prepare", "POST", {
+    "Idempotency-Key": id(10),
+  });
+  const cancelled = await (await request("/api/exports/" + id(1), "DELETE", {
+    "Idempotency-Key": id(11),
+  })).json();
+  assert.equal(cancelled.state, "CANCELLED");
+  assert.equal(cancelled.capturedAt, null);
+  assert.equal(cancelled.indexPartNumber, null);
+  assert.equal(cancelled.preparedPart, null);
+  assert.equal(cancelled.complete, false);
+  assert.equal(cancelled.indexNeedsRefresh, false);
+  assert.deepEqual(cancelled.excludedCounts, {});
+  for (const field of [
+    "totalMemories", "totalOriginals", "totalOriginalBytes", "originalPartCount",
+    "processedOriginalParts", "availableOriginals", "unavailableOriginals",
+  ]) {
+    assert.equal(cancelled[field], 0, field);
+  }
+  const attempt = await (await request(
+    "/api/exports/" + id(1) + "/attempts/" + id(10),
+  )).json();
+  assert.equal(attempt.state, "FAILED");
+  const parts = await (await request("/api/exports/" + id(1) + "/parts")).json();
+  assert.deepEqual(parts.items, []);
+  assert.equal(parts.nextCursor, null);
+});
+
+test("mock expiry stays content-free and a later cancellation does not replace its terminal reason", async () => {
+  let at = Date.parse("2026-10-19T18:00:00Z");
+  const request = rawExportServer(() => at);
+  await rawReadyExport(request);
+  at += 31 * 60_000;
+  const expired = await (await request("/api/exports/" + id(1))).json();
+  assert.equal(expired.state, "EXPIRED");
+  const cancelled = await (await request("/api/exports/" + id(1), "DELETE", {
+    "Idempotency-Key": id(12),
+  })).json();
+  assert.equal(cancelled.state, "EXPIRED");
+  assert.equal(cancelled.capturedAt, null);
+  assert.equal(cancelled.totalMemories, 0);
+  assert.deepEqual(cancelled.excludedCounts, {});
+});
+
+test("mock read activity refreshes the idle deadline without extending the absolute lifetime", async () => {
+  const started = Date.parse("2026-10-19T18:00:00Z");
+  let at = started;
+  const request = rawExportServer(() => at);
+  const readyJob = await rawReadyExport(request);
+  at += 20 * 60_000;
+  const refreshed = await (await request("/api/exports/" + id(1))).json();
+  assert.equal(refreshed.expiresAt, new Date(at + 30 * 60_000).toISOString());
+  assert.equal(refreshed.hardExpiresAt, readyJob.hardExpiresAt);
+  while (at + 29 * 60_000 < Date.parse(readyJob.hardExpiresAt)) {
+    at += 29 * 60_000;
+    const active = await (await request("/api/exports/" + id(1))).json();
+    assert.equal(active.state, "READY");
+    assert.equal(
+      active.expiresAt,
+      new Date(Math.min(at + 30 * 60_000, Date.parse(readyJob.hardExpiresAt))).toISOString(),
+    );
+  }
+  at = Date.parse(readyJob.hardExpiresAt);
+  assert.equal((await request("/api/exports/" + id(1))).status, 404);
+});
+
+test("mock preparation requires original results and preserves busy and recorded-attempt response semantics", async () => {
+  const request = rawExportServer();
+  const job = await rawReadyExport(request);
+  const earlyIndex = await request(
+    "/api/exports/" + id(1) + "/parts/" + job.indexPartNumber + "/prepare",
+    "POST",
+    { "Idempotency-Key": id(20) },
+  );
+  assert.equal(earlyIndex.status, 409);
+  assert.equal((await earlyIndex.json()).error.code, "EXPORT_PARTS_PENDING");
+  const path = "/api/exports/" + id(1) + "/parts/1/prepare";
+  const first = await request(path, "POST", { "Idempotency-Key": id(21) });
+  assert.equal(first.status, 202);
+  assert.equal((await request(path, "POST", { "Idempotency-Key": id(21) })).status, 202);
+  const busy = await request(path, "POST", { "Idempotency-Key": id(22) });
+  assert.equal(busy.status, 409);
+  assert.equal((await busy.json()).error.code, "EXPORT_BUSY");
+  await request("/api/exports/" + id(1));
+  assert.equal((await request(path, "POST", { "Idempotency-Key": id(21) })).status, 200);
+});
+
+test("a mock preparation finishing its asynchronous digest cannot resurrect a cancelled job or cache", async () => {
+  const request = rawExportServer();
+  await rawReadyExport(request);
+  await request("/api/exports/" + id(1) + "/parts/1/prepare", "POST", {
+    "Idempotency-Key": id(30),
+  });
+  const finishing = request("/api/exports/" + id(1));
+  await request("/api/exports/" + id(1), "DELETE", { "Idempotency-Key": id(31) });
+  const settled = await (await finishing).json();
+  assert.equal(settled.state, "CANCELLED");
+  assert.equal(settled.preparedPart, null);
+  assert.equal(settled.lastAttempt.kind, "CANCEL");
+  const latest = await (await request("/api/exports/" + id(1))).json();
+  assert.equal(latest.state, "CANCELLED");
+  assert.equal(latest.preparedPart, null);
+  assert.equal(latest.totalMemories, 0);
+});
+
+test("an admitted mock progress read refreshes activity before its asynchronous digest settles", async () => {
+  const started = Date.parse("2026-10-19T18:00:00Z");
+  let at = started;
+  const request = rawExportServer(() => at);
+  await rawReadyExport(request);
+  await request("/api/exports/" + id(1) + "/parts/1/prepare", "POST", {
+    "Idempotency-Key": id(40),
+  });
+  at = started + 29 * 60_000;
+  const finishing = request("/api/exports/" + id(1));
+  at = started + 31 * 60_000;
+  const completed = await (await finishing).json();
+  assert.equal(completed.state, "READY");
+  assert.equal(completed.preparedPart.partNumber, 1);
+  assert.equal(completed.expiresAt, new Date(started + 59 * 60_000).toISOString());
 });
