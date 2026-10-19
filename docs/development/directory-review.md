@@ -72,3 +72,81 @@ share this form.
 This batch covers all nine files in `frontend/src/features/audio/`. Audio playback
 in the private inbox and server-side audio verification belong to their respective
 directory reviews; they have not been marked reviewed by this frontend batch.
+
+## Media decisions — October 19, 2026
+
+The next batch reviewed all 18 tracked files in `frontend/src/features/media/`
+and all eight in `contribution/`, including tests and CSS. The active guest,
+private archive and development preview entrypoints all use `PhotoBatchForm` for
+one to five photos. Repository-wide caller searches found no consumer of the
+retired `SinglePhotoForm` chain.
+
+| File in `media/` | Decision and reason |
+|---|---|
+| `components/SinglePhotoForm.jsx` | Simplify: remove the unused predecessor to the batch form. Avoid maintaining a second, unreachable upload UI. |
+| `api/photoSubmission.js` | Simplify: remove the coordinator consumed only by that retired form. The batch coordinator remains the shared live path. |
+| `api/photoSubmission.test.js` | Simplify: remove tests for the retired coordinator; move its independent media-normalization case to the existing shared API suite. |
+| `api/photoBatchSubmission.js` | Keep: copies input before hashing, validates whole receipts before adoption, retains uncertain attempts and protects saved siblings. Existing deadlines and disposal suppress late results. |
+| `api/photoBatchSubmission.test.js` | Keep: covers immutable batch identity, selective retries, partial results, deadlines, cancellation and late responses. |
+| `api/photoBatchIntegration.test.js` | Keep: exercises the real JSON adapter with a synthetic server, plus rendering and recovery contracts. |
+| `hooks/usePhotoBatchForm.js` | Keep: owns selection, normalized field errors, active-only queued focus, retry selection and controller disposal. |
+| `components/PhotoBatchForm.jsx` | Keep: small composition shell for editable, review and finished states. |
+| `components/PhotoBatchCompose.jsx` | Keep: guest/private fields, selection and review actions have clear responsibilities. |
+| `components/PhotoBatchReview.jsx` | Keep: explicit review/edit/send boundary retains selected originals and captions. |
+| `components/PhotoBatchCard.jsx` | Keep: caption disclosure survives correction, and per-item status/retry controls remain associated with each original. |
+| `components/PhotoBatchActions.jsx` | Keep: result, selected retry and reset actions use existing state locks. |
+| `components/PhotoPicker.jsx` | Keep: controlled/standalone selection, mixed-file feedback, removal focus and dialog callbacks are cohesive. |
+| `components/PhotoPreview.jsx` | Keep: creates and revokes only its owned preview URL when the original changes or unmounts. |
+| `photoSelection.js` | Keep: validates additions before allocating IDs, preserves original File references and reports skipped picker files. |
+| `photoSelection.test.js` | Keep: covers bounds, mixed additions, duplicate filenames, ID collisions and atomic selection updates. |
+| `mediaConstraints.js` | Keep: derives picker options and labels from one small format/size policy. |
+| `photoBatchDisplay.js` | Keep: pure copy/status/focus helpers have active consumers and useful boundaries. |
+
+The moved test in `shared/api/archiveApi.test.js` retains every original assertion
+for NUL/unpaired-surrogate metadata, control characters in filenames and UUID
+case-folded duplicates. The now-unreferenced `.photo-original-preview` rule is
+removed from `styles/global.css`; active `.photo-submission` styles remain in use.
+These boundary edits do not constitute a full shared API or styles review.
+
+## Contribution decisions — October 19, 2026
+
+| File in `contribution/` | Decision and reason |
+|---|---|
+| `components/ContributionForm.jsx` | Keep: thin shell composing the form and confirmed result. |
+| `components/ContributionCompose.jsx` | Keep: direct-send controls, validation labels/ARIA and uncertain-outcome editing locks are explicit. |
+| `components/ContributionResult.jsx` | Keep: confirmed result and standalone done states preserve completion callback behavior. |
+| `hooks/useContributionForm.js` | Keep: effect-owned controller, array-shaped validation, queued focus and reset-before-callback ordering remain cohesive. |
+| `api/textSubmission.js` | Keep: freezes normalized input before transport, retains the original key/body through unknown outcomes and bounds request/body completion. |
+| `api/textSubmission.test.js` | Keep: existing transport, retry, deadline and rendering cases verify the live path. |
+| `contributionDisplay.js` | Simplify: remove two unused `reviewTitle` properties left after the intermediate note-review step was retired. |
+| `contribution.css` | Keep: compact form/result styles are scoped and responsive. |
+
+No active submission correctness defect or measured efficiency issue was found
+in this batch. The reduction is in unused code and duplicated maintenance paths;
+no upload performance or bundle-size improvement is claimed. The next batch is
+guest navigation and public content under `app/`, `guestGallery/` and `sharing/`.
+
+## Media and contribution verification
+
+The initial focused baseline passed 81 existing tests. After cleanup, the
+remaining media API/shared contract suites pass 129 tests and the contribution
+suite passes 14. The intended source snapshot passes all **509 frontend tests**,
+ESLint and the production build on Node 24.16.0, with no skips. The full count
+falls from 520 because 11 tests belonged solely to the retired coordinator; its
+independent normalization case remains covered in the existing shared API suite.
+No new test files were added. Independent cleanup review found no actionable
+findings or remaining consumers of the retired chain/style.
+
+Mounted Chromium verification passes **12 cases / 247 assertions** at 1280, 390
+and 320 px, across guest/private and active/inactive forms. The real API decoder
+and batch coordinator use an injected transport to check native caption-error
+arrays, sibling targeting, single-character correction, manual disclosure,
+original File retention, deliberate corrected retry, private attribution, reset,
+StrictMode disposal and preview URL cleanup. Six screenshots were captured and
+desktop/narrow samples inspected. There were no page errors or external
+requests, and owned browser/server resources were closed.
+
+Source hashes match the tested snapshot; the separate `guestFlow.js` working
+edit is preserved and excluded. Ignored inventory, reports and logs are under
+`logs/media-contribution-review.local/`. This review does not establish device,
+assistive-technology, real-provider persistence or hosted acceptance.
