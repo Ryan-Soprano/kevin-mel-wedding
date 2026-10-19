@@ -6,7 +6,12 @@ export function createMockAlbumServer({ getSession, getScenario, getMemories, ne
   const lost = new Set();
   const timestamp = () => new Date(now()).toISOString();
   const detail = entry => ({ ...entry.album, memberCount: entry.members.length });
-  function changed(entry) { entry.album.revision = nextId(); entry.album.updatedAt = timestamp(); }
+  function changed(entry) {
+    entry.album.revision = nextId();
+    entry.album.updatedAt = new Date(
+      Math.max(now(), Date.parse(entry.album.updatedAt)),
+    ).toISOString();
+  }
   const conflict = () => failure("ALBUM_CONFLICT", "This album changed. Reload it.", 412);
   const conditional = (headers, entry) => !headers.get("If-Match")
     ? failure("PRECONDITION_REQUIRED", "Reload before changing this album.", 428)
@@ -38,6 +43,7 @@ export function createMockAlbumServer({ getSession, getScenario, getMemories, ne
       const limit = Number(url.searchParams.get("limit") ?? 20);
       if (!Number.isInteger(limit) || limit < 1 || limit > 50) return failure("VALIDATION_FAILED", "Use a bounded page.", 400);
       if (url.pathname === "/api/albums" && method === "GET") {
+        // Synthetic offsets do not model production keyset pagination during concurrent list edits.
         const cursor = url.searchParams.get("cursor") ?? "albums:0";
         if (!/^albums:\d+$/.test(cursor)) return failure("VALIDATION_FAILED", "Reload the list.", 400);
         const offset = Number(cursor.split(":")[1]);
