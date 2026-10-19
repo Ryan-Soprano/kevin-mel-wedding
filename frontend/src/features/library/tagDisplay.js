@@ -53,7 +53,7 @@ export function getTagsFeedback(error, state) {
     visible: Boolean(error || state.error || state.mutation.error || state.notice),
     className,
     role,
-    text: error ?? state.error ?? state.mutation.error ?? state.notice,
+    text: state.error ?? state.mutation.error ?? error ?? state.notice,
   };
 }
 

@@ -510,3 +510,110 @@ temporary harness is preserved outside frontend source under ignored logs.
 Reports and source hashes remain in `logs/albums-directory-review.local/`.
 These synthetic frontend checks do not repeat real backend/provider or device
 acceptance. Final-head CI/configured review remains required after PR creation.
+
+## Library and tags decisions — October 19, 2026
+
+This batch reviews all 27 existing files under `features/library/` and adds one
+feature-local read-focus helper. It includes library search, tag management and
+memory attachments, their private inbox callers and the server contracts. The
+review starts from `feature/library-directory-review` at `68b5ea4`, including
+the reviewed timeline work and merged albums baseline.
+
+| File in `features/library/` | Decision and reason |
+|---|---|
+| `api/libraryApi.js` | Keep: canonical tag IDs, case-folded legacy memory identity, exact fractional timestamp ordering, ETags, tombstones and filter truth checks match the private API contract. |
+| `api/libraryActions.js` | Keep: applied search/page return context stays separate from draft tag-picker filters and queries; session/cancellation and privacy clearing remain with the host controller. |
+| `api/tagActions.js` | Fix: capture the parent tag-list query before opening a memory and restore it on direct return; clear the private query on hide and navigation. Preserve write identity, reconciliation and name-fingerprint retry rules. |
+| `api/mockLibraryServer.js` | Fix: clamp each existing tag's mutation timestamp to its own prior timestamp, matching backend `GREATEST(updated_at, action_time)` behavior after clock rollback. |
+| `api/library.test.js` | Extend the existing suite with direct-return query restoration, explicit All-tags reset, hidden-query clearing and per-tag clock/no-op/create/delete regressions. |
+| `components/Library.jsx` | Fix: retain deliberate read focus in the feature boundary while preserving the exact existing keyed editor reset contract; name the result or tag-picker page destination. |
+| `components/Library.test.js` | Extend existing presentation tests for filter constraints, server feedback precedence, field-specific ARIA, named read destinations and reachable tag recovery. |
+| `components/LibraryFilters.jsx` | Fix: associate search, type, review, precision and year errors with their controls and register the first invalid field as the correction focus target. |
+| `components/LibraryPaging.jsx` | Keep: bounded result/picker paging uses the correct cursor stack and existing error/busy gates; the hook now owns request focus. |
+| `components/LibraryRecovery.jsx` | Keep: reload uses the current applied filters or picker draft through the hook, without changing the recovery contract. |
+| `components/LibraryResults.jsx` | Keep: literal metadata summaries, partial dates, Eastern saved times and original excerpts have active consumers and do not preload originals. |
+| `components/LibraryTagChooser.jsx` | Fix: associate picker-query errors with its own field; preserve draft filters, explicit selection and cancellation arguments. |
+| `components/MemoryTags.jsx` | Fix scoped query validation and owned read focus across picker resets, including closed-disclosure visibility guards. Simplify attachment-only recovery by removing its unreachable name-entry branch; retry still passes `undefined`. |
+| `components/TagDetail.jsx` | Keep: member actions, tombstones and delete confirmation preserve memories and files; existing trigger/cancel refs support deliberate cancellation focus. |
+| `components/TagList.jsx` | Fix: associate local search errors with the tag-query field; preserve labelled identity controls, counts and bounded results. |
+| `components/TagMemorySummary.jsx` | Keep: pure metadata, attribution, date and excerpt rendering has active consumers and fetches no media. |
+| `components/TagNameForm.jsx` | Fix: associate create/rename validation with the name input while keeping the existing value and submission contract. |
+| `components/TagPaging.jsx` | Keep: list/member/selector paging and tombstone/error gates remain cohesive; deliberate read focus belongs to the hook. |
+| `components/Tags.jsx` | Fix: retain read-focus ownership outside the exact existing view/identity/revision/query editor key and expose a named page destination. |
+| `components/TagSelector.jsx` | Keep: review-status filters, metadata-only candidates and membership action arguments remain explicit and bounded. |
+| `components/TagsRecovery.jsx` | Fix: associate original-name validation with its separate retry input; keep busy-only recovery gates and same-name retry behavior. |
+| `hooks/useLibrary.js` | Fix: scope filter/picker validation, clear related local errors on correction and route deliberate reads through the persistent focus owner without changing applied-filter or draft-reset semantics. |
+| `hooks/useLibraryReadFocus.js` | Add: one helper shared by Library, Tags and MemoryTags retains a single read destination across editor resets and suppresses late focus after lifecycle or interactive focus changes. |
+| `hooks/useTags.js` | Fix: separate name/query/retry validation and correction, preserve delete-cancel restoration, and route paging/filter/reload focus through the persistent owner. |
+| `library.css` | Keep: scoped responsive filters, cards, controls and recovery styles have active consumers; no measured layout or efficiency defect warrants a rewrite. |
+| `libraryDisplay.js` | Fix: expose local filter/query errors using the existing normalization and date constraints, while giving current server feedback precedence. |
+| `libraryFilters.js` | Keep: raw UTF-16/storable-text limits, trimming, required names and filter combinations already match the shared contract. |
+| `tagDisplay.js` | Fix: prioritize current server read/mutation feedback over an older local validation message; retain the existing labels, counts and summaries. |
+
+The query regression is a direct-return context bug: opening a memory from a
+filtered tag list, searching the attachment picker and returning to that tag
+previously left the picker query in the tag detail's catalogue context. Capture
+the parent query privately before replacing that presentation, then restore it
+when returning. The actual UI's **All tags** action explicitly passes an empty
+query and intentionally starts an unfiltered list; that reset remains unchanged.
+No browser-history format or persistent private search context is added.
+
+Mock tag timestamps now clamp per existing tag, as the backend does. No-op
+renames retain their revision and timestamp, deletion uses the clamped time,
+and a newly created independent tag still uses the current clock. Existing
+scope-bound keyset anchors, stale-revision checks and cursor error order remain
+unchanged.
+
+Library, Tags and MemoryTags keep their previous editor reset identities, with
+deliberate read focus owned by their surrounding feature or memory boundary.
+Paging, filters and reloads can therefore focus their named destination after
+the response settles even when a partner revision replaces the local editor.
+Blur, hiding, traversal and an interactive focus move cancel that intent;
+ordinary typing and initial rendering do not request result focus. Memory-tag
+feedback and destinations also require visible client rectangles so a closed
+native details disclosure is not focused by a late response.
+
+Local correction clears the relevant field errors while current server errors,
+uncertain mutations and recovery controls remain available. Memory attachment
+recovery supports only add/remove intents; full Tags management retains the
+name-entry recovery needed for hidden create/rename attempts. No request,
+fingerprint, retry-identity, original-memory or audience behavior is broadened.
+
+The narrow `InboxScreens.jsx` and `MemoryDetail.jsx` integration passes the same
+reset keys into inner editors while preserving their outer focus owners. The
+existing inbox adapter test checks that contract. This wiring does not mark the
+whole inbox directory reviewed again. No new tracked test files or dependencies
+are added, and no unmeasured performance improvement is claimed.
+
+## Library and tags verification — October 19, 2026
+
+The initial focused baseline passed 24 existing API/presentation tests. Both new
+API regressions fail against the original source; the updated API suite passes
+**18/18 tests**, and the existing presentation suite passes **11/11 tests**.
+The shared inbox adapter case brings the focused run to **30 passing tests**.
+All **541 frontend tests** pass with zero skips, as do ESLint, the production
+build and diff checks on Node 24.16.0. Independent source review found no
+remaining actionable issues in the API, focus ownership, validation or recovery
+wiring.
+
+Mounted StrictMode Chromium verification passes **352 assertions** at 1280,
+390 and 320 px: 149 Library checks and 203 Tags/MemoryTags checks. The actual
+inbox controller and JSON mock adapter exercise bounded catalog/member/picker
+pages, parent-query return, literal filters, chooser drafts, partner revision
+reload, field correction, safe delete cancellation and terminal tombstones.
+Late success/failure respects blur, interactive focus and closed disclosures.
+Hidden rename attempts retain exact-name retry; hidden attachment attempts keep
+their name-free retry and shared write fence. All 25 original synthetic memory
+records remain identical as JSON in each fixture.
+
+Both runs have no page errors, external requests or horizontal overflow.
+Representative desktop/narrow validation and recovery screenshots were inspected;
+owned browser/server resources are closed. The temporary harness is preserved
+outside frontend source under ignored logs. Source hashes were recorded for all
+28 current library files and the three integration files; guest-flow source
+remains byte-identical. No backend or provider acceptance is claimed.
+
+Ignored reports and logs are under `logs/library-directory-review.local/`.
+These synthetic frontend checks do not establish real backend/provider, device
+or assistive-technology acceptance. Final-head CI and configured review remain
+required after PR creation. Merge timeline PR #71 before this branch.

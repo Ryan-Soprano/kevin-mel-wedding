@@ -44,6 +44,8 @@ export default function LibraryTagChooser({ view }) {
     disabled,
     tagQuery,
     setTagQuery,
+    fieldErrors,
+    registerField,
     handlers,
   } = view;
 
@@ -64,17 +66,28 @@ export default function LibraryTagChooser({ view }) {
       <form
         className="library-tag-search"
         onSubmit={handlers.searchTags}
+        aria-label="Search library filter tags"
       >
         <div>
           <label htmlFor="library-tag-query">Search tag names</label>
           <input
             id="library-tag-query"
+            ref={element => registerField("tagQuery", element)}
             type="search"
             maxLength={200}
             value={tagQuery}
             disabled={disabled}
+            aria-invalid={Boolean(fieldErrors.tagQuery)}
+            aria-describedby={
+              fieldErrors.tagQuery ? "library-tag-query-error" : undefined
+            }
             onChange={(event) => setTagQuery(event.target.value)}
           />
+          {fieldErrors.tagQuery && (
+            <p id="library-tag-query-error" className="form-error" role="alert">
+              {fieldErrors.tagQuery}
+            </p>
+          )}
         </div>
         <button type="submit" disabled={disabled}>
           Search filter tags

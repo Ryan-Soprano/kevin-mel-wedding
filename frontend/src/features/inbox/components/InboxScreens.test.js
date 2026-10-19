@@ -38,8 +38,8 @@ test("screen adapters preserve access precedence, creation guards and editor res
     assert.equal(render({ phase: "unknown", session: { authenticated: true } }), "");
 
     // Resolve only the pure adapter, leaving the feature component's hooks and
-    // local state intact. Albums transfers its reset key into a keyed editor so
-    // its unkeyed feature boundary can retain an in-flight paging-focus intent.
+    // local state intact. Features transfer reset keys into their editors so
+    // their unkeyed boundaries can retain deliberate request focus.
     const leaf = (snapshot, extra = {}) => {
       const route = InboxScreen({ view: { ...view, snapshot }, ...extra });
       return route.type(route.props);
@@ -105,6 +105,13 @@ test("screen adapters preserve access precedence, creation guards and editor res
       assert.notEqual(keyFor("library", { ...base.library, ...patch }), keyFor("library", base.library));
     }
     assert.notEqual(keyFor("tags", { ...keys.tags, q: "another tag" }), keyFor("tags", keys.tags));
+    for (const phase of ["library", "tags"]) {
+      assert.equal(
+        leaf({ ...base, phase, [phase]: keys[phase] }).key,
+        null,
+        `${phase} read focus survives its editor reset`,
+      );
+    }
     const create = leaf({ ...base, phase: "create" }, { audioEnabled: true });
     assert.equal(create.props.onNavigationStateChange, view.setCreationState);
     assert.equal(create.props.onDialogStateChange, view.setDialogState); assert.equal(create.props.audioEnabled, true);

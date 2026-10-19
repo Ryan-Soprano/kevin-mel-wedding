@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -7,8 +8,12 @@ import {
   normalizeLibraryFilters,
   normalizeLibraryQuery,
 } from "../libraryFilters.js";
+import {
+  getLibraryFilterErrors,
+  getLibraryQueryError,
+} from "../libraryDisplay.js";
 
-export function useLibrary({ state, busy, locked, actions }) {
+export function useLibrary({ state, busy, locked, actions, readFocus }) {
   const [q, setQ] = useState(state.filters.q);
   const [type, setType] = useState(state.filters.memoryType);
   const [status, setStatus] = useState(state.filters.reviewStatus);
@@ -20,24 +25,115 @@ export function useLibrary({ state, busy, locked, actions }) {
     state.filters.toYear?.toString() ?? "",
   );
   const [tagQuery, setTagQuery] = useState(state.tagQuery);
+  const [fieldErrors, setFieldErrors] = useState({});
   const [error, setError] = useState(null);
+  const fields = useRef({});
+  const validationFocus = useRef(null);
   const feedback = useRef(null);
   const disabled = busy || locked;
   const choosing = state.view === "chooseTag";
+  const cancelLocalFocus = useCallback(() => {
+    validationFocus.current = null;
+  }, []);
+  const registerField = useCallback((field, element) => {
+    fields.current[field] = element;
+  }, []);
 
   useEffect(() => {
-    if (error || state.error) {
+    const hidden = () => {
+      if (document.visibilityState === "hidden") {
+        cancelLocalFocus();
+      }
+    };
+    window.addEventListener("blur", cancelLocalFocus);
+    window.addEventListener("pagehide", cancelLocalFocus);
+    window.addEventListener("popstate", cancelLocalFocus);
+    document.addEventListener("visibilitychange", hidden);
+    return () => {
+      cancelLocalFocus();
+      window.removeEventListener("blur", cancelLocalFocus);
+      window.removeEventListener("pagehide", cancelLocalFocus);
+      window.removeEventListener("popstate", cancelLocalFocus);
+      document.removeEventListener("visibilitychange", hidden);
+    };
+  }, [cancelLocalFocus]);
+
+  const { canFocusFeedback } = readFocus;
+  useEffect(() => {
+    if (canFocusFeedback() && state.error) {
       feedback.current?.focus();
     }
-  }, [error, state.error]);
+  }, [state.error, canFocusFeedback]);
+
+  useEffect(() => {
+    if (!validationFocus.current || busy) {
+      return;
+    }
+    const target = fields.current[validationFocus.current] ?? feedback.current;
+    validationFocus.current = null;
+    if (target?.isConnected && !target.disabled) {
+      target.focus();
+    }
+  }, [fieldErrors, error, busy]);
+
+  function cancelPendingFocus() {
+    cancelLocalFocus();
+    readFocus.cancel();
+  }
+
+  function invoke(method, ...args) {
+    cancelLocalFocus();
+    readFocus.activate();
+    return actions[method](...args);
+  }
+
+  function request(method, context, ...args) {
+    cancelLocalFocus();
+    readFocus.begin(context);
+    return actions[method](...args);
+  }
+
+  function clearValidation(changedFields) {
+    setFieldErrors((current) => {
+      if (!changedFields) {
+        return {};
+      }
+      const next = { ...current };
+      for (const field of changedFields) {
+        delete next[field];
+      }
+      return next;
+    });
+    setError(null);
+  }
+
+  function showValidation(errors, message) {
+    readFocus.cancel();
+    validationFocus.current = Object.keys(errors)[0] ?? "feedback";
+    setFieldErrors(errors);
+    setError(message ?? null);
+  }
+
+  function changeField(field, value) {
+    cancelPendingFocus();
+    const setters = {
+      q: setQ,
+      memoryType: setType,
+      reviewStatus: setStatus,
+      datePrecision: setPrecision,
+      fromYear: setFromYear,
+      toYear: setToYear,
+      tagQuery: setTagQuery,
+    };
+    setters[field](value);
+    // Range and UNKNOWN errors depend on all three date-filter controls.
+    const changedFields = ["datePrecision", "fromYear", "toYear"].includes(field)
+      ? ["datePrecision", "fromYear", "toYear"]
+      : [field];
+    clearValidation(changedFields);
+  }
 
   function filters() {
-    const invalidYear = [fromYear, toYear].some(
-      (value) => value && !/^\d{1,4}$/.test(value),
-    );
-    if (invalidYear) {
-      throw new TypeError("Use years between 1 and 9999.");
-    }
     return normalizeLibraryFilters({
       q,
       memoryType: type,
@@ -49,56 +145,79 @@ export function useLibrary({ state, busy, locked, actions }) {
     });
   }
 
-  function apply(event) {
-    event.preventDefault();
+  function withFilters(method, context, transform = value => value) {
+    if (disabled) {
+      return;
+    }
+    cancelPendingFocus();
+    const errors = getLibraryFilterErrors({
+      q,
+      type,
+      status,
+      precision,
+      fromYear,
+      toYear,
+    });
+    if (Object.keys(errors).length) {
+      showValidation(errors);
+      return;
+    }
     try {
-      setError(null);
-      void actions.list(filters());
+      const normalized = transform(filters());
+      clearValidation();
+      void request(method, context, normalized);
     } catch (failure) {
-      setError(failure.message);
+      showValidation({}, failure.message);
     }
   }
 
+  function apply(event) {
+    event.preventDefault();
+    withFilters("list", "search");
+  }
+
   function choose() {
-    try {
-      setError(null);
-      void actions.choose(filters());
-    } catch (failure) {
-      setError(failure.message);
-    }
+    withFilters("choose", "chooseTag");
   }
 
   function searchTags(event) {
     event.preventDefault();
+    if (disabled) {
+      return;
+    }
+    cancelPendingFocus();
+    const queryError = getLibraryQueryError(tagQuery);
+    if (queryError) {
+      showValidation({ tagQuery: queryError });
+      return;
+    }
     try {
-      setError(null);
-      void actions.choose(
+      clearValidation();
+      void request(
+        "choose",
+        "chooseTag",
         state.draftFilters,
         normalizeLibraryQuery(tagQuery),
       );
     } catch (failure) {
-      setError(failure.message);
+      showValidation({}, failure.message);
     }
   }
 
   function clearTag() {
-    try {
-      setError(null);
-      void actions.list({
-        ...filters(),
-        tagId: null,
-      });
-    } catch (failure) {
-      setError(failure.message);
-    }
+    withFilters("list", "search", value => ({ ...value, tagId: null }));
   }
 
   function resetSearch() {
-    return actions.list(normalizeLibraryFilters());
+    clearValidation();
+    return request("list", "search", normalizeLibraryFilters());
   }
 
   function cancelTagSelection() {
-    return actions.list(
+    clearValidation();
+    return request(
+      "list",
+      "search",
       state.filters,
       state.cursors.at(-1),
       state.cursors,
@@ -106,42 +225,52 @@ export function useLibrary({ state, busy, locked, actions }) {
   }
 
   function reloadFirstPage() {
+    clearValidation();
     if (choosing) {
-      return actions.choose(state.draftFilters, state.tagQuery);
+      return request("choose", "chooseTag", state.draftFilters, state.tagQuery);
     }
-    return actions.list(state.filters);
+    return request("list", "search", state.filters);
   }
 
   function previousPage() {
-    return actions.page(false);
+    return request("page", state.view, false);
   }
 
   function nextPage() {
-    return actions.page(true);
+    return request("page", state.view, true);
   }
 
   return {
     feedback,
+    pageStatus: readFocus.target,
     view: {
       state,
       busy,
       disabled,
       choosing,
-      actions,
+      actions: {
+        ...actions,
+        inbox: () => invoke("inbox"),
+        tags: () => invoke("tags"),
+        open: id => invoke("open", id),
+        selectTag: tag => request("selectTag", "search", tag),
+      },
       q,
-      setQ,
+      setQ: value => changeField("q", value),
       type,
-      setType,
+      setType: value => changeField("memoryType", value),
       status,
-      setStatus,
+      setStatus: value => changeField("reviewStatus", value),
       precision,
-      setPrecision,
+      setPrecision: value => changeField("datePrecision", value),
       fromYear,
-      setFromYear,
+      setFromYear: value => changeField("fromYear", value),
       toYear,
-      setToYear,
+      setToYear: value => changeField("toYear", value),
       tagQuery,
-      setTagQuery,
+      setTagQuery: value => changeField("tagQuery", value),
+      fieldErrors,
+      registerField,
       error,
       handlers: {
         apply,
