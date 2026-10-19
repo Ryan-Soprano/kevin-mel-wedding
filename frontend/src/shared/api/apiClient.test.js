@@ -1,11 +1,31 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createServer } from "node:http";
 import { createApiClient } from "./apiClient.js";
 import { IDS, VALIDATION_ERROR } from "./v1/fixtures.js";
 
 const json = (body, status = 200, headers = {}) => new Response(JSON.stringify(body), {
   status, headers: { "Content-Type": "application/json", ...headers },
 });
+
+async function startLocalServer(context, handler) {
+  const server = createServer(handler);
+  context.after(async () => {
+    server.closeAllConnections();
+    if (!server.listening) return;
+    await new Promise((resolve, reject) => {
+      server.close(error => error ? reject(error) : resolve());
+    });
+  });
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      server.removeListener("error", reject);
+      resolve();
+    });
+  });
+  return `http://127.0.0.1:${server.address().port}`;
+}
 
 test("JSON transport sends same-origin cookies and the v1 contract header", async () => {
   let observed;
@@ -18,6 +38,7 @@ test("JSON transport sends same-origin cookies and the v1 contract header", asyn
     headers: { "Idempotency-Key": IDS.key },
   }), { ok: true });
   assert.equal(observed.credentials, "same-origin");
+  assert.equal(observed.redirect, "error");
   assert.equal(observed.cache, "no-store");
   assert.equal(observed.headers.get("X-Api-Contract"), "1");
   assert.equal(observed.headers.get("Content-Type"), "application/json");
@@ -26,6 +47,71 @@ test("JSON transport sends same-origin cookies and the v1 contract header", asyn
   await assert.rejects(client.request("https://other.example/api/session"), TypeError);
   await assert.rejects(client.request("/api/session#fragment"), TypeError);
 });
+
+for (const destination of ["same origin", "another origin"]) {
+  for (const method of ["GET", "POST"]) {
+    test(`JSON ${method} rejects a redirect to ${destination} before forwarding private headers or content`, {
+      timeout: 5_000,
+    }, async context => {
+      const forwarded = [];
+      const collect = (request, response) => {
+        let body = "";
+        request.setEncoding("utf8");
+        request.on("data", chunk => { body += chunk; });
+        request.on("error", () => response.destroy());
+        request.on("end", () => {
+          forwarded.push({
+            method: request.method,
+            csrfToken: request.headers["x-csrf-token"],
+            idempotencyKey: request.headers["idempotency-key"],
+            body,
+          });
+          response.writeHead(200, { "Content-Type": "application/json" });
+          response.end(JSON.stringify({ ok: true }));
+        });
+      };
+      const otherOrigin = await startLocalServer(context, collect);
+      let location;
+      let initialRequests = 0;
+      const origin = await startLocalServer(context, (request, response) => {
+        if (request.url !== "/api/session") {
+          collect(request, response);
+          return;
+        }
+        initialRequests += 1;
+        request.resume();
+        response.writeHead(307, { Location: location });
+        response.end();
+      });
+      location = destination === "same origin"
+        ? `${origin}/outside-api`
+        : `${otherOrigin}/outside-api`;
+      const client = createApiClient({
+        fetchImpl: (path, options) => fetch(origin + path, options),
+      });
+      let failure;
+      try {
+        await client.request("/api/session", {
+          method,
+          headers: {
+            "X-CSRF-TOKEN": "synthetic-csrf-token",
+            "Idempotency-Key": IDS.key,
+          },
+          body: method === "POST"
+            ? { username: "synthetic-user", password: "synthetic-password" }
+            : undefined,
+          signal: AbortSignal.timeout(2_000),
+        });
+      } catch (error) {
+        failure = error;
+      }
+      assert.equal(initialRequests, 1);
+      assert.deepEqual(forwarded, []);
+      assert.equal(failure?.code, "NETWORK_ERROR");
+      assert.equal(failure.unknownOutcome, method === "POST");
+    });
+  }
+}
 
 test("structured errors retain safe request IDs and field-level validation", async () => {
   const client = createApiClient({ fetchImpl: async () => json(VALIDATION_ERROR, 400) });

@@ -59,6 +59,7 @@ export function createApiClient({ fetchImpl = globalThis.fetch } = {}) {
           method,
           headers: requestHeaders,
           credentials: "same-origin",
+          redirect: "error",
           cache: "no-store",
           body: body === undefined ? undefined : JSON.stringify(body),
           signal,

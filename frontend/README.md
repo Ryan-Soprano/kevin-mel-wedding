@@ -10,7 +10,7 @@ For prerequisites, install/run/check commands, the development proxy, and curren
 | [src/app/App.jsx](src/app/App.jsx) | Top-level application shell |
 | [src/features/contribution/](src/features/contribution/) | Guest text form and retained draft/key coordinator in api/textSubmission.js |
 | [src/features/contribution/components/ContributionForm.jsx](src/features/contribution/components/ContributionForm.jsx) | Direct-send note form and result views; the hook owns editable state, validation, focus and coordinator wiring while the retained submission lifecycle stays in api/textSubmission.js |
-| [src/features/media/](src/features/media/) | Active batch photo form/coordinator, shared controlled picker, constraints/previews and the retained MED-01 singleton coordinator |
+| [src/features/media/](src/features/media/) | Active batch photo form/coordinator, shared controlled picker, constraints/previews and retained original-file retry state |
 | [src/features/media/components/PhotoBatchForm.jsx](src/features/media/components/PhotoBatchForm.jsx) | Photo batch shell and compose/review/card/action views; the form hook owns editable state, focus and coordinator wiring while the upload lifecycle stays in api/photoBatchSubmission.js |
 | [src/features/library/components/Tags.jsx](src/features/library/components/Tags.jsx) | Persistent tag boundary and keyed list/name/detail/selector/recovery editor; its hook owns local drafts, field validation, deletion focus and action wiring while the tag coordinator owns requests, return context and retry identity |
 | [src/features/library/components/MemoryTags.jsx](src/features/library/components/MemoryTags.jsx) | Memory-owned tag attachment boundary with a keyed picker editor; preserves attachment-only recovery and suppresses delayed focus inside closed memory details |
@@ -24,7 +24,7 @@ For prerequisites, install/run/check commands, the development proxy, and curren
 | [src/features/inbox/api/inboxHistory.js](src/features/inbox/api/inboxHistory.js) | Browser Back/Forward with fresh private reads, mutation guards and disposable in-memory route metadata; browser history contains opaque keys only |
 | [src/app/guestHistory.js](src/app/guestHistory.js) / [useGuestHistory.js](src/app/useGuestHistory.js) | Guest screen history; visited forms retain drafts in memory and pending submissions block traversal |
 | [src/shared/components/MemoryChoice.jsx](src/shared/components/MemoryChoice.jsx) | Accessible memory-type cards shared by guest and private creation screens |
-| [src/features/guestGallery/](src/features/guestGallery/) | Approved public photos, the welcome collage, single-photo slideshow and batched thumbnail browser; separate from private archive data |
+| [src/features/guestGallery/](src/features/guestGallery/) | Approved public photos, the welcome scrapbook, single-photo slideshow and batched thumbnail browser; separate from private archive data |
 | [src/features/inbox/api/inboxController.js](src/features/inbox/api/inboxController.js) | Private state publication, access checks, cancellation, lifecycle and navigation; composes feature actions |
 | [src/features/inbox/api/memoryMutationActions.js](src/features/inbox/api/memoryMutationActions.js) | Memory review, audiences, private links and metadata edits, including revision checks and unconfirmed-action recovery |
 | [src/features/inbox/api/inboxMedia.js](src/features/inbox/api/inboxMedia.js) | Original photo/audio loading, integrity checks and owned preview URL cleanup |

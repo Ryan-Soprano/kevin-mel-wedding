@@ -138,6 +138,54 @@ test("saved items replay expired grants without accepting foreign ownership or e
   assert.equal(page.items.filter((item) => item.contributionId === receipt.contributionId).length, 1);
 });
 
+test("unfinished items reuse unexpired grants and renew at the exact server deadline", async (t) => {
+  const localTime = Date.now();
+  t.mock.method(Date, "now", () => localTime);
+  let serverTime = localTime;
+  const api = createMockArchiveApi({ now: () => serverTime });
+  const receipt = await api.createMediaContribution(PHOTO_REQUEST, options);
+  const memoryId = receipt.memories[0].memoryId;
+  const grant = await api.authorizeUpload(receipt.contributionId, memoryId, options);
+  assert.equal(grant.expiresAt, new Date(serverTime + 300000).toISOString());
+  await api.uploadMedia(grant, new Blob(["synthetic bytes"]));
+
+  serverTime += 299999;
+  assert.deepEqual(await api.authorizeUpload(receipt.contributionId, memoryId, options), grant);
+  const partial = await api.finalizeUpload(receipt.contributionId, memoryId, grant.grantId, options);
+  assert.equal(partial.memories[0].uploadState, "UPLOADED");
+  assert.equal(partial.memories[1].uploadState, "PENDING");
+
+  const pendingMemoryId = receipt.memories[1].memoryId;
+  const pendingGrant = await api.authorizeUpload(receipt.contributionId, pendingMemoryId, options);
+  serverTime = Date.parse(pendingGrant.expiresAt);
+  await assert.rejects(api.uploadMedia(pendingGrant, new Blob(["synthetic bytes"])), {
+    code: "UPLOAD_GRANT_EXPIRED",
+    status: 403,
+  });
+  await assert.rejects(api.finalizeUpload(receipt.contributionId, pendingMemoryId, pendingGrant.grantId, options), {
+    code: "UPLOAD_GRANT_EXPIRED",
+    status: 410,
+  });
+
+  const renewed = await api.authorizeUpload(receipt.contributionId, pendingMemoryId, options);
+  assert.notEqual(renewed.grantId, pendingGrant.grantId);
+  assert.equal(renewed.expiresAt, new Date(serverTime + 300000).toISOString());
+  serverTime -= 1;
+  assert.deepEqual(await api.authorizeUpload(receipt.contributionId, pendingMemoryId, options), renewed);
+  serverTime += 1;
+  await assert.rejects(api.finalizeUpload(receipt.contributionId, pendingMemoryId, renewed.grantId, options), {
+    code: "UPLOAD_INCOMPLETE",
+    status: 409,
+  });
+  await api.uploadMedia(renewed, new Blob(["synthetic bytes"]));
+  const complete = await api.finalizeUpload(receipt.contributionId, pendingMemoryId, renewed.grantId, options);
+  assert.equal(complete.completion, "COMPLETE");
+  assert.deepEqual(complete.memories[0], partial.memories[0]);
+  assert.equal(complete.memories[1].memoryId, pendingMemoryId);
+  assert.equal(complete.memories[1].uploadState, "UPLOADED");
+  assert.deepEqual(await api.getReceipt(receipt.contributionId, options), complete);
+});
+
 test("expired grants renew against the same item; premature finalization fails", async () => {
   const api = createMockArchiveApi({ scenario: "expiredGrant" });
   const receipt = await api.createMediaContribution(AUDIO_REQUEST, options);
@@ -298,6 +346,93 @@ test("first DELETE uses server time and repeated DELETE cannot extend its recove
     code: "REVIEW_CONFLICT", status: 412,
   });
   assert.deepEqual((await api.listMemories({ reviewStatus: "DELETE" })).items, [deleted]);
+});
+
+test("metadata and review changes preserve updatedAt on clock rollback without extending deletion recovery", async () => {
+  let now = REVIEW_TIME;
+  const api = createMockArchiveApi({ now: () => now });
+  const session = await signIn(api);
+  const csrf = { csrfToken: session.csrfToken };
+  const metadata = {
+    title: "First title",
+    description: null,
+    memoryDate: null,
+    datePrecision: "UNKNOWN",
+  };
+  const edited = await api.updateMemoryMetadata(IDS.text, metadata, {
+    ...csrf,
+    revision: 1,
+  });
+
+  now -= 3600000;
+  const kept = await api.reviewMemory(IDS.text, {
+    reviewStatus: "KEEP",
+    revision: edited.revision,
+  }, csrf);
+  assert.equal(kept.updatedAt, edited.updatedAt);
+  assert.equal(kept.revision, edited.revision + 1);
+
+  now -= 3600000;
+  const renamed = await api.updateMemoryMetadata(IDS.text, {
+    ...metadata,
+    title: "Second title",
+  }, { ...csrf, revision: kept.revision });
+  assert.equal(renamed.updatedAt, kept.updatedAt);
+  assert.equal(renamed.revision, kept.revision + 1);
+
+  const deleted = await api.reviewMemory(IDS.text, {
+    reviewStatus: "DELETE",
+    revision: renamed.revision,
+  }, csrf);
+  assert.equal(deleted.updatedAt, renamed.updatedAt);
+  assert.equal(deleted.deleteAfter, new Date(now + 30 * DAY).toISOString());
+  now -= 3600000;
+  assert.deepEqual(await api.reviewMemory(IDS.text, {
+    reviewStatus: "DELETE",
+    revision: deleted.revision,
+  }, csrf), deleted);
+  assert.deepEqual(await api.getMemory(IDS.text), deleted);
+});
+
+test("audience changes update memory and receipt together while preserving originals and private review states", async () => {
+  const api = createMockArchiveApi({ now: () => REVIEW_TIME });
+  const receipt = await api.createTextContribution(TEXT_REQUEST, options);
+  const session = await signIn(api);
+  const csrf = { csrfToken: session.csrfToken };
+  const memoryId = receipt.memories[0].memoryId;
+  const original = await api.getMemory(memoryId);
+  let current = original;
+
+  for (const [reviewStatus, visibility] of [
+    ["KEEP", "PUBLIC"],
+    ["KEEP", "FRIENDS_FAMILY"],
+    ["ARCHIVED", "COUPLE_ONLY"],
+    ["KEEP", "COUPLE_ONLY"],
+  ]) {
+    const previous = current;
+    current = await api.reviewMemory(memoryId, {
+      reviewStatus,
+      visibility,
+      revision: previous.revision,
+    }, csrf);
+    assert.deepEqual(current, {
+      ...original,
+      reviewStatus,
+      visibility,
+      revision: previous.revision + 1,
+      updatedAt: new Date(REVIEW_TIME).toISOString(),
+    });
+    assert.deepEqual((await api.getReceipt(receipt.contributionId, options)).memories, [{
+      ...receipt.memories[0],
+      reviewStatus,
+      visibility,
+    }]);
+    assert.deepEqual(await api.reviewMemory(memoryId, {
+      reviewStatus,
+      revision: current.revision,
+    }, csrf), current);
+    assert.deepEqual(await api.getMemory(memoryId), current);
+  }
 });
 
 test("deleted text and photos remain recoverable before expiry and disappear at the exact deadline", async () => {

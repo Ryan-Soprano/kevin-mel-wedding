@@ -59,14 +59,19 @@ test("signed PUT permission expiry remains a retryable item and cannot clear aut
 });
 
 test("private photo retry renews a rejected signed grant and transfers the identical retained original", async () => {
-  const api = createMockArchiveApi();
+  let serverTime = Date.now();
+  const api = createMockArchiveApi({ now: () => serverTime });
   const anonymous = await api.getSession();
   await api.login({ username: "fixture", password: "synthetic" }, { csrfToken: anonymous.csrfToken });
   const session = await api.getSession(), transfers = []; let clears = 0;
   const transfer = api.uploadMedia;
   api.uploadMedia = async (grant, original, options) => {
     transfers.push([grant.grantId, original]);
-    if (transfers.length === 1) throw new ApiError("expired signed grant", { status: 403, code: "UPLOAD_GRANT_EXPIRED" });
+    if (transfers.length === 1) {
+      // The server expires the permission before PUT while the client's local
+      // clock still accepts it. Exercise the actual synthetic storage rejection.
+      serverTime = Date.parse(grant.expiresAt);
+    }
     return transfer(grant, original, options);
   };
   const privateApi = createCoupleSubmissionApi({ api, getSession: () => session, onAccessFailure: () => clears++ });
@@ -105,9 +110,11 @@ test("metadata PATCH enforces exact fields/revision/CSRF and rejects malformed s
   for (etag of [null, 'W/"2"', '"3"']) await assert.rejects(api.updateMemoryMetadata(IDS.text, target, { revision: 1, csrfToken: COUPLE_SESSION.csrfToken }), { code: "CONTRACT_MISMATCH", unknownOutcome: true });
 });
 
-test("shared coordinator fixture privately creates note/photo/audio, keeps originals and blocks guest capability access", async () => {
+test("shared coordinator fixture privately creates note/photo/audio, keeps originals and blocks guest capability access", async (context) => {
   // Synthetic adapter/coordinator fixture, not DOM, codecs, R2 or physical-browser acceptance.
-  const api = createMockArchiveApi({ now: () => Date.parse("2026-11-01T00:00:00Z") });
+  const time = Date.parse("2026-11-01T00:00:00Z");
+  context.mock.method(Date, "now", () => time);
+  const api = createMockArchiveApi({ now: () => time });
   const originals = [], transfer = api.uploadMedia;
   api.uploadMedia = async (grant, file, options) => { originals.push(file); return transfer(grant, file, options); };
   const initial = await api.getSession(); await api.login({ username: "fixture", password: "synthetic" }, { csrfToken: initial.csrfToken });
@@ -253,12 +260,19 @@ for (const phase of ["immediate success", "same-revision reconciliation"]) {
         value = { ...original, ...target, visibility: "PUBLIC", revision: 2 }; etag = '"2"';
       } else if (path === "/api/session") value = COUPLE_SESSION;
       else if (path.includes("/tags?")) value = { memoryId: IDS.text, items: [], nextCursor: null };
-      else if (path.includes("?")) value = { items: [readMemory], nextCursor: null };
-      else value = readMemory;
+      else if (path.includes("?")) {
+        const reviewStatus = new URLSearchParams(path.split("?")[1]).get("reviewStatus");
+        value = {
+          items: readMemory.reviewStatus === reviewStatus ? [readMemory] : [],
+          nextCursor: null,
+        };
+      } else value = readMemory;
       return new Response(JSON.stringify(value), { headers: { "Content-Type": "application/json", ...(etag ? { ETag: etag } : {}) } });
     } }) });
     const controller = await entered(api);
     try {
+      assert.equal(controller.getSnapshot().phase, "detail");
+      assert.deepEqual(controller.getSnapshot().detail, original);
       await controller.saveMetadata(target);
       if (phase === "same-revision reconciliation") {
         readMemory = { ...original, visibility: "PUBLIC" };

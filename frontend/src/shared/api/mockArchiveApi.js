@@ -38,7 +38,10 @@ function wait(ms, signal) {
   });
 }
 
-/** An isolated in-memory server used through the real adapter and JSON transport. */
+/**
+ * Isolated synthetic server through the real adapter and JSON transport.
+ * Uploads model lifecycle states without inspecting or persisting original bytes.
+ */
 export function createMockArchiveApi({ scenario = "success", delayMs = 0, now = () => Date.now() } = {}) {
   if (!SCENARIOS.includes(scenario)) throw new TypeError("Unknown mock scenario.");
   const contributions = new Map();
@@ -170,10 +173,19 @@ export function createMockArchiveApi({ scenario = "success", delayMs = 0, now = 
       if (!memory || memory.memoryType === "TEXT") return failure("NOT_FOUND", "That upload is unavailable.", 404);
       if (mediaPath[3] === "upload-grants") {
         if (memory.uploadState === "UPLOADED") return failure("ALREADY_COMPLETE", "This item is already saved.", 409);
+        const serverTime = now();
+        let activeGrant = null;
+        // A clock rollback can make older grants unexpired again; retain the latest issued match.
+        for (const transfer of grants.values()) {
+          if (transfer.memory === memory && Date.parse(transfer.grant.expiresAt) > serverTime) {
+            activeGrant = transfer.grant;
+          }
+        }
+        if (activeGrant) return reply(activeGrant, 201);
         const grant = { ...clone(UPLOAD_GRANT), grantId: nextId() };
         grant.uploadUrl = "https://uploads.example.test/" + grant.grantId;
         grant.expiresAt = scenario === "expiredGrant" ? "2000-01-01T00:00:00.000Z"
-          : new Date(Date.now() + 300000).toISOString();
+          : new Date(serverTime + 300000).toISOString();
         grant.headers["Content-Type"] = entry.payload.items.find((item) =>
           item.clientItemId === memory.clientItemId).declaredContentType;
         grants.set(grant.grantId, { entry, memory, grant, uploaded: false });
@@ -184,7 +196,7 @@ export function createMockArchiveApi({ scenario = "success", delayMs = 0, now = 
       // The backend replays a saved item after validating this grant's ownership,
       // even if its temporary transfer permission has since expired.
       if (memory.uploadState === "UPLOADED") return reply(refreshReceipt(entry));
-      if (Date.parse(transfer.grant.expiresAt) <= Date.now()) {
+      if (Date.parse(transfer.grant.expiresAt) <= now()) {
         return failure("UPLOAD_GRANT_EXPIRED", "Request a new upload link for this item.", 410);
       }
       if (!transfer.uploaded) return failure("UPLOAD_INCOMPLETE", "The file transfer is not complete.", 409);
@@ -222,6 +234,7 @@ export function createMockArchiveApi({ scenario = "success", delayMs = 0, now = 
             || (["PHOTO", "AUDIO"].includes(item.memoryType) && item.media?.uploadState === "UPLOADED"))
           && item.reviewStatus === (url.searchParams.get("reviewStatus") ?? "PENDING"))
           .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.memoryId.localeCompare(a.memoryId));
+        // Synthetic offsets do not model production keyset paging during concurrent list edits.
         const offset = Number((url.searchParams.get("cursor") ?? "offset:0").split(":")[1]);
         const limit = Number(url.searchParams.get("limit") ?? 20);
         if (!Number.isSafeInteger(offset) || offset < 0) return failure("INVALID_CURSOR", "Reload the list.", 400);
@@ -249,8 +262,11 @@ export function createMockArchiveApi({ scenario = "success", delayMs = 0, now = 
         let metadata;
         try { metadata = normalizeMemoryMetadata(body); } catch { return failure("VALIDATION_FAILED", "Check the metadata fields.", 400); }
         if (!sameMetadata(memory, metadata)) {
-          Object.assign(memory, metadata); memory.revision++;
-          memory.updatedAt = new Date(Math.max(serverTime, Date.parse(memory.createdAt))).toISOString();
+          Object.assign(memory, metadata);
+          memory.revision++;
+          memory.updatedAt = new Date(
+            Math.max(serverTime, Date.parse(memory.updatedAt)),
+          ).toISOString();
           if (scenario === "uncertainSubmission" && !lostMetadataResponse) {
             lostMetadataResponse = true; throw new TypeError("Synthetic lost response after metadata commit.");
           }
@@ -266,20 +282,32 @@ export function createMockArchiveApi({ scenario = "success", delayMs = 0, now = 
         if (!["PENDING", "KEEP", "ARCHIVED", "DELETE"].includes(body?.reviewStatus)) {
           return failure("VALIDATION_FAILED", "Choose a valid review state.", 400);
         }
-        if (memory.reviewStatus === body.reviewStatus) return reply(memory, 200, { ETag: '"' + memory.revision + '"' });
+        let visibility = body.visibility ?? memory.visibility;
+        if (body.reviewStatus !== "KEEP" || memory.reviewStatus === "DELETE") {
+          visibility = "COUPLE_ONLY";
+        }
+        if (memory.reviewStatus === body.reviewStatus && memory.visibility === visibility) {
+          return reply(memory, 200, { ETag: '"' + memory.revision + '"' });
+        }
         const deleting = body.reviewStatus === "DELETE";
         memory.reviewStatus = body.reviewStatus;
+        memory.visibility = visibility;
         if (deleting) albumServer.detachMemory(memory.memoryId);
         if (deleting) timelineServer.detachMemory(memory.memoryId);
         if (deleting) libraryServer.detachMemory(memory.memoryId);
         for (const entry of contributions.values()) {
-          const receiptMemory = entry.receipt.memories.find(item => item.memoryId === memory.memoryId);
-          if (receiptMemory) receiptMemory.reviewStatus = memory.reviewStatus;
+          const receiptMemory = entry.receipt.memories.find(
+            (item) => item.memoryId === memory.memoryId,
+          );
+          if (receiptMemory) {
+            receiptMemory.reviewStatus = memory.reviewStatus;
+            receiptMemory.visibility = memory.visibility;
+          }
         }
         memory.revision += 1;
-        memory.updatedAt = new Date(serverTime).toISOString();
-        // Fixtures describe a future wedding; keep the mock clock ordered.
-        if (Date.parse(memory.updatedAt) < Date.parse(memory.createdAt)) memory.updatedAt = memory.createdAt;
+        memory.updatedAt = new Date(
+          Math.max(serverTime, Date.parse(memory.updatedAt)),
+        ).toISOString();
         memory.deleteAfter = deleting
           ? new Date(serverTime + 30 * 86400000).toISOString() : null;
         if (scenario === "uncertainSubmission" && !lostReviewResponse) {
@@ -296,7 +324,7 @@ export function createMockArchiveApi({ scenario = "success", delayMs = 0, now = 
     await wait(delayMs, options.signal);
     const grant = grants.get(new URL(url).pathname.slice(1));
     if (!grant) return reply(null, 404);
-    if (Date.parse(grant.grant.expiresAt) <= Date.now()) return reply(null, 403);
+    if (Date.parse(grant.grant.expiresAt) <= now()) return reply(null, 403);
     if (scenario === "partialUpload" && grant.entry.receipt.memories.indexOf(grant.memory) === 1 && !failedTransfer) {
       failedTransfer = true;
       // A direct storage PUT cannot mutate the application's receipt.

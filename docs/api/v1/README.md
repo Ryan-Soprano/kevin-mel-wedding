@@ -9,7 +9,7 @@ adapters, and tests together.
 
 MSG-01 implements durable text POST and key-bound text receipt GET, and the wedding form uses the [real adapter](../../../frontend/src/shared/api/archiveApi.js). New text returns 201 only after commit; equivalent retries return 200 with original identity and current states. The [mock](../../../frontend/src/shared/api/mockArchiveApi.js) remains an isolated synthetic server behind the real transport/decoders.
 
-MED-01 implements PHOTO intents (one to five), capability-bound grants/finalization, and generic receipt GET, plus a minimal single-photo wedding form. Storage is opt-in and requires a private R2 bucket configured by Ryan. Desktop PNG operator comparison/restart/replay and scripted real-R2 JPEG/WebP upload, recovery and grant checks are verified; physical-phone, additional operator comparison and bucket-settings acceptance are pending. See [text verification](text-verification.md), [photo verification](photo-verification.md), and the [R2 runbook](../../runbooks/private-photo-storage.md).
+MED-01 implements PHOTO intents (one to five), capability-bound grants/finalization, and generic receipt GET. The active guest/private forms use the MED-02 batch coordinator; the retired single-photo form and its unused coordinator have been removed. Storage is opt-in and requires a private R2 bucket configured by Ryan. Desktop PNG operator comparison/restart/replay and scripted real-R2 JPEG/WebP upload, recovery and grant checks are verified; physical-phone, additional operator comparison and bucket-settings acceptance are pending. See [text verification](text-verification.md), [photo verification](photo-verification.md), and the [R2 runbook](../../runbooks/private-photo-storage.md).
 
 AUTH-01 implements GET/POST/DELETE `/api/session` with Spring Security server-side sessions, PostgreSQL accounts, bcrypt password hashes, CSRF/session rotation, durable login throttling, credential-version revocation, and reveal/role gates. Provisioning and recovery use a separate console utility. See [AUTH-01 verification](auth-verification.md) and the [account-access runbook](../../runbooks/account-access.md).
 
@@ -31,12 +31,12 @@ SEC-01 protects note/photo creation, receipt, grant and finalize before body par
 
 New photo intents and temporary permissions have separate serialized 7.5 GB reservation budgets. Pausing/capacity failures return `503 MEDIA_UNAVAILABLE` with `Retry-After: 60`; busy finalization returns the same code with `Retry-After: 5`. Honor valid 429/503 delays, retain original input/key and saved siblings, and retry deliberately. A pause preserves equivalent intent replay, existing unexpired permission recovery and finalization. Expired staging reservations require confirmed cleanup before release. See the [operator runbook](../../runbooks/guest-protection.md).
 
-- Same-origin REST/JSON under `/api`. Send `Accept: application/json`,
+- Same-origin REST/JSON under `/api`. The JSON adapter rejects redirects before forwarding API headers or bodies. Send `Accept: application/json`,
   `X-Api-Contract: 1`, and `Content-Type: application/json` for bodies.
 - The v1 server must honor version 1 without silently falling back to echo.
   Missing or unsupported versions return 400 UNSUPPORTED_CONTRACT on creation/receipt/grant/finalize/session/inbox/detail/playback. There is no echo fallback.
 - Response caching is `Cache-Control: no-store`. JSON is camelCase, IDs are UUIDs,
-  and timestamps are UTC ISO-8601 strings ending in Z.
+  and timestamps are actual UTC calendar instants ending in Z, with up to nine fractional digits. Shared decoders preserve the original strings and compare timestamp ordering without truncating fractions. The shared contribution and memory adapters compare UUID identities independently of case while preserving response spelling.
 - Required fields must have the documented type; nullable response fields are
   explicitly null, not omitted. Clients tolerate additional nonsensitive response
   fields; servers reject unknown request fields.
@@ -355,6 +355,8 @@ AbortSignal as required. Adapters do not retain secrets, own UI state, or auto-r
 
 Run `npm --prefix frontend test`, using Node's built-in runner with no dependency.
 Tests exercise the real JSON transport/decoders against mocks and malformed responses.
+The shared decoder rejects malformed or case-equivalent duplicate receipt members and inbox pages exceeding their requested limit or review filter. Inbox continuation cursors are null or nonempty strings of at most 256 characters. The mock preserves review audiences, nondecreasing mutation times and active-grant identity/expiry; its byte verification and offset pagination remain synthetic. Per-file review and verification are recorded in the [directory review guide](../../development/directory-review.md#shared-api-decisions--october-19-2026).
+
 The dev-only `/contract-preview.html` offers synthetic UI scenarios; the normal
 production index.html build excludes preview/mock code.
 

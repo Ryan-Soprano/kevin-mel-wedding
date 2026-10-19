@@ -6,10 +6,12 @@ import { createAudioSubmission } from "../features/audio/api/audioSubmission.js"
 import { createInboxController } from "../features/inbox/api/inboxController.js";
 import { createMockArchiveApi } from "../shared/api/mockArchiveApi.js";
 
+const JOURNEY_TIME = Date.parse("2026-10-24T19:00:00Z");
+
 // Synthetic adapter/coordinator fixture: this exercises the real JSON decoders
 // and private presentation controller, not DOM, codecs, R2 or physical-browser acceptance.
 function fixture() {
-  const time = Date.parse("2026-10-24T19:00:00Z");
+  const time = JOURNEY_TIME;
   const mock = createMockArchiveApi({ scenario: "uncertainSubmission", now: () => time });
   const grants = new Map(), originals = new Map(), uploads = [], created = [], revoked = [], downloads = [];
   let playbackMemoryId;
@@ -57,6 +59,7 @@ function fixture() {
 }
 
 test("guest notes, partial photos and anonymous audio reach one private inbox and survive review, recovery and sign-out", async context => {
+  context.mock.method(Date, "now", () => JOURNEY_TIME);
   const f = fixture();
   const text = createTextSubmission({ api: f.api });
   const photos = createPhotoBatchSubmission({ api: f.api });

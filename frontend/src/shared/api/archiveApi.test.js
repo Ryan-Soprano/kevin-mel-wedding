@@ -312,3 +312,146 @@ test("deleted detail decodes its persisted recovery deadline and requires it to 
   });
   await assert.rejects(returning({ ...memory, deleteAfter: "2020-01-01T00:00:00Z" }).getMemory(IDS.text), { code: "CONTRACT_MISMATCH" });
 });
+
+test("malformed receipt members retain the contract error and uncertain mutation outcome", async () => {
+  for (const member of [null, false, "not a memory", {}, []]) {
+    const receipt = { ...TEXT_RECEIPT, memories: [member] };
+    assert.throws(() => decodeReceipt(receipt), { code: "CONTRACT_MISMATCH" });
+    await assert.rejects(returning(receipt, 201).createTextContribution(TEXT_REQUEST, {
+      idempotencyKey: IDS.key,
+    }), {
+      code: "CONTRACT_MISMATCH",
+      status: 201,
+      unknownOutcome: true,
+    });
+  }
+});
+
+test("receipts reject UUID-equivalent duplicate memories and client items without changing valid output", () => {
+  const legacyId = "aaaaaaaa-bbbb-1ccc-8ddd-eeeeeeeeeeee";
+  for (const field of ["memoryId", "clientItemId"]) {
+    const receipt = copy(PHOTO_RECEIPT);
+    receipt.memories[0][field] = legacyId;
+    receipt.memories[1][field] = legacyId.toUpperCase();
+    assert.throws(() => decodeReceipt(receipt), { code: "CONTRACT_MISMATCH" });
+  }
+  const valid = copy(PHOTO_RECEIPT);
+  valid.memories[0].memoryId = legacyId.toUpperCase();
+  valid.memories[0].clientItemId = legacyId.toUpperCase();
+  assert.equal(decodeReceipt(valid), valid);
+  assert.equal(valid.memories[0].memoryId, legacyId.toUpperCase());
+  assert.equal(valid.memories[0].clientItemId, legacyId.toUpperCase());
+});
+
+test("receipt routes compare UUID identity independently of casing for guest and couple recovery", async () => {
+  const legacyId = "aaaaaaaa-bbbb-1ccc-8ddd-eeeeeeeeeeee";
+  for (const [requestedId, returnedId] of [
+    [legacyId.toUpperCase(), legacyId],
+    [legacyId, legacyId.toUpperCase()],
+  ]) {
+    const receipt = { ...TEXT_RECEIPT, contributionId: returnedId };
+    const api = returning(receipt);
+    const options = { idempotencyKey: IDS.key, csrfToken: ANONYMOUS_SESSION.csrfToken };
+    for (const read of [api.getReceipt, api.getCoupleReceipt]) {
+      assert.deepEqual(await read(requestedId, options), receipt);
+    }
+    for (const finalize of [api.finalizeUpload, api.finalizeCoupleUpload]) {
+      assert.deepEqual(await finalize(requestedId, IDS.photo, IDS.grant, options), receipt);
+    }
+  }
+});
+
+test("memory reads and conditional writes compare UUID identity independently of casing", async () => {
+  const legacyId = "aaaaaaaa-bbbb-1ccc-8ddd-eeeeeeeeeeee";
+  const metadata = { title: "A title", description: null, memoryDate: null, datePrecision: "UNKNOWN" };
+  for (const [requestedId, returnedId] of [
+    [legacyId.toUpperCase(), legacyId],
+    [legacyId, legacyId.toUpperCase()],
+  ]) {
+    const memory = { ...MEMORY_DETAIL, memoryId: returnedId };
+    const reviewed = { ...memory, reviewStatus: "KEEP", revision: 2 };
+    const edited = { ...memory, ...metadata, revision: 2 };
+    const returningMemory = value => createArchiveApi({
+      client: createApiClient({ fetchImpl: async () => new Response(JSON.stringify(value), {
+        headers: { "Content-Type": "application/json", ETag: `"${value.revision}"` },
+      }) }),
+    });
+    const options = { csrfToken: ANONYMOUS_SESSION.csrfToken };
+    assert.deepEqual(await returningMemory(memory).getMemory(requestedId), memory);
+    assert.deepEqual(await returningMemory(reviewed).reviewMemory(requestedId, {
+      reviewStatus: "KEEP", revision: 1,
+    }, options), reviewed);
+    assert.deepEqual(await returningMemory(edited).updateMemoryMetadata(requestedId, metadata, {
+      revision: 1, ...options,
+    }), edited);
+  }
+});
+
+test("inbox rejects response counts, filters, duplicate identities and unusable continuation cursors", async () => {
+  const legacyId = "aaaaaaaa-bbbb-1ccc-8ddd-eeeeeeeeeeee";
+  const first = { ...MEMORY_DETAIL, memoryId: legacyId };
+  for (const [page, options] of [
+    [{ items: [MEMORY_DETAIL, first], nextCursor: null }, { limit: 1 }],
+    [{ items: [{ ...MEMORY_DETAIL, reviewStatus: "ARCHIVED" }], nextCursor: null }, {}],
+    [{ items: [first, { ...first, memoryId: legacyId.toUpperCase() }], nextCursor: null }, {}],
+    [{ items: [MEMORY_DETAIL], nextCursor: "" }, {}],
+    [{ items: [MEMORY_DETAIL], nextCursor: "x".repeat(257) }, {}],
+  ]) {
+    await assert.rejects(returning(page).listMemories(options), {
+      code: "CONTRACT_MISMATCH",
+      unknownOutcome: false,
+    });
+  }
+  const boundary = { items: [MEMORY_DETAIL], nextCursor: "x".repeat(256) };
+  assert.deepEqual(await returning(boundary).listMemories({ limit: 1 }), boundary);
+});
+
+test("shared receipt, memory and permission timestamps require real canonical UTC instants", async () => {
+  for (const timestamp of [
+    "2026-02-31T12:00:00Z",
+    "2026-10-19T24:00:00Z",
+    "2026-10-19T12:00Z",
+    "2026-10-19T12:00:00.1234567890Z",
+  ]) {
+    assert.throws(() => decodeReceipt({ ...TEXT_RECEIPT, createdAt: timestamp }), {
+      code: "CONTRACT_MISMATCH",
+    });
+    await assert.rejects(returning({
+      ...MEMORY_DETAIL, createdAt: timestamp, updatedAt: timestamp,
+    }).getMemory(IDS.text), { code: "CONTRACT_MISMATCH" });
+    await assert.rejects(returning({ ...UPLOAD_GRANT, expiresAt: timestamp }, 201).authorizeUpload(
+      IDS.contribution, IDS.photo, { idempotencyKey: IDS.key },
+    ), { code: "CONTRACT_MISMATCH" });
+    await assert.rejects(returning({
+      url: "https://playback.example.test/synthetic", expiresAt: timestamp,
+    }).getPlayback(IDS.photo), { code: "CONTRACT_MISMATCH" });
+  }
+});
+
+test("memory timestamp ordering retains submillisecond precision", async () => {
+  const earlier = "2026-10-19T12:00:00.123001Z";
+  const later = "2026-10-19T12:00:00.123999Z";
+  await assert.rejects(returning({
+    ...MEMORY_DETAIL, createdAt: later, updatedAt: earlier,
+  }).getMemory(IDS.text), { code: "CONTRACT_MISMATCH" });
+  await assert.rejects(returning({
+    ...MEMORY_DETAIL,
+    reviewStatus: "DELETE",
+    createdAt: earlier,
+    updatedAt: later,
+    deleteAfter: earlier,
+  }).getMemory(IDS.text), { code: "CONTRACT_MISMATCH" });
+});
+
+test("equal timestamps with different fractional padding preserve valid receipt and memory values", async () => {
+  const receipt = { ...TEXT_RECEIPT, createdAt: "2026-10-19T12:00:00.1Z" };
+  assert.equal(decodeReceipt(receipt), receipt);
+  const memory = {
+    ...MEMORY_DETAIL,
+    reviewStatus: "DELETE",
+    createdAt: receipt.createdAt,
+    updatedAt: "2026-10-19T12:00:00.100000Z",
+    deleteAfter: "2026-10-19T12:00:00.100000000Z",
+  };
+  assert.deepEqual(await returning(memory).getMemory(IDS.text), memory);
+});
