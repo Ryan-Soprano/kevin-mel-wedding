@@ -982,3 +982,85 @@ Owned browser/server resources are closed; concurrent backend and gallery edits/
 assets stay excluded. Physical-device, assistive-technology, provider and hosted acceptance
 remain separate. Final-head CI/configured review is required after Ryan creates
 the PR. The next directory is `frontend/src/dev/`.
+
+## Development preview decisions — October 19, 2026
+
+This batch starts from styles `41bf666` on `feature/dev-directory-review`.
+Styles PR 76 has since merged as main `838b5a0`, whose source tree matches that
+baseline. All three tracked files were reviewed with their consumers. Entry
+HTML, build/packaging configuration and related documentation were read as
+boundary evidence; this does not mark those entire areas reviewed.
+
+| File in `dev/` | Decision and reason |
+|---|---|
+| `PreviewApp.jsx` | Fix: a failed receipt refresh must not replace the original upload action error or downgrade its uncertainty. Retain the last confirmed receipt on a failed read. Expand imports, diagnostics, calls, handlers and JSX into the agreed readable style; keep the single mock instance, independent keys and real photo-form injection. |
+| `contractPreview.jsx` | Simplify formatting: expand the DEV guard into a block. Keep the separate root/entry and existing production boundary. |
+| `contractPreview.css` | Simplify formatting: expand selectors and declarations without changing their order or values. Keep native control, focus, responsive wrapping and diagnostic-output styles. |
+
+The entry chain is `contract-preview.html` -> `contractPreview.jsx` ->
+`PreviewApp.jsx` and its CSS. No production app module imports this preview.
+The normal Vite build starts from `index.html`; packaging copies its `dist`
+output. Existing packaged/container smoke checks reject development source and
+preview routes. The fixture scenarios, shared mock/real JSON adapters, actual
+photo form/coordinator, base CSS and current README/verification references were
+traced. Historical single-photo evidence remains historical; the current preview
+uses `PhotoBatchForm`.
+
+With a retained two-photo receipt, `networkError` or `unavailable` makes both the
+upload action and its recovery GET fail. Previously the GET rejection replaced
+the original error, changing `unknownOutcome: true` to `false` and the displayed
+next step to generic correction/retry. A failed read cannot establish the earlier
+mutation's outcome. The nested recovery catch now leaves the confirmed receipt
+intact and always rethrows the original error; successful receipt reconciliation
+still updates state. Known transfer/validation failures remain known failures.
+
+The mock/API instance and form factory retain stable ownership. Raw and embedded
+form demos keep separate retry keys and busy state; no defect justified coupling
+their lifecycle. The photo coordinator still owns immutable originals, disposal,
+partial recovery and saved-item skipping. Login still reads fresh CSRF and logout
+clears its local session after confirmation. No new abstraction, dependency,
+production module or tracked test file is introduced; no runtime performance gain
+is claimed. Mechanical formatting is isolated in commit `722259d` before the fix.
+
+## Development preview verification — October 19, 2026
+
+On Node **24.21.0** / npm **11.19.0**, the existing mock/photo baseline passes
+**79 tests**. The final intended-source copy, created from `41bf666` plus only the
+three dev changes, passes all **566 frontend tests** with zero failures or skips,
+ESLint, production build and diff checks. Its dependency links use separate Vite
+caches. Concurrent backend and gallery edits/assets remain excluded. The build
+retains its existing large-chunk advisory.
+
+Independent mechanical verification passes **seven assertions**: normalized
+module syntax preserves imports/actions/control flow, ordered CSS declarations
+match, and initial server-rendered markup with the real photo form is identical
+at **4,703 bytes**. An exact-source function probe with the real mock/adapter
+confirms the prior uncertainty downgrade and passes **33 final assertions across
+six recovery cases**. It checks original error identity, failed/successful receipt
+reads, retained receipt state, known rejection, sequential completion and partial
+retry with the same IDs while skipping a confirmed sibling.
+
+The actual development entry passes **50 mounted browser assertions** at
+**1280, 390 and 320 px**. Before/after initial views match **21 captured style
+properties** and dimensions across **210 nodes**. Both original misleading errors
+were reproduced before the fix; final checks preserve their uncertainty and
+same-key guidance. Text replay/conflict/new intent, partial raw recovery, expired
+grant renewal, synthetic login/inbox/empty/logout, keyboard focus and the real
+two-file photo form's deliberate unsaved-item retry all pass. The confirmed
+embedded form survives an independent raw batch action. No checked initial,
+completed-form or narrow diagnostic view has horizontal overflow; final console
+warnings/errors are absent and representative screenshots were inspected.
+
+The final intended build has no preview HTML and no matches for six checked
+preview/mock markers in generated HTML/JS/CSS. This confirms normal-build
+exclusion; it does not repeat container/hosted route smoke tests. Browser uploads
+use two tiny synthetic PNGs and the mock does not verify/persist original bytes.
+These checks do not establish real storage, microphone, physical-device,
+assistive-technology or release acceptance.
+
+Independent final source review is clear. Ignored evidence, reproduction/proof
+scripts, baseline/final source hashes and a ready PR description are under
+`logs/dev-directory-review.local/`. Owned browser/server resources are closed.
+Final-head CI/configured review remains required after Ryan creates the PR. The
+next planned phase is backend package review, starting with request/security
+boundaries.
