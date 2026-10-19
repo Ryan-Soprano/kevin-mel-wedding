@@ -45,13 +45,6 @@
   object-fit: cover;
 }
 
-.scrapbook-caption {
-  margin-top: 10px;
-  color: #514b42;
-  font: 400 23px / 1.05 "Caveat", "Segoe Print", cursive;
-  text-align: center;
-}
-
 .scrapbook-dialog {
   max-width: min(90vw, 680px);
   max-height: 90dvh;
@@ -91,10 +84,8 @@
 
 @media (max-width: 360px) {
   .couple-scrapbook { width: 92%; }
-  .scrapbook-caption { font-size: 22px; }
 }
 
 @media (min-width: 800px) {
   .couple-scrapbook { width: 100%; max-width: 360px; margin-bottom: 0; }
-  .scrapbook-caption { font-size: 27px; }
 }

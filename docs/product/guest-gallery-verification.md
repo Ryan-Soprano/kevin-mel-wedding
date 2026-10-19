@@ -188,3 +188,17 @@ photo 151's existing assets and dimensions, with a matching alternative
 description. The caption remains "Her entrance. His perfect hair." The gallery's
 300 entries and ordering are unchanged. The five focused gallery tests, edited
 JavaScript lint checks and production build pass.
+
+## October 19, 2026 - Melanie's final welcome photo choice
+
+Melanie selected gallery photo 92, the garden selfie, for the main welcome photo
+with no caption. This replaces the photo 151 choice above. The opening print and
+full-photo dialog reuse photo 92's existing responsive assets, dimensions and a
+matching alternative description. The caption markup and its unused CSS are
+removed; the gallery's 300 photos and ordering remain unchanged.
+
+All five focused gallery tests, edited JavaScript lint checks and the production
+build pass. Edge checks at 1280 and 390 pixels confirm photo 92 loads in the
+welcome and full-photo dialog, no caption appears, Escape restores button focus,
+and there is no horizontal overflow or JavaScript page error. Screenshots were
+inspected; temporary previews and the browser helper were removed afterward.

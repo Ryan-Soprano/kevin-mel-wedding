@@ -246,14 +246,14 @@ test("real public gallery immediately renders one accessible slide with navigati
     assert.ok(invitationStart < choicesStart && choicesStart < galleryStart, "memory choices are available on the welcome before the full gallery");
     const scrapbook = landing.slice(scrapbookStart, invitationStart);
     const scrapbookImages = scrapbook.match(/<img\b[^>]*>/g) ?? [];
-    const focalPhoto = couplePhotos.find(photo => photo.id === 151);
+    const focalPhoto = couplePhotos.find(photo => photo.id === 92);
     assert.equal(scrapbookImages.length, 1);
     assert.ok(scrapbookImages[0].includes(`src="${focalPhoto.src}"`));
-    assert.ok(scrapbookImages[0].includes('alt="Melanie and Kevin laughing together while taking a selfie on a city street."'));
+    assert.ok(scrapbookImages[0].includes('alt="Melanie and Kevin smiling together in a flower-filled garden."'));
     assert.ok(scrapbookImages[0].includes('loading="eager"'));
     assert.ok(scrapbookImages[0].includes('fetchPriority="high"'));
     assert.ok(scrapbookImages[0].includes(`width="${focalPhoto.width}" height="${focalPhoto.height}"`));
-    assert.match(scrapbook, /Her entrance\.<br\/>His perfect hair\./);
+    assert.doesNotMatch(scrapbook, /figcaption|scrapbook-caption|Her entrance|His perfect hair/);
     assert.doesNotMatch(scrapbook, /scrapbook-share|Add your own memory/);
 
     const invitation = landing.slice(invitationStart, choicesStart);
