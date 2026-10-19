@@ -1064,3 +1064,146 @@ scripts, baseline/final source hashes and a ready PR description are under
 Final-head CI/configured review remains required after Ryan creates the PR. The
 next planned phase is backend package review, starting with request/security
 boundaries.
+
+## Backend request/security decisions — October 19, 2026
+
+This batch starts from `7926778` on
+`feature/backend-request-security-review`. Its backend tree is identical to
+fetched main `2c59d92`, which includes the merged gallery and development-preview
+PRs. All **38 tracked files** in the production `security/` and `web/` packages
+and their test packages were reviewed with their consumers. The existing
+`data/DatabaseMigrationTest.java` is also extended for login-throttle persistence.
+Properties, migrations, runtime configuration, private services, frontend API
+callers and operator runbooks were read as boundary evidence; this does not mark
+those entire directories reviewed.
+
+| File in production `security/` | Decision and reason |
+|---|---|
+| `.gitkeep` | Keep out of this delivery: obsolete in a populated package, but its working-tree deletion predates this review and belongs to concurrent placeholder cleanup. |
+| `AccountAdministration.java` | Keep: console-only commands, hidden credential entry, confirmations and redacted diagnostics preserve the operator boundary. |
+| `AccountAdministrationStore.java` | Keep: transactional row locks, disabled creation, credential-version increments, production identity restrictions and cleared credential buffers protect recovery and revocation. |
+| `AnonymousProtectionConfiguration.java` | Keep: explicit servlet registration orders guest admission after security/staging and before MVC without duplicate filter execution. |
+| `AnonymousSubmissionFilter.java` | Keep: exact guest routes, origin/contract/retry validation, bounded known/unknown-length bodies and safe store failures remain cohesive. |
+| `AnonymousThrottle.java` | Keep: keyed operation/global/peer/retry scopes, canonical UUIDs and captured connection peers prevent raw identity storage and forwarding-header quota bypass. |
+| `AnonymousThrottleRepository.java` | Keep: database time, row locks, ordered scope consumption, inclusive window rollover and bounded cleanup on admitted/denied requests preserve durable limits. |
+| `ArchiveAccessPolicy.java` | Keep: environment/profile, HTTPS/cookie, reveal and couple-identity checks serve distinct startup/request/direct-service boundaries. |
+| `ArchiveAccount.java` | Keep: immutable account state and redacted string representation avoid credential disclosure. |
+| `ArchiveAccountRepository.java` | Keep: parameterized fresh lookups preserve current account and credential-version decisions; no cache is justified. |
+| `ArchiveAuthenticationConfiguration.java` | Keep: the existing DAO authentication provider composes the account mapper and password encoder directly. |
+| `ArchiveAuthorization.java` | Keep: fresh account/version/role checks at service entry and after lock waits remain necessary alongside the HTTP filter and background export checks. |
+| `ArchivePrincipal.java` | Keep: identity/equality, authority mapping, credential erasure and redacted representation retain Spring Security semantics. |
+| `ArchiveUserDetailsService.java` | Keep: a narrow repository-to-principal adapter preserves generic authentication failure behavior. |
+| `CoupleRequestBodyFilter.java` | Fix: bound `POST /api/session` to 4,096 bytes before MVC parsing and credential work. Retain existing private-route limits and native request wrapping; expand imports, guards and stream methods. Use a generic oversized-request message suitable for login and private routes. |
+| `LoginThrottle.java` | Keep: normalized username and captured direct-peer digests, production secret validation and positive retry headers protect the existing admission boundary. |
+| `LoginThrottleRepository.java` | Fix: run the existing bounded expired-bucket cleanup after either denied reservation as well as admission. Preserve peer-first short-circuiting and current counters; expand the touched constructor/JDBC chain. |
+| `RequestPeerCapture.java` | Keep: typed connection-peer capture occurs before forwarding, fails closed if unavailable and clears its owned request state. |
+| `SecurityConfiguration.java` | Keep: explicit session persistence, CSRF rotation, narrow guest exceptions, deny-by-default routes and single filter construction preserve the authorization chain. |
+| `SecurityErrorWriter.java` | Keep and reuse: the shared writer already produces safe correlated error envelopes outside MVC. |
+| `SessionController.java` | Keep: the contract/header, current-session, login and logout endpoints delegate to the existing service boundary. |
+| `SessionIdentityFilter.java` | Keep: current account/version checks invalidate revoked identities before protected access and fail safely on database errors. |
+| `SessionService.java` | Keep: strict credential envelope/encoding checks, throttle-before-authentication, session/CSRF rotation, explicit context persistence and generic failures remain necessary after the new byte guard. |
+
+| File in production `web/` | Decision and reason |
+|---|---|
+| `ApiException.java` | Keep: immutable field errors, safe authored messages and optional retry delay carry the API failure contract. |
+| `ApiExceptionHandler.java` | Keep: consistent correlation/headers and sanitized database, conversion and body failures avoid leaking diagnostics. |
+| `ApiResponseHeadersFilter.java` | Keep: early API no-store and generated request IDs cover security rejections without trusting inbound correlation headers. |
+| `RequestOrigin.java` | Keep: exact origin and fetch-metadata checks agree with the existing v1 contract; absent Origin remains intentionally supported. |
+| `StagingAccessConfiguration.java` | Fix wiring: inject the existing `SecurityErrorWriter` into the staging filter; preserve profile, startup guards and filter order. |
+| `StagingAccessFilter.java` | Fix: use the shared writer for HTTPS, origin and Basic-auth rejection instead of partial hand-built JSON. Preserve codes/statuses/messages, the 401-only challenge, exact health bypass, bounded credential header and constant-time digest comparison. Expand touched guards. |
+| `StagingAudioSpikeController.java` | Keep: staging-only, operator-gated exact classpath resources and restrictive response headers do not expose arbitrary paths or production routes. |
+
+| File in test `security/` | Decision and reason |
+|---|---|
+| `AnonymousSubmissionFilterTest.java` | Keep: existing contract, origin, body-bound, wrapper and safe rejection cases exercise guest admission. |
+| `AnonymousSubmissionHttpTest.java` | Keep: actual servlet/HTTP known-length and chunked bodies, durable quotas and retained note replay cover the guest chain. |
+| `AnonymousThrottlePostgresTest.java` | Keep: real database rollover, concurrency, scope consumption and bounded maintenance cases cover guest persistence. |
+| `AnonymousThrottleTest.java` | Keep: keyed scope, direct-peer, UUID, secret and safe-failure cases cover admission policy. |
+| `RequestPeerCaptureTest.java` | Keep: listener ownership, forwarding resistance and missing-peer cases cover the connection identity boundary. |
+| `SessionHttpTest.java` | Extend: valid exact-limit bodies remain accepted; oversized known/unknown-length and multibyte UTF-8 bodies return 413 without credential/throttle work. Retain existing session, CSRF, revocation and direct-service cases. |
+
+| File in test `web/` | Decision and reason |
+|---|---|
+| `StagingAccessFilterTest.java` | Extend: assert complete correlated envelopes for all three staging rejections, no credential/body echo and challenge only on 401. Update constructor/context wiring and expand touched test code. |
+| `StagingAudioSpikeHttpTest.java` | Keep: existing staging resource/production-boundary checks exercise the unchanged spike controller. |
+
+`data/DatabaseMigrationTest.java` gains two real PostgreSQL regressions: a denied
+peer prunes at most 1,000 expired buckets per call (1,000 then five from a
+1,005-row fixture) while creating no new username bucket, and a denied account
+still prunes expired rows while consuming
+the admitted peer counter. Fresh buckets and current account/peer limits remain
+intact. No new tracked test file, migration, dependency or abstraction is added.
+
+Consumer tracing includes the guest contribution/media controllers, private
+review/authoring, albums, timeline, library/tags, sharing, playback and exports;
+background export authority; frontend session/JSON adapters and login ownership;
+and staging/proxy/account-access runbooks. Similar authorization checks at HTTP,
+service and post-lock boundaries intentionally remain separate. No measured
+runtime performance gain is claimed. New and rewritten code follows the expanded
+formatting preference without formatting the untouched packages wholesale.
+
+The login guard reuses the existing bounded request wrapper. Its 4,096-byte
+budget accommodates the permitted credential envelope, including escaped JSON,
+while preventing large padding/fields from reaching JSON materialization and
+credential work. CSRF and route authorization still precede this filter.
+`GET`/`DELETE` session behavior and all guest quota rules stay unchanged.
+
+Staging errors previously omitted the documented `requestId` and `fieldErrors`
+members. The current frontend tolerates those omissions, so this is an API
+consistency/correlation fix rather than a reproduced frontend failure. The
+shared writer supplies the complete safe envelope for every staging rejection.
+
+## Backend request/security verification — October 19, 2026
+
+On Temurin **25.0.3+9-LTS**, Maven wrapper **3.9.16**, Spring Boot **4.1.1**,
+Docker **29.7.2** and disposable PostgreSQL **17**, the existing focused baseline
+passes **69 tests**. The new request/web regression run reproduces **five
+failures across six tests** on the original behavior; the exact-limit positive
+case already passes. Both new database regressions also fail on the original
+repository, retaining 1,005 expired rows instead of five and one expired row
+instead of zero. A separate recording-JDBC probe confirms the skipped-cleanup
+control flow, with admitted cleanup as its positive control.
+
+The final intended-source backend passes the full suite: **466 tests, zero
+failures/errors, 464 passed and two skipped**. The skipped existing tests are
+explicitly Linux-only symlink protections in `OwnedExportDirectoryTest` and
+`OperatorRecoveryPostgresTest`; this Windows run does not establish those
+results. The focused request/web suites pass **75 tests** without skips, and
+`DatabaseMigrationTest` passes all **13** cases, including both cleanup
+regressions. Existing local FFmpeg/ffprobe **9.0.2** executables are supplied
+through process-scoped paths for the full audio suite; no binary is added to Git.
+Docker initially failed to start its engine; Ryan reopened it before PostgreSQL
+verification. Preliminary harness/overlay attempts are excluded from test totals.
+
+A supplemental ignored Java probe passes **six actual HTTP/1.1 requests** against
+embedded Tomcat and its own PostgreSQL container. A non-reading servlet observer
+confirms `Content-Length` for known bodies and unknown length plus
+`Transfer-Encoding: chunked` for genuine chunked bodies. Padded 4,097-byte and
+multibyte 4,145-byte envelopes return 413 without creating any login buckets.
+Both exact 4,096-byte envelopes reach authentication, returning generic 401 for
+the nonexistent synthetic account while advancing only the expected HMAC
+username/direct-peer counters. MockMvc separately verifies successful valid
+credentials at the exact limit. JSON, no-store, matching canonical request IDs,
+empty field errors and credential redaction pass. The probe's JVM, PostgreSQL
+and Ryuk containers are confirmed absent after completion.
+
+The ignored intended-source copy contains all **217 baseline backend files**
+plus exactly the seven reviewed Java changes. Their SHA-256 hashes match the
+visible sources; all **31 unchanged review files** retain their initial hashes.
+Concurrent album/contribution/health/library formatting, gallery/supporting work
+and placeholder deletions stay excluded. Independent source review is clear;
+documentation review verifies all 38 inventory decisions and the API byte-limit
+contract. New regression cases extend three existing test files.
+
+Backend JAR packaging passes after the full suite (`-DskipTests package` avoids
+repeating that completed run). Nine packaged boundary classes, including the
+request wrapper and shared error records, match the tested class bytes; tracked
+test classes are absent from the artifact. Diff checks pass. This verifies the
+backend artifact and local request behavior; provider, hosted, device and release
+acceptance remain separate. The two Linux-only checks require Linux CI.
+
+Ignored inventories, before/after regressions, full-suite/package logs, wire
+probe, source/class hashes and ready PR description are under
+`logs/backend-request-security-review.local/`. Owned verification services are
+closed. Ryan creates/merges the PR; exact-head CI/configured review remains
+required. The next planned backend area is the contribution/domain boundary.

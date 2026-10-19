@@ -14,13 +14,18 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.web.filter.OncePerRequestFilter;
 import org.springframework.web.util.UriComponentsBuilder;
 
+import com.kevinmel.archive.security.SecurityErrorWriter;
+
 final class StagingAccessFilter extends OncePerRequestFilter {
     private final boolean basicAuthenticationEnabled;
     private final byte[] credentialDigest;
     private final String expectedOrigin;
+    private final SecurityErrorWriter errors;
 
-    StagingAccessFilter(boolean basicAuthenticationEnabled, String username, String password, String origin) {
+    StagingAccessFilter(boolean basicAuthenticationEnabled, String username, String password, String origin,
+            SecurityErrorWriter errors) {
         this.basicAuthenticationEnabled = basicAuthenticationEnabled;
+        this.errors = errors;
         if (basicAuthenticationEnabled) {
             if (username == null || username.isBlank() || username.length() > 64
                     || username.contains(":") || username.chars().anyMatch(Character::isISOControl)
@@ -36,7 +41,9 @@ final class StagingAccessFilter extends OncePerRequestFilter {
             URI parsed = URI.create(origin);
             if (!"https".equals(parsed.getScheme()) || parsed.getHost() == null || parsed.getUserInfo() != null
                     || parsed.getPort() != -1 || parsed.getQuery() != null || parsed.getFragment() != null
-                    || (parsed.getPath() != null && !parsed.getPath().isEmpty())) throw new IllegalArgumentException();
+                    || (parsed.getPath() != null && !parsed.getPath().isEmpty())) {
+                throw new IllegalArgumentException();
+            }
             expectedOrigin = origin;
         } catch (IllegalArgumentException | NullPointerException invalid) {
             throw new IllegalStateException("Staging requires its exact HTTPS origin, without a path or credentials.");
@@ -54,25 +61,27 @@ final class StagingAccessFilter extends OncePerRequestFilter {
             return;
         }
         if (!request.isSecure()) {
-            reject(response, 403, "STAGING_HTTPS_REQUIRED", "Open the HTTPS test address.");
+            errors.write(request, response, 403, "STAGING_HTTPS_REQUIRED", "Open the HTTPS test address.");
             return;
         }
         String actualOrigin = UriComponentsBuilder.fromUriString(request.getRequestURL().toString())
                 .replacePath(null).replaceQuery(null).build().toUriString();
         if (!expectedOrigin.equals(actualOrigin)) {
-            reject(response, 403, "STAGING_ORIGIN_INVALID", "Open the approved HTTPS test address.");
+            errors.write(request, response, 403, "STAGING_ORIGIN_INVALID", "Open the approved HTTPS test address.");
             return;
         }
         if (basicAuthenticationEnabled && !authorized(request.getHeader("Authorization"))) {
             response.setHeader("WWW-Authenticate", "Basic realm=\"Memory Archive staging\", charset=\"UTF-8\"");
-            reject(response, 401, "STAGING_AUTH_REQUIRED", "Sign in to this test environment.");
+            errors.write(request, response, 401, "STAGING_AUTH_REQUIRED", "Sign in to this test environment.");
             return;
         }
         chain.doFilter(request, response);
     }
 
     private boolean authorized(String header) {
-        if (header == null || header.length() > 2048 || !header.regionMatches(true, 0, "Basic ", 0, 6)) return false;
+        if (header == null || header.length() > 2048 || !header.regionMatches(true, 0, "Basic ", 0, 6)) {
+            return false;
+        }
         try {
             byte[] candidate = Base64.getDecoder().decode(header.substring(6));
             return MessageDigest.isEqual(credentialDigest, digest(candidate));
@@ -87,12 +96,5 @@ final class StagingAccessFilter extends OncePerRequestFilter {
         } catch (NoSuchAlgorithmException unavailable) {
             throw new IllegalStateException("Required credential comparison is unavailable.", unavailable);
         }
-    }
-
-    private static void reject(HttpServletResponse response, int status, String code, String message) throws IOException {
-        response.setStatus(status);
-        response.setContentType("application/json");
-        response.setCharacterEncoding(StandardCharsets.UTF_8.name());
-        response.getWriter().write("{\"error\":{\"code\":\"" + code + "\",\"message\":\"" + message + "\"}}");
     }
 }
