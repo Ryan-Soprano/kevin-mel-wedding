@@ -35,7 +35,15 @@ function CreateScreen({ view, audioEnabled }) {
 function AlbumsScreen({ view }) {
   const { albums: state, busy } = view.snapshot;
   const key = `${state.view}:${state.album?.albumId ?? "new"}:${state.album?.revision ?? "new"}`;
-  return <Albums key={key} state={state} busy={busy} locked={view.reviewLocked} actions={view.actions.albums} />;
+  return (
+    <Albums
+      editorKey={key}
+      state={state}
+      busy={busy}
+      locked={view.reviewLocked}
+      actions={view.actions.albums}
+    />
+  );
 }
 
 function TimelineScreen({ view }) {

@@ -38,7 +38,8 @@ test("screen adapters preserve access precedence, creation guards and editor res
     assert.equal(render({ phase: "unknown", session: { authenticated: true } }), "");
 
     // Resolve only the pure adapter, leaving the feature component's hooks and
-    // local state intact. Its key determines when React discards an old editor.
+    // local state intact. Albums transfers its reset key into a keyed editor so
+    // its unkeyed feature boundary can retain an in-flight paging-focus intent.
     const leaf = (snapshot, extra = {}) => {
       const route = InboxScreen({ view: { ...view, snapshot }, ...extra });
       return route.type(route.props);
@@ -77,6 +78,11 @@ test("screen adapters preserve access precedence, creation guards and editor res
       );
     }
     const keyFor = (phase, state) => editorKeyOf(leaf({ ...base, phase, [phase]: state }));
+    assert.equal(
+      leaf({ ...base, phase: "albums", albums: keys.albums }).key,
+      null,
+      "album paging ownership survives its editor revision reset",
+    );
     for (const [phase, record, idField] of [["albums", "album", "albumId"], ["timeline", "event", "eventId"], ["tags", "tag", "tagId"]]) {
       const state = keys[phase], original = keyFor(phase, state);
       assert.notEqual(keyFor(phase, { ...state, [record]: { ...state[record], revision: "r2" } }), original,

@@ -49,6 +49,30 @@ The intended-source JAR (`bcef5d0f0373ebc425fdf54fa855746cd36473aa84c5fed98812cb
 
 The final run had no browser errors, external/provider requests or horizontal overflow. Its native Java process, exact labelled PostgreSQL fixture and browser were verified stopped/absent/closed. Two earlier helper-only interruptions are excluded from passing metrics and were also cleaned up. Ignored follow-up evidence is under `logs/albums-followup.local/native-3c8d787c-11af-4720-93d4-1ac60ed34267/summary.json`. No deployment was performed for this album update.
 
+## October 19, 2026 — albums directory review
+
+The methodical review covers all 17 tracked album files from merged inbox PR
+#69 (`a3b7f45`). It fixes case-insensitive duplicate member-ID detection, mock
+timestamp rollback, misleading sharing confirmation and demonstrated keyboard
+focus/validation defects. Paging focus now survives an editor reset to a
+partner's newer revision; stale drafts still reset and blur cancels late focus.
+Per-file keep/fix decisions are in the [directory review](../development/directory-review.md).
+
+Verification passes **24 focused album/adapter tests**, **534 frontend tests**,
+ESLint and the production build on Node 24.16.0. Mounted actual components,
+controller and JSON mock adapter pass **188 assertions** in StrictMode at
+1280, 390 and 320 px, including partner reload, validation correction,
+membership/order changes and pagehide/exact-name recovery. All 21 synthetic
+original memory records remain identical as JSON. No page errors, external
+requests or horizontal overflow occurred; desktop/narrow screenshots were
+inspected, independent review found no remaining actionable issue, and owned
+browser/server resources are closed. No tracked test files or dependencies were
+added. Ignored evidence is under `logs/albums-directory-review.local/`.
+
+This frontend review supplements the earlier real-backend rehearsal; it does
+not rerun that acceptance or establish device/provider behavior. Final-head
+CI/configured review remains required after PR creation.
+
 ## Retained acceptance
 
 This is local engineering verification ahead of Kevin and Melanie's real onboarding and feedback. REV-01/REV-03 acceptance remains open. Physical phones/tablets, assistive technology, actual hidden-tab/BFCache behavior, native dialogs, live-provider originals and hosted capacity/network/recovery acceptance remain open. Controlled blur/resume and synthetic storage do not establish those behaviors. Audio was disabled in the original fixture; current audio settings and acceptance are recorded in the [voice memory runbook](../runbooks/voice-memories.md).

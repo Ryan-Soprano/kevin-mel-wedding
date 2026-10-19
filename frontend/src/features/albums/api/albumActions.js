@@ -93,7 +93,7 @@ export function createAlbumActions({ api, getState, publish, start, bounded, run
       if (frozen.kind === "delete" && album.deletedAt === null) throw contractMismatch();
       await accepted(op, album, frozen.kind === "delete"
         ? "Album deleted. Its memories and original files remain in your archive."
-        : "Album change accepted. Current album loaded; every memory stays private.");
+        : "Album change accepted. Current album loaded; memory sharing is unchanged.");
     });
   }
   async function reconcile(op) {
