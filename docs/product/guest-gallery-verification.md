@@ -138,3 +138,53 @@ closed. Local evidence is under ignored `logs/gallery-completion.local/`.
 The build retains its non-fatal JavaScript chunk-size advisory. These results
 cover the local source and static production frontend build, without a backend;
 deployment and physical phone acceptance remain separate.
+
+## October 19, 2026 - return to the currently viewed thumbnail
+
+Both thumbnail-entry paths now use the currently displayed photo. Browsing the
+slideshow and choosing **Browse all 300 photos** opens the thumbnail batch that
+contains that photo. Opening photo 86, navigating to photo 124 and choosing
+**Back to thumbnails** returns to photo 124; Escape follows the same path.
+
+Previously the preview always targeted the first thumbnail, while the viewer
+restored the originally clicked thumbnail and its old page scroll coordinates.
+Mounted desktop and narrow-browser reproduction confirmed that photo 300 was
+absent after preview-to-grid navigation, and that returning after 86 to 124
+focused photo 86 while photo 124 was still outside the rendered batches.
+
+The return action exposes enough 24-photo batches to include the current photo,
+capped at the collection size, while preserving any larger already-opened batch.
+It then focuses and scrolls that thumbnail into view. The current thumbnail has
+an `aria-current` marker and an inset border without changing cell dimensions.
+Removing the original-click scroll snapshot also avoids restoring stale page
+coordinates after viewport changes. The selection stays in component state;
+gallery photos, slideshow timing and private archive boundaries are unchanged.
+
+All 567 frontend tests, ESLint and the production build pass. Existing gallery
+tests verify the current-thumbnail semantics for photos 1, 124 and 300, including
+that photo 86 is no longer marked current after navigating to 124. These static
+rendering checks do not substitute for mounted state/focus/scroll verification.
+
+The final production frontend passes **39 mounted Edge browser states**, 13 each
+at 1280 x 900, 390 x 900 and 320 x 900. Checks cover preview-to-grid navigation,
+86 to 124 and back, reverse navigation with Escape, first/last wrapping,
+unchanged selection, preserved larger batches, manual Show more focus, passive
+loading without stolen focus, viewport resizing, slideshow progression/stop and
+reduced motion. Each return checks the current thumbnail, keyboard focus and
+visible position; thumbnail bounds allow one pixel for browser scroll rounding.
+All checked layouts have no horizontal overflow or JavaScript page errors.
+Screenshots of the restored photo 124 and its current marker were inspected at
+all three widths. Evidence and source hashes are under ignored
+`logs/gallery-navigation.local/`; owned browsers and the local server are closed.
+These static frontend checks do not establish hosted/backend or physical-phone
+acceptance. No new dependency or test file was introduced, and the reserved
+`frontend/e2e/.gitkeep` remains unchanged.
+
+## October 19, 2026 - welcome photo selection
+
+Ryan selected gallery photo 151, the sunny city-street selfie, as the main welcome
+photo in place of photo 148. The opening print and its full-photo dialog now use
+photo 151's existing assets and dimensions, with a matching alternative
+description. The caption remains "Her entrance. His perfect hair." The gallery's
+300 entries and ordering are unchanged. The five focused gallery tests, edited
+JavaScript lint checks and production build pass.

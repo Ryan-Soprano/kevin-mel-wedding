@@ -183,8 +183,8 @@ test("real public gallery immediately renders one accessible slide with navigati
     assert.match(responsive, /sizes="\(max-width: 480px\) calc\(100vw - 74px\), \(max-width: 1100px\) calc\(90vw - 26px\), 962px"/);
     assert.doesNotMatch(responsive, /Previous photo|Next photo|Play slideshow/);
     assert.equal(renderToStaticMarkup(createElement(GuestGallery, { photos: [] })), "");
-    const renderOverview = (visibleCount) => renderToStaticMarkup(createElement(GalleryThumbnails, {
-      photos: couplePhotos, visibleCount, onOpen() {}, onMore() {},
+    const renderOverview = (visibleCount, currentIndex = 0) => renderToStaticMarkup(createElement(GalleryThumbnails, {
+      photos: couplePhotos, visibleCount, currentIndex, onOpen() {}, onMore() {},
     }));
     const overview = renderOverview(24);
     const thumbnails = overview.match(/<img\b[^>]*>/g) ?? [];
@@ -205,6 +205,29 @@ test("real public gallery immediately renders one accessible slide with navigati
     assert.equal((allPhotos.match(/<img\b/g) ?? []).length, couplePhotos.length);
     assert.ok(allPhotos.includes(`Showing ${couplePhotos.length} of ${couplePhotos.length} photos`));
     assert.doesNotMatch(allPhotos, /more photos/);
+
+    // These real component renders verify which thumbnail represents the
+    // current photo. Mounted browser checks cover navigation, focus and scroll.
+    const currentPhotoCases = [
+      [24, 0],
+      [144, 123],
+      [couplePhotos.length, couplePhotos.length - 1],
+    ];
+    for (const [visibleCount, currentIndex] of currentPhotoCases) {
+      const buttons = renderOverview(visibleCount, currentIndex).match(/<button\b[^>]*>/g) ?? [];
+      const currentButtons = buttons.filter(button => button.includes('aria-current="true"'));
+      assert.equal(currentButtons.length, 1, "only the current photo's thumbnail is marked");
+      assert.ok(currentButtons[0].includes(`id="couple-gallery-thumbnail-${currentIndex}"`));
+      assert.ok(currentButtons[0].includes(`aria-label="View photo ${currentIndex + 1} of ${couplePhotos.length}:`));
+      if (currentIndex === 123) {
+        const originalThumbnail = buttons.find(button => button.includes('id="couple-gallery-thumbnail-85"'));
+        assert.ok(originalThumbnail, "the originally opened photo remains available");
+        assert.ok(
+          !originalThumbnail.includes('aria-current="true"'),
+          "photo 86 is no longer current after navigating to photo 124",
+        );
+      }
+    }
     const { default: App } = await server.ssrLoadModule("/src/app/App.jsx");
     const landing = renderToStaticMarkup(createElement(App, { audioEnabled: false }));
     const scrapbookStart = landing.indexOf('class="couple-scrapbook"');
@@ -223,9 +246,10 @@ test("real public gallery immediately renders one accessible slide with navigati
     assert.ok(invitationStart < choicesStart && choicesStart < galleryStart, "memory choices are available on the welcome before the full gallery");
     const scrapbook = landing.slice(scrapbookStart, invitationStart);
     const scrapbookImages = scrapbook.match(/<img\b[^>]*>/g) ?? [];
-    const focalPhoto = couplePhotos.find(photo => photo.id === 148);
+    const focalPhoto = couplePhotos.find(photo => photo.id === 151);
     assert.equal(scrapbookImages.length, 1);
     assert.ok(scrapbookImages[0].includes(`src="${focalPhoto.src}"`));
+    assert.ok(scrapbookImages[0].includes('alt="Melanie and Kevin laughing together while taking a selfie on a city street."'));
     assert.ok(scrapbookImages[0].includes('loading="eager"'));
     assert.ok(scrapbookImages[0].includes('fetchPriority="high"'));
     assert.ok(scrapbookImages[0].includes(`width="${focalPhoto.width}" height="${focalPhoto.height}"`));

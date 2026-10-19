@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { couplePhotos } from "./photos.js";
 import "./coupleScrapbook.css";
 
-const photo = couplePhotos.find((selection) => selection.id === 148);
-const alt = "Melanie and Kevin leaning together and smiling for a selfie.";
+const photo = couplePhotos.find((selection) => selection.id === 151);
+const alt = "Melanie and Kevin laughing together while taking a selfie on a city street.";
 
 export default function CoupleScrapbook() {
   const dialog = useRef(null);

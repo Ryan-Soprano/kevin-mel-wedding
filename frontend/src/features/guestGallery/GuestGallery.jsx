@@ -46,7 +46,14 @@ function Photo({ photo, index, total, deferLoading = false }) {
   );
 }
 
-export function GalleryThumbnails({ photos, visibleCount, onOpen, onMore, onAutomaticMore }) {
+export function GalleryThumbnails({
+  photos,
+  visibleCount,
+  currentIndex = 0,
+  onOpen,
+  onMore,
+  onAutomaticMore,
+}) {
   const shown = Math.min(visibleCount, photos.length);
   const remaining = Math.min(THUMBNAIL_BATCH, photos.length - shown);
   const hasMore = remaining > 0;
@@ -71,6 +78,7 @@ export function GalleryThumbnails({ photos, visibleCount, onOpen, onMore, onAuto
               className="guest-gallery-thumbnail"
               id={`couple-gallery-thumbnail-${photoIndex}`}
               aria-label={`View photo ${photoIndex + 1} of ${photos.length}: ${photo.alt}`}
+              aria-current={photoIndex === currentIndex ? "true" : undefined}
               onClick={() => onOpen(photoIndex)}
             >
               <img
@@ -105,7 +113,6 @@ export default function GuestGallery({ photos = couplePhotos, deferInitialPhoto 
   const [view, setView] = useState("preview");
   const [visibleCount, setVisibleCount] = useState(THUMBNAIL_BATCH);
   const gallery = useRef(null);
-  const gridPosition = useRef(null);
   const pendingFocus = useRef(null);
   const reducedMotion = useSyncExternalStore(
     subscribeToMotionPreference,
@@ -131,8 +138,7 @@ export default function GuestGallery({ photos = couplePhotos, deferInitialPhoto 
     pendingFocus.current = null;
     const element = gallery.current?.querySelector(`#${target.id}`);
     element?.focus({ preventScroll: true });
-    if (target.scrollY != null) window.scrollTo({ top: target.scrollY, behavior: "instant" });
-    else element?.scrollIntoView({ block: "nearest", behavior: "instant" });
+    element?.scrollIntoView({ block: "nearest", behavior: "instant" });
   }, [view, visibleCount]);
 
   function move(direction) {
@@ -145,12 +151,17 @@ export default function GuestGallery({ photos = couplePhotos, deferInitialPhoto 
   function showThumbnails() {
     setPlaying(false);
     setHovered(false);
-    pendingFocus.current = gridPosition.current || { id: "couple-gallery-thumbnail-0" };
+    // The current slide may be beyond the thumbnail batches already opened.
+    const requiredCount = Math.min(
+      photos.length,
+      Math.ceil((currentIndex + 1) / THUMBNAIL_BATCH) * THUMBNAIL_BATCH,
+    );
+    setVisibleCount((count) => Math.max(count, requiredCount));
+    pendingFocus.current = { id: `couple-gallery-thumbnail-${currentIndex}` };
     setView("grid");
   }
 
   function openPhoto(photoIndex) {
-    gridPosition.current = { id: `couple-gallery-thumbnail-${photoIndex}`, scrollY: window.scrollY };
     pendingFocus.current = { id: "couple-gallery-slide" };
     setPlaying(false);
     setHovered(false);
@@ -198,6 +209,7 @@ export default function GuestGallery({ photos = couplePhotos, deferInitialPhoto 
         <GalleryThumbnails
           photos={photos}
           visibleCount={visibleCount}
+          currentIndex={currentIndex}
           onOpen={openPhoto}
           onMore={showMore}
           onAutomaticMore={active ? appendPhotos : undefined}
