@@ -1207,3 +1207,124 @@ probe, source/class hashes and ready PR description are under
 `logs/backend-request-security-review.local/`. Owned verification services are
 closed. Ryan creates/merges the PR; exact-head CI/configured review remains
 required. The next planned backend area is the contribution/domain boundary.
+
+## Backend contribution decisions — October 19, 2026
+
+This batch starts from request/security `bb60445` on
+`feature/backend-contribution-review`. At review start, fetched main `4585a3e`
+did not contain that parent; refreshed main `02ca9ae` now includes it, so this
+batch can target main directly. All **eight production files** in
+`backend/src/main/java/com/kevinmel/archive/contribution/` and its **one existing
+package test file** were reviewed with their consumers. Six production files
+already had local readability edits; their entry bytes were saved before the
+review, and the final cleanup preserves their behavior. Unrelated working files
+remain outside this batch.
+
+| File in production `contribution/` | Decision and reason |
+|---|---|
+| `ContributionController.java` | Keep: shared contract/key validation, same-origin mutation checks, deliberate text/media dispatch, creation/replay status and capability-protected receipt delegation are cohesive. |
+| `ContributionService.java` | Keep: text normalization and repository ownership stay narrow; strict v1/UUID-v4 header validation canonicalizes retry keys consistently with admission and consumers. |
+| `ContributionRequest.java` | Simplify formatting: expand guards, loop bodies and constructor arguments. Keep raw UTF-16 bounds before normalization, exact ECMAScript whitespace, NUL/unpaired-surrogate rejection and blank optional-name handling. |
+| `ContributionRepository.java` | Simplify formatting: expand JDBC chains, parameters, mapping/constructor arguments, signatures and guards. Keep exact SQL values, transactional insertion/rollback, normalized original fingerprints, separate conflict insertion/fresh lookup, source/author predicates, erased-key reservation and stable receipt ordering. |
+| `ContributionReceipt.java` | Simplify formatting: use consistent indentation and one record component per line. Keep the small content-free response projection; current callers do not mutate or share its list in a way that justifies a defensive-copy refactor. |
+| `ContributionScope.java` | Simplify formatting: group imports and expand components, scope construction, security-context reads and guards. Keep validated server-created scopes, per-account hashed retry namespaces, guest namespace exclusion, fresh authority checks and redacted string output. |
+| `CoupleContributionController.java` | Simplify formatting: replace the wildcard annotation import with seven explicit imports; expand signatures, mappings, calls, response chains and the empty-body guard. Keep all four private routes, same-origin checks, canonical retry keys and no-store behavior. |
+| `CoupleContributionService.java` | Simplify formatting: expand constructor/call arguments and guards. Keep account-derived scopes, rejection of non-null guest attribution, text/media dispatch and final authority checks inside the outer create/receipt transactions. |
+
+| File in test `contribution/` | Decision and reason |
+|---|---|
+| `ContributionHttpTest.java` | Keep unchanged: nine existing real HTTP/PostgreSQL tests cover committed private receipts, normalization and raw Unicode bounds, media-disabled admission, replay/conflict/current state, concurrent convergence, blocked-winner rollback, insertion/commit failures and contract/origin checks. |
+
+Consumer tracing covers guest text and media controllers, private authoring,
+media grants/finalization and their scope/revocation checks; review, retention,
+recovery and portable export; and shared text validators used by media metadata,
+albums, timeline and library/tags. Frontend tracing includes the shared JSON
+adapter/receipt decoder, text/photo/audio coordinators and authenticated private
+creation adapter through the inbox controller and AddMemory. Existing migration,
+upgrade/restart, photo/audio, review/retention and recovery tests were read as
+boundary evidence. Those other packages are not marked fully reviewed here.
+
+No concrete correctness, privacy or efficiency defect justified a behavior
+change. The separate `ON CONFLICT` statement and subsequent READ COMMITTED lookup
+remain necessary for visibility of a concurrent committed winner. HTTP, service
+and post-lock/current-account checks protect different revocation windows; final
+private-create authorization remains within its transaction so a revoked write
+rolls back. These checks are retained.
+
+Equivalent retries retain original identities/timestamps and immutable original
+payload fingerprints while receipts expose current review/visibility state.
+Purged media still reports `UPLOADED` in the receipt projection, retaining
+completion for its retry identity without recreating erased content. Receipt
+data omits content, guest names, authors, retry capabilities, filenames, storage
+keys and upload grants.
+Wrong key/source/author associations retain the same unavailable-receipt result.
+No new abstraction, dependency, migration or tracked test is introduced, and no
+runtime performance gain is claimed. The six edited files follow the expanded
+formatting preference; the readable guest controller/service and existing test
+remain intact.
+
+## Backend contribution verification — October 19, 2026
+
+The isolated entry-source baseline passes all **34 tests** in
+`ContributionHttpTest`, `CoupleAuthoringHttpTest`, `DatabaseMigrationTest` and
+`ContributionUpgradeRestartTest`, with zero failures/errors/skips. These existing
+suites exercise actual HTTP, disposable PostgreSQL, concurrent retry/rollback,
+actor isolation, revocation and populated legacy upgrade/restart behavior.
+
+An ignored Java **25** parser comparison checks all **eight production files**
+across committed `bb60445`, the saved entry snapshot and final visible sources.
+Canonical ASTs match for both transitions, retaining exact string/character/SQL
+values, annotations, modifiers, member/argument/statement order and meaningful
+scopes. It ignores source layout/comments and unwraps only harmless single
+terminal/expression statements directly used as control-flow bodies. Imports are
+checked separately: only the exact seven named annotation imports replacing the
+couple controller's wildcard are permitted, with ordering ignored. All other
+import changes fail the comparison.
+
+All **six negative controls** are rejected: a validation-limit change, SQL token
+change, SQL text-block whitespace change, authorization statement reorder,
+unexpected import and declaration-scope change. The entry snapshot remains
+unchanged. This is parse-level structural evidence rather than type attribution
+or runtime proof; ordinary compilation, full tests and independent source review
+remain necessary. All **24 source hashes** are retained with the comparison.
+
+The prior verified backend's eight contribution sources match the committed
+baseline after CRLF normalization. Its **13 contribution classes** (eight
+top-level and five nested) and the final compiled classes have identical
+`javap -c -p -constants -s` output: instructions, descriptors and printed constants
+match. This comparison excludes annotation, bootstrap-method and debug metadata
+and does not assert raw class-byte equality. It supplements the AST, compilation
+and HTTP/database evidence rather than replacing them.
+
+The final intended-source full backend suite completes **466 tests: 464 passed,
+zero failures/errors and two skipped**. The existing skipped cases are Linux-only
+symlink checks in `OwnedExportDirectoryTest` and `OperatorRecoveryPostgresTest`;
+they require Linux CI. This Windows run uses Temurin **25.0.3+9-LTS**, Maven
+**3.9.16**, Spring Boot **4.1.1**, Docker **29.7.2**, disposable PostgreSQL **17**
+and the existing local FFmpeg/ffprobe **9.0.2** paths for audio verification.
+
+Maven reports success with exit code zero. After the tests completed, Surefire
+reached its **30-second test-fork shutdown limit**. The saved thread dump shows
+Spring's shutdown hook waiting in Hikari pool shutdown while cached test contexts
+close. This is retained as a test-lifecycle diagnostic rather than described as
+a clean shutdown. The test JVM and all **29 containers** identified across the
+baseline/full-run logs are confirmed absent afterward. No contribution runtime
+change is introduced to address this broader test-harness behavior; exact-head
+CI/configured review must still cover the final branch.
+
+Backend JAR packaging passes after the full suite (`-DskipTests package`). All
+**13 packaged contribution classes** match the tested class bytes, and the
+package test classes are absent. Independent final source/documentation review
+and diff checks pass. The isolated backend contains all **217 baseline paths**
+plus exactly the six reviewed Java edits, and all **nine visible scope hashes**
+match the tested copy. At the preservation checkpoint, all **211 unrelated
+dirty/untracked paths** matched their entry hashes/existence. Subsequent
+concurrent gallery updates remain outside this delivery. No
+tracked test is added or changed.
+
+Ignored inventories, baseline/final logs, AST/negative controls, disassemblies,
+class/source hashes, shutdown dump/cleanup evidence and ready PR description are
+under `logs/backend-contribution-review.local/`. Local synthetic/storage fixtures
+and database checks do not establish provider, hosted, physical-device or release
+acceptance. Ryan creates/merges the PR after exact-head CI/configured review;
+the next planned backend area is the media package.
