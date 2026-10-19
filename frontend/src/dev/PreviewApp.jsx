@@ -71,7 +71,11 @@ export default function ContractPreview() {
         );
         setReceipt(current);
       } catch (error) {
-        setReceipt(await api.getReceipt(current.contributionId, options));
+        try {
+          setReceipt(await api.getReceipt(current.contributionId, options));
+        } catch {
+          // Keep the last confirmed receipt and the original mutation uncertainty.
+        }
         throw error;
       }
     }
