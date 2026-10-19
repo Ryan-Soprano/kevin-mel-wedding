@@ -118,7 +118,7 @@ public class MediaService {
             throw new ApiException(400, "VALIDATION_FAILED", "Supply the upload grant ID.");
         }
         // Admit before the transactional read/decode/publish, so waiting requests retain no media buffers or locks.
-        if (finalizationSlots != null && !finalizationSlots.tryAcquire()) {
+        if (!finalizationSlots.tryAcquire()) {
             throw new ApiException(503, "MEDIA_UNAVAILABLE", "Media verification is busy. Please retry this memory.", 5);
         }
         try {
@@ -128,7 +128,7 @@ public class MediaService {
             return result.receipt();
         } finally {
             // The transactional proxy has committed or rolled back before returning to this service.
-            if (finalizationSlots != null) finalizationSlots.release();
+            finalizationSlots.release();
         }
     }
 }

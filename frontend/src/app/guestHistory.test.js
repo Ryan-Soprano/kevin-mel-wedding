@@ -1,7 +1,124 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { attachGuestHistory } from "./guestHistory.js";
+import { attachGuestHistory, restoreGuestHomeView } from "./guestHistory.js";
 import { createGuestFlow, guestFlowReducer, hasUnfinishedWork } from "./guestFlow.js";
+
+function homeRestorationFixture({
+  kind = "photos", withGallery = true, withChoice = true, withHeading = true,
+  bounds = { top: 200, bottom: 300 }, offsetTop = 640,
+} = {}) {
+  const calls = [];
+  function element(name) {
+    return {
+      focus(options) { calls.push([name, "focus", options]); },
+      scrollIntoView(options) { calls.push([name, "scrollIntoView", options]); },
+      getBoundingClientRect() { return bounds; },
+    };
+  }
+  const galleryHeading = element("gallery"), choice = element("choice"), heading = element("heading");
+  return {
+    calls,
+    options: {
+      choices: {
+        offsetTop,
+        querySelector(selector) {
+          if (selector === `.memory-choice--${kind}`) return withChoice ? choice : null;
+          return selector === "h2" && withHeading ? heading : null;
+        },
+      },
+      gallery: {
+        querySelector(selector) { return selector === "#couple-gallery" && withGallery ? galleryHeading : null; },
+      },
+      windowImpl: {
+        innerHeight: 800,
+        scrollTo(options) { calls.push(["window", "scrollTo", options]); },
+      },
+    },
+  };
+}
+
+test("direct gallery return focuses and reveals the gallery before considering opening or choice metadata", () => {
+  const f = homeRestorationFixture();
+  assert.equal(restoreGuestHomeView({
+    kind: "photos", scrollY: 0, showOpening: true, target: "gallery",
+  }, f.options), true);
+  assert.deepEqual(f.calls, [
+    ["gallery", "focus", { preventScroll: true }],
+    ["gallery", "scrollIntoView", { block: "start", behavior: "instant" }],
+  ]);
+});
+
+test("restored gallery returns preserve zero and later viewports without replacing them with the gallery position", () => {
+  for (const scrollY of [0, 2120]) {
+    const f = homeRestorationFixture();
+    assert.equal(restoreGuestHomeView({ target: "gallery", scrollY }, { ...f.options, restoredHome: true }), true);
+    assert.deepEqual(f.calls, [
+      ["gallery", "focus", { preventScroll: true }],
+      ["window", "scrollTo", { top: scrollY, behavior: "instant" }],
+    ]);
+  }
+});
+
+test("restored gallery returns without a saved viewport reveal the gallery", () => {
+  const f = homeRestorationFixture();
+  assert.equal(restoreGuestHomeView({ target: "gallery", scrollY: null }, { ...f.options, restoredHome: true }), true);
+  assert.deepEqual(f.calls, [
+    ["gallery", "focus", { preventScroll: true }],
+    ["gallery", "scrollIntoView", { block: "start", behavior: "instant" }],
+  ]);
+});
+
+test("missing gallery falls back to the sharing choice and preserves a zero viewport", () => {
+  const f = homeRestorationFixture({ withGallery: false });
+  assert.equal(restoreGuestHomeView({
+    kind: "photos", scrollY: 0, showOpening: false, target: "gallery",
+  }, f.options), true);
+  assert.deepEqual(f.calls, [
+    ["choice", "focus", { preventScroll: true }],
+    ["window", "scrollTo", { top: 0, behavior: "instant" }],
+  ]);
+});
+
+test("missing sharing choice focuses its heading and uses the section position when no viewport was saved", () => {
+  const f = homeRestorationFixture({ withChoice: false });
+  assert.equal(restoreGuestHomeView({ kind: "photos", scrollY: null, showOpening: false }, f.options), true);
+  assert.deepEqual(f.calls, [
+    ["heading", "focus", { preventScroll: true }],
+    ["window", "scrollTo", { top: 640, behavior: "instant" }],
+  ]);
+});
+
+test("direct sharing returns reveal an offscreen choice while history restoration keeps its saved viewport", () => {
+  for (const bounds of [{ top: -20, bottom: 80 }, { top: 750, bottom: 850 }]) {
+    for (const restoredHome of [false, true]) {
+      const f = homeRestorationFixture({ bounds });
+      assert.equal(restoreGuestHomeView({ kind: "photos", scrollY: 1200, showOpening: false }, {
+        ...f.options, restoredHome,
+      }), true);
+      assert.deepEqual(f.calls, [
+        ["choice", "focus", { preventScroll: true }],
+        ["window", "scrollTo", { top: 1200, behavior: "instant" }],
+        ...(!restoredHome ? [["choice", "scrollIntoView", { block: "nearest", behavior: "instant" }]] : []),
+      ]);
+    }
+  }
+});
+
+test("opening views leave App's heading fallback untouched unless a gallery destination is available", () => {
+  for (const target of [undefined, "gallery"]) {
+    const f = homeRestorationFixture({ withGallery: false });
+    assert.equal(restoreGuestHomeView({ kind: "photos", scrollY: 1200, showOpening: true, target }, f.options), false);
+    assert.deepEqual(f.calls, []);
+  }
+});
+
+test("sharing restoration tolerates unavailable elements and keeps its original top-of-page fallback", () => {
+  const f = homeRestorationFixture();
+  assert.equal(restoreGuestHomeView({ showOpening: false, scrollY: null }, {
+    windowImpl: f.options.windowImpl,
+  }), true);
+  assert.deepEqual(f.calls, [["window", "scrollTo", { top: 0, behavior: "instant" }]]);
+});
 
 function fixture({ audioEnabled = true, getHomeView, restoreHomeView, scrollRestoration = "auto" } = {}) {
   let flow = createGuestFlow({ audioEnabled }), recording, serial = 0, position = -1;

@@ -178,6 +178,82 @@ test("bounded part/issue pages replace rows, preserve separate cursors and accep
   await f.c.exportPage("issues", true); assert.equal(f.c.getSnapshot().export.issues.length, 5); assert.equal(f.c.getSnapshot().export.parts[0].partNumber, 21);
   await f.c.exportPage("parts", false); assert.equal(f.c.getSnapshot().export.parts[0].partNumber, 1); await f.c.checkExport(); assert.deepEqual(f.c.getSnapshot().export.issueCursors, [null]); assert.equal(f.c.getSnapshot().export.issues.length, 20); f.c.dispose();
 });
+for (const kind of ["parts", "issues"]) {
+  for (const next of [true, false]) {
+    test(`failed ${next ? "next" : "previous"} export ${kind} page preserves content and history until a successful retry`, async () => {
+      const job = { ...JOB, originalPartCount: 45, indexPartNumber: 46, totalOriginals: 45,
+        processedOriginalParts: 45, unavailableOriginals: 45, state: "READY_WITH_WARNINGS" };
+      const rows = {
+        parts: Array.from({ length: 46 }, (_, n) => ({ partNumber: n + 1, kind: n === 45 ? "INDEX" : "ORIGINALS",
+          state: n === 45 ? "UNPROCESSED" : "PROCESSED", availableOriginals: 0, unavailableOriginals: n < 45 ? 1 : 0 })),
+        issues: Array.from({ length: 45 }, (_, n) => ({ partNumber: n + 1, memoryId: id(n + 100), assetId: id(n + 200), code: "READ_FAILED" })),
+      };
+      const requests = [], failure = deferred(), dispatched = deferred();
+      let failPage = false;
+      const api = createArchiveApi({ client: createApiClient({ fetchImpl: async path => {
+        const url = new URL(path, "https://synthetic.test");
+        const pageKind = path.includes("/parts?") ? "parts" : path.includes("/issues?") ? "issues" : null;
+        let value;
+        if (pageKind) {
+          const cursor = url.searchParams.get("cursor"), offset = Number(cursor ?? 0);
+          requests.push({ kind: pageKind, cursor });
+          if (failPage && pageKind === kind) {
+            failPage = false;
+            dispatched.resolve();
+            await failure.promise;
+            return new Response(JSON.stringify({ error: { code: "TEMPORARILY_UNAVAILABLE", message: "Synthetic page failure" } }),
+              { status: 503, headers: { "Content-Type": "application/json" } });
+          }
+          value = { exportId: job.exportId, items: rows[pageKind].slice(offset, offset + 20), nextCursor: offset + 20 < rows[pageKind].length ? String(offset + 20) : null };
+        } else if (path === "/api/session") value = COUPLE_SESSION;
+        else if (path.startsWith("/api/memories?")) value = { items: [], nextCursor: null };
+        else value = job;
+        return new Response(JSON.stringify(value), { headers: { "Content-Type": "application/json" } });
+      } }) });
+      const f = await entered(api), otherKind = kind === "parts" ? "issues" : "parts";
+      let paging;
+      const pageState = state => ({
+        parts: state.parts, issues: state.issues, partCursors: state.partCursors, issueCursors: state.issueCursors,
+        partsNextCursor: state.partsNextCursor, issuesNextCursor: state.issuesNextCursor,
+      });
+      try {
+        await f.c.exportPage(otherKind, true);
+        if (!next) await f.c.exportPage(kind, true);
+        const before = f.c.getSnapshot().export, expectedCursor = next ? "20" : null;
+        failPage = true;
+        paging = f.c.exportPage(kind, next);
+        await dispatched.promise;
+        const loading = f.c.getSnapshot();
+        failure.resolve();
+        await paging;
+        const failed = f.c.getSnapshot();
+        const retryStart = requests.length;
+        await f.c.exportPage(kind, next);
+        const retried = f.c.getSnapshot();
+
+        assert.equal(loading.busy, true);
+        assert.deepEqual(pageState(loading.export), pageState(before), "Loading keeps the visible pages and their navigation");
+        assert.equal(failed.busy, false);
+        assert.match(failed.export.error, /could not be checked/);
+        assert.deepEqual(pageState(failed.export), pageState(before), "A failed read does not commit the requested page");
+        assert.deepEqual(requests.slice(retryStart), [{ kind, cursor: expectedCursor }], "Retry requests the same target page");
+        assert.equal(retried.export.error, null);
+        assert.deepEqual(retried.export[kind], rows[kind].slice(next ? 20 : 0, next ? 40 : 20));
+        const cursorKey = kind === "parts" ? "partCursors" : "issueCursors";
+        assert.deepEqual(retried.export[cursorKey], next ? [null, "20"] : [null]);
+        const otherCursorKey = kind === "parts" ? "issueCursors" : "partCursors";
+        assert.deepEqual(retried.export[otherKind], before[otherKind]);
+        assert.deepEqual(retried.export[otherCursorKey], before[otherCursorKey]);
+        assert.equal(retried.export[otherKind + "NextCursor"], before[otherKind + "NextCursor"]);
+      } finally {
+        failure.resolve();
+        await paging;
+        f.c.dispose();
+      }
+    });
+  }
+}
+
 test("late ignored-abort create after hide is reconciled through original job identity and never republished while hidden", async () => {
   const api = await signedMock(), original = api.createExport, pending = deferred(), dispatched = deferred(); let identity, creates = 0;
   api.createExport = (...args) => { creates++; identity = args[0]; dispatched.resolve(); return pending.promise.then(() => original(args[0], { ...args[1], signal: undefined })); };

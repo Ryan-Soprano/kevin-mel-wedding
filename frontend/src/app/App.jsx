@@ -20,6 +20,7 @@ import {
 import GuestGallery from "../features/guestGallery/GuestGallery.jsx";
 import CoupleScrapbook from "../features/guestGallery/CoupleScrapbook.jsx";
 import MemoryChoice from "../shared/components/MemoryChoice.jsx";
+import { restoreGuestHomeView } from "./guestHistory.js";
 import { useGuestHistory } from "./useGuestHistory.js";
 import "../styles/guest.css";
 import "../styles/guestWelcome.css";
@@ -102,10 +103,17 @@ export default function App({
     (state) => dispatch({ type: "FORM_STATE", kind: "audio", state }),
     [],
   );
-  const finishMemory = useCallback((kind) => {
+  const prepareGalleryReturn = useCallback((kind = null) => {
     homeReturn.current = { kind, scrollY: null, showOpening: false, target: "gallery" };
-    dispatch({ type: "FINISHED", kind });
   }, []);
+  const finishMemory = useCallback((kind) => {
+    prepareGalleryReturn(kind);
+    dispatch({ type: "FINISHED", kind });
+  }, [prepareGalleryReturn]);
+  const returnToGallery = useCallback(() => {
+    prepareGalleryReturn();
+    dispatch({ type: "NAVIGATE", screen: "welcome" });
+  }, [prepareGalleryReturn]);
   const noteDone = useCallback(() => finishMemory("note"), [finishMemory]);
   const photosDone = useCallback(() => finishMemory("photos"), [finishMemory]);
   const audioDone = useCallback(() => finishMemory("audio"), [finishMemory]);
@@ -132,31 +140,12 @@ export default function App({
       homeReturn.current.showOpening = false;
       delete homeReturn.current.target;
     }
-    if (flow.screen === "welcome") {
-      const { kind, scrollY, showOpening, target: destination } = homeReturn.current;
-      if ((previous !== "welcome" || restoredHome) && destination === "gallery") {
-        const target = homeAlbum.current?.querySelector("#couple-gallery");
-        if (target) {
-          target.focus({ preventScroll: true });
-          if (restoredHome && scrollY != null) {
-            window.scrollTo({ top: scrollY, behavior: "instant" });
-          } else {
-            target.scrollIntoView({ block: "start", behavior: "instant" });
-          }
-          return;
-        }
-      }
-      if ((previous !== "welcome" || restoredHome) && !showOpening) {
-        const target = choices.current?.querySelector(`.memory-choice--${kind}`)
-          ?? choices.current?.querySelector("h2");
-        target?.focus({ preventScroll: true });
-        window.scrollTo({ top: scrollY ?? choices.current?.offsetTop ?? 0, behavior: "instant" });
-        const bounds = target?.getBoundingClientRect();
-        if (!restoredHome && bounds && (bounds.top < 0 || bounds.bottom > window.innerHeight)) {
-          target.scrollIntoView({ block: "nearest", behavior: "instant" });
-        }
-        return;
-      }
+    if (flow.screen === "welcome" && (previous !== "welcome" || restoredHome)) {
+      if (restoreGuestHomeView(homeReturn.current, {
+        choices: choices.current,
+        gallery: homeAlbum.current,
+        restoredHome,
+      })) return;
     }
     heading.current?.focus({ preventScroll: true });
     window.scrollTo({ top: 0, behavior: "instant" });
@@ -378,7 +367,9 @@ export default function App({
               ? "Continue or share another memory"
               : "Share another memory"}
           </button>
-          <button type="button" className="button-secondary" onClick={() => { homeReturn.current = { kind: null, scrollY: null, showOpening: false, target: "gallery" }; dispatch({ type: "NAVIGATE", screen: "welcome" }); }}>Back to our photos</button>
+          <button type="button" className="button-secondary" onClick={returnToGallery}>
+            Back to our photos
+          </button>
         </section>
       )}
     </main>

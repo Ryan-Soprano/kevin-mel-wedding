@@ -29,7 +29,7 @@ import com.kevinmel.archive.web.ApiException;
 /** Ephemeral, bounded jobs. Restart deliberately loses identities; this is not a backup scheduler. */
 @Service
 public class ExportJobService implements AutoCloseable {
-    public static final long MAX_ZIP_BYTES=83_886_080;
+    public static final long MAX_ZIP_BYTES=PortablePartWriter.MAX_ARTIFACT_BYTES;
     private static final Duration INACTIVITY=Duration.ofMinutes(30), HARD_LIFETIME=Duration.ofHours(24);
     private static final int MAX_ACTIVE=4, MAX_IDENTITIES=256, MAX_ATTEMPTS=512;
     private final Object monitor=new Object();
