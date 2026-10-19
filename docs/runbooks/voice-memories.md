@@ -91,3 +91,70 @@ exact-size signing, CORS, expiry/recovery, inaccessible public objects, capacity
 and hosted decoder deadlines. Physical-phone and live audio IO passes remain
 unclaimed until that evidence exists; the historical automated verification
 record remains unchanged.
+
+## Audio form structure and local verification — October 19, 2026
+
+`AudioForm` keeps the public prop defaults, form shell and saved result.
+`useAudioForm` owns the existing capture/submission references, effects, draft
+state, retry locks, interruption and completion actions. `AudioCompose` renders
+the unsaved controls without adding a DOM wrapper. The controller bodies and
+their ordering were moved intact; capture, validation and upload coordinators
+retain their existing implementations.
+
+An isolated intended source snapshot passes all **504 frontend tests**, ESLint
+and the production build on Node 24.16.0. Two cases added to the existing private
+creation test file cover controller-free server rendering, private attribution,
+recording guidance, fallback controls, retained-clip locks and caption ARIA. No
+new test files were added. Independent source review found no actionable issue.
+
+Headless Chromium compares the merged baseline and refactored component using
+deterministic injected capture/submission owners at 1280, 390 and 320 px widths.
+All **36 mounted cases**, **422 assertions** and **18 baseline comparisons** pass,
+covering normalized DOM, controls, focus and lifecycle traces across capture,
+fallback, recovery, guest/private completion and hide/unmount states. The run
+records 198 snapshots and 18 screenshots; desktop and narrow samples were
+visually inspected. Another 107 ownership/completion/source audit checks pass;
+all 144 factory owners are disposed exactly once. Source hashes remain stable,
+including the separate `guestFlow.js` edit excluded from this increment. Reports
+and harnesses remain ignored under `logs/audio-form-refactor.local/` and
+`frontend/audio-form-refactor.local/`; owned browser/server resources are closed.
+These component checks use synthetic owners and make no microphone, codec,
+upload, persistence, physical-device or provider acceptance claim.
+
+## Audio directory correctness review — October 19, 2026
+
+The subsequent [directory review](../development/directory-review.md) covers all
+nine frontend audio files and intentionally fixes three boundaries beyond the
+mechanical extraction above:
+
+- Submission preparation hashes the retained original and builds its draft from
+  normalized, frozen input. Mutating the caller's object while hashing cannot
+  change the submitted metadata; deliberate retries keep the same intent.
+- Caption validation reads the API's array of field errors, opens and focuses the
+  matching field, and keeps it open while corrections clear stale errors. Reset
+  closes the caption disclosure for the next memory.
+- Capture checks ownership after change callbacks, releases every late stream
+  track even if an earlier stop throws, and prevents disposal or superseded
+  cleanup from starting work or publishing stale errors.
+
+The intended source snapshot passes **520 frontend tests**, ESLint and the
+production build on Node 24.16.0, with no skipped tests or new test files. The
+focused capture and submission suites pass 23 and 16 cases respectively after
+reproducing failures against their previous implementations. Independent review
+of those fixes found no actionable issue. The separate `guestFlow.js` working
+edit is preserved and excluded from the snapshot.
+
+Mounted Chromium checks pass **36 broader cases / 428 assertions** and **12
+caption regression cases / 199 assertions** at 1280, 390 and 320 px. Broader
+comparisons retain exact unaffected DOM, controls, focus and lifecycle traces;
+the native-array caption checkpoint and reset disclosure have explicit new
+expectations. Caption regressions use the real API decoder and submission
+coordinator with an injected transport, retaining the original File through an
+explicit corrected retry. Narrow error/correction screenshots were inspected;
+there were no page errors or external requests. Capture owners are injected in
+the component harness, so the real capture fixes are verified by their dedicated
+suite. Reports remain ignored under `logs/audio-directory-review.local/`, with
+owned browser/server resources closed.
+
+These are frontend controller and presentation checks. Real microphone, device,
+provider and hosted release acceptance remain tracked separately.

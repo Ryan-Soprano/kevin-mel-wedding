@@ -1,6 +1,8 @@
 import { AUDIO_CONTENT_TYPES, MAX_AUDIO_BYTES, MAX_AUDIO_SECONDS, RECORDER_MIME_CANDIDATES,
   audioContentType, audioFileContentType, audioFilename } from "./audioConstraints.js";
 
+const ACTIVE_PHASES = new Set(["requesting", "recording", "stopping", "checking"]);
+
 export class AudioCaptureError extends Error {
   constructor(code) { super(code); this.code = code; }
 }
@@ -60,11 +62,14 @@ export function createAudioCapture({
     [deadline, tick, stopDeadline].forEach(clearTimeoutImpl);
     deadline = tick = stopDeadline = null;
   }
-  function releaseTracks() {
-    for (const track of stream?.getTracks() ?? []) {
-      track.removeEventListener("ended", trackEnded);
+  function stopTracks(incoming, endedListener) {
+    for (const track of incoming?.getTracks() ?? []) {
+      if (endedListener) track.removeEventListener("ended", endedListener);
       try { track.stop(); } catch { /* Release every other track as well. */ }
     }
+  }
+  function releaseTracks() {
+    stopTracks(stream, trackEnded);
     stream = null;
   }
   function clearClip() {
@@ -77,14 +82,22 @@ export function createAudioCapture({
     recorder = null;
     if (previous && previous.state !== "inactive") { try { previous.stop(); } catch { /* Tracks are still stopped. */ } }
     releaseTracks();
-    publish({ phase: supported ? "idle" : "unsupported", clip: null, errorCode: null, elapsedSeconds: 0 });
+    const cleared = { phase: supported ? "idle" : "unsupported", clip: null, errorCode: null, elapsedSeconds: 0 };
+    // Disposal clears the exposed snapshot without reentering its subscriber.
+    if (disposed) state = Object.freeze({ ...state, ...cleared });
+    else publish(cleared);
   }
   function interrupt(code = "INTERRUPTED") {
-    if (!["requesting", "recording", "stopping", "checking"].includes(state.phase)) return;
-    discard(); publish({ phase: "error", errorCode: code });
+    if (!ACTIVE_PHASES.has(state.phase)) return;
+    const token = generation + 1;
+    discard();
+    if (token !== generation || disposed) return;
+    publish({ phase: "error", errorCode: code });
   }
   async function check(file, token) {
+    if (token !== generation || disposed) return;
     publish({ phase: "checking", errorCode: null });
+    if (token !== generation || disposed) return;
     try {
       const accepted = await validate(file);
       if (token !== generation || disposed) return;
@@ -103,12 +116,15 @@ export function createAudioCapture({
   function updateClock(token) {
     if (disposed || token !== generation || state.phase !== "recording") return;
     publish({ elapsedSeconds: Math.floor((now() - startedAt) / 1000) });
+    if (disposed || token !== generation || state.phase !== "recording") return;
     tick = setTimeoutImpl(() => updateClock(token), 1000);
   }
   function stop() {
     if (state.phase !== "recording") return;
+    const token = generation;
     clearTimeoutImpl(deadline); clearTimeoutImpl(tick); deadline = tick = null;
     publish({ phase: "stopping", elapsedSeconds: Math.floor((now() - startedAt) / 1000) });
+    if (token !== generation || disposed || state.phase !== "stopping") return;
     stopDeadline = setTimeoutImpl(() => interrupt("RECORDER_ERROR"), 5000);
     try { recorder.stop(); } catch { interrupt("RECORDER_ERROR"); }
     releaseTracks();
@@ -116,13 +132,16 @@ export function createAudioCapture({
   const capture = {
     getSnapshot: () => state,
     async start() {
-      if (disposed || !supported || ["requesting", "recording", "stopping", "checking"].includes(state.phase)) return;
-      discard(); const token = generation;
+      if (disposed || !supported || ACTIVE_PHASES.has(state.phase)) return;
+      const token = generation + 1;
+      discard();
+      if (token !== generation || disposed) return;
       publish({ phase: "requesting" });
+      if (token !== generation || disposed || state.phase !== "requesting") return;
       deadline = setTimeoutImpl(() => interrupt("PERMISSION_TIMEOUT"), 30_000);
       try {
         const incoming = await requestStream({ audio: true, video: false });
-        if (token !== generation || disposed) { incoming.getTracks().forEach(track => track.stop()); return; }
+        if (token !== generation || disposed) { stopTracks(incoming); return; }
         clearTimeoutImpl(deadline); deadline = null; stream = incoming;
         let selected;
         for (const mimeType of RECORDER_MIME_CANDIDATES) {
@@ -158,7 +177,9 @@ export function createAudioCapture({
         tick = setTimeoutImpl(() => updateClock(token), 1000);
       } catch (error) {
         if (token !== generation || disposed) return;
+        const discardedToken = generation + 1;
         discard();
+        if (discardedToken !== generation || disposed) return;
         publish({ phase: "error", errorCode: ["NotAllowedError", "SecurityError"].includes(error.name)
           ? "PERMISSION_DENIED" : error.code ?? "RECORDER_ERROR" });
       }
@@ -166,10 +187,11 @@ export function createAudioCapture({
     stop, discard, interrupt,
     useFile(file) {
       if (disposed) return Promise.resolve();
+      const token = generation + 1;
       discard();
-      return file ? check(file, generation) : Promise.resolve();
+      return file ? check(file, token) : Promise.resolve();
     },
-    dispose() { if (disposed) return; discard(); disposed = true; },
+    dispose() { if (disposed) return; disposed = true; discard(); },
   };
   return Object.freeze(capture);
 }
