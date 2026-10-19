@@ -34,7 +34,17 @@ function TimelineDeleteConfirmation({ disabled, handlers, cancelDelete }) {
 }
 
 export default function TimelineDetail({ view, cancelDelete, deleteTrigger }) {
-  const { state, busy, disabled, actions, fields, setFields, confirmDelete, handlers } = view;
+  const {
+    state,
+    busy,
+    disabled,
+    actions,
+    fields,
+    fieldErrors,
+    registerEditorField,
+    confirmDelete,
+    handlers,
+  } = view;
   if (!state.event) return null;
   if (state.event.deletedAt !== null) return <ArchiveEmpty title="Deleted timeline event" icon="timeline">
     <p>This event was deleted. Its links were removed; the memories and original files remain in your archive. Events do not have a restore action.</p>
@@ -46,7 +56,14 @@ export default function TimelineDetail({ view, cancelDelete, deleteTrigger }) {
         {state.event.description && <p className="inbox-note">{state.event.description}</p>}
         <p>{state.event.memberCount} linked {getTimelineMemoryCount(state.event.memberCount)} · Couple only</p>
       </>}>
-        <TimelineEditor fields={fields} setFields={setFields} disabled={disabled} onSubmit={handlers.save} />
+        <TimelineEditor
+          fields={fields}
+          onChange={handlers.changeFields}
+          disabled={disabled}
+          onSubmit={handlers.save}
+          errors={fieldErrors?.editor}
+          onFieldRef={registerEditorField}
+        />
         <ArchiveActions>
           <button type="button" disabled={disabled} onClick={() => actions.select("KEEP")}>Link memories</button>
           <button ref={deleteTrigger} className="button-secondary" type="button" disabled={disabled} onClick={handlers.beginDelete}>Delete event…</button>

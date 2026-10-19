@@ -7,8 +7,16 @@ import { createServer } from "vite";
 import react from "@vitejs/plugin-react";
 import { initialTimeline } from "../api/timelineActions.js";
 import { MEDIA_DETAIL, MEMORY_DETAIL } from "../../../shared/api/v1/fixtures.js";
-import { emptyEventFields } from "../timelineFields.js";
-import { getTimelineFeedback } from "../timelineDisplay.js";
+import { ApiError } from "../../../shared/api/apiClient.js";
+import {
+  emptyEventFields,
+  normalizeEventFields,
+  normalizeTimelineFilters,
+} from "../timelineFields.js";
+import {
+  getTimelineFeedback,
+  getTimelineFilterErrors,
+} from "../timelineDisplay.js";
 
 const event = { eventId: "22222222-2222-4222-8222-222222222222", title: "Our <milestone>", description: "Private description",
   eventDate: "2024-03", datePrecision: "MONTH", visibility: "COUPLE_ONLY", revision: "33333333-3333-4333-8333-333333333333",
@@ -19,6 +27,53 @@ function createViewServer() {
   return createServer({ configFile: false, logLevel: "silent", root: fileURLToPath(new URL("../../../../", import.meta.url)),
     plugins: [react()], server: { middlewareMode: true, hmr: false, watch: null }, appType: "custom", optimizeDeps: { noDiscovery: true, include: [] } });
 }
+
+test("timeline-local validation identifies event fields and keeps filter and server feedback contracts distinct", () => {
+  const fields = {
+    title: "Milestone",
+    description: null,
+    eventDate: "2000-02-29",
+    datePrecision: "DAY",
+  };
+  assert.deepEqual(normalizeEventFields(fields), fields);
+  for (const [input, expected] of [
+    [{ ...fields, title: " " }, ["title"]],
+    [{ ...fields, eventDate: "1900-02-29" }, ["eventDate"]],
+    [{ ...fields, description: "private\0description", eventDate: "1900-02-29" }, ["description", "eventDate"]],
+  ]) {
+    assert.throws(() => normalizeEventFields(input), (failure) => {
+      assert.ok(failure instanceof ApiError);
+      assert.equal(failure.code, "VALIDATION_FAILED");
+      assert.deepEqual(failure.fieldErrors.map(item => item.field), expected);
+      assert.ok(failure.fieldErrors.every(item => item.message));
+      return true;
+    });
+  }
+  assert.deepEqual(
+    getTimelineFilterErrors({ fromYear: "1", toYear: "9999", precision: "ALL" }),
+    {},
+  );
+  for (const [values, expected] of [
+    [{ fromYear: "0", toYear: "", precision: "ALL" }, "fromYear"],
+    [{ fromYear: "", toYear: "abcd", precision: "ALL" }, "toYear"],
+    [{ fromYear: "2025", toYear: "2024", precision: "ALL" }, "toYear"],
+    [{ fromYear: "2025", toYear: "", precision: "UNKNOWN" }, "datePrecision"],
+  ]) {
+    assert.deepEqual(Object.keys(getTimelineFilterErrors(values)), [expected]);
+  }
+  assert.throws(
+    () => normalizeTimelineFilters({ fromYear: 2025, datePrecision: "UNKNOWN" }),
+    TypeError,
+    "the API filter normalizer retains its existing error contract",
+  );
+  assert.equal(
+    getTimelineFeedback("Earlier local error", {
+      ...initialTimeline(),
+      mutation: { ...initialTimeline().mutation, error: "New server error" },
+    }).text,
+    "New server error",
+  );
+});
 test("real private timeline views expose honest partial dates, original dates/saved times, paging, exact recovery and tombstone controls", async () => {
   // Real SSR verifies view contracts. Root separately verifies actual Chrome
   // keyboard focus, phone/zoom layout and packaged authenticated HTTP flows.
@@ -27,6 +82,10 @@ test("real private timeline views expose honest partial dates, original dates/sa
     const { default: Timeline } = await server.ssrLoadModule("/src/features/timeline/components/Timeline.jsx");
     const render = (state, extra = {}) => renderToStaticMarkup(createElement(Timeline, { state: { ...initialTimeline(), ...state }, busy: false, locked: false, actions, ...extra }));
     const empty = render({}); assert.match(empty, /No events on this timeline page/); assert.match(empty, /Create a timeline event/);
+    assert.match(
+      empty,
+      /<h2[^>]*tab[Ii]ndex="-1"[^>]*class="visually-hidden">Timeline events · Page 1<\/h2>/,
+    );
     assert.match(empty, /class="archive-intro"/); assert.match(empty, /class="archive-empty" role="status"/);
     assert.match(empty, /<svg[^>]*aria-hidden="true"[^>]*focusable="false"/);
     const list = render({ items: [event, { ...event, eventId: "44444444-4444-4444-8444-444444444444", eventDate: null, datePrecision: "UNKNOWN" }], nextCursor: "opaque-next" });
@@ -41,6 +100,10 @@ test("real private timeline views expose honest partial dates, original dates/sa
     assert.match(detail, /Event date: March 2024/); assert.match(detail, /Memory date: Sometime in 2022/); assert.match(detail, /Saved on:/);
     assert.match(detail, /Oct 24, 2026, 2:30 PM EDT<\/time> · Eastern/); assert.doesNotMatch(detail, /Chicago|CDT|CST/);
     assert.match(detail, /YYYY-MM/); assert.match(detail, /Save event details/); assert.match(detail, /Unlink from event/); assert.match(detail, /Guest contribution/);
+    assert.match(
+      detail,
+      /class="visually-hidden">Linked timeline memories · Page 1<\/h2>/,
+    );
     assert.doesNotMatch(detail.match(/<input[^>]*id="timeline-date"[^>]*>/)?.[0] ?? "", /inputMode="numeric"/);
     const yearDetail = render({ view: "detail", event: { ...event, eventDate: "2024", datePrecision: "YEAR" } });
     assert.match(yearDetail.match(/<input[^>]*id="timeline-date"[^>]*>/)?.[0] ?? "", /inputMode="numeric"/);
@@ -69,6 +132,9 @@ test("extracted timeline views preserve stale-page results, separate recovery dr
     const { default: TimelineRecovery } = await server.ssrLoadModule("/src/features/timeline/components/TimelineRecovery.jsx");
     const { default: TimelineDetail } = await server.ssrLoadModule("/src/features/timeline/components/TimelineDetail.jsx");
     const { default: TimelineMemorySummary } = await server.ssrLoadModule("/src/features/timeline/components/TimelineMemorySummary.jsx");
+    const { default: TimelineList } = await server.ssrLoadModule(
+      "/src/features/timeline/components/TimelineList.jsx",
+    );
     const renderComponent = (Component, props) => renderToStaticMarkup(createElement(Component, props));
     const render = (state, extra = {}) => renderComponent(Timeline, { state: { ...initialTimeline(), ...state }, busy: false, locked: false, actions, ...extra });
     const stale = render({ error: "Page unavailable", items: [event], cursors: [null, "previous"], nextCursor: "next" });
@@ -100,7 +166,7 @@ test("extracted timeline views preserve stale-page results, separate recovery dr
     for (const [precision, date, length, placeholder] of [
       ["YEAR", "0001", 4, "YYYY"], ["MONTH", "2024-03", 7, "YYYY-MM"], ["DAY", "9999-12-31", 10, "YYYY-MM-DD"],
     ]) {
-      const markup = renderComponent(TimelineEventFields, { fields: { ...emptyEventFields(), title: "Draft <title>", eventDate: date, datePrecision: precision }, setFields: noop, disabled: false });
+      const markup = renderComponent(TimelineEventFields, { fields: { ...emptyEventFields(), title: "Draft <title>", eventDate: date, datePrecision: precision }, onChange: noop, disabled: false });
       const input = markup.match(/<input[^>]*id="timeline-date"[^>]*>/)?.[0] ?? "";
       assert.match(input, /type="text"/);
       assert.match(input, new RegExp(`maxLength="${length}"`));
@@ -110,12 +176,77 @@ test("extracted timeline views preserve stale-page results, separate recovery dr
       else assert.doesNotMatch(input, /inputMode=/);
       assert.match(markup, /Draft &lt;title&gt;/);
     }
-    const unknownFields = renderComponent(TimelineEventFields, { fields: emptyEventFields(), setFields: noop, disabled: false });
+    const unknownFields = renderComponent(TimelineEventFields, { fields: emptyEventFields(), onChange: noop, disabled: false });
     assert.doesNotMatch(unknownFields, /id="timeline-date"/);
+
+    for (const prefix of ["timeline", "timeline-retry"]) {
+      const invalidFields = renderComponent(TimelineEventFields, {
+        fields: {
+          ...emptyEventFields(),
+          title: " ",
+          eventDate: "1900-02-29",
+          datePrecision: "DAY",
+        },
+        onChange: noop,
+        disabled: false,
+        prefix,
+        errors: {
+          title: "Correct the title",
+          eventDate: "Correct the date",
+        },
+      });
+      assert.match(
+        invalidFields,
+        new RegExp(`id="${prefix}-title"[^>]*aria-invalid="true"[^>]*aria-describedby="${prefix}-title-error"`),
+      );
+      assert.match(
+        invalidFields,
+        new RegExp(`id="${prefix}-date"[^>]*aria-invalid="true"[^>]*aria-describedby="${prefix}-date-help ${prefix}-date-error"`),
+      );
+      assert.match(
+        invalidFields,
+        new RegExp(`<p id="${prefix}-title-error" class="form-error" role="alert">Correct the title<`),
+      );
+      assert.match(
+        invalidFields,
+        new RegExp(`<p id="${prefix}-date-error" class="form-error" role="alert">Correct the date<`),
+      );
+    }
+    const invalidFilters = renderComponent(TimelineList, {
+      view: {
+        state: initialTimeline(),
+        busy: false,
+        disabled: false,
+        actions,
+        fromYear: "0",
+        setFromYear: noop,
+        toYear: "",
+        setToYear: noop,
+        precision: "UNKNOWN",
+        setPrecision: noop,
+        handlers: { filter: noop, clearFilters: noop },
+        fieldErrors: {
+          editor: { title: "Unrelated editor message" },
+          filters: {
+            fromYear: "Correct the year",
+            datePrecision: "Clear the range or change precision",
+          },
+        },
+      },
+    });
+    assert.match(
+      invalidFilters,
+      /id="timeline-from-year"[^>]*aria-invalid="true"[^>]*aria-describedby="timeline-from-year-error"/,
+    );
+    assert.match(
+      invalidFilters,
+      /id="timeline-filter-precision"[^>]*aria-invalid="true"[^>]*aria-describedby="timeline-filter-precision-error"/,
+    );
+    assert.doesNotMatch(invalidFilters, /Unrelated editor message/);
 
     const recoveryView = {
       state: { ...initialTimeline(), event, mutation: { phase: "csrf", error: "Refresh needed", canRetry: true, needsFields: true } },
-      busy: false, locked: true, actions, retryFields: emptyEventFields(), setRetryFields: noop, handlers: { retry: noop },
+      busy: false, locked: true, actions, retryFields: emptyEventFields(), handlers: { retry: noop, changeRetryFields: noop },
     };
     const recovery = renderComponent(TimelineRecovery, { view: recoveryView });
     assert.match(recovery, /class="archive-panel timeline-recovery"/);
@@ -130,8 +261,8 @@ test("extracted timeline views preserve stale-page results, separate recovery dr
     assert.doesNotMatch(noRetry, /timeline-retry-title|Retry this same timeline change/);
 
     const confirmationView = { state: { ...initialTimeline(), view: "detail", event }, busy: false, disabled: true, actions,
-      fields: { title: event.title, description: event.description, eventDate: event.eventDate, datePrecision: event.datePrecision }, setFields: noop,
-      confirmDelete: true, handlers: { save: noop, beginDelete: noop, cancelDeletion: noop, confirmDeletion: noop } };
+      fields: { title: event.title, description: event.description, eventDate: event.eventDate, datePrecision: event.datePrecision },
+      confirmDelete: true, handlers: { save: noop, changeFields: noop, beginDelete: noop, cancelDeletion: noop, confirmDeletion: noop } };
     const confirmation = renderComponent(TimelineDetail, { view: confirmationView });
     assert.match(confirmation, /role="group" aria-labelledby="timeline-delete-heading"/);
     assert.match(confirmation, /disabled="">Cancel event deletion/);
@@ -149,7 +280,7 @@ test("extracted timeline views preserve stale-page results, separate recovery dr
     assert.match(filename, /Guest contribution · From Guest &lt;name&gt;/);
 
     assert.deepEqual(getTimelineFeedback("", { ...initialTimeline(), error: "Later error" }),
-      { visible: true, className: "form-error", role: "alert", text: "" }, "truthy visibility and nullish display precedence remain distinct");
+      { visible: true, className: "form-error", role: "alert", text: "Later error" }, "server errors remain independent from earlier local validation");
     const emptyFirstError = render({ error: "", mutation: { phase: "idle", error: "Later mutation error", canRetry: false, needsFields: false } });
     assert.match(emptyFirstError, /class="form-error" role="alert"><\/p>/);
     assert.doesNotMatch(emptyFirstError, /Later mutation error/);

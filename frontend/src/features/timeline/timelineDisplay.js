@@ -46,7 +46,7 @@ export function getTimelineFeedback(error, state) {
   return {
     visible: Boolean(error || state.error || state.mutation.error || state.notice),
     className, role,
-    text: error ?? state.error ?? state.mutation.error ?? state.notice,
+    text: state.error ?? state.mutation.error ?? error ?? state.notice,
   };
 }
 
@@ -64,4 +64,27 @@ export function getTimelineReloadLabel(phase) {
 export function getTimelineYear(value) {
   if (value) return Number(value);
   return null;
+}
+
+export function getTimelineFilterErrors({ fromYear, toYear, precision }) {
+  const errors = {};
+  for (const [field, value] of [["fromYear", fromYear], ["toYear", toYear]]) {
+    if (value && (!/^\d{1,4}$/.test(value) || Number(value) < 1 || Number(value) > 9999)) {
+      errors[field] = "Use a year between 1 and 9999.";
+    }
+  }
+  if (
+    !errors.fromYear && !errors.toYear && fromYear && toYear
+    && Number(fromYear) > Number(toYear)
+  ) {
+    errors.toYear =
+      "The ending year must be the same as or later than the starting year.";
+  }
+  if (precision === "UNKNOWN" && (fromYear || toYear)) {
+    errors.datePrecision =
+      "Unknown dates cannot have a year range. Clear the years or choose another precision.";
+  } else if (precision !== "ALL" && !Object.hasOwn(TIMELINE_PRECISIONS, precision)) {
+    errors.datePrecision = "Choose a valid date precision.";
+  }
+  return errors;
 }

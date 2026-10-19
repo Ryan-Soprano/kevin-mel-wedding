@@ -47,6 +47,10 @@ For prerequisites, install/run/check commands, the development proxy, and curren
 
 Keep component tests beside the implementation they exercise. Update this map when boundaries change; keep implementation work in Notion.
 
+Timeline keeps its view/identity/revision/applied-filter reset key inside the
+feature boundary. That boundary retains paging focus while the keyed editor
+owns drafts and field validation.
+
 ## Source readability
 
 Ryan prefers the expanded formatting used in the album files. Put long imports,

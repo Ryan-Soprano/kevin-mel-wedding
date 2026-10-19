@@ -41,7 +41,15 @@ function AlbumsScreen({ view }) {
 function TimelineScreen({ view }) {
   const { timeline: state, busy } = view.snapshot;
   const key = `${state.view}:${state.event?.eventId ?? "new"}:${state.event?.revision ?? "new"}:${JSON.stringify(state.filters)}`;
-  return <Timeline key={key} state={state} busy={busy} locked={view.reviewLocked} actions={view.actions.timeline} />;
+  return (
+    <Timeline
+      editorKey={key}
+      state={state}
+      busy={busy}
+      locked={view.reviewLocked}
+      actions={view.actions.timeline}
+    />
+  );
 }
 
 function LibraryScreen({ view }) {
