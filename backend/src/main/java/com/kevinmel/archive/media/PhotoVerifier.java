@@ -10,6 +10,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import javax.imageio.ImageIO;
 import javax.imageio.ImageReadParam;
+import javax.imageio.stream.MemoryCacheImageInputStream;
 
 import org.springframework.stereotype.Component;
 import com.kevinmel.archive.web.ApiException;
@@ -30,7 +31,7 @@ public class PhotoVerifier {
                     expected.checksum().getBytes(java.nio.charset.StandardCharsets.US_ASCII))) {
                 throw invalid();
             }
-            try (var input = ImageIO.createImageInputStream(new ByteArrayInputStream(bytes))) {
+            try (var input = new MemoryCacheImageInputStream(new ByteArrayInputStream(bytes))) {
                 var readers = ImageIO.getImageReaders(input);
                 if (!readers.hasNext()) {
                     throw invalid();

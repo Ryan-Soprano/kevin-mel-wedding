@@ -1328,3 +1328,164 @@ under `logs/backend-contribution-review.local/`. Local synthetic/storage fixture
 and database checks do not establish provider, hosted, physical-device or release
 acceptance. Ryan creates/merges the PR after exact-head CI/configured review;
 the next planned backend area is the media package.
+
+## Backend media decisions — October 19, 2026
+
+This batch reviews all **17 production Java files**, **22 existing test/support
+files**, and **one placeholder** in the backend `media/` packages: **40 tracked
+paths**. The `.gitkeep` deletion predates this task and stays excluded. The branch
+starts from contribution head `47ec048`; unrelated album/library/health,
+gallery/supporting work and other placeholder deletions stay outside this batch.
+
+All 17 production files receive expanded formatting: explicit control-flow
+blocks, readable parameters, records, constructor assignments, calls and builder/
+JDBC chains. The controller's wildcard becomes six explicit annotation imports.
+The mechanical cleanup and the photo-cache behavior fix are separate commits.
+
+| File in production `media/` | Decision and reason |
+|---|---|
+| `AudioRequest.java` | Simplify formatting; keep strict single-original metadata, raw UTF-16 bounds, canonical IDs/types, normalized attribution/caption and length-prefixed fingerprints of every claim. |
+| `AudioVerifier.java` | Simplify formatting; keep strict container framing, checksum/size, one supported audio stream, channel/sample/duration bounds, bounded full native decoding, private temporary input, process termination and operational 503 versus invalid 422 outcomes. |
+| `MediaController.java` | Simplify formatting/imports; keep shared contract/key validation, same-origin checks, empty grant bodies and capability-protected grant/finalization delegation. |
+| `MediaService.java` | Simplify formatting; keep normalized guest/private creation, configuration availability, replay/admission policy, current-account checks, live-grant reuse, original/staging budgets and nonblocking finalization permits released after transaction completion. |
+| `MediaTypes.java` | Simplify formatting; keep canonical immutable type sets and coherent byte/duration/container/codec predicates used by playback, recovery, sharing and export. No new constant-alias abstraction is justified. |
+| `ObjectStorage.java` | Simplify formatting; keep the narrow storage contract and small upload/read grant projections shared by production and test adapters. |
+| `PhotoAdmissionPolicy.java` | Simplify formatting; keep positive configuration validation, separate original/staging budgets, deliberate pause behavior and overflow-safe capacity subtraction. |
+| `PhotoFinalizer.java` | Simplify formatting; keep grant ownership validation before replay, expiry, bounded candidate verification and publication of those exact bytes to a server-only original key. Invalid media commits FAILED before the outer service emits 422; operational failures remain retryable. |
+| `PhotoRepository.java` | Simplify formatting; keep READ COMMITTED retry convergence, advisory admission locking, guest/source/author ownership, memory-then-asset lock order, conservative reservations, retained grant identity and verified metadata transitions. Exact SQL values remain intact. |
+| `PhotoRequest.java` | Simplify formatting; keep one-to-five ordered items, raw string/filename/scalar validation, normalized IDs, duplicate detection and fingerprints including every claim and item order. |
+| `PhotoVerifier.java` | Fix the reproduced dependency on ImageIO's global disk cache by explicitly using a memory image stream for already bounded bytes; also expand formatting. Keep integrity, actual format, dimensions/pixels, subsampled decode/warning rejection, reader disposal and original-byte ownership. |
+| `PlaybackController.java` | Simplify formatting; keep authenticated private playback and no-store response headers. |
+| `PlaybackRepository.java` | Simplify formatting; keep the complete verified media tuple and event/review/audience/purge eligibility predicates with a narrow private projection. |
+| `PlaybackService.java` | Simplify formatting; keep current access validation, exact original key/type/size/codec checks, verified-object HEAD through storage and a bounded signed link. Sharing reuses the same verified-original validator. |
+| `R2ObjectStorage.java` | Simplify formatting; keep exact key/size/MIME signing scope, actual bounded expiry, original HEAD checks, bounded reads with abort/close, verified-byte publication, conditional recovery/tombstone writes and safe errors. |
+| `R2StorageConfiguration.java` | Simplify formatting; keep opt-in startup validation of private endpoint, bucket and credentials and close ownership of the SDK clients. |
+| `StorageConfiguration.java` | Simplify formatting; keep injectable UTC time and fail-closed disabled storage, including private-read errors. |
+
+| File in test `media/` | Decision and reason |
+|---|---|
+| `AlbumHttpTest.java` | Keep unchanged: conditional identity/revisions, membership concurrency, revocation, photo/audio eligibility and deletion preserve originals. |
+| `AudioFinalizationFailureTest.java` | Keep unchanged: missing/failed native runtime stays retryable while invalid audio records FAILED. |
+| `AudioFixtures.java` | Keep unchanged: shared synthetic audio generator supports codec, HTTP, restart and organization tests; this is support code, not a separate test suite. |
+| `AudioGateHttpTest.java` | Keep unchanged: default-disabled audio rejects new valid intent without affecting notes. |
+| `AudioHttpTest.java` | Keep unchanged: supported containers, exact original bytes, server duration, replay, invalid/transient/commit failures, capacity, concurrency and authenticated playback. |
+| `AudioRequestTest.java` | Keep unchanged: strict fields/raw bounds, filenames, scalar limits and complete normalized identity. |
+| `AudioRestartTest.java` | Keep unchanged: an issued pending permission remains recoverable after restart with new audio admission/uploads closed. |
+| `AudioUnavailableHttpTest.java` | Keep unchanged: missing native tools cannot publish or commit FAILED and retain the retryable intent. |
+| `AudioVerifierTest.java` | Keep unchanged: real local codecs, exact two-minute boundaries, timestamps/gaps, framing, tracks/channels, integrity and termination-before-input-cleanup. |
+| `CoupleAuthoringHttpTest.java` | Keep unchanged: actor-bound retries, guest isolation, private media publication, metadata/commit revocation, gate/budget rules and erasure. |
+| `ExportHttpTest.java` | Keep unchanged: authenticated integrity-bound archives, strict route contracts, account-scoped discovery, metadata/inactivity and revocation during original reads. |
+| `LibraryHttpTest.java` | Keep unchanged: bounded search/tags, conditional identity, lock/revision races, mixed verified media and original preservation. |
+| `MediaAdmissionPostgresTest.java` | Keep unchanged: database reservation accounting, cross-asset concurrent capacity, pause/replay and retained expired-grant reservations. |
+| `MediaServiceAdmissionTest.java` | Keep unchanged: fail-fast overlapping finalizations, malformed grants and permit release after invalid/storage/commit outcomes. |
+| `PhotoHttpTest.java` | Keep unchanged: private intent/replay, exact verified publication, failed renewal, grant scope/expiry, partial batches, concurrent retry and rollback. |
+| `PhotoRestartTest.java` | Keep unchanged: pending permissions and completed originals survive application restart. |
+| `PhotoValidationTest.java` | Extend the existing file with one regression covering valid JPEG, PNG and WebP when a configured ImageIO cache becomes unavailable. Restore global cache settings in finally and assert originals remain unchanged. Keep existing raw metadata, identity, integrity and dimension cases. |
+| `R2DeletionStorageTest.java` | Keep unchanged: conditional private ledger writes, exact identity, bounded pages/bodies, aborts, safe failures and precise idempotent deletion scope. |
+| `R2ObjectStorageTest.java` | Keep unchanged: exact HEAD/signing metadata and actual expiry, safe filenames, bounded reads, verified bytes and redacted errors. |
+| `R2RecoveryStorageTest.java` | Keep unchanged: conditional exact-original restoration accepts only matching bytes/size/MIME and never overwrites a conflicting object. |
+| `TimelineHttpTest.java` | Keep unchanged: chronology, conditional identity, pagination, lock/revision races, mixed verified media and original preservation. |
+| `WeddingJourneyHttpTest.java` | Keep unchanged: actual mixed guest-to-private HTTP journey, partial recovery, review and unchanged saved siblings. |
+
+Consumer tracing covers guest and private contribution creation, retry receipts,
+grants and finalization; review/retention; private playback and sharing;
+operator readiness/recovery/deletion; portable export; migrations; and the
+frontend photo/audio coordinators, shared JSON/grant/receipt decoders and private
+viewer. These consumer packages are boundary evidence, not additional fully
+reviewed directories.
+
+Storage-disabled creation/grant failure is explicit policy in
+`docs/runbooks/private-photo-storage.md`. Private playback already authorized
+and in flight may finish during a later account/media change, as documented in
+`docs/api/v1/authorization-verification.md`; sharing deliberately has stronger
+locking. Neither policy warrants speculative availability/replay or locking
+changes. Scope rechecks around private writes protect different revocation
+windows and remain intact.
+
+The photo regression uses synthetic valid originals with correct hashes/sizes.
+The unchanged verifier accepts all three formats with a healthy ImageIO cache;
+after the owned configured cache directory becomes unavailable it rejects all
+three with `422 INVALID_MEDIA`. The exact new test also fails against the
+unchanged verifier. Explicit memory streaming removes this unnecessary disk
+dependency for bytes already bounded to 10 MB. It retains stream/reader cleanup
+and benefits operator recovery's shared verifier too. The old cache was removed
+normally on close; this is not evidence of leaked files or a POSIX disclosure.
+No measured speed, memory-use or throughput improvement is claimed. No new
+production module, test file, dependency, migration or build setting is added.
+
+## Backend media verification — October 19, 2026
+
+The isolated baseline passes **105 tests** in 17 existing media suites, with zero
+failures/errors/skips. This includes actual HTTP/PostgreSQL, admission, signing,
+restart, supported local codecs, failure/retry and mixed wedding-journey checks.
+The final `PhotoValidationTest` passes **five tests**, including the exact added
+regression that fails against the unchanged verifier. Standalone before/after
+probes confirm all three supported photo formats and restoration of ImageIO's
+global settings; verification leaves each original byte array unchanged.
+
+Mechanical commit `7b9afa1` is verified separately from the subsequent intentional
+cache fix. Java **25** parse-level comparisons match all **17 production files**
+from committed baseline to saved entry to a frozen formatting snapshot. Exact
+processed string/SQL values, annotations, modifiers, names and member/argument/
+statement order remain checked. Import order is ignored; only the controller's
+exact six-import annotation expansion is allowed. Harmless single terminal/
+expression control-body wrappers are normalized, along with two explicit
+`AudioVerifier` if-body wrappers around already scoped try/catch cleanup. Inner
+resource/declaration/body/catch/finally scopes remain checked. The original
+stricter rejection of those two wrappers is saved, and no arbitrary declaration
+or block scopes are discarded.
+
+All **eight negative controls** are rejected: changed validation limit, SQL token,
+SQL whitespace, authorization order, unexpected import, declaration scope,
+audio cleanup target and an extra annotation in the wildcard expansion. All
+**51 stage/source hashes** and the immutable formatting sources are retained.
+This parser comparison does not resolve type bindings or establish runtime
+correctness. After compilation, all **33 media top-level/nested classes**
+have identical `javap -c -p -constants -s` output before/after formatting, including
+printed constants, descriptors and instructions. Annotation/bootstrap/debug
+metadata are excluded from that disassembly comparison; raw class-byte equality
+is not claimed. Both proofs cover the mechanical snapshot, not the intentional
+memory-stream construction/import change.
+
+Verification uses Windows, Temurin **25.0.3+9-LTS**, Maven **3.9.16**, Spring Boot
+**4.1.1**, Docker **29.7.2**, disposable PostgreSQL **17**, and the existing local
+FFmpeg/ffprobe **9.0.2**. A local CLI override, `-Dsurefire.exitTimeout=120`, extends
+only the test-fork shutdown grace from the plugin default of 30 seconds after
+the prior contribution batch's cached Spring/Hikari shutdown diagnostic. Tracked
+build/runtime configuration remains unchanged. An initial full-suite attempt
+inside the sandbox could not access Docker/Java attach pipes and was stopped;
+it is retained as an incomplete environment-blocked attempt and is not counted
+as validation. The full run uses the required local integration-test access.
+
+The isolated intended backend checks all **217 baseline paths** with exactly
+**18 source/test differences**: 17 production files and the existing photo test.
+All **39 existing visible scope files** match the tested copy; the other **21
+reviewed test/support files** retain their entry hashes. The pre-existing media
+placeholder deletion remains excluded. At the preservation checkpoint, **207
+of 211 unrelated paths** match entry; four concurrent gallery/tester/release
+documentation or JSX updates differ and remain excluded. No unrelated file is
+restored, staged or overwritten by this batch. Refreshed main `c9ca28e` includes
+contribution PR **83**, and its backend matches this batch's baseline.
+
+The final full backend suite passes **467 tests: 465 passed, zero failures/errors
+and two skipped**, with Maven exit zero. The existing Windows skips are the
+Linux-only symlink checks in `OwnedExportDirectoryTest` and
+`OperatorRecoveryPostgresTest`; they still require Linux CI. The final run exits
+without the prior test-fork shutdown timeout using the disclosed local grace.
+All **34 containers** identified across the baseline/full-run logs and the final
+test JVM are confirmed absent afterward.
+
+Backend packaging passes after the completed suite (`-DskipTests package`). All
+**33 packaged media classes** match the tested class bytes; all **41 compiled
+media test/fixture classes** are absent, and the Spring Boot launcher/application
+manifest is checked. Independent final source/documentation review and diff
+checks pass. Local synthetic originals, SDK adapters and HTTP/database tests do
+not establish provider, hosted, physical-device, capacity or release acceptance.
+
+Inventories, frozen formatting/AST/negative controls, disassemblies, exact
+red/green photo probes, full-suite/package logs, source/class hashes, cleanup
+checks and the ready PR description are under
+`logs/backend-media-review.local/`. The focused Notion issue records delivery
+and review status. Ryan creates/merges the PR after exact-head CI/configured
+review; the next suggested backend boundary is review/retention, then operations
+and recovery, with inventory/consumer tracing before choosing each batch.
