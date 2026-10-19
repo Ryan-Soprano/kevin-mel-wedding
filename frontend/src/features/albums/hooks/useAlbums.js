@@ -1,8 +1,4 @@
-import {
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { useEffect, useRef, useState } from "react";
 import { normalizeAlbumName } from "../albumName.js";
 
 export function useAlbums({ state, busy, locked, actions }) {

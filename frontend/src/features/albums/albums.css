@@ -1,9 +1,31 @@
-.private-inbox .albums { min-width: 0; }
-.private-inbox .album-name-form { display: grid; gap: 18px; min-width: 0; margin: 0; }
+.private-inbox .albums {
+  min-width: 0;
+}
+.private-inbox .album-name-form {
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+  margin: 0;
+}
 .private-inbox .album-name-form input,
-.private-inbox .album-recovery input { min-width: 0; max-width: 100%; width: 100%; }
-.private-inbox .album-members { counter-reset: album-member; }
-.private-inbox .album-member { counter-increment: album-member; }
-.private-inbox .album-member h3::before { content: counter(album-member) ". "; }
-.private-inbox .album-member h3 { overflow-wrap: anywhere; }
-.private-inbox .album-candidates .inbox-card > button { align-self: flex-start; margin-top: auto; }
+.private-inbox .album-recovery input {
+  min-width: 0;
+  max-width: 100%;
+  width: 100%;
+}
+.private-inbox .album-members {
+  counter-reset: album-member;
+}
+.private-inbox .album-member {
+  counter-increment: album-member;
+}
+.private-inbox .album-member h3::before {
+  content: counter(album-member) ". ";
+}
+.private-inbox .album-member h3 {
+  overflow-wrap: anywhere;
+}
+.private-inbox .album-candidates .inbox-card > button {
+  align-self: flex-start;
+  margin-top: auto;
+}
