@@ -138,7 +138,7 @@ export default function GuestGallery({ photos = couplePhotos, deferInitialPhoto 
     pendingFocus.current = null;
     const element = gallery.current?.querySelector(`#${target.id}`);
     element?.focus({ preventScroll: true });
-    element?.scrollIntoView({ block: "nearest", behavior: "instant" });
+    element?.scrollIntoView({ block: target.block ?? "nearest", behavior: "instant" });
   }, [view, visibleCount]);
 
   function move(direction) {
@@ -157,7 +157,10 @@ export default function GuestGallery({ photos = couplePhotos, deferInitialPhoto 
       Math.ceil((currentIndex + 1) / THUMBNAIL_BATCH) * THUMBNAIL_BATCH,
     );
     setVisibleCount((count) => Math.max(count, requiredCount));
-    pendingFocus.current = { id: `couple-gallery-thumbnail-${currentIndex}` };
+    pendingFocus.current = {
+      id: `couple-gallery-thumbnail-${currentIndex}`,
+      block: "center",
+    };
     setView("grid");
   }
 

@@ -45,7 +45,8 @@ results for all groups; validating only the original 218 does not pass this gate
 | Total | 300 | Verify slideshow advancement from 218 to 219 and wraparound from 300 to 1, plus thumbnail access to every addition. |
 
 Verify that **Browse all 300 photos**, **Back to thumbnails** and viewer Escape
-return to the currently displayed photo's visible, marked thumbnail. Include
+return to the currently displayed photo's marked thumbnail, centered on screen
+when the page has room. Include
 opening photo 86, advancing to 124 and returning to thumbnail 124, plus reverse
 navigation and a target beyond the previously loaded thumbnail batches.
 

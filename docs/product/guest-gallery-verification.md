@@ -202,3 +202,25 @@ build pass. Edge checks at 1280 and 390 pixels confirm photo 92 loads in the
 welcome and full-photo dialog, no caption appears, Escape restores button focus,
 and there is no horizontal overflow or JavaScript page error. Screenshots were
 inspected; temporary previews and the browser helper were removed afterward.
+
+## October 19, 2026 - center the current thumbnail on return
+
+Ryan clarified that the selected thumbnail was correct but appeared at the bottom
+of the screen. The earlier return behavior used the nearest visible position;
+its visibility and focus checks did not require centering the selected row.
+Browse all, Back to thumbnails and viewer Escape now request vertical centering
+for the current thumbnail. Browser scroll limits apply at the document edges.
+Opening a full photo and manually loading another thumbnail batch retain their
+existing nearest-position scrolling.
+
+All eight existing gallery/loading tests, edited JavaScript lint checks and the
+production build pass. The built frontend passes 29 mounted Edge checks: 27 at
+1280, 390 and 320 pixels, plus first/last-photo document-limit checks at a tall
+viewport. Returns center the current thumbnail within one pixel after images,
+fonts and passive batch loading settle; document-edge cases stop at the closest
+available scroll position. Checks include real manual navigation, photos 24/48
+at batch boundaries, 86 to 124 and back, reverse Escape, wrapping and unchanged
+manual Show more focus/scrolling. There is no horizontal overflow or JavaScript
+page error. Centered desktop/phone screenshots were inspected; owned resources
+and temporary previews/helpers were cleaned up. Small JSON summaries and the
+build log remain under ignored `logs/gallery-browse-recheck.local/`.
