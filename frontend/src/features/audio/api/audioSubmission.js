@@ -85,6 +85,15 @@ export function createAudioSubmission({
       ],
     });
   }
+  async function prepareDraft(progress) {
+    progress("Preparing the original audio…");
+    const hash = await bounded(() => digest(file), apiTimeoutMs, false);
+    const prepared = normalizeMediaContribution({ ...input, items: [{ ...input.items[0],
+      clientItemId: randomUUID(), checksumSha256: hash,
+    }] });
+    draft = Object.freeze({ ...prepared, items: Object.freeze(prepared.items.map(Object.freeze)) });
+    key = randomUUID();
+  }
   async function bounded(operation, timeoutMs, mutation = true) {
     live();
     const controller = new AbortController();
@@ -243,16 +252,7 @@ export function createAudioSubmission({
       const progress = progressCallback(onProgress);
       inFlight = (async () => {
         failed = false;
-        if (!draft) {
-          progress("Preparing the original audio…");
-          const hash = await bounded(() => digest(file), apiTimeoutMs, false);
-          draft = normalized(raw, randomUUID(), hash);
-          draft = Object.freeze({
-            ...draft,
-            items: Object.freeze(draft.items.map(Object.freeze)),
-          });
-          key = randomUUID();
-        }
+        if (!draft) await prepareDraft(progress);
         progress("Checking this audio submission…");
         accept(
           receipt

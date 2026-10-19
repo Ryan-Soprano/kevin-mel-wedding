@@ -1,7 +1,124 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { attachGuestHistory } from "./guestHistory.js";
+import { attachGuestHistory, restoreGuestHomeView } from "./guestHistory.js";
 import { createGuestFlow, guestFlowReducer, hasUnfinishedWork } from "./guestFlow.js";
+
+function homeRestorationFixture({
+  kind = "photos", withGallery = true, withChoice = true, withHeading = true,
+  bounds = { top: 200, bottom: 300 }, offsetTop = 640,
+} = {}) {
+  const calls = [];
+  function element(name) {
+    return {
+      focus(options) { calls.push([name, "focus", options]); },
+      scrollIntoView(options) { calls.push([name, "scrollIntoView", options]); },
+      getBoundingClientRect() { return bounds; },
+    };
+  }
+  const galleryHeading = element("gallery"), choice = element("choice"), heading = element("heading");
+  return {
+    calls,
+    options: {
+      choices: {
+        offsetTop,
+        querySelector(selector) {
+          if (selector === `.memory-choice--${kind}`) return withChoice ? choice : null;
+          return selector === "h2" && withHeading ? heading : null;
+        },
+      },
+      gallery: {
+        querySelector(selector) { return selector === "#couple-gallery" && withGallery ? galleryHeading : null; },
+      },
+      windowImpl: {
+        innerHeight: 800,
+        scrollTo(options) { calls.push(["window", "scrollTo", options]); },
+      },
+    },
+  };
+}
+
+test("direct gallery return focuses and reveals the gallery before considering opening or choice metadata", () => {
+  const f = homeRestorationFixture();
+  assert.equal(restoreGuestHomeView({
+    kind: "photos", scrollY: 0, showOpening: true, target: "gallery",
+  }, f.options), true);
+  assert.deepEqual(f.calls, [
+    ["gallery", "focus", { preventScroll: true }],
+    ["gallery", "scrollIntoView", { block: "start", behavior: "instant" }],
+  ]);
+});
+
+test("restored gallery returns preserve zero and later viewports without replacing them with the gallery position", () => {
+  for (const scrollY of [0, 2120]) {
+    const f = homeRestorationFixture();
+    assert.equal(restoreGuestHomeView({ target: "gallery", scrollY }, { ...f.options, restoredHome: true }), true);
+    assert.deepEqual(f.calls, [
+      ["gallery", "focus", { preventScroll: true }],
+      ["window", "scrollTo", { top: scrollY, behavior: "instant" }],
+    ]);
+  }
+});
+
+test("restored gallery returns without a saved viewport reveal the gallery", () => {
+  const f = homeRestorationFixture();
+  assert.equal(restoreGuestHomeView({ target: "gallery", scrollY: null }, { ...f.options, restoredHome: true }), true);
+  assert.deepEqual(f.calls, [
+    ["gallery", "focus", { preventScroll: true }],
+    ["gallery", "scrollIntoView", { block: "start", behavior: "instant" }],
+  ]);
+});
+
+test("missing gallery falls back to the sharing choice and preserves a zero viewport", () => {
+  const f = homeRestorationFixture({ withGallery: false });
+  assert.equal(restoreGuestHomeView({
+    kind: "photos", scrollY: 0, showOpening: false, target: "gallery",
+  }, f.options), true);
+  assert.deepEqual(f.calls, [
+    ["choice", "focus", { preventScroll: true }],
+    ["window", "scrollTo", { top: 0, behavior: "instant" }],
+  ]);
+});
+
+test("missing sharing choice focuses its heading and uses the section position when no viewport was saved", () => {
+  const f = homeRestorationFixture({ withChoice: false });
+  assert.equal(restoreGuestHomeView({ kind: "photos", scrollY: null, showOpening: false }, f.options), true);
+  assert.deepEqual(f.calls, [
+    ["heading", "focus", { preventScroll: true }],
+    ["window", "scrollTo", { top: 640, behavior: "instant" }],
+  ]);
+});
+
+test("direct sharing returns reveal an offscreen choice while history restoration keeps its saved viewport", () => {
+  for (const bounds of [{ top: -20, bottom: 80 }, { top: 750, bottom: 850 }]) {
+    for (const restoredHome of [false, true]) {
+      const f = homeRestorationFixture({ bounds });
+      assert.equal(restoreGuestHomeView({ kind: "photos", scrollY: 1200, showOpening: false }, {
+        ...f.options, restoredHome,
+      }), true);
+      assert.deepEqual(f.calls, [
+        ["choice", "focus", { preventScroll: true }],
+        ["window", "scrollTo", { top: 1200, behavior: "instant" }],
+        ...(!restoredHome ? [["choice", "scrollIntoView", { block: "nearest", behavior: "instant" }]] : []),
+      ]);
+    }
+  }
+});
+
+test("opening views leave App's heading fallback untouched unless a gallery destination is available", () => {
+  for (const target of [undefined, "gallery"]) {
+    const f = homeRestorationFixture({ withGallery: false });
+    assert.equal(restoreGuestHomeView({ kind: "photos", scrollY: 1200, showOpening: true, target }, f.options), false);
+    assert.deepEqual(f.calls, []);
+  }
+});
+
+test("sharing restoration tolerates unavailable elements and keeps its original top-of-page fallback", () => {
+  const f = homeRestorationFixture();
+  assert.equal(restoreGuestHomeView({ showOpening: false, scrollY: null }, {
+    windowImpl: f.options.windowImpl,
+  }), true);
+  assert.deepEqual(f.calls, [["window", "scrollTo", { top: 0, behavior: "instant" }]]);
+});
 
 function fixture({ audioEnabled = true, getHomeView, restoreHomeView, scrollRestoration = "auto" } = {}) {
   let flow = createGuestFlow({ audioEnabled }), recording, serial = 0, position = -1;
@@ -231,7 +348,65 @@ test("each welcome history entry restores its own copied choice and viewport bef
   } finally { f.recording.dispose(); }
 });
 
-test("opening-top intent survives browser Back and Forward and restored objects cannot mutate stored entries", () => {
+for (const kind of ["note", "photos", "audio"]) {
+  test(`${kind} confirmed finish retains its gallery destination and live viewport across browser navigation`, () => {
+    let view = { kind, scrollY: 780, showOpening: false };
+    const f = fixture({ getHomeView: () => view, restoreHomeView(next) { view = next; } });
+    try {
+      const otherKind = kind === "note" ? "photos" : "note";
+      f.update({ type: "FORM_STATE", kind: otherKind, state: { hasDraft: true } });
+      const otherDraft = f.flow().forms[otherKind];
+      f.update({ type: "SELECT", kind });
+      f.update({ type: "FORM_STATE", kind, state: { complete: true } });
+      view = { kind, scrollY: null, showOpening: false, target: "gallery" };
+      f.update({ type: "FINISHED", kind });
+      assert.equal(f.flow().screen, "welcome");
+      assert.deepEqual(f.flow().forms[kind], {
+        busy: false, capturing: false, pending: false, hasDraft: false, complete: false,
+      });
+      assert.equal(f.flow().forms[otherKind], otherDraft, "finishing preserves another form's draft");
+      const forms = f.flow().forms, started = f.flow().started, writes = f.writes.length;
+
+      // The direct return scrolls to the gallery; history captures that live viewport on departure.
+      view.scrollY = 1400;
+      f.history.go(-1);
+      assert.equal(f.flow().screen, kind);
+      Object.assign(view, { target: "unrecognized", scrollY: 25 });
+      f.history.go(1);
+      assert.deepEqual(view, { kind, scrollY: 1400, showOpening: false, target: "gallery" });
+
+      // After scrolling farther on home, another traversal must restore the newer position.
+      view.scrollY = 2120;
+      f.history.go(-1);
+      delete view.target;
+      view.scrollY = 0;
+      f.history.go(1);
+      assert.deepEqual(view, { kind, scrollY: 2120, showOpening: false, target: "gallery" },
+        "mutating a returned copy on the form cannot change its stored home entry");
+      assert.equal(f.flow().forms, forms);
+      assert.equal(f.flow().started, started);
+      assert.equal(f.flow().forms[kind].complete, false, "history cannot resurrect the confirmed receipt");
+      assert.equal(f.writes.length, writes, "traversal does not add replacement home entries");
+      for (const entry of f.entries) assert.deepEqual(Object.keys(entry), ["owner", "key", "index"]);
+      assert.doesNotMatch(JSON.stringify(f.entries), /gallery|target|homeView|scrollY/);
+    } finally { f.recording.dispose(); }
+  });
+}
+
+test("home metadata discards absent or unrecognized destinations while preserving its supported fields", () => {
+  for (const target of [undefined, null, "Gallery", "sharing", "#couple-gallery", true, {}]) {
+    let view = { kind: "photos", scrollY: 780, showOpening: false, target, receipt: "private" };
+    const f = fixture({ getHomeView: () => view, restoreHomeView(next) { view = next; } });
+    try {
+      f.update({ type: "SELECT", kind: "photos" });
+      f.history.go(-1);
+      assert.deepEqual(view, { kind: "photos", scrollY: 780, showOpening: false });
+      assert.equal(Object.hasOwn(view, "target"), false);
+    } finally { f.recording.dispose(); }
+  }
+});
+
+test("opening fallback survives browser Back and Forward and restored objects cannot mutate stored entries", () => {
   let view = { kind: "photos", scrollY: 780, showOpening: false };
   const f = fixture({ getHomeView: () => view, restoreHomeView(next) { view = next; } });
   try {
@@ -255,7 +430,7 @@ test("opening-top intent survives browser Back and Forward and restored objects 
 });
 
 test("locked, malformed, current and foreign pops do not capture or restore home metadata", () => {
-  const view = { kind: "photos", scrollY: 780, showOpening: false };
+  const view = { kind: "photos", scrollY: 780, showOpening: false, target: "gallery" };
   let captures = 0, restores = 0;
   const f = fixture({
     getHomeView() { captures++; return view; },
@@ -275,7 +450,7 @@ test("locked, malformed, current and foreign pops do not capture or restore home
     assert.equal(captures, baseline); assert.equal(restores, 0);
     assert.deepEqual(f.movements, [-1, 1]);
     for (const entry of f.entries) assert.deepEqual(Object.keys(entry), ["owner", "key", "index"]);
-    assert.doesNotMatch(JSON.stringify(f.entries), /homeView|kind|scrollY|showOpening|photos/);
+    assert.doesNotMatch(JSON.stringify(f.entries), /homeView|kind|scrollY|showOpening|photos|target|gallery/);
   } finally { f.recording.dispose(); }
 });
 

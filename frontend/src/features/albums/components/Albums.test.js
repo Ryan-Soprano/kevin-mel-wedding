@@ -66,6 +66,10 @@ test("real album views provide empty/create/tombstone recovery and accessible pa
     assert.match(empty, /Create an album/);
     assert.match(empty, /class="archive-intro"/);
     assert.match(empty, /class="archive-empty" role="status"/);
+    assert.match(
+      empty,
+      /<h2[^>]*tab[Ii]ndex="-1"[^>]*class="visually-hidden">Albums · Page 1<\/h2>/,
+    );
     assert.match(empty, /<svg[^>]*aria-hidden="true"[^>]*focusable="false"/);
     const emptyPagination =
       empty.match(/<nav class="archive-pagination"[\s\S]*?<\/nav>/)?.[0] ?? "";
@@ -104,6 +108,7 @@ test("real album views provide empty/create/tombstone recovery and accessible pa
     assert.match(page, /Move Couple memory earlier/);
     assert.match(page, /Remove Couple memory from album/);
     assert.match(page, /Page 2/);
+    assert.match(page, /class="visually-hidden">Album memories · Page 2<\/h2>/);
     assert.match(page, /Next album page/);
     assert.match(page, /Guest contribution/);
     assert.match(page, /from every album/);
@@ -211,6 +216,9 @@ test("extracted album views preserve cached-member loading, separate recovery na
     const { default: AlbumMemorySummary } = await server.ssrLoadModule(
       "/src/features/albums/components/AlbumMemorySummary.jsx",
     );
+    const { default: AlbumNameForm } = await server.ssrLoadModule(
+      "/src/features/albums/components/AlbumNameForm.jsx",
+    );
     const renderComponent = (Component, props) =>
       renderToStaticMarkup(createElement(Component, props));
     const render = (state, extra = {}) =>
@@ -295,6 +303,10 @@ test("extracted album views preserve cached-member loading, separate recovery na
     const busySelector = render(selector, { busy: true });
     assert.match(
       busySelector,
+      /class="visually-hidden">Available pending memories · Page 1 could not be loaded<\/h2>/,
+    );
+    assert.match(
+      busySelector,
       /<output>Loading available memories…<\/output>/,
     );
     assert.doesNotMatch(busySelector, /Retained &lt;member&gt;/);
@@ -328,6 +340,51 @@ test("extracted album views preserve cached-member loading, separate recovery na
     assert.match(recovery, /<input id="album-original-name"[^>]*value=""/);
     assert.match(recovery, /Retry this same album change/);
     assert.doesNotMatch(recovery, /disabled=""|Private &lt;album&gt;/);
+    const fieldErrors = {
+      name: "Correct the album name",
+      originalName: "Re-enter the original name",
+    };
+    const nameError = renderComponent(AlbumNameForm, {
+      view: {
+        name: " ",
+        setName: noop,
+        disabled: false,
+        fieldErrors,
+        handlers: { submitName: noop },
+      },
+    });
+    assert.match(
+      nameError,
+      /<input[^>]*id="album-name"[^>]*aria-invalid="true"[^>]*aria-describedby="album-name-error"/,
+    );
+    assert.match(
+      nameError,
+      /<p id="album-name-error" class="form-error" role="alert">Correct the album name<\/p>/,
+    );
+    assert.doesNotMatch(nameError, /Re-enter the original name/);
+    const originalNameError = renderComponent(AlbumRecovery, {
+      view: { ...recoveryView, fieldErrors },
+    });
+    assert.match(
+      originalNameError,
+      /<input[^>]*id="album-original-name"[^>]*aria-invalid="true"[^>]*aria-describedby="album-original-name-error"/,
+    );
+    assert.match(
+      originalNameError,
+      /<p id="album-original-name-error" class="form-error" role="alert">Re-enter the original name<\/p>/,
+    );
+    assert.doesNotMatch(originalNameError, /Correct the album name/);
+    const correctedName = renderComponent(AlbumNameForm, {
+      view: {
+        name: "W",
+        setName: noop,
+        disabled: false,
+        fieldErrors: { ...fieldErrors, name: null },
+        handlers: { submitName: noop },
+      },
+    });
+    assert.match(correctedName, /aria-invalid="false"/);
+    assert.doesNotMatch(correctedName, /aria-describedby|album-name-error/);
     const busyRecovery = renderComponent(AlbumRecovery, {
       view: { ...recoveryView, busy: true },
     });

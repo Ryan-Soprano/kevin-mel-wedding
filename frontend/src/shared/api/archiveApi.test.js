@@ -26,6 +26,18 @@ test("text normalization preserves anonymity and validates before trimming", () 
   assert.equal(normalizeTextContribution({ message: "x".repeat(5000) }).message.length, 5000);
 });
 
+test("media normalization rejects controls, nonrepresentable strings and case-folded duplicate IDs", () => {
+  const id = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const item = { clientItemId: id, originalFilename: "ok.png", declaredContentType: "image/png", byteSize: 1, checksumSha256: "0".repeat(64) };
+  const payload = { memoryType: "PHOTO", items: [item] };
+  for (const field of ["originalFilename", "caption"]) {
+    for (const text of ["\u0000", "\ud800"]) assert.throws(() => normalizeMediaContribution({ ...payload, items: [{ ...item, [field]: text }] }));
+  }
+  assert.throws(() => normalizeMediaContribution({ ...payload, items: [{ ...item, originalFilename: "x\t.png" }] }));
+  assert.throws(() => normalizeMediaContribution({ ...payload, guestName: "\ud800" }));
+  assert.throws(() => normalizeMediaContribution({ ...payload, items: [item, { ...item, clientItemId: id.toUpperCase() }] }));
+});
+
 test("media metadata is normalized without treating client claims as verified bytes", () => {
   assert.equal(normalizeMediaContribution(PHOTO_REQUEST).items.length, 2);
   assert.equal(normalizeMediaContribution(AUDIO_REQUEST).items[0].durationSeconds, 12);

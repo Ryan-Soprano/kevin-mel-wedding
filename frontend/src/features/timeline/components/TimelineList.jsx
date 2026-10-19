@@ -3,25 +3,80 @@ import { partialDateLabel } from "../timelineFields.js";
 import { getTimelineMemoryCount, TIMELINE_PRECISIONS } from "../timelineDisplay.js";
 
 function TimelineFilters({ view }) {
-  const { fromYear, setFromYear, toYear, setToYear, precision, setPrecision, disabled, handlers } = view;
+  const {
+    fromYear,
+    setFromYear,
+    toYear,
+    setToYear,
+    precision,
+    setPrecision,
+    disabled,
+    handlers,
+    fieldErrors,
+    registerFilterField,
+  } = view;
+  const errors = fieldErrors?.filters ?? {};
   return (
     <ArchivePanel title="Filter your timeline">
       <form className="timeline-filters" onSubmit={handlers.filter} aria-label="Filter timeline events">
         <div className="archive-filter-grid">
           <div>
             <label htmlFor="timeline-from-year">From year (inclusive)</label>
-            <input id="timeline-from-year" inputMode="numeric" maxLength={4} value={fromYear} disabled={disabled} onChange={event => setFromYear(event.target.value)} />
+            <input
+              id="timeline-from-year"
+              ref={element => registerFilterField?.("fromYear", element)}
+              inputMode="numeric"
+              maxLength={4}
+              value={fromYear}
+              disabled={disabled}
+              aria-invalid={Boolean(errors.fromYear)}
+              aria-describedby={errors.fromYear ? "timeline-from-year-error" : undefined}
+              onChange={event => setFromYear(event.target.value)}
+            />
+            {errors.fromYear && (
+              <p id="timeline-from-year-error" className="form-error" role="alert">
+                {errors.fromYear}
+              </p>
+            )}
           </div>
           <div>
             <label htmlFor="timeline-to-year">To year (inclusive)</label>
-            <input id="timeline-to-year" inputMode="numeric" maxLength={4} value={toYear} disabled={disabled} onChange={event => setToYear(event.target.value)} />
+            <input
+              id="timeline-to-year"
+              ref={element => registerFilterField?.("toYear", element)}
+              inputMode="numeric"
+              maxLength={4}
+              value={toYear}
+              disabled={disabled}
+              aria-invalid={Boolean(errors.toYear)}
+              aria-describedby={errors.toYear ? "timeline-to-year-error" : undefined}
+              onChange={event => setToYear(event.target.value)}
+            />
+            {errors.toYear && (
+              <p id="timeline-to-year-error" className="form-error" role="alert">
+                {errors.toYear}
+              </p>
+            )}
           </div>
           <div>
             <label htmlFor="timeline-filter-precision">Date precision</label>
-            <select id="timeline-filter-precision" value={precision} disabled={disabled} onChange={event => setPrecision(event.target.value)}>
+            <select
+              id="timeline-filter-precision"
+              ref={element => registerFilterField?.("datePrecision", element)}
+              value={precision}
+              disabled={disabled}
+              aria-invalid={Boolean(errors.datePrecision)}
+              aria-describedby={errors.datePrecision ? "timeline-filter-precision-error" : undefined}
+              onChange={event => setPrecision(event.target.value)}
+            >
               <option value="ALL">All precisions</option>
               {Object.entries(TIMELINE_PRECISIONS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
             </select>
+            {errors.datePrecision && (
+              <p id="timeline-filter-precision-error" className="form-error" role="alert">
+                {errors.datePrecision}
+              </p>
+            )}
           </div>
         </div>
         <ArchiveActions>

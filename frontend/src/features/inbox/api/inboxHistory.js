@@ -8,8 +8,8 @@ function featureRoute(phase, state, idField, recordField) {
   return { phase, view: state.view, pages: pagesOf(state.cursors),
     ...(["detail", "select"].includes(state.view) ? { id: state[recordField]?.[idField] ?? state.requestedId ?? null } : {}),
     ...(state.view === "select" ? { selectorStatus: state.selectorStatus } : {}),
-    ...(phase === "timeline" && state.view === "list" ? { filters: filtersOf(state.filters) } : {}),
-    ...(phase === "tags" && state.view === "list" ? { q: state.q } : {}) };
+    ...(phase === "timeline" ? { filters: filtersOf(state.filters) } : {}),
+    ...(phase === "tags" ? { q: state.q } : {}) };
 }
 
 function libraryRoute(state) {
@@ -19,9 +19,19 @@ function libraryRoute(state) {
     pages: pagesOf(choosing ? state.tagCursors : state.cursors), ...(choosing ? { q: state.tagQuery } : {}) };
 }
 
+function tagParentRoute(tagId, previousRoute) {
+  // Memory-tag controls replace the tag detail presentation. Retain only its
+  // matching navigation metadata, never another tag's page or query.
+  const previous = previousRoute?.phase === "detail" && previousRoute.context.tagId === tagId
+    ? previousRoute.parent : previousRoute;
+  return previous?.phase === "tags" && previous.view === "detail" && previous.id === tagId
+    ? { ...previous, pages: pagesOf(previous.pages) }
+    : { phase: "tags", view: "detail", id: tagId, q: "", pages: [null] };
+}
+
 // Only navigation metadata enters this private, disposable map. In particular,
 // never retain presentation snapshots, editable drafts, capabilities or originals.
-function routeOf(snapshot, inboxPages) {
+function routeOf(snapshot, inboxPages, previousRoute) {
   switch (snapshot.phase) {
     case "inbox": return { phase: "inbox", reviewStatus: snapshot.reviewStatus, pages: pagesOf(inboxPages) };
     case "create": return { phase: "create" };
@@ -35,7 +45,7 @@ function routeOf(snapshot, inboxPages) {
       if (!id) return null;
       const parent = snapshot.albumReturnId ? featureRoute("albums", snapshot.albums, "albumId", "album")
         : snapshot.timelineReturnId ? featureRoute("timeline", snapshot.timeline, "eventId", "event")
-          : snapshot.tagReturnId ? featureRoute("tags", snapshot.tags, "tagId", "tag")
+          : snapshot.tagReturnId ? tagParentRoute(snapshot.tagReturnId, previousRoute)
             : snapshot.libraryReturn ? libraryRoute(snapshot.library)
               : { phase: "inbox", reviewStatus: snapshot.reviewStatus, pages: pagesOf(inboxPages) };
       return { phase: "detail", id, parent,
@@ -59,7 +69,7 @@ function destinationOf(route) {
 export function attachInboxHistory({ controller, eventTarget = window, historyImpl = window.history,
   getInboxPages = () => [null], setInboxPages = () => {}, isCreationBlocked = () => false,
   confirmDiscard = () => window.confirm("Discard this unfinished memory and leave this screen?"),
-  hasCreationDraft = () => false, onBlocked = () => {}, randomId = () => crypto.randomUUID(),
+  hasCreationDraft = () => false, onBlocked = () => {}, onNavigate = () => {}, randomId = () => crypto.randomUUID(),
 }) {
   const routes = new Map();
   let owner = randomId(), current = null, restoring = null, bouncing = false, disposed = false, generation = 0;
@@ -83,7 +93,7 @@ export function attachInboxHistory({ controller, eventTarget = window, historyIm
     // Read destinations must own an entry before their transport settles, so
     // Back can cancel a slow read and Forward can reread the intended target.
     if (restoring || isInboxLocked(snapshot)) return;
-    const route = routeOf(snapshot, getInboxPages());
+    const route = routeOf(snapshot, getInboxPages(), current ? routes.get(current.key)?.route : null);
     if (!route) return;
     const destination = destinationOf(route);
     if (current && routes.get(current.key)?.destination === destination) {
@@ -120,6 +130,14 @@ export function attachInboxHistory({ controller, eventTarget = window, historyIm
           else await controller[names[0]](route.phase === "timeline" ? filtersOf(route.filters) : route.q, cursor, [...pages]);
         } else if (route.view === "create") await controller[names[2]]();
         else if (route.id) {
+          // Restore the list context before opening a nested destination. Other
+          // screens may have reset it since this history entry was recorded.
+          if (route.phase === "timeline" && JSON.stringify(controller.getSnapshot().timeline.filters) !== JSON.stringify(route.filters)) {
+            await controller.loadTimeline(filtersOf(route.filters), null, [null]);
+          } else if (route.phase === "tags" && controller.getSnapshot().tags.q !== route.q) {
+            await controller.loadTags(route.q, null, [null]);
+          }
+          if (!active()) return;
           await controller[names[1]](route.id, route.view === "select" ? null : cursor, route.view === "select" ? [null] : [...pages]);
           if (active() && route.view === "select") await controller[names[3]](route.selectorStatus, cursor, [...pages]);
         }
@@ -172,6 +190,7 @@ export function attachInboxHistory({ controller, eventTarget = window, historyIm
       if (blocked) onBlocked();
       return;
     }
+    onNavigate();
     if (!known(target)) { clear(); return; }
     const saved = routes.get(target.key);
     current = { owner, key: target.key, index: target.index };
@@ -185,7 +204,7 @@ export function attachInboxHistory({ controller, eventTarget = window, historyIm
       restoring = null;
       const state = controller.getSnapshot();
       if (!state.session?.authenticated) { clear(); return; }
-      const route = routeOf(state, getInboxPages());
+      const route = routeOf(state, getInboxPages(), routes.get(current.key)?.route);
       if (route) routes.set(current.key, { route, destination: destinationOf(route), index: current.index });
     });
   }

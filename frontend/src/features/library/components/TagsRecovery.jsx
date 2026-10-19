@@ -8,7 +8,8 @@ import {
 } from "../tagDisplay.js";
 
 function TagMutationRecoveryActions({ view }) {
-  const { state, busy, originalName, setOriginalName, handlers } = view;
+  const { state, busy, originalName, setOriginalName, handlers, fieldErrors = {}, fields = {} } = view;
+  const { retryName: retryNameField } = fields;
   if (!["uncertain", "conflict", "csrf"].includes(state.mutation.phase)) {
     return null;
   }
@@ -30,11 +31,19 @@ function TagMutationRecoveryActions({ view }) {
               <label htmlFor="tag-original-name">Original tag name</label>
               <input
                 id="tag-original-name"
+                ref={retryNameField}
                 value={originalName}
                 maxLength={200}
                 onChange={(event) => setOriginalName(event.target.value)}
                 disabled={busy}
+                aria-invalid={Boolean(fieldErrors.retryName)}
+                aria-describedby={fieldErrors.retryName ? "tag-original-name-error" : undefined}
               />
+              {fieldErrors.retryName && (
+                <p id="tag-original-name-error" className="form-error" role="alert">
+                  {fieldErrors.retryName}
+                </p>
+              )}
               <p className="guest-help">
                 The hidden name draft was cleared. Re-enter the same name to
                 retry the original change.

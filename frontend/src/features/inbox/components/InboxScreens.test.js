@@ -38,7 +38,8 @@ test("screen adapters preserve access precedence, creation guards and editor res
     assert.equal(render({ phase: "unknown", session: { authenticated: true } }), "");
 
     // Resolve only the pure adapter, leaving the feature component's hooks and
-    // local state intact. Its key determines when React discards an old editor.
+    // local state intact. Features transfer reset keys into their editors so
+    // their unkeyed boundaries can retain deliberate request focus.
     const leaf = (snapshot, extra = {}) => {
       const route = InboxScreen({ view: { ...view, snapshot }, ...extra });
       return route.type(route.props);
@@ -49,27 +50,68 @@ test("screen adapters preserve access precedence, creation guards and editor res
       library: base.library,
       tags: { ...base.tags, view: "detail", tag: { tagId: "tag-one", revision: "r1" } },
     };
+    const editorKeyOf = screen => screen.props.editorKey ?? screen.key;
     for (const [phase, state] of Object.entries(keys)) {
       const snapshot = { ...base, phase, [phase]: state, busy: true };
       const screen = leaf(snapshot);
       assert.equal(screen.props.state, state); assert.equal(screen.props.actions, actions[phase]);
       assert.equal(screen.props.busy, true); assert.equal(screen.props.locked, true);
-      assert.equal(leaf({ ...snapshot, [phase]: { ...state, cursors: [null, "next"], error: "Reload failed" } }).key, screen.key,
-        `${phase} pagination and feedback preserve the current editor`);
-      assert.notEqual(leaf({ ...snapshot, [phase]: { ...state, view: "create" } }).key, screen.key);
+      const pagedScreen = leaf({
+        ...snapshot,
+        [phase]: {
+          ...state,
+          cursors: [null, "next"],
+          error: "Reload failed",
+        },
+      });
+      assert.equal(
+        editorKeyOf(pagedScreen),
+        editorKeyOf(screen),
+        `${phase} pagination and feedback preserve the current editor`,
+      );
+      assert.notEqual(
+        editorKeyOf(leaf({
+          ...snapshot,
+          [phase]: { ...state, view: "create" },
+        })),
+        editorKeyOf(screen),
+      );
     }
-    const keyFor = (phase, state) => leaf({ ...base, phase, [phase]: state }).key;
+    const keyFor = (phase, state) => editorKeyOf(leaf({ ...base, phase, [phase]: state }));
+    assert.equal(
+      leaf({ ...base, phase: "albums", albums: keys.albums }).key,
+      null,
+      "album paging ownership survives its editor revision reset",
+    );
     for (const [phase, record, idField] of [["albums", "album", "albumId"], ["timeline", "event", "eventId"], ["tags", "tag", "tagId"]]) {
       const state = keys[phase], original = keyFor(phase, state);
       assert.notEqual(keyFor(phase, { ...state, [record]: { ...state[record], revision: "r2" } }), original,
         `${phase} replaces a stale form after a new server revision`);
       assert.notEqual(keyFor(phase, { ...state, [record]: { ...state[record], [idField]: "other-record" } }), original);
     }
-    assert.notEqual(keyFor("timeline", { ...keys.timeline, filters: { ...keys.timeline.filters, year: 2025 } }), keyFor("timeline", keys.timeline));
+    assert.notEqual(
+      keyFor("timeline", {
+        ...keys.timeline,
+        filters: { ...keys.timeline.filters, fromYear: 2025 },
+      }),
+      keyFor("timeline", keys.timeline),
+    );
+    assert.equal(
+      leaf({ ...base, phase: "timeline", timeline: keys.timeline }).key,
+      null,
+      "timeline paging ownership survives editor revision/filter resets",
+    );
     for (const patch of [{ filters: { ...base.library.filters, q: "another search" } }, { tagQuery: "another tag" }, { formResetVersion: base.library.formResetVersion + 1 }]) {
       assert.notEqual(keyFor("library", { ...base.library, ...patch }), keyFor("library", base.library));
     }
     assert.notEqual(keyFor("tags", { ...keys.tags, q: "another tag" }), keyFor("tags", keys.tags));
+    for (const phase of ["library", "tags"]) {
+      assert.equal(
+        leaf({ ...base, phase, [phase]: keys[phase] }).key,
+        null,
+        `${phase} read focus survives its editor reset`,
+      );
+    }
     const create = leaf({ ...base, phase: "create" }, { audioEnabled: true });
     assert.equal(create.props.onNavigationStateChange, view.setCreationState);
     assert.equal(create.props.onDialogStateChange, view.setDialogState); assert.equal(create.props.audioEnabled, true);

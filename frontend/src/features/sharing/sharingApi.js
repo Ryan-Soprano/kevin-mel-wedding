@@ -27,7 +27,7 @@ export function decodeSharedMemory(value) {
 
 function memoryId(id) {
   if (!isId(id)) throw new TypeError("Use a valid memory ID.");
-  return id;
+  return id.toLowerCase();
 }
 
 function tokenQuery(token) {
@@ -49,9 +49,10 @@ export function createSharingApi({ client = createApiClient(), csrf } = {}) {
       } });
     },
     getSharedMemory(id, { token, signal } = {}) {
-      return client.request("/api/shared-memories/" + memoryId(id) + tokenQuery(token), { signal, decode(value) {
+      const requestedId = memoryId(id);
+      return client.request("/api/shared-memories/" + requestedId + tokenQuery(token), { signal, decode(value) {
         const memory = decodeSharedMemory(value);
-        if (memory.memoryId !== id) throw contractMismatch();
+        if (memory.memoryId.toLowerCase() !== requestedId) throw contractMismatch();
         return memory;
       } });
     },
@@ -65,14 +66,16 @@ export function createSharingApi({ client = createApiClient(), csrf } = {}) {
     },
     createShareLink(id, { revision, csrfToken, signal } = {}) {
       if (!Number.isSafeInteger(revision) || revision < 1) throw new TypeError("Supply the current memory revision.");
-      return client.request("/api/memories/" + memoryId(id) + "/share-link", {
+      const requestedId = memoryId(id);
+      return client.request("/api/memories/" + requestedId + "/share-link", {
         method: "POST", headers: { ...csrf(csrfToken), "If-Match": `"${revision}"` }, signal,
         decode(value, response) {
-          if (value?.memoryId !== id || value.revision !== revision + 1
-            || typeof value.url !== "string" || !value.url.startsWith(`/shared/${id}#token=`)
-            || !/^[A-Za-z0-9_-]{43}$/.test(value.url.split("#token=")[1])
+          const link = typeof value?.url === "string"
+            ? /^\/shared\/([0-9a-fA-F-]{36})#token=([A-Za-z0-9_-]{43})$/.exec(value.url) : null;
+          if (!isId(value?.memoryId) || value.memoryId.toLowerCase() !== requestedId || value.revision !== revision + 1
+            || !link || link[1].toLowerCase() !== requestedId
             || response.headers.get("ETag") !== `"${value.revision}"`) throw contractMismatch();
-          return value;
+          return { ...value, memoryId: requestedId, url: `/shared/${requestedId}#token=${link[2]}` };
         },
       });
     },

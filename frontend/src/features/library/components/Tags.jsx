@@ -4,7 +4,8 @@ import {
   ArchiveScreen,
 } from "../../inbox/components/ArchiveLayout.jsx";
 import { useTags } from "../hooks/useTags.js";
-import { getTagsFeedback } from "../tagDisplay.js";
+import { useLibraryReadFocus } from "../hooks/useLibraryReadFocus.js";
+import { getTagsFeedback, TAG_REVIEW_STATUSES } from "../tagDisplay.js";
 import TagList from "./TagList.jsx";
 import TagNameForm from "./TagNameForm.jsx";
 import TagDetail from "./TagDetail.jsx";
@@ -41,14 +42,38 @@ function TagsContent({ view, cancelDelete, deleteTrigger }) {
   }
 }
 
-export default function Tags({ state, busy, locked, actions }) {
-  const { view, feedback, cancelDelete, deleteTrigger } = useTags({
+export default function Tags({ state, busy, locked, actions, editorKey }) {
+  const context = ["detail", "select"].includes(state.view)
+    ? `${state.view}:${state.tag?.tagId ?? state.requestedId ?? ""}`
+    : state.view;
+  const readFocus = useLibraryReadFocus({ state, busy, locked, context });
+  return (
+    <TagsScreen
+      key={editorKey}
+      state={state}
+      busy={busy}
+      locked={locked}
+      actions={actions}
+      readFocus={readFocus}
+    />
+  );
+}
+
+function TagsScreen({ state, busy, locked, actions, readFocus }) {
+  const { view, feedback, cancelDelete, deleteTrigger, pageStatus } = useTags({
     state,
     busy,
     locked,
     actions,
+    readFocus,
   });
   const notice = getTagsFeedback(view.error, state);
+  let pageLabel = "Tags";
+  if (state.view === "detail") {
+    pageLabel = "Tagged memories";
+  } else if (state.view === "select") {
+    pageLabel = `Available ${TAG_REVIEW_STATUSES[state.selectorStatus].toLowerCase()} memories`;
+  }
   return (
     <ArchiveScreen className="tags" label="Private tags" busy={busy}>
       <ArchiveIntro
@@ -58,7 +83,7 @@ export default function Tags({ state, busy, locked, actions }) {
               className="button-secondary"
               type="button"
               disabled={view.disabled}
-              onClick={actions.inbox}
+              onClick={view.actions.inbox}
             >
               Back to inbox
             </button>
@@ -81,6 +106,11 @@ export default function Tags({ state, busy, locked, actions }) {
           a memory.
         </p>
       </ArchiveIntro>
+      {["list", "detail", "select"].includes(state.view) && !state.tag?.deletedAt && (
+        <h2 ref={pageStatus} tabIndex={-1} className="visually-hidden">
+          {pageLabel} · Page {state.cursors.length}{state.error ? " could not be loaded" : ""}
+        </h2>
+      )}
       {notice.visible && (
         <p
           ref={feedback}

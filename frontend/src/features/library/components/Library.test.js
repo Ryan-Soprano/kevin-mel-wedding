@@ -8,6 +8,12 @@ import react from "@vitejs/plugin-react";
 import { initialLibrary } from "../api/libraryActions.js";
 import { initialTags } from "../api/tagActions.js";
 import {
+  getLibraryFeedback,
+  getLibraryFilterErrors,
+  getLibraryQueryError,
+} from "../libraryDisplay.js";
+import { getTagsFeedback } from "../tagDisplay.js";
+import {
   MEMORY_DETAIL,
   MEDIA_DETAIL,
 } from "../../../shared/api/v1/fixtures.js";
@@ -152,6 +158,7 @@ test("actual Library/Tags views expose literal filters, partial dates, bounded p
     assert.match(tagDetail, /Save tag name/);
     assert.match(tagDetail, /Remove from tag/);
     assert.match(tagDetail, /Next tag page/);
+    assert.match(tagDetail, /Tagged memories · Page 2<\/h2>/);
     assert.match(tagDetail, /Guest contribution/);
     assert.doesNotMatch(tagDetail, /<img|<audio|<video/);
     assert.match(tagDetail, /Saved on: Oct 24, 2026, 2:30 PM EDT · Eastern/);
@@ -179,6 +186,7 @@ test("actual Library/Tags views expose literal filters, partial dates, bounded p
     assert.match(attached, /Memory tags/);
     assert.match(attached, /Remove tag/);
     assert.match(attached, /Next memory tags page/);
+    assert.match(attached, /Attached memory tags · Page 1<\/h4>/);
     assert.match(attached, /original content, files, memory date or saved time/);
     const picker = render(MemoryTags, {
       ...initialTags(),
@@ -189,16 +197,17 @@ test("actual Library/Tags views expose literal filters, partial dates, bounded p
     assert.match(picker, /Search available tags/);
     assert.match(picker, /Attach tag/);
     assert.match(picker, /Back to attached tags/);
+    assert.match(picker, /Available memory tags · Page 1<\/h4>/);
     const locked = render(MemoryTags, {
       ...initialTags(),
       mutation: {
         phase: "uncertain",
         canRetry: true,
-        needsName: true,
+        needsName: false,
         error: "Unknown outcome"
       }
     }, true);
-    assert.match(locked, /Original tag name/);
+    assert.doesNotMatch(locked, /Original tag name/);
     assert.match(locked, /Reload current tag/);
     assert.match(locked, /Retry this same tag change/);
     assert.match(locked, /disabled=""[^>]*>Add tags/);
@@ -238,7 +247,7 @@ async function withLibraryView(check) {
         ...options,
       }),
     );
-    await check(render);
+    await check(render, server);
   } finally {
     await server.close();
   }
@@ -381,6 +390,141 @@ test("Library preserves applied field values, nullish attribution and original e
   });
 });
 
+test("Library local filter errors match the existing query and date constraints without masking server feedback", () => {
+  const valid = {
+    q: "  literal_%\\'😀  ",
+    type: "ALL",
+    status: "ALL",
+    precision: "ALL",
+    fromYear: "",
+    toYear: "",
+  };
+  assert.deepEqual(getLibraryFilterErrors(valid), {});
+  assert.deepEqual(
+    getLibraryFilterErrors({ ...valid, fromYear: "1", toYear: "9999" }),
+    {},
+  );
+  for (const query of ["", "   ", "😀".repeat(100)]) {
+    assert.equal(getLibraryQueryError(query), null);
+  }
+  for (const query of [null, "x".repeat(201), "bad\0query", "\ud800"]) {
+    const message = getLibraryQueryError(query);
+    assert.equal(typeof message, "string");
+    assert.equal(getLibraryFilterErrors({ ...valid, q: query }).q, message);
+  }
+  for (const fromYear of ["0", "10000", "12x", "-1"]) {
+    assert.deepEqual(
+      getLibraryFilterErrors({ ...valid, fromYear }),
+      { fromYear: "Use a year between 1 and 9999." },
+    );
+  }
+  assert.deepEqual(
+    getLibraryFilterErrors({ ...valid, fromYear: "2025", toYear: "2024" }),
+    {
+      toYear: "The ending year must be the same as or later than the starting year.",
+    },
+  );
+  assert.deepEqual(
+    getLibraryFilterErrors({ ...valid, precision: "UNKNOWN", toYear: "2024" }),
+    {
+      datePrecision:
+        "Unknown dates cannot have a year range. Clear the years or choose another precision.",
+    },
+  );
+  assert.deepEqual(
+    Object.keys(getLibraryFilterErrors({
+      ...valid,
+      q: "\0",
+      type: "VIDEO",
+      status: "DELETE",
+    })),
+    ["q", "memoryType", "reviewStatus"],
+  );
+  assert.equal(
+    getLibraryFeedback("Old local validation", { error: "Current read failed" }),
+    "Current read failed",
+  );
+  assert.equal(getLibraryFeedback("Local validation", { error: null }), "Local validation");
+});
+
+test("Library field views associate each local error with its own editable control and name read destinations", async () => {
+  await withLibraryView(async (render, server) => {
+    const { default: LibraryFilters } = await server.ssrLoadModule(
+      "/src/features/library/components/LibraryFilters.jsx",
+    );
+    const { default: LibraryTagChooser } = await server.ssrLoadModule(
+      "/src/features/library/components/LibraryTagChooser.jsx",
+    );
+    const view = {
+      state: initialLibrary(),
+      disabled: false,
+      busy: false,
+      actions,
+      q: "bad query",
+      type: "ALL",
+      status: "ALL",
+      precision: "ALL",
+      fromYear: "0",
+      toYear: "0",
+      tagQuery: "bad tag query",
+      setQ() {},
+      setType() {},
+      setStatus() {},
+      setPrecision() {},
+      setFromYear() {},
+      setToYear() {},
+      setTagQuery() {},
+      registerField() {},
+      handlers: {},
+      fieldErrors: {
+        q: "Fix search text",
+        memoryType: "Fix memory type",
+        reviewStatus: "Fix review status",
+        datePrecision: "Fix date precision",
+        fromYear: "Fix starting year",
+        toYear: "Fix ending year",
+        tagQuery: "Fix tag search",
+      },
+    };
+    const filters = renderToStaticMarkup(createElement(LibraryFilters, { view }));
+    for (const [id, message] of [
+      ["library-query", "Fix search text"],
+      ["library-type", "Fix memory type"],
+      ["library-review", "Fix review status"],
+      ["library-precision", "Fix date precision"],
+      ["library-from-year", "Fix starting year"],
+      ["library-to-year", "Fix ending year"],
+    ]) {
+      assert.match(
+        filters,
+        new RegExp(`id="${id}"[^>]*aria-invalid="true"[^>]*aria-describedby="${id}-error"`),
+      );
+      assert.match(
+        filters,
+        new RegExp(`id="${id}-error"[^>]*role="alert">${message}</p>`),
+      );
+    }
+    const chooser = renderToStaticMarkup(createElement(LibraryTagChooser, { view }));
+    assert.match(chooser, /aria-label="Search library filter tags"/);
+    assert.match(
+      chooser,
+      /id="library-tag-query"[^>]*aria-invalid="true"[^>]*aria-describedby="library-tag-query-error"/,
+    );
+    assert.match(
+      chooser,
+      /id="library-tag-query-error"[^>]*role="alert">Fix tag search<\/p>/,
+    );
+    assert.match(
+      render({ cursors: [null, "page-two"] }),
+      /<h2 tabindex="-1" class="visually-hidden">Library memories · Page 2<\/h2>/,
+    );
+    assert.match(
+      render({ view: "chooseTag", tagCursors: [null, "tag-page"], error: "Unavailable" }),
+      /Library filter tags · Page 2 could not be loaded<\/h2>/,
+    );
+  });
+});
+
 async function withTagsView(check) {
   const server = await createServer({
     configFile: false,
@@ -412,7 +556,7 @@ async function withTagsView(check) {
         ...props,
       }),
     );
-    await check(render);
+    await check(render, server);
   } finally {
     await server.close();
   }
@@ -427,6 +571,7 @@ test("Tags list preserves search, counts, page gates and cached error results", 
       nextCursor: "next-page",
     };
     const list = render(state);
+    assert.match(list, /Tags · Page 2<\/h2>/);
     assert.match(list, /value="&lt;literal_%&gt;"/);
     assert.match(list, /25 memories · Couple only/);
     assert.match(list, /1 memory · Couple only/);
@@ -510,6 +655,7 @@ test("Tags selector keeps status filters, literal summaries and Eastern saved ti
       candidates: [note, photo],
     };
     const selector = render(state);
+    assert.match(selector, /Available archived memories · Page 1<\/h2>/);
     assert.match(selector, /Add memories to Our &lt;tag&gt;/);
     assert.match(selector, /aria-pressed="true">Archived/);
     assert.match(selector, /aria-label="Add &lt;Private title&gt; to tag"/);
@@ -565,5 +711,85 @@ test("Tags recovery keeps deliberate retry gates and feedback precedence", async
     assert.doesNotMatch(feedback, /Mutation failed|Change saved/);
     assert.match(render({ notice: "Change saved" }), /role="status">Change saved/);
     assert.match(render({ error: "", notice: "Notice" }), /role="status"><\/p>/);
+    assert.equal(
+      getTagsFeedback("Old local validation", {
+        ...initialTags(),
+        error: "Current read failed",
+        mutation: { phase: "uncertain", error: "Current mutation failed" },
+      }).text,
+      "Current read failed",
+    );
+    assert.equal(
+      getTagsFeedback("Old local validation", {
+        ...initialTags(),
+        mutation: { phase: "uncertain", error: "Current mutation failed" },
+      }).text,
+      "Current mutation failed",
+    );
+  });
+});
+
+test("Tag field views associate independent name, query and recovery errors with the correct controls", async () => {
+  await withTagsView(async (_render, server) => {
+    const { default: TagNameForm } = await server.ssrLoadModule(
+      "/src/features/library/components/TagNameForm.jsx",
+    );
+    const { default: TagList } = await server.ssrLoadModule(
+      "/src/features/library/components/TagList.jsx",
+    );
+    const { TagMutationRecovery } = await server.ssrLoadModule(
+      "/src/features/library/components/TagsRecovery.jsx",
+    );
+    const view = {
+      state: {
+        ...initialTags(),
+        mutation: {
+          phase: "uncertain",
+          canRetry: true,
+          needsName: true,
+        },
+      },
+      actions,
+      handlers: {},
+      name: " ",
+      q: "bad query",
+      originalName: " ",
+      setName() {},
+      setQ() {},
+      setOriginalName() {},
+      disabled: false,
+      busy: false,
+      locked: true,
+      fieldErrors: {
+        name: "Fix tag name",
+        query: "Fix tag query",
+        retryName: "Re-enter original tag name",
+      },
+    };
+    for (const [Component, props, id, message] of [
+      [TagNameForm, { mode: "create" }, "tag-name", "Fix tag name"],
+      [TagNameForm, { mode: "rename" }, "tag-name", "Fix tag name"],
+      [TagList, {}, "tag-query", "Fix tag query"],
+      [TagMutationRecovery, {}, "tag-original-name", "Re-enter original tag name"],
+    ]) {
+      const markup = renderToStaticMarkup(createElement(Component, { view, ...props }));
+      assert.match(
+        markup,
+        new RegExp(`id="${id}"[^>]*aria-invalid="true"[^>]*aria-describedby="${id}-error"`),
+      );
+      assert.match(
+        markup,
+        new RegExp(`id="${id}-error"[^>]*role="alert">${message}</p>`),
+      );
+    }
+    const recovery = renderToStaticMarkup(createElement(TagMutationRecovery, { view }));
+    assert.doesNotMatch(
+      recovery,
+      /disabled=""[^>]*>Retry this same tag change/,
+    );
+    const busy = renderToStaticMarkup(createElement(TagMutationRecovery, {
+      view: { ...view, busy: true },
+    }));
+    assert.match(busy, /disabled=""[^>]*>Retry this same tag change/);
   });
 });

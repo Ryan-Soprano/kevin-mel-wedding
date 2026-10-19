@@ -13,11 +13,9 @@ const clip = new File(["synthetic audio bytes"], "message.webm", {
   type: "audio/webm;codecs=opus",
 });
 function deferred() {
-  let resolve;
-  const promise = new Promise((yes) => {
-    resolve = yes;
-  });
-  return { promise, resolve };
+  let resolve, reject;
+  const promise = new Promise((yes, no) => { resolve = yes; reject = no; });
+  return { promise, resolve, reject };
 }
 function fixture(overrides = {}) {
   const timers = new Map(),
@@ -196,6 +194,187 @@ test("late permission after timeout or page interruption stops its tracks and ca
   }
 });
 
+test("late permission attempts every track even when an earlier stop throws", async () => {
+  const permission = deferred(), stopped = [];
+  const f = fixture({ requestStream: () => permission.promise });
+  const request = f.capture.start();
+  f.capture.interrupt();
+  permission.resolve({ getTracks: () => [
+    { stop() { stopped.push("first"); throw new Error("already ended"); } },
+    { stop() { stopped.push("second"); } },
+  ] });
+  await request;
+  assert.deepEqual(stopped, ["first", "second"]);
+  assert.equal(f.capture.getSnapshot().errorCode, "INTERRUPTED");
+  assert.equal(f.timers.size, 0);
+  assert.equal(f.Recorder.latest, undefined);
+});
+
+test("discard or disposal from a requesting notification prevents microphone work and deadline creation", async () => {
+  for (const action of ["discard", "dispose"]) {
+    let f;
+    f = fixture({ onChange(state) { if (state.phase === "requesting") f.capture[action](); } });
+    await f.capture.start();
+    assert.equal(f.permissionRequests, 0);
+    assert.equal(f.timers.size, 0);
+    assert.equal(f.capture.getSnapshot().clip, null);
+  }
+});
+
+test("discard or disposal from a stopping notification leaves no finishing deadline", async () => {
+  for (const action of ["discard", "dispose"]) {
+    let f;
+    f = fixture({ onChange(state) { if (state.phase === "stopping") f.capture[action](); } });
+    await f.capture.start();
+    f.capture.stop();
+    assert.equal(f.timers.size, 0);
+    assert.equal(f.stopped, 1);
+    assert.equal(f.listeners.size, 0);
+    f.Recorder.latest.finish(); await turn();
+    assert.equal(f.created.length, 0);
+  }
+});
+
+test("discard or disposal from a checking notification prevents local decoding", async () => {
+  for (const action of ["discard", "dispose"]) {
+    let f, validations = 0;
+    f = fixture({
+      onChange(state) { if (state.phase === "checking") f.capture[action](); },
+      validate: async file => { validations++; return { file, durationSeconds: 1 }; },
+    });
+    await f.capture.useFile(clip);
+    assert.equal(validations, 0);
+    assert.equal(f.created.length, 0);
+    assert.equal(f.timers.size, 0);
+  }
+});
+
+test("discard or disposal from a clock notification cannot schedule another tick", async () => {
+  for (const action of ["discard", "dispose"]) {
+    let f;
+    f = fixture({ onChange(state) {
+      if (state.phase === "recording" && state.elapsedSeconds === 1) f.capture[action]();
+    } });
+    await f.capture.start();
+    f.elapsed = 1000; f.fire(1000);
+    assert.equal(f.timers.size, 0);
+    assert.equal(f.stopped, 1);
+    assert.equal(f.listeners.size, 0);
+  }
+});
+
+test("stopping from a clock notification preserves only its finishing deadline", async () => {
+  let f;
+  f = fixture({ onChange(state) {
+    if (state.phase === "recording" && state.elapsedSeconds === 1) f.capture.stop();
+  } });
+  await f.capture.start();
+  f.elapsed = 1000; f.fire(1000);
+  assert.equal(f.capture.getSnapshot().phase, "stopping");
+  assert.deepEqual([...f.timers.values()].map(timer => timer.milliseconds), [5000]);
+  f.Recorder.latest.finish(); await turn();
+  assert.equal(f.capture.getSnapshot().phase, "ready");
+  assert.equal(f.timers.size, 0);
+  f.capture.dispose();
+});
+
+test("a file chosen during initial cleanup supersedes the outer capture or file request", async () => {
+  for (const action of ["start", "useFile"]) {
+    let f, replacement, chosen = false;
+    const next = new File(["replacement synthetic audio"], "replacement.webm", { type: "audio/webm" });
+    f = fixture({ onChange(state) {
+      if (state.phase === "idle" && !chosen) {
+        chosen = true;
+        replacement = f.capture.useFile(next);
+      }
+    } });
+    await f.capture[action](clip);
+    await replacement;
+    assert.equal(f.permissionRequests, 0);
+    assert.equal(f.capture.getSnapshot().phase, "ready");
+    assert.equal(f.capture.getSnapshot().clip.file.name, "replacement.webm");
+    assert.equal(f.created.length, 1);
+    assert.equal(f.timers.size, 0);
+    f.capture.dispose();
+    assert.deepEqual(f.revoked, ["blob:voice-1"]);
+  }
+});
+
+test("disposal clears its snapshot silently and cannot admit replacement capture or decoding", async () => {
+  for (const action of ["start", "useFile"]) {
+    let f, replacing = false, replacement, validations = 0, notifications = 0;
+    f = fixture({
+      onChange(state) {
+        notifications++;
+        if (replacing && state.phase === "idle") {
+          replacing = false;
+          replacement = f.capture[action](clip);
+        }
+      },
+      validate: async file => {
+        validations++;
+        return { file: new File([file], file.name, { type: "audio/webm" }), durationSeconds: 1 };
+      },
+    });
+    await f.capture.useFile(clip);
+    const before = notifications;
+    replacing = true;
+    f.capture.dispose();
+    await replacement;
+    assert.equal(notifications, before);
+    assert.equal(f.permissionRequests, 0);
+    assert.equal(validations, 1);
+    assert.equal(f.created.length, 1);
+    assert.deepEqual(f.revoked, ["blob:voice-1"]);
+    assert.equal(f.capture.getSnapshot().phase, "idle");
+    assert.equal(f.capture.getSnapshot().clip, null);
+    assert.equal(f.timers.size, 0);
+  }
+});
+
+test("interruption cannot publish its stale error over a file chosen during cleanup", async () => {
+  let f, replacing = false, replacement;
+  f = fixture({ onChange(state) {
+    if (replacing && state.phase === "idle") {
+      replacing = false;
+      replacement = f.capture.useFile(clip);
+    }
+  } });
+  await f.capture.start();
+  replacing = true;
+  f.capture.interrupt();
+  assert.equal(f.capture.getSnapshot().phase, "checking");
+  assert.equal(f.capture.getSnapshot().errorCode, null);
+  await replacement;
+  assert.equal(f.capture.getSnapshot().phase, "ready");
+  f.capture.dispose();
+  assert.equal(f.timers.size, 0);
+});
+
+test("a rejected microphone request cannot report its stale error over a replacement file", async () => {
+  const permission = deferred(), errors = [];
+  let f, replacing = false, replacement;
+  f = fixture({
+    requestStream: () => permission.promise,
+    onChange(state) {
+      if (state.errorCode) errors.push(state.errorCode);
+      if (replacing && state.phase === "idle") {
+        replacing = false;
+        replacement = f.capture.useFile(clip);
+      }
+    },
+  });
+  const request = f.capture.start();
+  replacing = true;
+  permission.reject(Object.assign(new Error("denied"), { name: "NotAllowedError" }));
+  await request; await replacement;
+  assert.deepEqual(errors, []);
+  assert.equal(f.capture.getSnapshot().phase, "ready");
+  assert.equal(f.capture.getSnapshot().errorCode, null);
+  f.capture.dispose();
+  assert.equal(f.timers.size, 0);
+});
+
 test("hidden/disposed capture, ended track, unsolicited recorder stop and excessive bytes cannot retain partial clips", async () => {
   for (const action of [
     (f) => f.capture.interrupt(),
@@ -217,6 +396,26 @@ test("hidden/disposed capture, ended track, unsolicited recorder stop and excess
     assert.ok(f.stopped >= 1);
     assert.equal(f.capture.getSnapshot().clip, null);
   }
+});
+
+test("old recorder and track callbacks cannot interrupt a fresh recording", async () => {
+  const f = fixture();
+  await f.capture.start();
+  const previous = f.Recorder.latest, ended = f.listeners.get("ended");
+  f.capture.discard();
+  await f.capture.start();
+  const current = f.Recorder.latest, before = f.capture.getSnapshot(), stopped = f.stopped;
+  previous.ondataavailable({ data: clip }); previous.onerror(); previous.onstop(); ended();
+  assert.equal(f.capture.getSnapshot(), before);
+  assert.equal(f.capture.getSnapshot().phase, "recording");
+  assert.equal(f.stopped, stopped);
+  assert.equal(f.created.length, 0);
+  f.capture.stop(); current.finish(); await turn();
+  assert.equal(f.capture.getSnapshot().phase, "ready");
+  f.capture.dispose();
+  assert.equal(f.timers.size, 0);
+  assert.equal(f.listeners.size, 0);
+  assert.deepEqual(f.revoked, ["blob:voice-1"]);
 });
 
 test("late local decode cannot replace a newer file and reset/dispose revoke every owned preview", async () => {
@@ -244,6 +443,25 @@ test("late local decode cannot replace a newer file and reset/dispose revoke eve
   assert.deepEqual(f.revoked, ["blob:voice-1"]);
   f.capture.dispose();
   assert.deepEqual(f.revoked, ["blob:voice-1", "blob:voice-2"]);
+});
+
+test("late decoder success or failure after disposal cannot create a preview or publish state", async () => {
+  for (const succeeds of [false, true]) {
+    const pending = deferred(), f = fixture({ validate: () => pending.promise });
+    const checking = f.capture.useFile(clip);
+    f.capture.dispose();
+    const before = f.capture.getSnapshot(), notifications = f.states.length;
+    if (succeeds) pending.resolve({ file: new File([clip], "late.webm", { type: "audio/webm" }), durationSeconds: 2 });
+    else pending.reject(new AudioCaptureError("DECODE_FAILED"));
+    await checking;
+    assert.equal(f.capture.getSnapshot(), before);
+    assert.equal(f.states.length, notifications);
+    assert.equal(f.created.length, 0);
+    assert.equal(f.timers.size, 0);
+    assert.equal(f.capture.getSnapshot().clip, null);
+    f.capture.dispose();
+    assert.equal(f.states.length, notifications);
+  }
 });
 
 test("unsupported recording still permits an existing file and does not ask for microphone access", async () => {

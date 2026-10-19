@@ -104,7 +104,7 @@ function AlbumDeleteConfirmation({ view, cancelDelete }) {
   );
 }
 
-export default function AlbumDetail({ view, cancelDelete }) {
+export default function AlbumDetail({ view, cancelDelete, deleteTrigger }) {
   const { state, locked, disabled, actions, confirmDelete, handlers } = view;
   if (!state.album) {
     return null;
@@ -140,6 +140,7 @@ export default function AlbumDetail({ view, cancelDelete }) {
             Add memories
           </button>
           <button
+            ref={deleteTrigger}
             className="button-secondary"
             type="button"
             disabled={disabled}

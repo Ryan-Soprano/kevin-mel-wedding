@@ -252,7 +252,7 @@ export function createAlbumActions({
         album,
         frozen.kind === "delete"
           ? "Album deleted. Its memories and original files remain in your archive."
-          : "Album change accepted. Current album loaded; every memory stays private.",
+          : "Album change accepted. Current album loaded; memory sharing is unchanged.",
       );
     });
   }

@@ -39,7 +39,8 @@ function TagResults({ view }) {
 }
 
 export default function TagList({ view }) {
-  const { q, setQ, disabled, actions, handlers } = view;
+  const { q, setQ, disabled, actions, handlers, fieldErrors = {}, fields = {} } = view;
+  const { query: queryField } = fields;
   return (
     <ArchivePanel
       title="Your tags"
@@ -58,12 +59,20 @@ export default function TagList({ view }) {
           <label htmlFor="tag-query">Search tag names</label>
           <input
             id="tag-query"
+            ref={queryField}
             type="search"
             value={q}
             maxLength={200}
             disabled={disabled}
             onChange={(event) => setQ(event.target.value)}
+            aria-invalid={Boolean(fieldErrors.query)}
+            aria-describedby={fieldErrors.query ? "tag-query-error" : undefined}
           />
+          {fieldErrors.query && (
+            <p id="tag-query-error" className="form-error" role="alert">
+              {fieldErrors.query}
+            </p>
+          )}
         </div>
         <button type="submit" disabled={disabled}>
           Search tags

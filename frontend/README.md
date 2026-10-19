@@ -12,13 +12,15 @@ For prerequisites, install/run/check commands, the development proxy, and curren
 | [src/features/contribution/components/ContributionForm.jsx](src/features/contribution/components/ContributionForm.jsx) | Direct-send note form and result views; the hook owns editable state, validation, focus and coordinator wiring while the retained submission lifecycle stays in api/textSubmission.js |
 | [src/features/media/](src/features/media/) | Active batch photo form/coordinator, shared controlled picker, constraints/previews and the retained MED-01 singleton coordinator |
 | [src/features/media/components/PhotoBatchForm.jsx](src/features/media/components/PhotoBatchForm.jsx) | Photo batch shell and compose/review/card/action views; the form hook owns editable state, focus and coordinator wiring while the upload lifecycle stays in api/photoBatchSubmission.js |
-| [src/features/library/components/Tags.jsx](src/features/library/components/Tags.jsx) | Tag shell and focused list/name/detail/selector/recovery views; its hook owns local drafts, validation, deletion focus and action wiring while the existing tag coordinator owns requests and retry identity |
+| [src/features/library/components/Tags.jsx](src/features/library/components/Tags.jsx) | Persistent tag boundary and keyed list/name/detail/selector/recovery editor; its hook owns local drafts, field validation, deletion focus and action wiring while the tag coordinator owns requests, return context and retry identity |
+| [src/features/library/components/MemoryTags.jsx](src/features/library/components/MemoryTags.jsx) | Memory-owned tag attachment boundary with a keyed picker editor; preserves attachment-only recovery and suppresses delayed focus inside closed memory details |
+| [src/features/library/hooks/useLibraryReadFocus.js](src/features/library/hooks/useLibraryReadFocus.js) | Shared deliberate read-focus owner for Library, Tags and MemoryTags; survives inner editor resets and cancels delayed focus after blur, traversal, hiding or focus movement |
 | [src/features/inbox/components/Inbox.jsx](src/features/inbox/components/Inbox.jsx) | Shared private archive page layout; InboxScreens.jsx selects small screen adapters, each owning its feature props and reset key |
 | [src/features/inbox/components/ArchiveLayout.jsx](src/features/inbox/components/ArchiveLayout.jsx) | Shared cards, action rows, empty states and pagination for archive features |
-| [src/features/library/components/Library.jsx](src/features/library/components/Library.jsx) | Library shell and focused filters/results/tag chooser/recovery/paging views; its hook owns editable search fields, validation, focus and action wiring while the existing library coordinator owns applied filters, requests and return context |
+| [src/features/library/components/Library.jsx](src/features/library/components/Library.jsx) | Persistent Library boundary and keyed filters/results/tag chooser/recovery/paging editor; its hook owns editable fields, scoped validation and action wiring while the library coordinator owns applied filters, requests and return context |
 | [src/features/timeline/components/Timeline.jsx](src/features/timeline/components/Timeline.jsx) | Timeline shell and focused list/editor/detail/selector/recovery views; its hook owns local fields, filters, validation and focus while the existing timeline coordinator owns requests and recovery |
-| [src/features/albums/components/Albums.jsx](src/features/albums/components/Albums.jsx) | Album shell and focused list/name/detail/selector/recovery views; its hook owns local drafts, validation, focus and action wiring while the existing album coordinator owns requests, ordering and recovery |
-| [src/features/export/components/ExportArchive.jsx](src/features/export/components/ExportArchive.jsx) | Export shell and focused guide/recovery/status/parts/download/warnings views; its hook owns cancellation and feedback focus while the existing export coordinator owns jobs, retries, paging and verified download lifetimes |
+| [src/features/albums/components/Albums.jsx](src/features/albums/components/Albums.jsx) | Album feature boundary retains paging focus across the keyed editor's view/identity/revision resets; the editor hook owns local drafts, validation, deletion focus and action wiring while the existing album coordinator owns requests, ordering and recovery |
+| [src/features/export/components/ExportArchive.jsx](src/features/export/components/ExportArchive.jsx) | Export shell and focused guide/recovery/status/parts/download/warnings views; its hook owns job-bound cancellation, deliberate status/part/warning focus and action wiring while the export coordinator owns jobs, retries, paging and verified download lifetimes |
 | [src/features/inbox/api/inboxHistory.js](src/features/inbox/api/inboxHistory.js) | Browser Back/Forward with fresh private reads, mutation guards and disposable in-memory route metadata; browser history contains opaque keys only |
 | [src/app/guestHistory.js](src/app/guestHistory.js) / [useGuestHistory.js](src/app/useGuestHistory.js) | Guest screen history; visited forms retain drafts in memory and pending submissions block traversal |
 | [src/shared/components/MemoryChoice.jsx](src/shared/components/MemoryChoice.jsx) | Accessible memory-type cards shared by guest and private creation screens |
@@ -46,6 +48,10 @@ For prerequisites, install/run/check commands, the development proxy, and curren
 | [package.json](package.json) / [package-lock.json](package-lock.json) | Scripts, dependency ranges, and resolved versions |
 
 Keep component tests beside the implementation they exercise. Update this map when boundaries change; keep implementation work in Notion.
+
+Timeline keeps its view/identity/revision/applied-filter reset key inside the
+feature boundary. That boundary retains paging focus while the keyed editor
+owns drafts and field validation.
 
 ## Source readability
 

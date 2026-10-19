@@ -35,25 +35,57 @@ function CreateScreen({ view, audioEnabled }) {
 function AlbumsScreen({ view }) {
   const { albums: state, busy } = view.snapshot;
   const key = `${state.view}:${state.album?.albumId ?? "new"}:${state.album?.revision ?? "new"}`;
-  return <Albums key={key} state={state} busy={busy} locked={view.reviewLocked} actions={view.actions.albums} />;
+  return (
+    <Albums
+      editorKey={key}
+      state={state}
+      busy={busy}
+      locked={view.reviewLocked}
+      actions={view.actions.albums}
+    />
+  );
 }
 
 function TimelineScreen({ view }) {
   const { timeline: state, busy } = view.snapshot;
   const key = `${state.view}:${state.event?.eventId ?? "new"}:${state.event?.revision ?? "new"}:${JSON.stringify(state.filters)}`;
-  return <Timeline key={key} state={state} busy={busy} locked={view.reviewLocked} actions={view.actions.timeline} />;
+  return (
+    <Timeline
+      editorKey={key}
+      state={state}
+      busy={busy}
+      locked={view.reviewLocked}
+      actions={view.actions.timeline}
+    />
+  );
 }
 
 function LibraryScreen({ view }) {
   const { library: state, busy } = view.snapshot;
   const key = `${state.view}:${JSON.stringify(state.filters)}:${state.tagQuery}:${state.formResetVersion}`;
-  return <Library key={key} state={state} busy={busy} locked={view.reviewLocked} actions={view.actions.library} />;
+  return (
+    <Library
+      editorKey={key}
+      state={state}
+      busy={busy}
+      locked={view.reviewLocked}
+      actions={view.actions.library}
+    />
+  );
 }
 
 function TagsScreen({ view }) {
   const { tags: state, busy } = view.snapshot;
   const key = `${state.view}:${state.tag?.tagId ?? "new"}:${state.tag?.revision ?? "new"}:${state.q}`;
-  return <Tags key={key} state={state} busy={busy} locked={view.reviewLocked} actions={view.actions.tags} />;
+  return (
+    <Tags
+      editorKey={key}
+      state={state}
+      busy={busy}
+      locked={view.reviewLocked}
+      actions={view.actions.tags}
+    />
+  );
 }
 
 function ExportScreen({ view }) {

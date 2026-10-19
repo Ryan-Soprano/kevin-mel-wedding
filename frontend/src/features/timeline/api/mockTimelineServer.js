@@ -3,11 +3,22 @@ import { compareCanonical, compareEvents, compareInstants, eventFields, normaliz
 /** Synthetic authenticated server through the same JSON/ETag adapter as production. */
 export function createMockTimelineServer({ getSession, getScenario, getMemories, nextId, now, reply, failure }) {
   const events = new Map(), lost = new Set(); let listRevision = nextId();
-  const timestamp = () => new Date(now()).toISOString();
+  let latestActionTime = null;
+  function actionTimestamp() {
+    const current = now();
+    latestActionTime = latestActionTime === null
+      ? current
+      : Math.max(latestActionTime, current);
+    return new Date(latestActionTime).toISOString();
+  }
   const detail = entry => ({ ...entry.event, memberCount: entry.members.length });
   const conflict = () => failure("TIMELINE_CONFLICT", "Timeline changed. Reload current state.", 412);
   const invalidCursor = () => failure("INVALID_CURSOR", "Reload the first page.", 400);
-  const changed = entry => { entry.event.revision = nextId(); entry.event.updatedAt = timestamp(); listRevision = nextId(); };
+  const changed = (entry) => {
+    entry.event.revision = nextId();
+    entry.event.updatedAt = actionTimestamp();
+    listRevision = nextId();
+  };
   const conditional = (headers, entry) => !headers.get("If-Match") ? failure("PRECONDITION_REQUIRED", "Reload the event.", 428)
     : !/^"[0-9a-f-]{36}"$/.test(headers.get("If-Match")) ? failure("VALIDATION_FAILED", "Use a valid revision.", 400)
       : headers.get("If-Match") !== '"' + entry.event.revision + '"' ? conflict() : null;
@@ -22,7 +33,12 @@ export function createMockTimelineServer({ getSession, getScenario, getMemories,
     if (cursor) {
       let parsed; try { parsed = JSON.parse(decodeURIComponent(cursor)); } catch { return { error: invalidCursor() }; }
       if (!Array.isArray(parsed) || parsed.length !== 3 || typeof parsed[0] !== "string" || typeof parsed[1] !== "string" || typeof parsed[2] !== "string") return { error: invalidCursor() };
-      if (parsed[0] !== revision || parsed[1] !== scope) return { error: conflict() };
+      if (parsed[1] !== scope) {
+        return { error: invalidCursor() };
+      }
+      if (parsed[0] !== revision) {
+        return { error: conflict() };
+      }
       offset = rows.findIndex(row => identity(row) === parsed[2]) + 1;
       if (!offset) return { error: invalidCursor() };
     }
@@ -61,7 +77,19 @@ export function createMockTimelineServer({ getSession, getScenario, getMemories,
         if (headers.get("If-None-Match") !== "*") return failure("VALIDATION_FAILED", "Use a create condition.", 400);
         if (entry) return conflict();
         let fields; try { fields = normalizeEventFields(body); } catch { return failure("VALIDATION_FAILED", "Check the event fields.", 400); }
-        const createdAt = timestamp(); entry = { event: { eventId, ...fields, visibility: "COUPLE_ONLY", revision: nextId(), createdAt, updatedAt: createdAt, deletedAt: null }, members: [] };
+        const createdAt = actionTimestamp();
+        entry = {
+          event: {
+            eventId,
+            ...fields,
+            visibility: "COUPLE_ONLY",
+            revision: nextId(),
+            createdAt,
+            updatedAt: createdAt,
+            deletedAt: null,
+          },
+          members: [],
+        };
         events.set(eventId, entry); listRevision = nextId(); return result(entry, 201, "create");
       }
       if (!entry) return failure("NOT_FOUND", "This event is unavailable.", 404);

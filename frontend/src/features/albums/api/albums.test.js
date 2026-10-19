@@ -229,6 +229,99 @@ test("malformed album rows, tombstone chronology, ETags, duplicate/deleted membe
   }
 });
 
+test(
+  "member pages accept a single uppercase legacy UUID but reject mixed-case duplicate identities",
+  async () => {
+    const legacy = "aaaaaaaa-aaaa-1aaa-8aaa-aaaaaaaaaaaa";
+    const member = (memoryId) => ({
+      memory: {
+        ...MEMORY_DETAIL,
+        memoryId,
+      },
+      canMoveEarlier: false,
+      canMoveLater: false,
+    });
+    let items = [member(legacy.toUpperCase())];
+    const api = createArchiveApi({
+      client: createApiClient({
+        fetchImpl: async () => {
+          return response({
+            album: {
+              ...ALBUM,
+              memberCount: items.length,
+            },
+            items,
+            nextCursor: null,
+          });
+        },
+      }),
+    });
+
+    const page = await api.listAlbumMembers(ALBUM.albumId);
+    assert.equal(page.items[0].memory.memoryId, legacy.toUpperCase());
+
+    items = [...items, member(legacy)];
+    await assert.rejects(api.listAlbumMembers(ALBUM.albumId), {
+      code: "CONTRACT_MISMATCH",
+    });
+  },
+);
+
+test(
+  "mock album changes keep timestamps nondecreasing when the clock moves backward",
+  async () => {
+    let at = Date.parse("2026-10-19T16:00:00Z");
+    const api = createMockArchiveApi({
+      now: () => at,
+    });
+    const session = await api.getSession();
+    await api.login(
+      {
+        username: "synthetic",
+        password: "synthetic",
+      },
+      {
+        csrfToken: session.csrfToken,
+      },
+    );
+    const original = await directCreate(api);
+
+    at += 60_000;
+    const later = await api.renameAlbum(
+      original.albumId,
+      "Later name",
+      await options(api, original),
+    );
+    assert.ok(Date.parse(later.updatedAt) > Date.parse(original.createdAt));
+
+    at -= 120_000;
+    const renamed = await api.renameAlbum(
+      original.albumId,
+      "Name after clock rollback",
+      await options(api, later),
+    );
+    assert.equal(renamed.updatedAt, later.updatedAt);
+    assert.equal(renamed.createdAt, original.createdAt);
+    assert.notEqual(renamed.revision, later.revision);
+
+    const noop = await api.renameAlbum(
+      original.albumId,
+      renamed.name,
+      await options(api, renamed),
+    );
+    assert.deepEqual(noop, renamed);
+
+    const deleted = await api.deleteAlbum(
+      original.albumId,
+      await options(api, renamed),
+    );
+    assert.equal(deleted.updatedAt, later.updatedAt);
+    assert.equal(deleted.deletedAt, later.updatedAt);
+    assert.equal(deleted.name, null);
+    assert.deepEqual(await api.getAlbum(original.albumId), deleted);
+  },
+);
+
 test("many-to-many membership, no-op tokens, cross-page moves, stale cursors and deletion preserve original memories", async () => {
   const api = await signedMock();
   let album = await directCreate(api);

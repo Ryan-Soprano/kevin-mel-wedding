@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -8,23 +9,67 @@ import {
   normalizeTagName,
 } from "../libraryFilters.js";
 
-export function useTags({ state, busy, locked, actions }) {
+export function useTags({ state, busy, locked, actions, readFocus }) {
   const [name, setName] = useState(state.tag?.name ?? "");
   const [q, setQ] = useState(state.q);
   const [originalName, setOriginalName] = useState("");
-  const [error, setError] = useState(null);
+  const [fieldErrors, setFieldErrors] = useState({});
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const nameInput = useRef(null);
+  const queryInput = useRef(null);
+  const retryNameInput = useRef(null);
+  const validationFocus = useRef(null);
   const feedback = useRef(null);
   const cancelDelete = useRef(null);
   const deleteTrigger = useRef(null);
   const restoreDeleteFocus = useRef(false);
   const disabled = busy || locked;
+  const cancelLocalFocus = useCallback(() => {
+    validationFocus.current = null;
+    restoreDeleteFocus.current = false;
+  }, []);
 
   useEffect(() => {
-    if (error || state.mutation.error || state.notice || state.error) {
+    const hidden = () => {
+      if (document.visibilityState === "hidden") {
+        cancelLocalFocus();
+      }
+    };
+    window.addEventListener("blur", cancelLocalFocus);
+    window.addEventListener("pagehide", cancelLocalFocus);
+    window.addEventListener("popstate", cancelLocalFocus);
+    document.addEventListener("visibilitychange", hidden);
+    return () => {
+      cancelLocalFocus();
+      window.removeEventListener("blur", cancelLocalFocus);
+      window.removeEventListener("pagehide", cancelLocalFocus);
+      window.removeEventListener("popstate", cancelLocalFocus);
+      document.removeEventListener("visibilitychange", hidden);
+    };
+  }, [cancelLocalFocus]);
+
+  const { canFocusFeedback } = readFocus;
+  useEffect(() => {
+    if (canFocusFeedback() && (state.mutation.error || state.notice || state.error)) {
       feedback.current?.focus();
     }
-  }, [error, state.mutation.error, state.notice, state.error]);
+  }, [state.mutation.error, state.notice, state.error, canFocusFeedback]);
+
+  useEffect(() => {
+    const field = validationFocus.current;
+    if (!field || busy) {
+      return;
+    }
+    validationFocus.current = null;
+    const target = {
+      name: nameInput.current,
+      query: queryInput.current,
+      retryName: retryNameInput.current,
+    }[field];
+    if (target?.isConnected && !target.disabled) {
+      target.focus();
+    }
+  }, [fieldErrors, busy]);
 
   useEffect(() => {
     if (confirmDelete) {
@@ -35,101 +80,151 @@ export function useTags({ state, busy, locked, actions }) {
     }
   }, [confirmDelete, disabled]);
 
+  function cancelPendingFocus() {
+    cancelLocalFocus();
+    readFocus.cancel();
+  }
+
+  function invoke(method, ...args) {
+    cancelLocalFocus();
+    readFocus.activate();
+    return actions[method](...args);
+  }
+
+  function requestRead(method, context, ...args) {
+    cancelLocalFocus();
+    readFocus.begin(context);
+    return actions[method](...args);
+  }
+
+  function clearError(field) {
+    setFieldErrors((current) => {
+      const next = { ...current };
+      delete next[field];
+      return next;
+    });
+  }
+
+  function changeField(field, value, update) {
+    cancelPendingFocus();
+    update(value);
+    clearError(field);
+  }
+
+  function showValidation(field, failure) {
+    validationFocus.current = field;
+    setFieldErrors((current) => ({ ...current, [field]: failure.message }));
+  }
+
   function submitName(event) {
     event.preventDefault();
+    if (disabled) {
+      return;
+    }
+    cancelPendingFocus();
     try {
       const normalized = normalizeTagName(name);
-      setError(null);
-      if (state.view === "create") {
-        void actions.create(normalized);
-      } else {
-        void actions.rename(normalized);
-      }
+      clearError("name");
+      void invoke(state.view === "create" ? "create" : "rename", normalized);
     } catch (failure) {
-      setError(failure.message);
+      showValidation("name", failure);
     }
   }
 
   function search(event) {
     event.preventDefault();
+    if (disabled) {
+      return;
+    }
+    cancelPendingFocus();
     try {
-      setError(null);
-      void actions.list(normalizeLibraryQuery(q));
+      const normalized = normalizeLibraryQuery(q);
+      clearError("query");
+      void requestRead("list", "list", normalized);
     } catch (failure) {
-      setError(failure.message);
+      showValidation("query", failure);
     }
   }
 
   function retry() {
+    if (busy) {
+      return;
+    }
+    cancelPendingFocus();
     try {
-      setError(null);
-      let normalized;
-      if (state.mutation.needsName) {
-        normalized = normalizeTagName(originalName);
-      }
-      void actions.retry(normalized);
+      const normalized = state.mutation.needsName
+        ? normalizeTagName(originalName)
+        : undefined;
+      clearError("retryName");
+      void invoke("retry", normalized);
     } catch (failure) {
-      setError(failure.message);
+      showValidation("retryName", failure);
     }
   }
 
   function listAll() {
-    return actions.list("");
+    return requestRead("list", "list", "");
   }
 
   function reloadMutation() {
-    return actions.reload(state.mutation.phase === "csrf");
+    return invoke("reload", state.mutation.phase === "csrf");
   }
 
   function beginDelete() {
+    cancelPendingFocus();
     setConfirmDelete(true);
   }
 
   function cancelDeletion() {
+    cancelPendingFocus();
     restoreDeleteFocus.current = true;
     setConfirmDelete(false);
   }
 
   function confirmDeletion() {
     setConfirmDelete(false);
-    void actions.delete();
+    void invoke("delete");
   }
 
   function reloadFirstPage() {
     if (state.view === "list") {
-      return actions.list();
+      return requestRead("list", "list");
     }
     if (state.requestedId) {
-      return actions.open(state.requestedId);
+      return requestRead("open", `detail:${state.requestedId}`, state.requestedId);
     }
-    return actions.list();
-  }
-
-  function previousPage() {
-    return actions.page(false);
-  }
-
-  function nextPage() {
-    return actions.page(true);
+    return requestRead("list", "list");
   }
 
   return {
     feedback,
     cancelDelete,
     deleteTrigger,
+    pageStatus: readFocus.target,
     view: {
       state,
       busy,
       locked,
-      actions,
+      actions: {
+        ...actions,
+        inbox: () => invoke("inbox"),
+        open: id => invoke("open", id),
+        beginCreate: () => invoke("beginCreate"),
+        select: status => requestRead("select", `select:${state.tag.tagId}`, status),
+        add: id => invoke("add", id),
+        remove: id => invoke("remove", id),
+        openMemory: id => invoke("openMemory", id),
+      },
       disabled,
       name,
-      setName,
+      setName: value => changeField("name", value, setName),
       q,
-      setQ,
+      setQ: value => changeField("query", value, setQ),
       originalName,
-      setOriginalName,
-      error,
+      setOriginalName: value => changeField("retryName", value, setOriginalName),
+      fieldErrors,
+      fields: { name: nameInput, query: queryInput, retryName: retryNameInput },
+      error: null,
       confirmDelete,
       handlers: {
         submitName,
@@ -141,8 +236,8 @@ export function useTags({ state, busy, locked, actions }) {
         cancelDeletion,
         confirmDeletion,
         reloadFirstPage,
-        previousPage,
-        nextPage,
+        previousPage: () => requestRead("page", undefined, false),
+        nextPage: () => requestRead("page", undefined, true),
       },
     },
   };

@@ -20,6 +20,7 @@ import {
 import GuestGallery from "../features/guestGallery/GuestGallery.jsx";
 import CoupleScrapbook from "../features/guestGallery/CoupleScrapbook.jsx";
 import MemoryChoice from "../shared/components/MemoryChoice.jsx";
+import { restoreGuestHomeView } from "./guestHistory.js";
 import { useGuestHistory } from "./useGuestHistory.js";
 import "../styles/guest.css";
 import "../styles/guestWelcome.css";
@@ -63,6 +64,7 @@ export default function App({
   );
   const heading = useRef(null);
   const choices = useRef(null);
+  const homeAlbum = useRef(null);
   const previousScreen = useRef("welcome");
   const homeReturn = useRef({ kind: null, scrollY: null, showOpening: false });
   const [homeRevision, setHomeRevision] = useState(0);
@@ -101,18 +103,20 @@ export default function App({
     (state) => dispatch({ type: "FORM_STATE", kind: "audio", state }),
     [],
   );
-  const noteDone = useCallback(
-    () => { homeReturn.current.showOpening = true; dispatch({ type: "FINISHED", kind: "note" }); },
-    [],
-  );
-  const photosDone = useCallback(
-    () => { homeReturn.current.showOpening = true; dispatch({ type: "FINISHED", kind: "photos" }); },
-    [],
-  );
-  const audioDone = useCallback(
-    () => { homeReturn.current.showOpening = true; dispatch({ type: "FINISHED", kind: "audio" }); },
-    [],
-  );
+  const prepareGalleryReturn = useCallback((kind = null) => {
+    homeReturn.current = { kind, scrollY: null, showOpening: false, target: "gallery" };
+  }, []);
+  const finishMemory = useCallback((kind) => {
+    prepareGalleryReturn(kind);
+    dispatch({ type: "FINISHED", kind });
+  }, [prepareGalleryReturn]);
+  const returnToGallery = useCallback(() => {
+    prepareGalleryReturn();
+    dispatch({ type: "NAVIGATE", screen: "welcome" });
+  }, [prepareGalleryReturn]);
+  const noteDone = useCallback(() => finishMemory("note"), [finishMemory]);
+  const photosDone = useCallback(() => finishMemory("photos"), [finishMemory]);
+  const audioDone = useCallback(() => finishMemory("audio"), [finishMemory]);
   const anotherNote = useCallback(
     () => dispatch({ type: "ANOTHER", kind: "note" }),
     [],
@@ -134,20 +138,14 @@ export default function App({
     if (MEMORY_TYPES.includes(flow.screen)) {
       homeReturn.current.kind = flow.screen;
       homeReturn.current.showOpening = false;
+      delete homeReturn.current.target;
     }
-    if (flow.screen === "welcome") {
-      const { kind, scrollY, showOpening } = homeReturn.current;
-      if ((previous !== "welcome" || restoredHome) && !showOpening) {
-        const target = choices.current?.querySelector(`.memory-choice--${kind}`)
-          ?? choices.current?.querySelector("h2");
-        target?.focus({ preventScroll: true });
-        window.scrollTo({ top: scrollY ?? choices.current?.offsetTop ?? 0, behavior: "instant" });
-        const bounds = target?.getBoundingClientRect();
-        if (!restoredHome && bounds && (bounds.top < 0 || bounds.bottom > window.innerHeight)) {
-          target.scrollIntoView({ block: "nearest", behavior: "instant" });
-        }
-        return;
-      }
+    if (flow.screen === "welcome" && (previous !== "welcome" || restoredHome)) {
+      if (restoreGuestHomeView(homeReturn.current, {
+        choices: choices.current,
+        gallery: homeAlbum.current,
+        restoredHome,
+      })) return;
     }
     heading.current?.focus({ preventScroll: true });
     window.scrollTo({ top: 0, behavior: "instant" });
@@ -201,6 +199,7 @@ export default function App({
     event.preventDefault();
     target.focus({ preventScroll: true });
     target.scrollIntoView({ block: "start", behavior: "instant" });
+    homeReturn.current = { kind: null, scrollY: window.scrollY, showOpening: false };
   }
 
   return (
@@ -285,7 +284,7 @@ export default function App({
       )}
 
       {/* Retain the home album and loaded public content so history restores the page guests left. */}
-      <div hidden={!welcome}>
+      <div ref={homeAlbum} hidden={!welcome}>
         <GuestGallery deferInitialPhoto active={welcome} onBackToSharing={returnToSharing} />
         <Suspense fallback={null}>
           <PublicMemories active={welcome} />
@@ -368,7 +367,9 @@ export default function App({
               ? "Continue or share another memory"
               : "Share another memory"}
           </button>
-          <button type="button" className="button-secondary" onClick={() => { homeReturn.current.showOpening = true; dispatch({ type: "NAVIGATE", screen: "welcome" }); }}>Back to our photos</button>
+          <button type="button" className="button-secondary" onClick={returnToGallery}>
+            Back to our photos
+          </button>
         </section>
       )}
     </main>

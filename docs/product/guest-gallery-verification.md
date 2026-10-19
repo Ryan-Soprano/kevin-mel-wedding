@@ -54,3 +54,22 @@ The public gallery adds an optional thumbnail overview in batches of 24, with la
 Verification on the isolated branch based on `main`: all **468 frontend tests**, ESLint and the production build pass. An isolated local headless Chromium check exercised 1280 × 900, 768 × 1024, 390 × 844 and 320 × 720 viewports. Welcome/forms had no horizontal overflow or JavaScript page errors. Checks covered direct form entry, retained note drafts through in-page and browser navigation, mixed valid/unsupported/empty photo selection, expandable audio help, the collage focus button without hash-history entries, reduced-motion controls, five-second advancement, pointer pause/resume, manual stop, first/last wrapping, 24/48 thumbnail batches, and Back/Escape focus restoration. Desktop/mobile screenshots were rendered and inspected; local evidence is under ignored `logs/welcome-review/`.
 
 All browser API requests were intercepted with in-memory responses, and the checks sent no contribution/upload requests. This is local browser emulation, not physical iPhone/Android, hosted/backend/provider acceptance or deployment. No dependencies, accounts, infrastructure, DNS or deployment settings changed.
+
+## October 19, 2026 — directory review follow-up
+
+The current welcome uses the single portrait from gallery photo 148. The four
+arch/globe WebP variants described in the historical collage records above have
+no runtime, build or script consumers and are removed. All 218 approved gallery
+entries and 401 active image hashes remain unchanged; the structural asset audit
+confirms exact paths, dimensions and metadata-free WebP chunks.
+
+Automatic thumbnail loading remains enabled in batches of 24. Passive loading
+pauses while Show more has focus, so the focused control cannot disappear at the
+final batch; deliberate activation retains focus on the first new thumbnail.
+The observer still loads once per footer approach. The existing focused suite
+passes seven tests, and mounted Chromium at 1280, 390 and 320 px passes 97
+assertions for focus, manual/passive loading, native dialog, keyboard return,
+reduced motion, slideshow and cleanup behavior. The previous focus loss was
+reproduced at all three widths before the fix. These synthetic checks retain the
+separate device/provider/release acceptance boundaries above. Full batch evidence
+and file decisions are in the [directory review guide](../development/directory-review.md).

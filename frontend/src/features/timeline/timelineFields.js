@@ -9,9 +9,35 @@ export function normalizeEventFields(value) {
     || EVENT_FIELDS.some(field => !Object.hasOwn(value, field))) {
     throw new ApiError("Supply the title, description, event date and precision together.", { status: 400, code: "VALIDATION_FAILED" });
   }
-  const normalized = normalizeMemoryMetadata({ title: value.title, description: value.description,
-    memoryDate: value.eventDate, datePrecision: value.datePrecision });
-  if (normalized.title === null) throw new ApiError("Give this event a title of 1–200 characters.", { status: 400, code: "VALIDATION_FAILED" });
+  let normalized;
+  try {
+    normalized = normalizeMemoryMetadata({
+      title: value.title,
+      description: value.description,
+      memoryDate: value.eventDate,
+      datePrecision: value.datePrecision,
+    });
+  } catch (failure) {
+    if (!(failure instanceof ApiError) || failure.code !== "VALIDATION_FAILED") {
+      throw failure;
+    }
+    throw new ApiError(failure.message, {
+      status: failure.status,
+      code: failure.code,
+      fieldErrors: failure.fieldErrors.map((item) => ({
+        ...item,
+        field: item.field === "memoryDate" ? "eventDate" : item.field,
+      })),
+    });
+  }
+  if (normalized.title === null) {
+    const message = "Give this event a title of 1–200 characters.";
+    throw new ApiError(message, {
+      status: 400,
+      code: "VALIDATION_FAILED",
+      fieldErrors: [{ field: "title", code: "INVALID_TEXT", message }],
+    });
+  }
   return { title: normalized.title, description: normalized.description, eventDate: normalized.memoryDate, datePrecision: normalized.datePrecision };
 }
 export function normalizeTimelineFilters({ fromYear = null, toYear = null, datePrecision = "ALL" } = {}) {

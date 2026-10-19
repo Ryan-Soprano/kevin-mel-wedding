@@ -6,7 +6,38 @@ function copyHomeView(view) {
     kind: MEMORY_TYPES.includes(view.kind) ? view.kind : null,
     scrollY: Number.isFinite(view.scrollY) ? view.scrollY : null,
     showOpening: view.showOpening === true,
+    ...(view.target === "gallery" ? { target: "gallery" } : {}),
   };
+}
+
+/** Restore the home destination after entering home or revisiting its history entry. */
+export function restoreGuestHomeView(view, {
+  choices, gallery, restoredHome = false, windowImpl = window,
+} = {}) {
+  const { kind, scrollY, showOpening, target: destination } = view;
+  if (destination === "gallery") {
+    const target = gallery?.querySelector("#couple-gallery");
+    if (target) {
+      target.focus({ preventScroll: true });
+      if (restoredHome && scrollY != null) {
+        windowImpl.scrollTo({ top: scrollY, behavior: "instant" });
+      } else {
+        target.scrollIntoView({ block: "start", behavior: "instant" });
+      }
+      return true;
+    }
+  }
+  if (showOpening) return false;
+
+  const target = choices?.querySelector(`.memory-choice--${kind}`)
+    ?? choices?.querySelector("h2");
+  target?.focus({ preventScroll: true });
+  windowImpl.scrollTo({ top: scrollY ?? choices?.offsetTop ?? 0, behavior: "instant" });
+  const bounds = target?.getBoundingClientRect();
+  if (!restoredHome && bounds && (bounds.top < 0 || bounds.bottom > windowImpl.innerHeight)) {
+    target.scrollIntoView({ block: "nearest", behavior: "instant" });
+  }
+  return true;
 }
 
 /** Screen/view metadata stays in memory. History stores only opaque ownership keys. */

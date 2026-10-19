@@ -241,3 +241,38 @@ test("disposing a note before transport or while transport ignores abort never s
   await assert.rejects(second, { code: "REQUEST_ABORTED" }); assert.equal(signal.aborted, true);
   pending.resolve(TEXT_RECEIPT); await turn(); assert.equal(running.receipt, null); assert.equal(running.pending, false);
 });
+
+for (const phase of ["immediate success", "same-revision reconciliation"]) {
+  test(`metadata rejects an unexpected audience change during ${phase} but accepts a newer reviewed state`, async () => {
+    const original = { ...copy(MEMORY_DETAIL), reviewStatus: "KEEP" };
+    let readMemory = original;
+    const api = createArchiveApi({ client: createApiClient({ fetchImpl: async (path, options) => {
+      let value, etag;
+      if (options.method === "PATCH") {
+        if (phase === "same-revision reconciliation") throw new TypeError("Synthetic lost response");
+        value = { ...original, ...target, visibility: "PUBLIC", revision: 2 }; etag = '"2"';
+      } else if (path === "/api/session") value = COUPLE_SESSION;
+      else if (path.includes("/tags?")) value = { memoryId: IDS.text, items: [], nextCursor: null };
+      else if (path.includes("?")) value = { items: [readMemory], nextCursor: null };
+      else value = readMemory;
+      return new Response(JSON.stringify(value), { headers: { "Content-Type": "application/json", ...(etag ? { ETag: etag } : {}) } });
+    } }) });
+    const controller = await entered(api);
+    try {
+      await controller.saveMetadata(target);
+      if (phase === "same-revision reconciliation") {
+        readMemory = { ...original, visibility: "PUBLIC" };
+        await controller.reloadMetadata();
+      }
+      assert.equal(controller.getSnapshot().metadata.phase, "uncertain");
+      assert.equal(controller.getSnapshot().metadata.canRetry, false);
+      assert.equal(controller.getSnapshot().detail.visibility, "COUPLE_ONLY");
+      assert.equal(controller.getSnapshot().detail.revision, 1);
+      readMemory = { ...original, ...target, visibility: "PUBLIC", revision: 3 };
+      await controller.reloadMetadata();
+      const state = controller.getSnapshot();
+      assert.equal(state.metadata.phase, "idle"); assert.equal(state.detail.visibility, "PUBLIC");
+      assert.equal(state.detail.revision, 3); assert.match(state.notice, /does not identify who/);
+    } finally { controller.dispose(); }
+  });
+}

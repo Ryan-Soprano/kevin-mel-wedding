@@ -164,12 +164,13 @@ export function createAlbumApi({ client, decodeMemory, csrf }) {
               const memory = decodeMemory(item?.memory);
               if (
                 memory.reviewStatus === "DELETE" ||
-                seen.has(memory.memoryId) ||
+                seen.has(memory.memoryId.toLowerCase()) ||
                 typeof item.canMoveEarlier !== "boolean" ||
                 typeof item.canMoveLater !== "boolean"
-              )
+              ) {
                 throw contractMismatch();
-              seen.add(memory.memoryId);
+              }
+              seen.add(memory.memoryId.toLowerCase());
             }
             return value;
           },

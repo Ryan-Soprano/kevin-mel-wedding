@@ -6,7 +6,12 @@ export function createMockLibraryServer({ getSession, getScenario, getMemories, 
   const tags = new Map(), lost = new Set();
   const eligible = memory => memory.reviewStatus !== "DELETE" && (memory.memoryType === "TEXT" || memory.media?.uploadState === "UPLOADED");
   const detail = entry => ({ ...entry.tag, memberCount: entry.members.length });
-  const changed = entry => { entry.tag.revision = nextId(); entry.tag.updatedAt = new Date(now()).toISOString(); };
+  const changed = entry => {
+    entry.tag.revision = nextId();
+    entry.tag.updatedAt = new Date(
+      Math.max(now(), Date.parse(entry.tag.updatedAt)),
+    ).toISOString();
+  };
   const error = (code, status) => failure(code, "Reload current state before continuing.", status);
   const conflict = () => error("TAG_CONFLICT", 412);
   const condition = (headers, entry) => !headers.get("If-Match") ? error("PRECONDITION_REQUIRED", 428)

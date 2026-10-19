@@ -40,6 +40,41 @@ A separate mounted supplement passed **37 assertions** across nine component cas
 
 The JAR SHA-256 was `998f413937dd03b5e44d733f4fbb8269f16c8e2c9cdc23ce07462b4067da9889`. Ignored local evidence is under `logs/timeline-refactor.local/`, with summaries in `native-888cfaa1-ea7e-4399-a2ce-2c965764cd23/summary.json` and `mounted-supplement/summary.json`. Local storage/audio/retention fixture settings do not describe hosted release settings. No deployment, account/provider/configuration change or invitation was performed.
 
+## October 19, 2026 — timeline directory review
+
+All 18 tracked timeline files were reviewed with their callers and contract.
+Local event validation now associates title/date errors with the correct
+editor or retry field, keeps filter errors separate and preserves server
+feedback on correction. Deliberate paging/filter/reload focus survives partner
+revision and applied-filter editor resets, while blur or focus moving to another
+interactive control cancels late focus. Existing draft-reset, date precision,
+deletion-confirmation and exact four-field retry contracts remain intact.
+
+The production API and action coordinator remain unchanged. The mock now keeps
+genuine action times nondecreasing across the timeline and rejects wrong cursor
+scope with 400 before checking stale revisions; genuine no-ops preserve tokens
+and timestamps. Per-file decisions are in the [directory review](../development/directory-review.md).
+
+The branch starts from main `a3b7f45` and integrates reviewed albums commit
+`4ddd361` locally to preserve both feature boundaries in the shared screen
+adapter. It includes a small album follow-up for the same within-window focus
+defect, reproduced separately. Albums PR #70's head is unchanged; merge it first.
+
+Verification passes **21 focused timeline/adapter tests** and **536 combined
+frontend tests**, ESLint and production build on Node 24.16.0. Mounted StrictMode
+checks pass **254 timeline** and **194 album assertions** at 1280, 390 and 320 px,
+including partial dates, filters, partner reloads, local correction, membership,
+no-ops, late responses and pagehide/exact-field recovery. Both fixtures preserve
+all 21 original memory records as identical JSON. Screenshots were inspected;
+no page errors, external requests or horizontal overflow occurred, and owned
+browser/server resources are closed. Independent review found no remaining
+actionable issues. No tracked test files or dependencies were added. Ignored
+evidence remains under `logs/timeline-directory-review.local/`.
+
+This frontend review supplements the earlier real-backend rehearsal; provider,
+device and hosted acceptance remains separate. Final-head CI/configured review
+is still required after PR creation.
+
 ## Retained acceptance
 
 Local engineering verification precedes Kevin and Melanie's real onboarding and feedback. REV-01/REV-03 acceptance remains open. Physical devices, actual screen readers, native dialogs, hidden-tab/BFCache behavior, live-provider originals and hosted network/capacity/recovery checks remain open. Controlled blur/resume and synthetic storage do not establish those behaviors. Audio was disabled in the original fixture; current audio settings and acceptance are recorded in the [voice memory runbook](../runbooks/voice-memories.md).

@@ -4,7 +4,14 @@ import {
 } from "../../inbox/components/ArchiveLayout.jsx";
 
 export default function AlbumNameForm({ view, create = false }) {
-  const { name, setName, disabled, handlers } = view;
+  const {
+    name,
+    setName,
+    disabled,
+    handlers,
+    fieldErrors = {},
+    nameInput,
+  } = view;
   let label = "Rename this album";
   let buttonLabel = "Save album name";
   if (create) {
@@ -21,12 +28,20 @@ export default function AlbumNameForm({ view, create = false }) {
         <label htmlFor="album-name">Album name</label>
         <input
           id="album-name"
+          ref={nameInput}
           value={name}
           maxLength={200}
           onChange={(event) => setName(event.target.value)}
           required
           disabled={disabled}
+          aria-invalid={Boolean(fieldErrors.name)}
+          aria-describedby={fieldErrors.name ? "album-name-error" : undefined}
         />
+        {fieldErrors.name && (
+          <p id="album-name-error" className="form-error" role="alert">
+            {fieldErrors.name}
+          </p>
+        )}
       </div>
       <ArchiveActions>
         <button type="submit" disabled={disabled}>
