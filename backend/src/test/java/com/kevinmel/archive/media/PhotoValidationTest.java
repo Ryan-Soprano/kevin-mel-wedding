@@ -3,10 +3,13 @@ package com.kevinmel.archive.media;
 import static org.assertj.core.api.Assertions.*;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.util.*;
 import javax.imageio.ImageIO;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import com.kevinmel.archive.web.ApiException;
 
 class PhotoValidationTest {
@@ -78,6 +81,58 @@ class PhotoValidationTest {
                 .isInstanceOf(ApiException.class).satisfies(e -> assertThat(((ApiException)e).status()).isEqualTo(422));
         }
     }
+
+    @Test
+    void validOriginalsDoNotDependOnWritableImageIoDiskCache(@TempDir Path temporary) throws Exception {
+        var originals = new LinkedHashMap<String, byte[]>();
+        for (String format : List.of("png", "jpeg")) {
+            try (var output = new ByteArrayOutputStream()) {
+                boolean written = ImageIO.write(
+                        new BufferedImage(3, 2, BufferedImage.TYPE_INT_RGB),
+                        format,
+                        output);
+                assertThat(written).isTrue();
+                originals.put("image/" + format, output.toByteArray());
+            }
+        }
+        originals.put(
+                "image/webp",
+                Base64.getDecoder().decode("UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEADsD+JaQAA3AAAAAA"));
+
+        boolean previousUseCache = ImageIO.getUseCache();
+        var previousCacheDirectory = ImageIO.getCacheDirectory();
+        Path cache = Files.createDirectory(temporary.resolve("image-cache"));
+        try {
+            ImageIO.setUseCache(true);
+            ImageIO.setCacheDirectory(cache.toFile());
+            // A cache location may become unavailable after the process has configured it.
+            Files.delete(cache);
+            Files.writeString(cache, "Owned cache location is unavailable.");
+
+            var verifier = new PhotoVerifier();
+            for (var original : originals.entrySet()) {
+                byte[] bytes = original.getValue();
+                byte[] before = bytes.clone();
+                String type = original.getKey();
+                String hash = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
+                var expected = new PhotoRepository.Asset(
+                        UUID.randomUUID(),
+                        "unused",
+                        type,
+                        bytes.length,
+                        hash,
+                        "PENDING");
+
+                assertThat(verifier.verify(bytes, expected)).isEqualTo(type);
+                assertThat(bytes).isEqualTo(before);
+            }
+            assertThat(Files.readString(cache)).isEqualTo("Owned cache location is unavailable.");
+        } finally {
+            ImageIO.setUseCache(previousUseCache);
+            ImageIO.setCacheDirectory(previousCacheDirectory);
+        }
+    }
+
     byte[] hugeDimensions(byte[] png) {
         byte[] bytes = png.clone(); java.nio.ByteBuffer.wrap(bytes, 16, 8).putInt(20_001).putInt(20_001); return bytes;
     }

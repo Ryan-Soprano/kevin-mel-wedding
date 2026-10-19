@@ -2,6 +2,7 @@ package com.kevinmel.archive.media;
 
 import java.util.Optional;
 import java.util.UUID;
+
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
@@ -10,7 +11,9 @@ import org.springframework.transaction.annotation.Transactional;
 public class PlaybackRepository {
     private final JdbcClient db;
 
-    public PlaybackRepository(JdbcClient db) { this.db = db; }
+    public PlaybackRepository(JdbcClient db) {
+        this.db = db;
+    }
 
     /** Only verified, committed private originals are eligible. */
     @Transactional(readOnly = true)
@@ -38,18 +41,48 @@ public class PlaybackRepository {
                     AND a.expected_checksum_sha256 = a.checksum_sha256
                     AND a.declared_content_type = a.detected_format
                     AND a.object_key = 'originals/' || a.id::text
-                """).param("memory", memoryId)
-                .query((rs, row) -> new PlayableMedia(rs.getObject("id", UUID.class), rs.getString("object_key"),
-                        rs.getString("detected_format"), rs.getLong("byte_size"), rs.getString("memory_type"),
-                        rs.getObject("audio_duration_ms", Long.class), rs.getString("audio_container"), rs.getString("audio_codec")))
+                """)
+                .param("memory", memoryId)
+                .query((rs, row) -> new PlayableMedia(
+                        rs.getObject("id", UUID.class),
+                        rs.getString("object_key"),
+                        rs.getString("detected_format"),
+                        rs.getLong("byte_size"),
+                        rs.getString("memory_type"),
+                        rs.getObject("audio_duration_ms", Long.class),
+                        rs.getString("audio_container"),
+                        rs.getString("audio_codec")))
                 .optional();
     }
 
-    public record PlayableMedia(UUID assetId, String objectKey, String contentType, long byteSize,
-            String memoryType, Long durationMs, String container, String codec) {
-        public PlayableMedia(UUID assetId, String objectKey, String contentType, long byteSize) {
-            this(assetId, objectKey, contentType, byteSize, "PHOTO", null, null, null);
+    public record PlayableMedia(
+            UUID assetId,
+            String objectKey,
+            String contentType,
+            long byteSize,
+            String memoryType,
+            Long durationMs,
+            String container,
+            String codec) {
+        public PlayableMedia(
+                UUID assetId,
+                String objectKey,
+                String contentType,
+                long byteSize) {
+            this(
+                    assetId,
+                    objectKey,
+                    contentType,
+                    byteSize,
+                    "PHOTO",
+                    null,
+                    null,
+                    null);
         }
-        @Override public String toString() { return "PlayableMedia[assetId=" + assetId + "]"; }
+
+        @Override
+        public String toString() {
+            return "PlayableMedia[assetId=" + assetId + "]";
+        }
     }
 }
