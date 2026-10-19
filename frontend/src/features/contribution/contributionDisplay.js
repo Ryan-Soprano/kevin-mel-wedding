@@ -2,14 +2,14 @@ import { ApiError } from "../../shared/api/apiClient.js";
 
 const GUEST_COPY = {
   introduction: "Your note goes privately to Kevin and Melanie. Your name is optional.",
-  reviewTitle: "Ready to send?", sendLabel: "Send note",
+  sendLabel: "Send note",
   resultTitle: "Thank you — your note was saved for Kevin and Melanie.",
   resultDescription: "They can review it privately when their archive is ready.",
   finishLabel: "Back to our photos",
 };
 const PRIVATE_COPY = {
   introduction: "Add a written memory to your private archive. You can add a title, description and date after saving.",
-  reviewTitle: "Ready to save privately?", sendLabel: "Save note privately",
+  sendLabel: "Save note privately",
   resultTitle: "Your note is saved in your private archive.",
   resultDescription: "New memories start in Kept. Open this memory to see its current status and add a title, description or date.",
   finishLabel: "View added memory",
