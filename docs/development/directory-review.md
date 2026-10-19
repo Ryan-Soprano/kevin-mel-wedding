@@ -343,3 +343,84 @@ metadata, history, focus or audio changes. Ryan's guest-flow refactor remains
 byte-identical. Reports and source hashes remain under
 `logs/private-inbox-review.local/`. Device, real-provider and hosted acceptance,
 plus final-head CI/configured review, remain separate gates.
+
+## Albums decisions — October 19, 2026
+
+This batch reviews all 17 tracked files under `features/albums/`, their callers
+and the private album contract. It starts from merged inbox PR #69 at
+`a3b7f45`, on `feature/albums-directory-review`.
+
+| File in `features/albums/` | Decision and reason |
+|---|---|
+| `api/albumActions.js` | Keep the coordinator's session, revision, write-fence and recovery boundaries. Fix the success notice: album organization preserves each memory's existing audience. |
+| `api/albumApi.js` | Fix member-page duplicate detection to compare case-folded memory UUIDs, while preserving a valid single uppercase legacy ID. |
+| `api/mockAlbumServer.js` | Fix mutation timestamps to remain nondecreasing when the clock moves backward; document its synthetic list-pagination limitation. |
+| `api/albums.test.js` | Extend existing real-adapter tests with mixed-case duplicate IDs and clock rollback, retaining membership, no-op, ordering, stale-write and recovery coverage. |
+| `albumName.js` | Keep: required names, raw UTF-16 limits, storable Unicode and trimming match the server contract. |
+| `albumDisplay.js` | Keep: every label, nullish summary, count and feedback helper has active consumers. |
+| `hooks/useAlbums.js` | Fix field-specific validation/correction focus, deliberate delete-cancel restoration and owned paging/filter/reload focus, including lifecycle cancellation and revision resets. |
+| `components/Albums.jsx` | Keep the composition shell; wire the named paging target and field errors, preserving editor reset boundaries. |
+| `components/AlbumNameForm.jsx` | Fix invalid-field focus and associated name-error markup. |
+| `components/AlbumRecovery.jsx` | Fix separate original-name validation and correction without clearing server recovery feedback or relaxing its busy-only gates. |
+| `components/AlbumDetail.jsx` | Keep member/tombstone behavior; attach the delete trigger for deliberate cancellation focus restoration. |
+| `components/AlbumPaging.jsx` | Keep bounded previous/next/reload controls, using the hook's deliberate focus ownership. |
+| `components/AlbumSelector.jsx` | Keep candidate summaries, review filters and private membership actions; route filter focus through the hook. |
+| `components/AlbumList.jsx` | Keep: bounded loading, empty/error states and labelled album controls remain cohesive. |
+| `components/AlbumMemorySummary.jsx` | Keep: metadata-only summaries do not fetch or preload originals. |
+| `components/Albums.test.js` | Extend existing presentation contracts for field-specific errors, independent recovery feedback and named page focus. Mounted checks verify stateful transitions. |
+| `albums.css` | Keep: all selectors have active consumers; no measured layout or efficiency defect justified changing them. |
+
+The API decoder previously accepted two rows for the same memory UUID when
+their capitalization differed. Only duplicate-comparison keys are folded;
+returned identity spelling, legacy UUID support and wrong-ID, revision and
+tombstone checks remain intact.
+
+The mock's clock rollback previously committed a change whose timestamp failed
+real response decoding. Its new timestamp clamp matches the server's
+nondecreasing `updatedAt` rule, including no-ops and deletion. Its offset list
+cursors still do not model production keyset pagination under concurrent list
+edits; synthetic paging evidence does not establish that server behavior.
+
+Album organization can include a memory already shared publicly or by private
+link. A real-adapter/controller probe confirms its audience stays unchanged.
+The corrected notice describes that behavior without implying that adding a
+memory to a private album makes the memory private.
+
+Browser reproductions establish lost focus after paging and delete cancellation,
+unassociated local name errors that persist after correction, and lost reload
+focus when another partner's revision resets the editor. Fixes preserve the
+revision-based draft reset while keeping deliberate paging focus outside that
+reset boundary. Initial rendering, ordinary typing, reactivation and cancelled
+late reads do not replay focus requests. Local input correction clears only its
+own validation message; server recovery feedback remains available.
+
+The narrow inbox adapter now passes the same view/identity/revision reset key
+into an album editor inside a persistent feature boundary. Its existing test
+checks both that reset contract and the boundary's unkeyed ownership; other
+feature adapters retain their prior keys. This is integration coverage for the
+albums change, rather than a second inbox directory review.
+
+## Albums verification
+
+The 21-test album baseline passed. The two new API regression cases failed
+against the original decoder/mock and pass after the fixes. Final verification
+passes **24 focused album/adapter tests**, **534 frontend tests** with no skips,
+ESLint and the production build on Node 24.16.0. No tracked test files or
+dependencies were added.
+
+Mounted Chromium in React StrictMode passes **188 assertions** at 1280, 390 and
+320 px. It covers list/member/selector paging, filters, failed reads and reloads,
+partner revision resets, late success/failure after blur, name correction,
+delete cancellation, shared-memory notices, membership/order changes and
+pagehide recovery with a deliberate exact-name retry. Create/delete still work,
+and all 21 synthetic original memory records remain identical as JSON. No page
+errors, external requests or horizontal overflow were observed. Desktop and
+narrow validation/recovery screenshots were inspected.
+
+Independent reviews found no remaining actionable issues in API/mock behavior,
+focus ownership, recovery wiring or the per-file decisions. Ryan's guest-flow
+refactor remains byte-identical. Browser/server resources are closed and the
+temporary harness is preserved outside frontend source under ignored logs.
+Reports and source hashes remain in `logs/albums-directory-review.local/`.
+These synthetic frontend checks do not repeat real backend/provider or device
+acceptance. Final-head CI/configured review remains required after PR creation.

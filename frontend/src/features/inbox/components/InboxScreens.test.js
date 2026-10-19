@@ -38,7 +38,8 @@ test("screen adapters preserve access precedence, creation guards and editor res
     assert.equal(render({ phase: "unknown", session: { authenticated: true } }), "");
 
     // Resolve only the pure adapter, leaving the feature component's hooks and
-    // local state intact. Its key determines when React discards an old editor.
+    // local state intact. Albums transfers its reset key into a keyed editor so
+    // its unkeyed feature boundary can retain an in-flight paging-focus intent.
     const leaf = (snapshot, extra = {}) => {
       const route = InboxScreen({ view: { ...view, snapshot }, ...extra });
       return route.type(route.props);
@@ -49,16 +50,39 @@ test("screen adapters preserve access precedence, creation guards and editor res
       library: base.library,
       tags: { ...base.tags, view: "detail", tag: { tagId: "tag-one", revision: "r1" } },
     };
+    const editorKeyOf = screen => screen.props.editorKey ?? screen.key;
     for (const [phase, state] of Object.entries(keys)) {
       const snapshot = { ...base, phase, [phase]: state, busy: true };
       const screen = leaf(snapshot);
       assert.equal(screen.props.state, state); assert.equal(screen.props.actions, actions[phase]);
       assert.equal(screen.props.busy, true); assert.equal(screen.props.locked, true);
-      assert.equal(leaf({ ...snapshot, [phase]: { ...state, cursors: [null, "next"], error: "Reload failed" } }).key, screen.key,
-        `${phase} pagination and feedback preserve the current editor`);
-      assert.notEqual(leaf({ ...snapshot, [phase]: { ...state, view: "create" } }).key, screen.key);
+      const pagedScreen = leaf({
+        ...snapshot,
+        [phase]: {
+          ...state,
+          cursors: [null, "next"],
+          error: "Reload failed",
+        },
+      });
+      assert.equal(
+        editorKeyOf(pagedScreen),
+        editorKeyOf(screen),
+        `${phase} pagination and feedback preserve the current editor`,
+      );
+      assert.notEqual(
+        editorKeyOf(leaf({
+          ...snapshot,
+          [phase]: { ...state, view: "create" },
+        })),
+        editorKeyOf(screen),
+      );
     }
-    const keyFor = (phase, state) => leaf({ ...base, phase, [phase]: state }).key;
+    const keyFor = (phase, state) => editorKeyOf(leaf({ ...base, phase, [phase]: state }));
+    assert.equal(
+      leaf({ ...base, phase: "albums", albums: keys.albums }).key,
+      null,
+      "album paging ownership survives its editor revision reset",
+    );
     for (const [phase, record, idField] of [["albums", "album", "albumId"], ["timeline", "event", "eventId"], ["tags", "tag", "tagId"]]) {
       const state = keys[phase], original = keyFor(phase, state);
       assert.notEqual(keyFor(phase, { ...state, [record]: { ...state[record], revision: "r2" } }), original,

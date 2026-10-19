@@ -76,9 +76,15 @@ export function createAlbumApi({ client, decodeMemory, csrf }) {
           const seen = new Set();
           for (const item of value.items) {
             const memory = decodeMemory(item?.memory);
-            if (memory.reviewStatus === "DELETE" || seen.has(memory.memoryId)
-              || typeof item.canMoveEarlier !== "boolean" || typeof item.canMoveLater !== "boolean") throw contractMismatch();
-            seen.add(memory.memoryId);
+            if (
+              memory.reviewStatus === "DELETE"
+              || seen.has(memory.memoryId.toLowerCase())
+              || typeof item.canMoveEarlier !== "boolean"
+              || typeof item.canMoveLater !== "boolean"
+            ) {
+              throw contractMismatch();
+            }
+            seen.add(memory.memoryId.toLowerCase());
           }
           return value;
         },

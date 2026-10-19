@@ -10,6 +10,8 @@ function AlbumRecoveryActions({ view }) {
     busy,
     actions,
     originalName,
+    originalNameInput,
+    fieldErrors = {},
     setOriginalName,
     handlers,
   } = view;
@@ -32,11 +34,25 @@ function AlbumRecoveryActions({ view }) {
               <label htmlFor="album-original-name">Original album name</label>
               <input
                 id="album-original-name"
+                ref={originalNameInput}
                 value={originalName}
                 maxLength={200}
                 onChange={(event) => setOriginalName(event.target.value)}
                 disabled={busy}
+                aria-invalid={Boolean(fieldErrors.originalName)}
+                aria-describedby={fieldErrors.originalName
+                  ? "album-original-name-error"
+                  : undefined}
               />
+              {fieldErrors.originalName && (
+                <p
+                  id="album-original-name-error"
+                  className="form-error"
+                  role="alert"
+                >
+                  {fieldErrors.originalName}
+                </p>
+              )}
               <p className="guest-help">
                 The hidden name draft was cleared. Re-enter the same name to
                 retry the original change.
