@@ -731,3 +731,110 @@ Ignored reports and logs are under `logs/export-directory-review.local/`.
 These frontend checks do not repeat real backend/ZIP/provider acceptance or
 establish physical-device, assistive-technology, native save-dialog or hosted acceptance.
 Final-head CI and configured review remain required after PR creation.
+
+## Shared API decisions — October 19, 2026
+
+This batch starts from merged main `f2fa58e` on
+`feature/shared-api-directory-review`. The tracked inventory contains 12 source,
+fixture and test files plus one obsolete `.gitkeep`. Every file was reviewed
+with its callers and the corresponding server contracts. Backend source was
+read as contract evidence; this does not mark its packages reviewed.
+
+| File in `shared/api/` | Decision and reason |
+|---|---|
+| `apiClient.js` | Fix: reject redirects before fetch can forward explicit API headers or JSON credentials. Keep same-origin cookies, no-store, safe diagnostics, structured field errors, deliberate retries and caller-owned deadlines. |
+| `apiClient.test.js` | Extend the existing suite with native GET/POST redirect tests to same-origin and other-origin destinations, bounded deadlines and server cleanup. Keep existing transport/error/uncertainty contracts. |
+| `archiveApi.js` | Keep: the small facade composes cohesive adapters, captures binary transports per instance, and preserves named exports and the ordered method surface. No measured cost or responsibility problem warrants extraction. |
+| `archiveApiCompatibility.test.js` | Keep facade, transport capture and validation-order coverage. Fix the casing expectation: preserve legacy UUID route/response spelling while accepting the same identity returned in canonical server casing; continue rejecting unrelated IDs. |
+| `archiveContracts.js` | Fix: reject null receipt members and case-equivalent duplicate memory/client IDs; validate inbox count, filter, unique identity and usable cursor. Reuse existing exact UTC helpers for valid calendar instants and submillisecond ordering. Keep normalization rules and returned objects unchanged. |
+| `archiveApi.test.js` | Extend existing real-transport tests with malformed/duplicate receipts, equivalent UUID identities, bounded/scoped inbox responses and exact timestamp regressions. |
+| `contributionApi.js` | Fix receipt/finalize expected-ID comparisons to compare UUID identity independently of case. Keep normalized input snapshots, private CSRF, original upload bodies, permission checks, omitted storage credentials and explicit recovery. |
+| `memoryApi.js` | Fix detail/review/metadata expected-ID comparisons and pass the requested inbox limit/status into decoding. Keep conditional revision/ETag checks, normalized metadata snapshots and HTTPS playback permissions. |
+| `sessionApi.js` | Keep: its three methods forward current CSRF and cancellation to the shared transport; session owners already manage access recovery, private-state clearing and bounded completion. |
+| `mockArchiveApi.js` | Fix monotonic mutation timestamps, review audience/receipt synchronization and active-grant reuse with one injected server clock. Prefer the latest issued unexpired grant after clock rollback. Keep explicit synthetic byte-verification and offset-pagination limitations. |
+| `mockArchiveApi.test.js` | Extend the existing suite with timestamp/no-op/deletion-deadline, audience/original-preservation and grant identity/expiry/rollback regressions. |
+| `v1/fixtures.js` | Keep: executable synthetic requests, responses and scenarios have active test/preview consumers; mocks clone their records, and far-future example expiries are explicitly synthetic. |
+| `.gitkeep` | Simplify: remove the whitespace-only placeholder now that this directory contains tracked implementation files. |
+
+Consumer tracing covers guest text/photo/audio coordinators, private creation,
+inbox reads/mutations/media, albums, timeline, library/tags, sharing, export and
+the development preview. The feature adapters retain their responsibilities;
+no new production module, dependency or tracked test file is introduced.
+
+Native-fetch and browser reproductions show that the prior JSON client followed
+a 307 response and forwarded synthetic JSON credentials, CSRF and retry-key
+headers to its destination. Same-origin cookie policy does not suppress those
+explicit headers or request bodies. The API has no redirect response contract.
+The client now uses `redirect: "error"`; a refused redirect retains the existing
+network-error semantics, with mutations uncertain and no automatic retry.
+The original endpoint may already have acted, so rejection does not imply rollback.
+
+The old receipt decoder accepted two distinct client items mapped to one memory
+UUID with different capitalization. The actual photo coordinator could then
+report both originals saved. Duplicate-comparison keys now fold UUID case while
+the returned receipt and IDs stay intact. A null member previously escaped as a
+raw TypeError; it now produces a classified contract mismatch through the real
+JSON transport. Route comparisons likewise accept canonical server responses to
+valid uppercase legacy IDs without changing the request path or response object.
+
+Inbox pages now respect their requested limit and review filter, reject repeated
+UUID identities, and require null or a nonempty continuation cursor of at most
+256 characters, matching `InboxCursor`. Existing controller tests returned KEEP
+rows for an initial PENDING request; their synthetic transport now filters its
+response and asserts that the intended metadata detail was actually opened.
+The production controller's audience-preservation checks remain unchanged.
+
+The existing `instantKey` and `compareInstants` helpers already validate actual
+Gregorian UTC timestamps through nine fractional digits. Reusing them avoids
+Date.parse calendar normalization and millisecond truncation of ordering checks.
+Equal instants with different fractional padding remain valid and unchanged.
+No global time abstraction or feature reset behavior is introduced.
+
+Mock review and metadata actions clamp updatedAt against its prior value, while
+the first deletion deadline still uses the action clock and no-ops retain their
+revision/timestamps. Explicit KEEP audience changes update both memory and
+receipt; archive/deletion/restoration retain the server's private-state rules.
+Repeated authorization retains an unexpired grant and its transfer state; expiry
+renews only that item's permission. A follow-up regression prevents an older
+grant from becoming preferred when the clock rolls backward. Related existing
+private-upload and journey fixtures pin their synthetic client/server clocks,
+so fixed calendar dates cannot silently expire every test upload in the future.
+
+These are correctness and contract changes. No runtime performance improvement
+is claimed. Existing facade/adapters, owner deadlines, immutable contribution
+drafts and same-intent retry fences remain useful boundaries.
+
+## Shared API verification — October 19, 2026
+
+The initial shared API baseline passed **82 tests**. Redirect, receipt/identity,
+inbox, mock lifecycle and timestamp defects were reproduced before their fixes
+in existing suites. One equal-fraction timestamp case was already valid and is
+retained as compatibility coverage. Independent review reproduced and resolved
+the older-grant-after-clock-rollback follow-up.
+
+Final verification uses Node **24.21.0** and npm **11.19.0**. The four shared API
+suites pass **97 tests**, and the complete frontend passes **566 tests** with no
+failures or skips. ESLint, the production build and diff checks pass. The build
+retains its existing large-chunk advisory. Existing private-creation and journey
+suites verify the corrected injected clocks and query fixtures.
+
+Mounted React StrictMode checks at **1280, 390 and 320 px** exercise the actual
+guest note form and private inbox/controller with the real JSON adapters and
+synthetic responses. **33 harness checks and 27 DOM assertions** cover native
+browser redirect behavior before/after, duplicate-photo receipt rejection,
+wrong-filter inbox rejection, retained/locked notes after malformed success,
+deliberate retry with the same key/body, confirmed completion, session access,
+public audience changes, private archive/restore and unchanged original text.
+The duplicate-photo check uses the actual batch coordinator; it is not a file
+picker or real-storage acceptance test. No horizontal overflow occurs in the
+checked note/private views; desktop and narrow screenshots were inspected.
+Preliminary fixture correction and hot-reload warnings are excluded from passing
+metrics and retained in the local report.
+
+All browser fixtures, reports and baseline/final source hashes are retained under
+ignored `logs/shared-api-directory-review.local/`, outside frontend test discovery.
+Owned browser/server resources are closed after verification. Concurrent backend
+formatting edits are preserved and excluded from this frontend delivery. These
+checks do not repeat backend persistence, provider, physical-device or assistive-
+technology acceptance. Final-head CI/configured review remains required after
+Ryan creates the PR. The next directory is `frontend/src/shared/components/`.

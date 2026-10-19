@@ -7,7 +7,9 @@ export function createContributionApi({ client, uploadFetch }) {
     ...options,
     decode(value) {
       const receipt = decodeReceipt(value);
-      if (receipt.contributionId !== expectedId) throw contractMismatch();
+      if (receipt.contributionId.toLowerCase() !== expectedId.toLowerCase()) {
+        throw contractMismatch();
+      }
       return receipt;
     },
   });

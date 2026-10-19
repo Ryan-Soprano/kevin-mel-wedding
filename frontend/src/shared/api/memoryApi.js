@@ -8,7 +8,9 @@ export function createMemoryApi({ client }) {
     ...options,
     decode(value) {
       const memory = decodeMemory(value);
-      if (memory.memoryId !== expectedId) throw contractMismatch();
+      if (memory.memoryId.toLowerCase() !== expectedId.toLowerCase()) {
+        throw contractMismatch();
+      }
       return memory;
     },
   });
@@ -20,7 +22,10 @@ export function createMemoryApi({ client }) {
       }
       const params = new URLSearchParams({ reviewStatus, limit: String(limit) });
       if (cursor) params.set("cursor", cursor);
-      return client.request("/api/memories?" + params, { decode: decodeInbox, signal });
+      return client.request("/api/memories?" + params, {
+        decode: value => decodeInbox(value, { limit, reviewStatus }),
+        signal,
+      });
     },
     getMemory(memoryId, { signal } = {}) {
       return memoryRequest("/api/memories/" + id(memoryId), { signal }, memoryId);
@@ -32,8 +37,14 @@ export function createMemoryApi({ client }) {
         method: "PATCH", body, headers: { ...csrf(csrfToken), "If-Match": '"' + revision + '"' }, signal,
         decode(value, response) {
           const memory = decodeMemory(value);
-          if (memory.memoryId !== memoryId || !sameMetadata(memory, body) || ![revision, revision + 1].includes(memory.revision)
-            || response.headers.get("ETag") !== '"' + memory.revision + '"') throw contractMismatch();
+          if (
+            memory.memoryId.toLowerCase() !== memoryId.toLowerCase() ||
+            !sameMetadata(memory, body) ||
+            ![revision, revision + 1].includes(memory.revision) ||
+            response.headers.get("ETag") !== '"' + memory.revision + '"'
+          ) {
+            throw contractMismatch();
+          }
           return memory;
         },
       });
@@ -52,10 +63,15 @@ export function createMemoryApi({ client }) {
         signal,
         decode(value, response) {
           const memory = decodeMemory(value);
-          if (memory.memoryId !== memoryId || memory.reviewStatus !== reviewStatus
-            || (visibility !== undefined && memory.visibility !== visibility)
-            || ![revision, revision + 1].includes(memory.revision)
-            || response.headers.get("ETag") !== '"' + memory.revision + '"') throw contractMismatch();
+          if (
+            memory.memoryId.toLowerCase() !== memoryId.toLowerCase() ||
+            memory.reviewStatus !== reviewStatus ||
+            (visibility !== undefined && memory.visibility !== visibility) ||
+            ![revision, revision + 1].includes(memory.revision) ||
+            response.headers.get("ETag") !== '"' + memory.revision + '"'
+          ) {
+            throw contractMismatch();
+          }
           return memory;
         },
       });

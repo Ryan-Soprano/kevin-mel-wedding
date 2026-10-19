@@ -3,6 +3,7 @@ import { ALLOWED_FILE_TYPES, MAX_PHOTO_BYTES, MAX_PHOTOS } from "../../features/
 import { AUDIO_CONTENT_TYPES, MAX_AUDIO_BYTES, MAX_AUDIO_SECONDS } from "../../features/audio/audioConstraints.js";
 import { normalizeMemoryMetadata, metadataOf, sameMetadata } from "../../features/inbox/memoryMetadata.js";
 import { MEMORY_VISIBILITIES } from "../../features/sharing/sharingApi.js";
+import { compareInstants, instantKey } from "../../features/timeline/timelineFields.js";
 
 export { MEMORY_VISIBILITIES };
 
@@ -12,8 +13,7 @@ const TYPES = ["TEXT", "PHOTO", "AUDIO"];
 export const STATES = ["PENDING", "KEEP", "ARCHIVED", "DELETE"];
 const UPLOADS = ["PENDING", "UPLOADED", "FAILED"];
 const isId = (value) => typeof value === "string" && UUID.test(value);
-export const isTime = (value) => typeof value === "string"
-  && /^\d{4}-\d\d-\d\dT/.test(value) && /Z$/.test(value) && Number.isFinite(Date.parse(value));
+export const isTime = (value) => instantKey(value) !== null;
 export const positiveInteger = (value) => Number.isSafeInteger(value) && value > 0;
 
 export function id(value) {
@@ -118,26 +118,44 @@ export function normalizeMediaContribution({ guestName = null, memoryType, items
 
 /** Reject an echo or an incomplete/malformed receipt before presenting a saved state. */
 export function decodeReceipt(value) {
-  if (!isId(value?.contributionId) || value.eventKey !== "kevin-mel-wedding"
-    || !isTime(value.createdAt) || !["PENDING", "PARTIAL", "COMPLETE"].includes(value.completion)
-    || !Array.isArray(value.memories) || value.memories.length < 1 || value.memories.length > 5) {
+  if (
+    !isId(value?.contributionId) ||
+    value.eventKey !== "kevin-mel-wedding" ||
+    !isTime(value.createdAt) ||
+    !["PENDING", "PARTIAL", "COMPLETE"].includes(value.completion) ||
+    !Array.isArray(value.memories) ||
+    value.memories.length < 1 ||
+    value.memories.length > 5
+  ) {
     throw contractMismatch();
   }
   const ids = new Set();
   const clientIds = new Set();
   for (const memory of value.memories) {
-    if (!isId(memory.memoryId) || ids.has(memory.memoryId) || !TYPES.includes(memory.memoryType)
-      || !STATES.includes(memory.reviewStatus) || !MEMORY_VISIBILITIES.includes(memory.visibility)
-      || (memory.reviewStatus !== "KEEP" && memory.visibility !== "COUPLE_ONLY")) {
+    if (
+      !isId(memory?.memoryId) ||
+      ids.has(memory.memoryId.toLowerCase()) ||
+      !TYPES.includes(memory.memoryType) ||
+      !STATES.includes(memory.reviewStatus) ||
+      !MEMORY_VISIBILITIES.includes(memory.visibility) ||
+      (memory.reviewStatus !== "KEEP" && memory.visibility !== "COUPLE_ONLY")
+    ) {
       throw contractMismatch();
     }
-    ids.add(memory.memoryId);
+    ids.add(memory.memoryId.toLowerCase());
     if (memory.memoryType === "TEXT") {
-      if (memory.uploadState !== null || memory.clientItemId !== null) throw contractMismatch();
+      if (memory.uploadState !== null || memory.clientItemId !== null) {
+        throw contractMismatch();
+      }
     } else {
-      if (!isId(memory.clientItemId) || clientIds.has(memory.clientItemId)
-        || !UPLOADS.includes(memory.uploadState)) throw contractMismatch();
-      clientIds.add(memory.clientItemId);
+      if (
+        !isId(memory.clientItemId) ||
+        clientIds.has(memory.clientItemId.toLowerCase()) ||
+        !UPLOADS.includes(memory.uploadState)
+      ) {
+        throw contractMismatch();
+      }
+      clientIds.add(memory.clientItemId.toLowerCase());
     }
   }
   const type = value.memories[0].memoryType;
@@ -169,7 +187,7 @@ export function decodeMemory(value) {
     || !STATES.includes(value.reviewStatus) || !MEMORY_VISIBILITIES.includes(value.visibility)
     || (value.reviewStatus !== "KEEP" && value.visibility !== "COUPLE_ONLY")
     || !positiveInteger(value.revision) || !isTime(value.createdAt) || !isTime(value.updatedAt)
-    || Date.parse(value.updatedAt) < Date.parse(value.createdAt)
+    || compareInstants(value.updatedAt, value.createdAt) < 0
     || !(value.guestName === null || typeof value.guestName === "string")
     || !(value.textContent === null || typeof value.textContent === "string")
     || (value.memoryType === "TEXT"
@@ -177,7 +195,7 @@ export function decodeMemory(value) {
       : value.textContent !== null || !value.media)
     || !(value.caption === null || (typeof value.caption === "string" && value.caption.length <= 500))
     || (value.reviewStatus === "DELETE"
-      ? !isTime(value.deleteAfter) || Date.parse(value.deleteAfter) < Date.parse(value.updatedAt)
+      ? !isTime(value.deleteAfter) || compareInstants(value.deleteAfter, value.updatedAt) < 0
       : value.deleteAfter !== null)) {
     throw contractMismatch();
   }
@@ -194,10 +212,30 @@ export function decodeMemory(value) {
   return value;
 }
 
-export function decodeInbox(value) {
-  if (!Array.isArray(value?.items) || value.items.length > 100
-    || !(value.nextCursor === null || typeof value.nextCursor === "string")) throw contractMismatch();
-  value.items.forEach(decodeMemory);
+export function decodeInbox(value, { limit = 100, reviewStatus } = {}) {
+  if (
+    !Array.isArray(value?.items) ||
+    value.items.length > limit ||
+    !(value.nextCursor === null || (
+      typeof value.nextCursor === "string" &&
+      value.nextCursor.length > 0 &&
+      value.nextCursor.length <= 256
+    ))
+  ) {
+    throw contractMismatch();
+  }
+  const ids = new Set();
+  for (const item of value.items) {
+    const memory = decodeMemory(item);
+    const memoryId = memory.memoryId.toLowerCase();
+    if (
+      ids.has(memoryId) ||
+      (reviewStatus !== undefined && memory.reviewStatus !== reviewStatus)
+    ) {
+      throw contractMismatch();
+    }
+    ids.add(memoryId);
+  }
   return value;
 }
 

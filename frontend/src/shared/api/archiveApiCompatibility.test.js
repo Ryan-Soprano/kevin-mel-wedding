@@ -70,12 +70,26 @@ test("facade preserves legacy UUID casing while normalizing v4 retry keys and su
   assert.equal(receipt.options.headers["Idempotency-Key"], retryKey.toLowerCase());
   const currentReceipt = { ...TEXT_RECEIPT, contributionId: legacyId };
   assert.equal(receipt.options.decode(currentReceipt), currentReceipt);
-  assert.throws(() => receipt.options.decode({ ...currentReceipt, contributionId: legacyId.toLowerCase() }), { code: "CONTRACT_MISMATCH" });
+  const canonicalReceipt = {
+    ...currentReceipt,
+    contributionId: legacyId.toLowerCase(),
+  };
+  assert.equal(receipt.options.decode(canonicalReceipt), canonicalReceipt);
+  assert.throws(() => receipt.options.decode(TEXT_RECEIPT), {
+    code: "CONTRACT_MISMATCH",
+  });
   const memory = api.getMemory(legacyId);
   assert.equal(memory.path, `/api/memories/${legacyId}`);
   const currentMemory = { ...MEMORY_DETAIL, memoryId: legacyId };
   assert.equal(memory.options.decode(currentMemory), currentMemory);
-  assert.throws(() => memory.options.decode({ ...currentMemory, memoryId: legacyId.toLowerCase() }), { code: "CONTRACT_MISMATCH" });
+  const canonicalMemory = {
+    ...currentMemory,
+    memoryId: legacyId.toLowerCase(),
+  };
+  assert.equal(memory.options.decode(canonicalMemory), canonicalMemory);
+  assert.throws(() => memory.options.decode(MEMORY_DETAIL), {
+    code: "CONTRACT_MISMATCH",
+  });
   const photo = { ...PHOTO_REQUEST.items[0], clientItemId: legacyId };
   const payload = { ...PHOTO_REQUEST, items: [photo] };
   assert.equal(archive.normalizeMediaContribution(payload).items[0].clientItemId, legacyId.toLowerCase());
