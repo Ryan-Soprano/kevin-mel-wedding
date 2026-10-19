@@ -10,8 +10,11 @@ import react from "@vitejs/plugin-react";
 import { couplePhotos } from "./photos.js";
 import { startSlideshow } from "./slideshow.js";
 
-test("approved public manifest appends 166 photos while preserving the original 52 and their order", () => {
-  assert.equal(couplePhotos.length, 218);
+const expectedPhotoCount = 300;
+const expectedAssetCount = 565;
+
+test("approved public manifest keeps every photo unique and preserves the existing selections", () => {
+  assert.equal(couplePhotos.length, expectedPhotoCount);
   assert.equal(new Set(couplePhotos.map(photo => photo.id)).size, couplePhotos.length);
   assert.equal(new Set(couplePhotos.map(photo => photo.src)).size, couplePhotos.length);
   for (const [index, photo] of couplePhotos.entries()) {
@@ -28,23 +31,41 @@ test("approved public manifest appends 166 photos while preserving the original 
       assert.ok(photo.smallSrc.endsWith(`/assets/${filename}-560.webp`));
       assert.doesNotMatch(photo.smallSrc, /\/api\/|https?:\/\//);
     }
-    if (photo.id > 52) assert.ok(photo.smallSrc, "each new photo has its responsive copy");
+    if (photo.id > 52 && photo.width > 560) {
+      assert.ok(photo.smallSrc, "each new photo wider than 560 pixels has its responsive copy");
+    }
+    if (photo.width <= 560) {
+      assert.equal(photo.smallSrc, undefined, "smaller photos must not be upscaled for responsive copies");
+      assert.equal(photo.smallWidth, undefined);
+    }
   }
   assert.match(couplePhotos[0].alt, /Grand Central/);
-  // Snapshot only the October 10 selection, so later approved additions can append
-  // without changing any original identity, framing, description or order.
-  const originals = couplePhotos.slice(0, 52).map(({ id, src, width, height, alt, smallSrc, smallWidth }) => [
-    id, new URL(src).pathname.split("/").at(-1), width, height, alt,
-    smallSrc ? new URL(smallSrc).pathname.split("/").at(-1) : null, smallWidth ?? null,
+  // Keep both prior selections fixed, so later approved additions can append
+  // without changing existing identities, framing, descriptions or order.
+  const descriptors = couplePhotos.map(({ id, src, width, height, alt, smallSrc, smallWidth }) => [
+    id,
+    new URL(src).pathname.split("/").at(-1),
+    width,
+    height,
+    alt,
+    smallSrc ? new URL(smallSrc).pathname.split("/").at(-1) : null,
+    smallWidth ?? null,
   ]);
-  assert.equal(createHash("sha256").update(JSON.stringify(originals)).digest("hex"),
+  assert.equal(
+    createHash("sha256").update(JSON.stringify(descriptors.slice(0, 52))).digest("hex"),
     "4aae8619a2f003229c2ef3bc35817fbca6413053d7cb6e4e1e6f47c00a231f5c",
-    "the original 52 photo descriptors must remain unchanged");
+    "the original 52 photo descriptors must remain unchanged",
+  );
+  assert.equal(
+    createHash("sha256").update(JSON.stringify(descriptors.slice(0, 218))).digest("hex"),
+    "786204d51be86563058e45113a2461ad0690fbe70297e5f993f50e5ad67a84a3",
+    "the existing 218 photo descriptors and their order must remain unchanged",
+  );
 });
 
-test("all 401 public assets match the manifest, intrinsic dimensions and metadata-free lossy WebP format", () => {
+test(`all ${expectedAssetCount} public assets match the manifest, intrinsic dimensions and metadata-free lossy WebP format`, () => {
   const assets = couplePhotos.flatMap(photo => [photo.src, photo.smallSrc].filter(Boolean));
-  assert.equal(assets.length, 401);
+  assert.equal(assets.length, expectedAssetCount);
   assert.equal(new Set(assets).size, assets.length);
   assert.deepEqual(readdirSync(new URL("./assets/", import.meta.url)).sort(),
     assets.map(src => new URL(src).pathname.split("/").at(-1)).sort());
@@ -73,6 +94,63 @@ test("all 401 public assets match the manifest, intrinsic dimensions and metadat
   }
 });
 
+test("source audit accounts for every scanned and later photo, including duplicate representatives", () => {
+  const audit = JSON.parse(readFileSync(new URL("../../../../docs/product/guest-gallery-source-audit.json", import.meta.url), "utf8"));
+  assert.equal(audit.basePhotoCount, 218);
+  assert.equal(audit.addedPhotoCount, 82);
+  assert.equal(audit.totalPhotoCount, expectedPhotoCount);
+  assert.equal(audit.totalAssetCount, expectedAssetCount);
+  assert.equal(audit.pdf.pageCount, 52);
+
+  const expectedSources = [
+    ...Array.from({ length: 52 }, (_, index) => `pdf:${index + 1}`),
+    ...Array.from({ length: 30 }, (_, index) => `scan-jpeg:image_page${index + 1}.jpg`),
+    "later-couple:couple-arch.webp",
+    "later-couple:couple-globe.webp",
+  ];
+  const reviewedSources = audit.decisions.map(record =>
+    `${record.sourceKind}:${record.sourceKind === "pdf" ? record.sourcePage : record.sourceFile}`);
+  assert.deepEqual(reviewedSources.sort(), expectedSources.sort(), "each of the 84 source candidates is reviewed exactly once");
+
+  const additions = audit.decisions.filter(record => record.decision === "added");
+  assert.deepEqual(
+    additions.map(record => record.galleryId).sort((left, right) => left - right),
+    Array.from({ length: 82 }, (_, index) => index + 219),
+    "each appended gallery photo has exactly one source record",
+  );
+  const duplicates = audit.decisions.filter(record => record.decision === "duplicate");
+  assert.deepEqual(
+    duplicates.map(record => [record.sourceKind, record.sourcePage, record.duplicateOfPage, record.galleryId]),
+    [["pdf", 21, 22, 239], ["pdf", 23, 24, 240]],
+  );
+
+  const photosById = new Map(couplePhotos.map(photo => [photo.id, photo]));
+  for (const record of audit.decisions) {
+    const photo = photosById.get(record.galleryId);
+    assert.ok(photo, `reviewed source resolves to gallery photo ${record.galleryId}`);
+    assert.ok(record.decision === "added" || record.decision === "duplicate");
+    if (record.decision === "duplicate") {
+      const representative = additions.find(candidate =>
+        candidate.sourceKind === "pdf" && candidate.sourcePage === record.duplicateOfPage);
+      assert.ok(representative, `duplicate PDF page ${record.sourcePage} retains a representative`);
+      assert.equal(representative.galleryId, record.galleryId);
+      continue;
+    }
+
+    assert.deepEqual(
+      [record.width, record.height, record.smallWidth],
+      [photo.width, photo.height, photo.smallWidth],
+    );
+    for (const [src, filename, digest] of [
+      [photo.src, record.primary, record.primarySha256],
+      [photo.smallSrc, record.small, record.smallSha256],
+    ]) {
+      assert.equal(new URL(src).pathname.split("/").at(-1), filename);
+      assert.equal(createHash("sha256").update(readFileSync(new URL(src))).digest("hex"), digest, filename);
+    }
+  }
+});
+
 test("real public gallery immediately renders one accessible slide with navigation, optional playback and the memory invitation", async () => {
   // Real React SSR through existing tools. Browser download scheduling, visual
   // layout, metadata stripping and phone acceptance are verified separately.
@@ -93,7 +171,7 @@ test("real public gallery immediately renders one accessible slide with navigati
     assert.match(markup, /aria-roledescription="carousel"/); assert.match(markup, /aria-roledescription="slide"/);
     assert.match(markup, /aria-label="Previous photo"/); assert.match(markup, /aria-label="Next photo"/);
     assert.match(markup, /Play slideshow/); assert.match(markup, /aria-live="polite"/);
-    assert.match(markup, /Browse all 218 photos/);
+    assert.ok(markup.includes(`Browse all ${couplePhotos.length} photos`));
     assert.doesNotMatch(markup, /couple-scrapbook|scrapbook-snapshot|scrapbook-couple-print|welcome-assets|couple-arch|couple-globe/);
     assert.ok(markup.indexOf("Play slideshow") < markup.indexOf('id="couple-gallery-slide"'), "playback control is the first interactive control");
     assert.doesNotMatch(markup, /Skip photos and share a memory|Back to Share a memory/);
@@ -114,16 +192,18 @@ test("real public gallery immediately renders one accessible slide with navigati
     assert.ok(thumbnails.every(image => image.includes('loading="lazy"')));
     assert.equal((overview.match(/<link\b[^>]*as="image"/g) ?? []).length, 0, "browsing does not preload the full gallery");
     assert.ok(thumbnails[1].includes(couplePhotos[1].smallSrc), "thumbnail uses the smaller public copy when available");
-    assert.match(overview, /aria-label="View photo 24 of 218:/);
-    assert.doesNotMatch(overview, /aria-label="View photo 25 of 218:/);
+    assert.ok(overview.includes(`aria-label="View photo 24 of ${couplePhotos.length}:`));
+    assert.ok(!overview.includes(`aria-label="View photo 25 of ${couplePhotos.length}:`));
     assert.doesNotMatch(overview, /<span aria-hidden="true">\d+<\/span>/, "thumbnail numbers stay in accessible labels without visible badges");
-    assert.match(overview, /Showing 24 of 218 photos/);
+    assert.ok(overview.includes(`Showing 24 of ${couplePhotos.length} photos`));
     assert.match(overview, /Show 24 more photos/);
     assert.equal((renderOverview(48).match(/<img\b/g) ?? []).length, 48);
-    assert.match(renderOverview(216), /Show 2 more photos/);
-    const allPhotos = renderOverview(240);
-    assert.equal((allPhotos.match(/<img\b/g) ?? []).length, 218);
-    assert.match(allPhotos, /Showing 218 of 218 photos/);
+    const finalBatchStart = Math.floor((couplePhotos.length - 1) / 24) * 24;
+    const finalBatchCount = couplePhotos.length - finalBatchStart;
+    assert.ok(renderOverview(finalBatchStart).includes(`Show ${finalBatchCount} more photos`));
+    const allPhotos = renderOverview(finalBatchStart + 24);
+    assert.equal((allPhotos.match(/<img\b/g) ?? []).length, couplePhotos.length);
+    assert.ok(allPhotos.includes(`Showing ${couplePhotos.length} of ${couplePhotos.length} photos`));
     assert.doesNotMatch(allPhotos, /more photos/);
     const { default: App } = await server.ssrLoadModule("/src/app/App.jsx");
     const landing = renderToStaticMarkup(createElement(App, { audioEnabled: false }));

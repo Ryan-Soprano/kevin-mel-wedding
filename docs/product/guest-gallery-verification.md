@@ -73,3 +73,68 @@ reduced motion, slideshow and cleanup behavior. The previous focus loss was
 reproduced at all three widths before the fix. These synthetic checks retain the
 separate device/provider/release acceptance boundaries above. Full batch evidence
 and file decisions are in the [directory review guide](../development/directory-review.md).
+
+## October 19, 2026 - complete supplied-photo review
+
+Ryan requested a duplicate check of the scanned PDF and the two later couple
+photos, followed by adding every missing non-duplicate photograph to the guest
+slideshow. This supersedes the historical scan exclusions above.
+
+The review covered all 52 PDF pages, the 30 saved `image_page*.jpg` files and both
+later couple photos against the existing 218 gallery photos and one another.
+The PDF pages were rendered with Poppler, and their embedded JPEGs were extracted
+without changing the supplied PDF. Perceptual hashes identified comparison
+candidates; visual contact-sheet and full-image reviews determined duplicates.
+Different expressions, poses and group compositions remain included.
+
+| Supplied material | Reviewed | Added | Gallery IDs |
+| --- | ---: | ---: | --- |
+| Scanned PDF | 52 pages | 50 | 219-268 |
+| Saved scan JPEGs | 30 | 30 | 269-298 |
+| Later archway and globe couple photos | 2 | 2 | 299-300 |
+| Total | 84 | 82 | 219-300 |
+
+PDF pages 21/22 contain the same two-women photograph, and pages 23/24 contain
+the same mother/newborn photograph. The upright, cleaner scans on pages 22 and
+24 represent those photographs as gallery photos 239 and 240. The 30 saved JPEGs
+are additional scenes, despite their historical "scan-review extract" label;
+their filenames do not correspond to the current PDF page numbers. All 30 are
+distinct from the PDF, the original gallery and one another. The two later couple
+photos are also distinct. JPEG `image_page15.jpg` receives a 180-degree display
+rotation; its supplied source remains unchanged.
+
+The [source audit](guest-gallery-source-audit.json) records every reviewed source,
+inclusion or duplicate decision, gallery ID, dimensions and SHA-256 hashes. The
+later couple primaries were recovered byte-for-byte from their previously
+reviewed Git assets because the original PNGs are not present in this checkout.
+Their existing 768 x 1024 primary copies are retained, with new 560-pixel copies
+derived for the gallery's responsive sizing.
+
+The current slideshow and thumbnail browser contain **300 photos**. All original
+218 descriptors, order and 401 image hashes are unchanged. The 164 new WebP files
+total 8,665,260 bytes; the complete 565-file image collection totals 56,644,952
+bytes. New copies preserve framing and aspect ratio, use profile-aware sRGB
+conversion, strip metadata and remain within 1120 x 1600 pixels without
+upscaling. Original source files remain unchanged and outside the application
+package. Independent source/asset and visual review confirmed the mappings,
+duplicate decisions, rotation and preserved originals.
+
+All **567 frontend tests**, ESLint and the final production build pass. Eight
+focused gallery tests include complete 84-source accounting, both duplicate
+representatives, all 82 added IDs, recorded output hashes, unchanged original
+descriptors and exact coverage of all 565 metadata-free image files. The initial
+sandboxed run could not connect to four disposable redirect-test servers
+(`connect EACCES`); the complete suite passed with local loopback access.
+
+Headless Edge exercised the final production build at 1280, 390 and 320 pixels.
+All 565 built image assets decoded; all 300 thumbnails were reachable at each
+width. Every one of the 82 additions opened and decoded in the desktop viewer,
+with seven representative additions also checked at each narrow width. The
+actual five-second timer crossed photo 218 to 219 and wrapped 300 to 1. No
+JavaScript page errors or horizontal overflow were observed. Screenshots of the rotated beach
+scan and final globe photo were inspected. Owned browser/server resources were
+closed. Local evidence is under ignored `logs/gallery-completion.local/`.
+
+The build retains its non-fatal JavaScript chunk-size advisory. These results
+cover the local source and static production frontend build, without a backend;
+deployment and physical phone acceptance remain separate.
