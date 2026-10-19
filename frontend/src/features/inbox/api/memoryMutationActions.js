@@ -150,7 +150,7 @@ export function createMemoryMutationActions({ api, getState, publish, start, bou
         revision: intent.expectedRevision, csrfToken: token, signal,
       }), apiTimeoutMs, true);
       if (memory.memoryId !== intent.memoryId || originalContext(memory) !== intent.original
-        || memory.reviewStatus !== intent.fromStatus || memory.deleteAfter !== intent.deleteAfter
+        || memory.reviewStatus !== intent.fromStatus || memory.visibility !== intent.fromVisibility || memory.deleteAfter !== intent.deleteAfter
         || !sameMetadata(memory, intent.target)
         || memory.revision !== intent.expectedRevision + (sameMetadata(intent.before, intent.target) ? 0 : 1)) throw contractMismatch();
       await acceptMetadata(op, memory, "Memory details saved. Your original content is preserved.");
@@ -162,7 +162,7 @@ export function createMemoryMutationActions({ api, getState, publish, start, bou
       || originalContext(memory) !== intent.original) throw contractMismatch();
     if (metadataUncertain && memory.revision === intent.expectedRevision) {
       if (!sameMetadata(memory, intent.before) || memory.reviewStatus !== intent.fromStatus
-        || memory.deleteAfter !== intent.deleteAfter) throw contractMismatch();
+        || memory.visibility !== intent.fromVisibility || memory.deleteAfter !== intent.deleteAfter) throw contractMismatch();
       publish({ detail: frozenCopy(memory), metadata: metadataState("uncertain",
         "The current read still shows the earlier revision. The first request may still finish. Retry only this same edit, or reload again.", true) });
     } else await acceptMetadata(op, memory,
@@ -280,7 +280,7 @@ export function createMemoryMutationActions({ api, getState, publish, start, bou
         || !getState().detail || getState().detail.reviewStatus === "DELETE" || !getState().session?.authenticated) return Promise.resolve(getState());
       const target = frozenCopy(normalizeMemoryMetadata(raw));
       metadataIntent = Object.freeze({ memoryId: getState().detail.memoryId, target, before: frozenCopy(metadataOf(getState().detail)),
-        expectedRevision: getState().detail.revision, fromStatus: getState().detail.reviewStatus,
+        expectedRevision: getState().detail.revision, fromStatus: getState().detail.reviewStatus, fromVisibility: getState().detail.visibility,
         deleteAfter: getState().detail.deleteAfter, original: originalContext(getState().detail) });
       metadataUncertain = false;
       return sendMetadata();

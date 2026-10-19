@@ -116,11 +116,12 @@ test("invalid credentials show a safe sign-in error without returning server mes
 });
 
 test("inbox pages replace rather than append and returning from detail preserves the current page", async () => {
-  const f = await entered(fixture({ api: { listMemories: async options => ({
+  const f = await entered(fixture({ api: { listAlbums: async () => ({ items: [], nextCursor: null }), listMemories: async options => ({
     items: [copy(options.cursor ? photo : MEMORY_DETAIL)], nextCursor: options.cursor ? null : "page-two",
   }) } }));
   await f.controller.loadInbox("PENDING", "page-two");
   const items = f.controller.getSnapshot().items;
+  const version = f.controller.getSnapshot().pageResetVersion;
   await f.controller.openMemory(IDS.text);
   f.controller.backToInbox();
   assert.equal(f.controller.getSnapshot().items, items);
@@ -128,6 +129,18 @@ test("inbox pages replace rather than append and returning from detail preserves
   assert.equal(f.controller.getSnapshot().items[0].memoryId, IDS.photo);
   assert.equal(f.controller.getSnapshot().nextCursor, null);
   assert.equal(f.controller.getSnapshot().detail, null);
+  assert.equal(f.controller.getSnapshot().pageResetVersion, version, "a cached detail return preserves its loaded cursor stack");
+
+  await f.controller.loadAlbums();
+  await f.controller.loadInbox("PENDING");
+  assert.equal(f.controller.getSnapshot().items[0].memoryId, IDS.text);
+  assert.equal(f.controller.getSnapshot().pageResetVersion, version + 1, "an explicit first-page return resets shell cursors");
+
+  await f.controller.loadInbox("PENDING", "page-two");
+  f.controller.beginCreation();
+  await f.controller.backToInbox();
+  assert.equal(f.controller.getSnapshot().items[0].memoryId, IDS.text);
+  assert.equal(f.controller.getSnapshot().pageResetVersion, version + 2, "discarding creation reloads the first page and resets shell cursors");
 });
 
 test("detail404 removes the stale cached page and reloads the same filter on Back while temporary failures preserve it", async () => {
@@ -1088,4 +1101,118 @@ test("hiding an unfinished sign-out keeps it unconfirmed and restoration resolve
   assert.ok(f.calls.slice(before).every(call => call[0] === "session"), "return never opens the private inbox during sign-out recovery");
   waiting.resolve(); await turn();
   assert.equal(f.controller.getSnapshot().phase, "login"); assert.deepEqual(f.controller.getSnapshot().items, []);
+});
+
+for (const action of ["logout", "suspend", "dispose"]) {
+  test(`${action} prevents abort callbacks from starting replacement private reads`, async () => {
+    const clock = timers(), firstResult = deferred(), replacementResult = deferred();
+    let replacement, replacementCalls = 0;
+    const f = await entered(fixture({ ...clock }));
+    f.api.getMemory = (id, { signal }) => {
+      if (id !== IDS.text) { replacementCalls++; return replacementResult.promise; }
+      signal.addEventListener("abort", () => { replacement = f.controller.openMemory(IDS.photo); }, { once: true });
+      return firstResult.promise;
+    };
+    const first = f.controller.openMemory(IDS.text); await turn();
+    try {
+      await f.controller[action]();
+      replacementResult.resolve({ ...MEMORY_DETAIL, memoryId: IDS.photo, textContent: "Late replacement private content" });
+      firstResult.resolve(copy(MEMORY_DETAIL));
+      await Promise.all([first, replacement]);
+      const state = f.controller.getSnapshot();
+      assert.equal(replacementCalls, 0);
+      assert.equal(state.session, null); assert.equal(state.detail, null);
+      assert.deepEqual(state.items, []); assert.equal(state.photo.url, null);
+      assert.equal(state.busy, false); assert.equal(clock.pending.size, 0);
+    } finally {
+      firstResult.resolve(copy(MEMORY_DETAIL)); replacementResult.resolve(copy(MEMORY_DETAIL));
+      f.controller.dispose(); await Promise.all([first, replacement]);
+    }
+  });
+}
+
+test("suspension during cancellation owns the view before an outer navigation can start its read", async () => {
+  const clock = timers(), held = deferred();
+  const f = await entered(fixture({ ...clock }));
+  f.api.getMemory = (_id, { signal }) => {
+    signal.addEventListener("abort", () => f.controller.suspend(), { once: true });
+    return held.promise;
+  };
+  const first = f.controller.openMemory(IDS.text); await turn();
+  const listCount = f.calls.filter(call => call[0] === "list").length;
+  try {
+    await f.controller.loadInbox("KEEP");
+    held.resolve(copy(MEMORY_DETAIL)); await first;
+    assert.equal(f.calls.filter(call => call[0] === "list").length, listCount);
+    const state = f.controller.getSnapshot();
+    assert.equal(state.phase, "checking"); assert.equal(state.session, null);
+    assert.equal(state.detail, null); assert.deepEqual(state.items, []);
+    assert.equal(state.busy, false); assert.equal(clock.pending.size, 0);
+  } finally { held.resolve(copy(MEMORY_DETAIL)); f.controller.dispose(); await first; }
+});
+
+test("preview cleanup callbacks cannot register a new review while logout invalidates private work", async () => {
+  const clock = timers(), held = deferred();
+  let saving, reviewCalls = 0, f;
+  f = await entered(fixture({ ...clock, revokeObjectURL() { saving = f.controller.reviewMemory("KEEP"); } }));
+  await f.controller.openMemory(IDS.photo);
+  f.api.reviewMemory = () => { reviewCalls++; return held.promise; };
+  try {
+    await f.controller.logout();
+    held.resolve({ ...photo, reviewStatus: "KEEP", revision: 2 }); await saving;
+    assert.equal(reviewCalls, 0);
+    const state = f.controller.getSnapshot();
+    assert.equal(state.phase, "login"); assert.equal(state.session, null); assert.equal(state.detail, null);
+    assert.equal(state.review.phase, "idle"); assert.equal(state.photo.url, null);
+    assert.equal(state.busy, false); assert.equal(clock.pending.size, 0);
+  } finally { held.resolve({ ...photo, reviewStatus: "KEEP", revision: 2 }); f.controller.dispose(); await saving; }
+});
+
+test("ordinary publication reentry still gives the newest detail selection exclusive ownership", async () => {
+  const clock = timers();
+  const f = await entered(fixture({ ...clock }));
+  let replacement;
+  const unsubscribe = f.controller.subscribe(state => {
+    if (state.phase === "detail" && state.requestedMemoryId === IDS.text && !state.detail) {
+      replacement = f.controller.openMemory(IDS.photo);
+    }
+  });
+  try {
+    await f.controller.openMemory(IDS.text); await replacement;
+    const detailCalls = f.calls.filter(call => call[0] === "detail");
+    assert.deepEqual(detailCalls.map(call => call[1]), [IDS.photo]);
+    assert.equal(f.controller.getSnapshot().detail.memoryId, IDS.photo);
+    assert.equal(f.controller.getSnapshot().photo.phase, "ready");
+    assert.equal(f.controller.getSnapshot().busy, false); assert.equal(clock.pending.size, 0);
+  } finally { unsubscribe(); f.controller.dispose(); }
+});
+
+for (const action of ["beginCreation", "backToInbox"]) {
+  test(`${action} preserves suspension triggered by preview cleanup`, async () => {
+    const clock = timers(); let f;
+    f = await entered(fixture({ ...clock, revokeObjectURL() { f.controller.suspend(); } }));
+    try {
+      await f.controller.openMemory(IDS.photo); await f.controller[action]();
+      const state = f.controller.getSnapshot();
+      assert.equal(state.phase, "checking"); assert.equal(state.session, null); assert.equal(state.detail, null);
+      assert.deepEqual(state.items, []); assert.equal(state.busy, false); assert.equal(clock.pending.size, 0);
+    } finally { f.controller.dispose(); }
+  });
+}
+
+test("suspension during logout cleanup retains sign-out intent until restoration confirms invalidation", async () => {
+  const clock = timers(); let f, signouts = 0;
+  f = await entered(fixture({ ...clock, revokeObjectURL() { f.controller.suspend(); },
+    api: { logout: async () => { signouts++; } } }));
+  try {
+    await f.controller.openMemory(IDS.photo); await f.controller.logout();
+    assert.equal(f.controller.getSnapshot().logoutUnconfirmed, true);
+    const listCount = f.calls.filter(call => call[0] === "list").length;
+    await f.controller.resume();
+    const state = f.controller.getSnapshot();
+    assert.equal(signouts, 1); assert.equal(state.phase, "login"); assert.equal(state.session, null);
+    assert.equal(state.logoutUnconfirmed, false); assert.deepEqual(state.items, []); assert.equal(state.detail, null);
+    assert.equal(f.calls.filter(call => call[0] === "list").length, listCount);
+    assert.equal(state.busy, false); assert.equal(clock.pending.size, 0);
+  } finally { f.controller.dispose(); }
 });
