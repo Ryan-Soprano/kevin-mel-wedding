@@ -65,13 +65,41 @@ test("sharing APIs canonicalize UUID case for reads, playback and link identity 
     ? response({ ...link, memoryId: mixed, url: `/shared/${mixed}#token=${token}` }, { ETag: '"3"' })
     : response({ ...memory, memoryId: mixed }) }) });
   assert.equal((await mixedResponse.getSharedMemory(id.toUpperCase())).memoryId, mixed);
-  assert.equal((await mixedResponse.createShareLink(id.toUpperCase(), { revision: 2, csrfToken: COUPLE_SESSION.csrfToken })).url, `/shared/${mixed}#token=${token}`);
+  assert.deepEqual(await mixedResponse.createShareLink(id.toUpperCase(), { revision: 2, csrfToken: COUPLE_SESSION.csrfToken }), link);
   const wrongMemory = createSharingApi({ client: createApiClient({ fetchImpl: async () => response(shared) }) });
   await assert.rejects(wrongMemory.getSharedMemory(mixed), { code: "CONTRACT_MISMATCH" });
   for (const changed of [{ memoryId: IDS.photo }, { url: `/shared/${IDS.photo}#token=${token}` },
     { url: `/shared/${id}#token=${token}&other=value` }, { url: `https://example.test/shared/${id}#token=${token}` }]) {
     const wrongLink = createArchiveApi({ client: createApiClient({ fetchImpl: async () => response({ ...link, ...changed }, { ETag: '"3"' }) }) });
     await assert.rejects(wrongLink.createShareLink(mixed, { revision: 2, csrfToken: COUPLE_SESSION.csrfToken }), { code: "CONTRACT_MISMATCH" });
+  }
+});
+
+test("inbox confirms canonical share links from mixed-case API responses without changing the capability", async () => {
+  const id = "abcdefab-cdef-4abc-8def-abcdefabcdef";
+  const capability = "AbC_-09".repeat(6) + "A";
+  for (const returnedId of [id.toUpperCase(), "AbCdEfAb-cDeF-4aBc-8dEf-AbCdEfAbCdEf"]) {
+    const memory = { ...MEMORY_DETAIL, memoryId: id, reviewStatus: "KEEP", visibility: "FRIENDS_FAMILY", revision: 2 };
+    const sharing = createArchiveApi({ client: createApiClient({ fetchImpl: async (path, options) => {
+      assert.equal(path, `/api/memories/${id}/share-link`);
+      assert.equal(options.headers.get("If-Match"), '"2"');
+      assert.equal(options.headers.get("X-CSRF-Token"), COUPLE_SESSION.csrfToken);
+      return response({ memoryId: returnedId, revision: 3, url: `/shared/${returnedId}#token=${capability}` }, { ETag: '"3"' });
+    } }) });
+    const controller = createInboxController({ api: {
+      getSession: async () => COUPLE_SESSION,
+      listMemories: async () => ({ items: [memory], nextCursor: null }),
+      getMemory: async () => memory,
+      createShareLink: sharing.createShareLink,
+    } });
+    try {
+      await controller.loadSession(); await controller.openMemory(id); await controller.createShareLink();
+      const state = controller.getSnapshot();
+      assert.deepEqual(state.shareLink, { memoryId: id, revision: 3, url: `/shared/${id}#token=${capability}` });
+      assert.equal(state.detail.revision, 3);
+      assert.equal(state.busy, false);
+      assert.equal(state.error, null);
+    } finally { controller.dispose(); }
   }
 });
 

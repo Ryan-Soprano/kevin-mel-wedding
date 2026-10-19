@@ -233,3 +233,16 @@ All 401 active image hashes and Ryan's guest-flow refactor match the review
 baseline. Browser/server resources are closed; ignored inventories and reports
 remain under `logs/public-flow-review.local/`. These frontend checks make no
 device, assistive-technology, backend/provider persistence or deployment claim.
+
+PR #68's configured review identified a remaining UUID-case mismatch: link
+creation accepted a mixed-case response but returned it unchanged, causing the
+inbox's identity check to reject a successful result. The API now returns the
+canonical memory ID and URL UUID while preserving the validated capability token
+exactly. An existing-suite regression reproduces the failure through the real
+API decoder and inbox controller before the fix and passes afterward.
+
+The follow-up passes all **513 frontend tests** with no skips, plus ESLint and
+the production build against a clean snapshot of the same frontend source.
+Independent review found no actionable issues. No new test files were added.
+GitHub CI was queued during the reported Actions incident; local verification
+does not establish passing CI or a fresh configured review for the follow-up.

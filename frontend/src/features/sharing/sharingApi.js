@@ -75,7 +75,7 @@ export function createSharingApi({ client = createApiClient(), csrf } = {}) {
           if (!isId(value?.memoryId) || value.memoryId.toLowerCase() !== requestedId || value.revision !== revision + 1
             || !link || link[1].toLowerCase() !== requestedId
             || response.headers.get("ETag") !== `"${value.revision}"`) throw contractMismatch();
-          return value;
+          return { ...value, memoryId: requestedId, url: `/shared/${requestedId}#token=${link[2]}` };
         },
       });
     },
