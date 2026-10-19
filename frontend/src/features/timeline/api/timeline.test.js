@@ -90,6 +90,86 @@ test("malformed events/pages/ETags, impossible tombstones and stale member order
   const api = createArchiveApi({ client: createApiClient({ fetchImpl: async () => response({ event: { ...EVENT, memberCount: 2 }, items: [{ memory: whole }, { memory: fractional }], nextCursor: null }) }) });
   assert.equal((await api.listTimelineMemories(id(1))).items.length, 2);
 });
+test(
+  "mock timeline action times stay nondecreasing across rollback, creation and deletion",
+  async () => {
+    let at = Date.parse("2026-10-19T16:00:00Z");
+    const api = await signedMock({
+      now: () => at,
+    });
+    const original = await directCreate(api);
+
+    at += 60_000;
+    const later = await api.updateTimelineEvent(
+      original.eventId,
+      {
+        ...FIELDS,
+        title: "Later edit",
+      },
+      await options(api, original),
+    );
+    assert.ok(compareInstants(later.updatedAt, original.createdAt) > 0);
+
+    at -= 120_000;
+    const edited = await api.updateTimelineEvent(
+      original.eventId,
+      {
+        ...FIELDS,
+        title: "Edit after clock rollback",
+      },
+      await options(api, later),
+    );
+    assert.equal(edited.createdAt, original.createdAt);
+    assert.equal(edited.updatedAt, later.updatedAt);
+    assert.notEqual(edited.revision, later.revision);
+
+    const beforeNoop = await api.listTimelineEvents();
+    const noop = await api.updateTimelineEvent(
+      original.eventId,
+      eventFields(edited),
+      await options(api, edited),
+    );
+    assert.deepEqual(noop, edited);
+    assert.equal((await api.listTimelineEvents()).revision, beforeNoop.revision);
+
+    const created = await directCreate(api, id(3));
+    assert.equal(created.createdAt, later.updatedAt);
+    assert.equal(created.updatedAt, later.updatedAt);
+
+    at = Date.parse("2026-10-19T16:02:00Z");
+    const other = await api.updateTimelineEvent(
+      created.eventId,
+      {
+        ...FIELDS,
+        title: "Latest timeline action",
+      },
+      await options(api, created),
+    );
+
+    at = Date.parse("2026-10-19T15:59:00Z");
+    const deleted = await api.deleteTimelineEvent(
+      original.eventId,
+      await options(api, edited),
+    );
+    assert.equal(deleted.createdAt, original.createdAt);
+    assert.equal(deleted.updatedAt, other.updatedAt);
+    assert.equal(deleted.deletedAt, other.updatedAt);
+    assert.equal(deleted.title, null);
+    assert.deepEqual(await api.getTimelineEvent(original.eventId), deleted);
+
+    const beforeRepeatedDelete = await api.listTimelineEvents();
+    const repeatedDelete = await api.deleteTimelineEvent(
+      original.eventId,
+      await options(api, deleted),
+    );
+    assert.deepEqual(repeatedDelete, deleted);
+    assert.equal(
+      (await api.listTimelineEvents()).revision,
+      beforeRepeatedDelete.revision,
+    );
+  },
+);
+
 test("timeline pagination/filtering and shared links preserve originals; date/member edits invalidate exact cursor scope", async () => {
   const api = await signedMock(); const events = [];
   for (let index = 0; index < 25; index++) events.push(await directCreate(api, id(index + 1), { ...FIELDS, title: "Milestone " + index,
@@ -98,12 +178,31 @@ test("timeline pagination/filtering and shared links preserve originals; date/me
   assert.equal(first.items.length, 20); assert.equal(second.items.length, 5); assert.equal(second.items.at(-1).datePrecision, "UNKNOWN");
   const range = await api.listTimelineEvents({ fromYear: 2005, toYear: 2006 }); assert.deepEqual(range.items.map(event => event.eventDate), ["2005", "2006"]);
   assert.equal((await api.listTimelineEvents({ datePrecision: "UNKNOWN" })).items.length, 1);
-  await assert.rejects(() => api.listTimelineEvents({ cursor: first.nextCursor, fromYear: 2000 }), error => error.status === 412);
+  await assert.rejects(
+    api.listTimelineEvents({
+      cursor: first.nextCursor,
+      fromYear: 2000,
+    }),
+    {
+      status: 400,
+      code: "INVALID_CURSOR",
+    },
+  );
   const original = await api.getMemory(MEMORY_DETAIL.memoryId);
   let linked = await api.linkTimelineMemory(events[0].eventId, original.memoryId, await options(api, events[0]));
   const shared = await api.linkTimelineMemory(events[1].eventId, original.memoryId, await options(api, events[1]));
   const noop = await api.linkTimelineMemory(linked.eventId, original.memoryId, await options(api, linked)); assert.equal(noop.revision, linked.revision);
   await assert.rejects(() => api.listTimelineEvents({ cursor: first.nextCursor }), error => error.code === "TIMELINE_CONFLICT");
+  await assert.rejects(
+    api.listTimelineEvents({
+      cursor: first.nextCursor,
+      fromYear: 2000,
+    }),
+    {
+      status: 400,
+      code: "INVALID_CURSOR",
+    },
+  );
   linked = await api.updateTimelineEvent(linked.eventId, { ...eventFields(linked), eventDate: "0001", title: "Ancient milestone" }, await options(api, linked));
   assert.equal((await api.listTimelineEvents()).items[0].eventDate, "0001"); assert.deepEqual(await api.getMemory(original.memoryId), original);
   const tombstone = await api.deleteTimelineEvent(linked.eventId, await options(api, linked)); assert.equal(tombstone.title, null); assert.equal(tombstone.memberCount, 0);

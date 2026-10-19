@@ -3,7 +3,15 @@ import { getTimelineProgressLabel, getTimelineReloadLabel } from "../timelineDis
 import TimelineEventFields from "./TimelineEventFields.jsx";
 
 function TimelineRecoveryActions({ view }) {
-  const { state, busy, actions, retryFields, setRetryFields, handlers } = view;
+  const {
+    state,
+    busy,
+    actions,
+    retryFields,
+    fieldErrors,
+    registerRetryField,
+    handlers,
+  } = view;
   if (!["uncertain", "conflict", "csrf"].includes(state.mutation.phase)) return null;
   return (
     <>
@@ -11,7 +19,14 @@ function TimelineRecoveryActions({ view }) {
       {state.mutation.canRetry && <>
         {state.mutation.needsFields && <>
           <p>The hidden edit was cleared. Re-enter the same four original event fields to retry that change.</p>
-          <TimelineEventFields fields={retryFields} setFields={setRetryFields} disabled={busy} prefix="timeline-retry" />
+          <TimelineEventFields
+            fields={retryFields}
+            onChange={handlers.changeRetryFields}
+            disabled={busy}
+            errors={fieldErrors?.retry}
+            onFieldRef={registerRetryField}
+            prefix="timeline-retry"
+          />
         </>}
         <button className="button-secondary" type="button" disabled={busy} onClick={handlers.retry}>Retry this same timeline change</button>
       </>}

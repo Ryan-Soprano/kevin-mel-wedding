@@ -89,7 +89,18 @@ test("screen adapters preserve access precedence, creation guards and editor res
         `${phase} replaces a stale form after a new server revision`);
       assert.notEqual(keyFor(phase, { ...state, [record]: { ...state[record], [idField]: "other-record" } }), original);
     }
-    assert.notEqual(keyFor("timeline", { ...keys.timeline, filters: { ...keys.timeline.filters, year: 2025 } }), keyFor("timeline", keys.timeline));
+    assert.notEqual(
+      keyFor("timeline", {
+        ...keys.timeline,
+        filters: { ...keys.timeline.filters, fromYear: 2025 },
+      }),
+      keyFor("timeline", keys.timeline),
+    );
+    assert.equal(
+      leaf({ ...base, phase: "timeline", timeline: keys.timeline }).key,
+      null,
+      "timeline paging ownership survives editor revision/filter resets",
+    );
     for (const patch of [{ filters: { ...base.library.filters, q: "another search" } }, { tagQuery: "another tag" }, { formResetVersion: base.library.formResetVersion + 1 }]) {
       assert.notEqual(keyFor("library", { ...base.library, ...patch }), keyFor("library", base.library));
     }

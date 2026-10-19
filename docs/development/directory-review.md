@@ -247,6 +247,92 @@ Independent review found no actionable issues. No new test files were added.
 GitHub CI was queued during the reported Actions incident; local verification
 does not establish passing CI or a fresh configured review for the follow-up.
 
+## Timeline decisions — October 19, 2026
+
+This batch reviews all 18 tracked files under `features/timeline/`, their callers
+and the private timeline contract. It starts on `feature/timeline-directory-review`
+from main `a3b7f45`, separately from the then-unmerged albums PR #70.
+
+| File in `features/timeline/` | Decision and reason |
+|---|---|
+| `api/timelineActions.js` | Keep: exact four-field fingerprints, same-identity retries, session/write fences, acknowledged-write reconciliation and fresh-revision card clearing match the contract. No extraction is warranted. |
+| `api/timelineApi.js` | Keep: canonical event IDs/tokens, case-folded memory identity checks, exact UTC instant ordering, bounded pages and ETag/route validation already cover the relevant contracts. |
+| `api/mockTimelineServer.js` | Fix: clamp genuine action timestamps across the timeline when the clock moves backward; reject mismatched cursor scope before stale revisions, matching production error order. |
+| `api/timeline.test.js` | Extend the existing real-adapter tests for rollback edits/creation/deletion and correct wrong-scope cursor expectations, retaining genuine stale-cursor and no-op coverage. |
+| `timelineFields.js` | Fix local validation metadata to name event fields and identify a missing required title. Keep Unicode/date normalization, exact four-field shapes, chronological ordering and instant comparison algorithms. |
+| `timelineDisplay.js` | Fix server-feedback precedence and provide field-specific filter validation messages; keep actively used labels, partial-date controls and memory summaries. |
+| `hooks/useTimeline.js` | Fix independently scoped editor/retry/filter validation and correction, and own deliberate paging/filter/reload focus across editor resets with lifecycle cancellation. Keep exact action arguments and recovery locks. |
+| `components/Timeline.jsx` | Keep focused view composition; retain paging focus in the feature boundary while the inner editor keeps its existing view/identity/revision/filter reset key. |
+| `components/Timeline.test.js` | Extend existing presentation/normalization contracts for associated field errors, separate recovery feedback, honest date help and named page targets. Mounted checks verify stateful transitions. |
+| `components/TimelineEventFields.jsx` | Fix field refs and associated errors for editor/retry scopes; changing precision still clears the date atomically and preserves its precision help. |
+| `components/TimelineEditor.jsx` | Keep the create/edit form boundary; forward scoped validation and field-change/focus wiring. |
+| `components/TimelineDetail.jsx` | Keep membership, tombstone and existing deletion-confirmation behavior; forward editor validation wiring without changing its locks. |
+| `components/TimelineList.jsx` | Fix associated filter errors and correction; keep chronological pages, unknown-date grouping and metadata-only cards. |
+| `components/TimelineRecovery.jsx` | Fix independent retry-field errors while preserving server recovery feedback and busy-only recovery controls. |
+| `components/TimelinePaging.jsx` | Keep bounded previous/next/reload controls, routed through deliberate focus ownership. |
+| `components/TimelineSelector.jsx` | Keep candidate summaries, review filters and private linking; route paging/filter focus through the feature hook. |
+| `components/TimelineMemorySummary.jsx` | Keep honest memory precision, separate saved timestamps and metadata-only summaries; no original-media loading is introduced. |
+| `timeline.css` | Keep: all selectors have active consumers and no measured layout or efficiency issue justifies a style rewrite. |
+
+The production API already rejects case-folded duplicate memory IDs and compares
+creation instants through nanosecond precision. The mock defects are distinct:
+clock rollback could commit an event response rejected by that decoder or
+backdate a new event, and a cursor reused with different filters incorrectly
+reported a revision conflict. Genuine action time now matches the server's
+timeline-wide maximum; no-op timestamps and event/list tokens remain unchanged.
+Wrong scope returns `400 INVALID_CURSOR` even when the cursor is also stale;
+valid-scope stale revisions retain `412 TIMELINE_CONFLICT`.
+
+Browser reproductions show lost paging focus, unassociated title/year errors
+that persist after correction, and a newer failed member read obscured by an
+old local validation message. Editor, retry and coupled filter errors now have
+separate scopes. Correcting one scope does not erase server feedback or another
+draft's validation. The event-date mapping changes local validation metadata,
+not accepted Unicode/date values or the backend response contract.
+
+The narrow inbox adapter passes the existing timeline reset key into a keyed
+editor inside an unkeyed feature boundary. This keeps deliberately requested
+result focus through partner revision and applied-filter resets, while drafts
+still reset to current data and blur/history/hiding cancel pending focus.
+Moving focus to another interactive control in the active window also cancels
+the pending result focus; expected disabled-control and editor-remount gaps do
+not. This behavior was reproduced separately before the fix.
+Existing delete-cancel restoration and visible-but-disabled confirmation
+behavior remain intact. This integration check is not a second inbox review.
+
+## Timeline verification
+
+The initial 18 timeline tests passed. The mock regression run reproduced both
+defects before the fixes; all 17 API cases now pass. The changed timeline and
+inbox adapter suites pass **21 focused tests**. Initial standalone verification
+passed 534 frontend tests, lint and build on Node 24.16.0.
+
+The branch then integrated reviewed albums commit `4ddd361` locally, preserving
+both features' editor-reset assertions in the shared adapter test. Albums PR
+#70's head remains unchanged. A narrow album follow-up applies the same
+interactive-focus cancellation after a separate browser reproduction confirmed
+that defect there too. This branch is intended to follow PR #70's merge.
+
+Final combined verification passes **536 frontend tests**, with zero skips,
+ESLint and the production build. Mounted actual components, inbox controller and
+JSON mock adapters in StrictMode pass **254 timeline assertions** and **194
+album assertions** at 1280, 390 and 320 px. They cover chronology/unknown dates,
+partial-date filters, paging, partner revision/filter resets, input correction,
+late success/failure after blur or focus movement, linking/no-ops, deletion and
+pagehide recovery with deliberate exact four-field retry. Both fixtures retain
+all 21 original synthetic memory records unchanged as JSON. Desktop/narrow
+validation and recovery screenshots were inspected; no page errors, external
+requests or horizontal overflow were observed.
+
+Independent API/mock, UI/focus, integration and documentation reviews found no
+remaining actionable issues. Ryan's guest-flow source stays byte-identical.
+No tracked test files or dependencies were added. Browser/server resources are
+closed; fixtures, reports and source hashes are preserved under ignored
+`logs/timeline-directory-review.local/`. Fixture selector/ordering corrections
+are excluded from passing metrics. These frontend checks supplement prior
+backend evidence and do not establish real provider/device/hosted acceptance.
+Final-head CI/configured review remains required after PR creation.
+
 ## Private inbox decisions — October 19, 2026
 
 This batch reviews all 38 tracked files under `features/inbox/`, including

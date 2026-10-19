@@ -1,7 +1,15 @@
 import { ArchiveActions, ArchivePanel } from "../../inbox/components/ArchiveLayout.jsx";
 import TimelineEventFields from "./TimelineEventFields.jsx";
 
-export default function TimelineEditor({ fields, setFields, disabled, onSubmit, create = false }) {
+export default function TimelineEditor({
+  fields,
+  onChange,
+  disabled,
+  onSubmit,
+  errors,
+  onFieldRef,
+  create = false,
+}) {
   let label = "Edit this timeline event";
   let buttonLabel = "Save event details";
   if (create) {
@@ -10,7 +18,13 @@ export default function TimelineEditor({ fields, setFields, disabled, onSubmit, 
   }
   const form = (
     <form className="timeline-event-form" onSubmit={onSubmit} aria-label={label}>
-      <TimelineEventFields fields={fields} setFields={setFields} disabled={disabled} />
+      <TimelineEventFields
+        fields={fields}
+        onChange={onChange}
+        disabled={disabled}
+        errors={errors}
+        onFieldRef={onFieldRef}
+      />
       <ArchiveActions><button type="submit" disabled={disabled}>{buttonLabel}</button></ArchiveActions>
     </form>
   );
