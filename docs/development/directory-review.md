@@ -617,3 +617,117 @@ Ignored reports and logs are under `logs/library-directory-review.local/`.
 These synthetic frontend checks do not establish real backend/provider, device
 or assistive-technology acceptance. Final-head CI and configured review remain
 required after PR creation. Merge timeline PR #71 before this branch.
+
+## Export decisions — October 19, 2026
+
+This batch reviews all 16 tracked files under `features/export/`, their inbox
+callers, the portable-export contract and the corresponding backend behavior.
+Work starts from `6de44fa` on `feature/export-directory-review`. Merged library
+PR #72 is integrated at `926e42337bbddf974f6986a862429cbb4553ed60`, preserving
+the reviewed export source. The portable ZIP format, backend jobs, original files
+and operator-recovery format are unchanged.
+
+| File in `features/export/` | Decision and reason |
+|---|---|
+| `api/exportActions.js` | Keep: known job/control identities, uncertain-action reconciliation, shared write fences, Retry-After, bounded downloads, separate successful page commits and owned Blob URL cleanup remain cohesive and tested. |
+| `api/exportApi.js` | Keep: canonical job/attempt/generation identities, bodyless conditional controls, bounded owner-checked pages and response validation match the current contract. |
+| `api/exportDownload.js` | Fix: retain the validated byte size, filename and checksum before asynchronous fetch/hash work so caller mutation cannot change the verification target. Keep the existing single-part bounds, stream cancellation and integrity checks. |
+| `api/mockExportServer.js` | Fix: match scoped cursor/limit errors, content-free terminal cleanup, attempt outcomes, idle/hard expiry and preparation admission; prevent a late digest from resurrecting cancelled work. Keep its explicitly synthetic ZIP/provider limits. |
+| `api/export.test.js` | Extend the existing suite with delayed descriptor mutation and mock cursor, lifecycle, admission and digest-race regressions; retain controller retry, cancellation, pagination and URL ownership coverage. |
+| `hooks/useExportArchive.js` | Fix: bind cancellation confirmation and Keep-export focus to the current job identity, own separate status/parts/warnings read destinations and suppress late focus after lifecycle or interactive focus changes. |
+| `components/ExportArchive.jsx` | Fix: pass hook-owned actions and focus refs through the existing shell; retain warning-page controls when a non-first page becomes empty. |
+| `components/ExportArchive.test.js` | Extend the existing presentation suite with distinct focus destinations and empty-tail warning recovery, preserving feedback, busy/lock and native save contracts. |
+| `components/ExportGuide.jsx` | Keep: extraction, completeness, missing-original and device-save guidance describe the portable format without claiming a successful browser save. |
+| `components/ExportIssues.jsx` | Fix: expose a named warnings-page destination and an explicit empty-page message while keeping Previous available on a valid empty tail. |
+| `components/ExportParts.jsx` | Fix: expose a named part-page destination; keep bounded paging and the original-results-before-index preparation gate. |
+| `components/ExportPreparedPart.jsx` | Keep: byte progress, verified Blob links and deliberate native save actions retain separate meanings and existing busy gates. |
+| `components/ExportRecovery.jsx` | Keep: pending/uncertain/CSRF controls preserve deliberate status reads, exact retained retries and busy-only recovery gates. |
+| `components/ExportStatus.jsx` | Fix: expose a named status-read destination; preserve progress/expiry summaries and the hook's deliberate cancellation controls. |
+| `exportDisplay.js` | Keep: labels, terminal/preparation guards, feedback precedence and byte summaries have active consumers and useful boundaries. |
+| `export.css` | Keep: responsive summaries, prepared filenames, warnings and progress rules have active consumers; no measured efficiency issue warrants a change. |
+
+The binary helper is an exported API boundary. The live inbox controller already
+deep-freezes its prepared-part descriptor, but a direct API caller could mutate
+the raw descriptor during fetch or hashing. A delayed fetch then rejected valid
+original bytes against replacement metadata; a delayed checksum could instead
+accept bytes against a newly substituted checksum. Retain the three validated
+verification scalars synchronously without freezing or modifying the caller's
+object. Both failure modes are reproduced in the existing transport suite.
+
+The mock now uses canonical job/route-scoped page cursors and validates page
+limits in the backend's order. Cancellation and expiry discard captured counts,
+results and cached parts and fail running attempts; a later cancellation does
+not replace an existing terminal reason. Activity extends only the idle deadline,
+bounded by the absolute lifetime. A progress read records activity before its
+asynchronous digest, so crossing the old idle deadline while that admitted read
+finishes does not expire the job prematurely.
+
+Preparation rejects an early index or conflicting work and distinguishes a
+recorded running attempt from a resolved attempt. After hashing, the mock checks
+that the same preparation still owns the job before publishing a cached part.
+These changes repair observable mock contracts; its tiny empty ZIP, single
+original batch and synthetic session/scenario model do not simulate provider
+verification, the full production worker or hosted capacity.
+
+The existing coordinator still preserves both part and issue pages during a
+transient paging request or failure, committing only a successful replacement.
+The UI now owns a separate one-shot focus destination for each page family and
+status reads. Blur, hiding, traversal or moving focus to another interactive
+control cancels late focus. Cancellation confirmation is tied to the current
+job, so replacing or retiring that job cannot expose an old confirmation against
+a new export. Keep export restores only the matching active job's trigger.
+
+A valid warning-page offset can become an empty tail when another read or part
+retry changes the warning list. The non-first page now keeps its destination,
+empty-page message and Previous control. Progress reads, retries, original
+processing and native save requests remain explicit. No new tracked test files,
+production modules or dependencies are added, and no runtime-performance
+improvement is claimed.
+
+## Export verification — October 19, 2026
+
+The focused baseline passed 26 existing API/presentation tests. Both new binary
+descriptor cases failed before their fix; six mock contract cases failed against
+the prior mock, and a further admitted-read timing regression failed before its
+touch-order correction. The updated existing suites pass **31 API tests** and
+**five presentation tests**, with zero skips. The shared inbox adapter case
+brings the focused run to **37 passing tests**. All **551 frontend tests** pass
+with zero skips; ESLint, the production build and diff checks pass on Node
+24.16.0. Independent source and integration review found no remaining actionable
+issues in the UI, mock lifecycle, paging/admission or download verification
+changes. Terminal presentation fixtures now reflect content-free backend state;
+active warning fixtures retain the separate paging assertions.
+
+The final mounted StrictMode Chromium run passes **239 assertions** across
+1280, 390 and 320 px,
+preserving all 25 synthetic original memory records as identical JSON. Three
+actual browser-saved 22-byte empty-ZIP fixtures pass size and SHA-256 checks;
+this verifies the synthetic native-save path, not portable archive contents or
+provider originals. The run reports no page errors, external requests or
+horizontal overflow. It covers successful/failed next and previous reads for
+both page families, retained content/cursors, empty warning tails, progress
+checks, late responses, job-bound cancellation, same-identity recovery and
+checksum rejection. Verified Blob URLs survive ordinary save-related blur and
+are revoked on navigation or private hiding; resume freshly checks the opaque
+job and does not restore the download link.
+
+Representative desktop/narrow warning, cancellation and prepared-download
+screenshots were inspected. Browser/server resources are closed, and the
+temporary harness is preserved outside frontend source. All 17 source hashes
+(the 16 export files and unchanged inbox adapter) match the final browser/test
+snapshot; guest-flow source remains byte-identical. No new tracked test files,
+production modules or dependencies are added.
+
+The full suite, lint and build also pass on a separate copy containing the
+export changes over the committed baseline. The final delivery additionally
+includes the two existing contribution files from `5741362`: expanded display/
+hook formatting and extraction of the existing submit-failure handler. Review
+confirms unchanged ownership guards, validation and retry behavior. All 551
+tests, lint and build pass again with those changes included in the same branch.
+The export/adapter hashes match both verification copies; this small readability
+change does not mark the contribution directory reviewed again.
+
+Ignored reports and logs are under `logs/export-directory-review.local/`.
+These frontend checks do not repeat real backend/ZIP/provider acceptance or
+establish physical-device, assistive-technology, native save-dialog or hosted acceptance.
+Final-head CI and configured review remain required after PR creation.

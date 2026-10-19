@@ -137,7 +137,12 @@ function ExportResults({ job, terminal }) {
   );
 }
 
-export default function ExportStatus({ view, cancelTrigger, cancelButton }) {
+export default function ExportStatus({
+  view,
+  cancelTrigger,
+  cancelButton,
+  statusTarget,
+}) {
   const {
     job,
     terminal,
@@ -150,6 +155,13 @@ export default function ExportStatus({ view, cancelTrigger, cancelButton }) {
       title={EXPORT_STATE_LABELS[job.state]}
       className="export-status"
     >
+      <h3
+        ref={statusTarget}
+        tabIndex={-1}
+        className="visually-hidden"
+      >
+        Export progress · {EXPORT_STATE_LABELS[job.state]}
+      </h3>
       <ExportSummary job={job} />
       <ExportTiming job={job} terminal={terminal} />
       {!terminal && (

@@ -1,11 +1,22 @@
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { ApiError } from "../../../shared/api/apiClient.js";
 import { normalizeTextContribution } from "../../../shared/api/archiveApi.js";
-import { getContributionGuestName, getContributionSubmitError, getContributionValidationField } from "../contributionDisplay.js";
+import {
+  getContributionGuestName,
+  getContributionSubmitError,
+  getContributionValidationField,
+} from "../contributionDisplay.js";
 
 const FIELD_NAMES = new Set(["guestName", "message"]);
 
-export function useContributionForm({ active, onFlowStateChange, onDone, onShareAnother, createSubmission, privateArchive }) {
+export function useContributionForm({
+  active,
+  onFlowStateChange,
+  onDone,
+  onShareAnother,
+  createSubmission,
+  privateArchive,
+}) {
   const submission = useRef(null);
   const factory = useRef(createSubmission);
   const mounted = useRef(false);
@@ -26,13 +37,17 @@ export function useContributionForm({ active, onFlowStateChange, onDone, onShare
   const busy = isSubmitting || retryAfter > 0;
   const complete = step === "success" || step === "done";
   const hasDraft = !complete && (guestName.length > 0 || message.length > 0);
-  const reportFlow = useEffectEvent(state => onFlowStateChange?.(state));
+  const reportFlow = useEffectEvent((state) => onFlowStateChange?.(state));
 
   useEffect(() => {
     const current = factory.current();
     submission.current = current;
     mounted.current = true;
-    return () => { mounted.current = false; current.dispose?.(); if (submission.current === current) submission.current = null; };
+    return () => {
+      mounted.current = false;
+      current.dispose?.();
+      if (submission.current === current) submission.current = null;
+    };
   }, []);
 
   useEffect(() => {
@@ -59,7 +74,8 @@ export function useContributionForm({ active, onFlowStateChange, onDone, onShare
   function showValidation(failure) {
     const next = {};
     for (const item of failure.fieldErrors ?? []) {
-      if (FIELD_NAMES.has(item.field) && !next[item.field]) next[item.field] = item.message;
+      if (FIELD_NAMES.has(item.field) && !next[item.field])
+        next[item.field] = item.message;
     }
     if (Object.keys(next).length === 0) {
       setError(failure.message);
@@ -79,6 +95,20 @@ export function useContributionForm({ active, onFlowStateChange, onDone, onShare
     }
   }
 
+  function handleSubmitFailure(failure, current) {
+    if (!mounted.current || submission.current !== current) return;
+    setRetryAfter(current.retryAfterSeconds);
+    if (
+      failure instanceof ApiError &&
+      failure.code === "VALIDATION_FAILED" &&
+      !failure.unknownOutcome
+    ) {
+      showValidation(failure);
+      return;
+    }
+    setError(getContributionSubmitError(failure));
+  }
+
   async function send(event) {
     event?.preventDefault();
     const current = submission.current;
@@ -86,30 +116,33 @@ export function useContributionForm({ active, onFlowStateChange, onDone, onShare
     setError("");
     setFieldErrors({});
     try {
-      normalizeTextContribution({ guestName: getContributionGuestName(privateArchive, guestName), message });
-    } catch (failure) {
-      if (failure instanceof ApiError && failure.code === "VALIDATION_FAILED") showValidation(failure);
+      normalizeTextContribution({
+        guestName: getContributionGuestName(privateArchive, guestName),
+        message,
+      });
+    } catch (error_) {
+      if (error_ instanceof ApiError && error_.code === "VALIDATION_FAILED")
+        showValidation(error_);
       else setError("Please check your message and try again.");
       return;
     }
     sending.current = true;
     setIsSubmitting(true);
     try {
-      await current.submit({ guestName: getContributionGuestName(privateArchive, guestName), message });
+      await current.submit({
+        guestName: getContributionGuestName(privateArchive, guestName),
+        message,
+      });
       if (!mounted.current || submission.current !== current) return;
       setPending(false);
       setStep("success");
-    } catch (failure) {
-      if (!mounted.current || submission.current !== current) return;
-      setRetryAfter(current.retryAfterSeconds);
-      if (failure instanceof ApiError && failure.code === "VALIDATION_FAILED" && !failure.unknownOutcome) {
-        showValidation(failure);
-      } else {
-        setError(getContributionSubmitError(failure));
-      }
+    } catch (error_) {
+      handleSubmitFailure(error_, current);
     } finally {
       if (mounted.current && submission.current === current) {
-        setPending(current.pending); setIsSubmitting(false); sending.current = false;
+        setPending(current.pending);
+        setIsSubmitting(false);
+        sending.current = false;
       }
     }
   }
@@ -145,19 +178,29 @@ export function useContributionForm({ active, onFlowStateChange, onDone, onShare
   function changeGuestName(value) {
     if (sending.current || pending) return;
     setGuestName(value);
-    setFieldErrors(old => ({ ...old, guestName: "" }));
+    setFieldErrors((old) => ({ ...old, guestName: "" }));
   }
 
   function changeMessage(value) {
     if (sending.current || pending) return;
     setMessage(value);
-    setFieldErrors(old => ({ ...old, message: "" }));
+    setFieldErrors((old) => ({ ...old, message: "" }));
   }
 
   return {
-    nameInput, messageInput, resultHeading,
+    nameInput,
+    messageInput,
+    resultHeading,
     view: {
-      guestName, message, step, fieldErrors, error, isSubmitting, pending, retryAfter, busy,
+      guestName,
+      message,
+      step,
+      fieldErrors,
+      error,
+      isSubmitting,
+      pending,
+      retryAfter,
+      busy,
       hasShellActions: Boolean(onDone || onShareAnother),
       actions: { send, finish, shareAnother, changeGuestName, changeMessage },
     },

@@ -22,6 +22,9 @@ export default function ExportArchive({ state, busy, locked, actions }) {
     feedback,
     cancelTrigger,
     cancelButton,
+    statusTarget,
+    partsTarget,
+    issuesTarget,
   } = useExportArchive({
     state,
     busy,
@@ -45,7 +48,7 @@ export default function ExportArchive({ state, busy, locked, actions }) {
             className="button-secondary"
             type="button"
             disabled={view.disabled}
-            onClick={actions.inbox}
+            onClick={view.actions.inbox}
           >
             Back to inbox
           </button>
@@ -78,7 +81,7 @@ export default function ExportArchive({ state, busy, locked, actions }) {
           <button
             type="button"
             disabled={busy}
-            onClick={actions.create}
+            onClick={view.actions.create}
           >
             {getExportStartLabel(view.job, state.unavailable)}
           </button>
@@ -89,16 +92,17 @@ export default function ExportArchive({ state, busy, locked, actions }) {
           view={view}
           cancelTrigger={cancelTrigger}
           cancelButton={cancelButton}
+          statusTarget={statusTarget}
         />
       )}
       {view.job?.capturedAt && !view.terminal && (
-        <ExportParts view={view} />
+        <ExportParts view={view} pageTarget={partsTarget} />
       )}
       {view.job?.preparedPart && !view.terminal && (
         <ExportPreparedPart view={view} />
       )}
-      {view.job && state.issues.length > 0 && (
-        <ExportIssues view={view} />
+      {view.job && (state.issues.length > 0 || state.issueCursors.length > 1) && (
+        <ExportIssues view={view} pageTarget={issuesTarget} />
       )}
     </ArchiveScreen>
   );
