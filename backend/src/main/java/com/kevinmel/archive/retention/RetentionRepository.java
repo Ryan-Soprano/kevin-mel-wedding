@@ -274,6 +274,12 @@ public class RetentionRepository {
                     .param("recorded", time(record.recordedAt()))
                     .param("now", time(now))
                     .update();
+            // Serialize sibling cleanup even when the erased key was reserved earlier.
+            // The next statement gets a fresh snapshot after any contribution-lock wait.
+            db.sql("SELECT id FROM contribution WHERE id = :id FOR UPDATE")
+                    .param("id", record.contributionId())
+                    .query(UUID.class)
+                    .optional();
             db.sql("""
                     UPDATE contribution SET guest_name = NULL WHERE id = :id
                     AND NOT EXISTS (SELECT 1 FROM memory WHERE contribution_id = :id AND purged_at IS NULL)
