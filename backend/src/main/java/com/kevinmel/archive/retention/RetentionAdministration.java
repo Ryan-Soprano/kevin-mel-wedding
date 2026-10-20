@@ -18,9 +18,13 @@ import com.kevinmel.archive.media.R2ObjectStorage;
 
 /** Offline, console-only maintenance. No HTTP listener, moderation choices or component scan. */
 public final class RetentionAdministration {
-    private RetentionAdministration() { }
 
-    public static void main(String[] args) { System.exit(run(args)); }
+    private RetentionAdministration() {
+    }
+
+    public static void main(String[] args) {
+        System.exit(run(args));
+    }
 
     static int run(String[] args) {
         if (args.length == 1 && "--help".equals(args[0])) {
@@ -64,23 +68,32 @@ public final class RetentionAdministration {
                 System.err.println("Confirmation did not match; no maintenance was started.");
                 return 2;
             }
-            var source = new DriverManagerDataSource(settings.getRequiredProperty("spring.datasource.url"),
+            var source = new DriverManagerDataSource(
+                    settings.getRequiredProperty("spring.datasource.url"),
                     settings.getRequiredProperty("spring.datasource.username"),
                     settings.getRequiredProperty("spring.datasource.password"));
-            try (var storage = R2ObjectStorage.openPrivate(settings.getRequiredProperty("archive.storage.endpoint"),
+            try (var storage = R2ObjectStorage.openPrivate(
+                    settings.getRequiredProperty("archive.storage.endpoint"),
                     settings.getRequiredProperty("archive.storage.bucket"),
                     settings.getRequiredProperty("archive.storage.access-key-id"),
                     settings.getRequiredProperty("archive.storage.secret-access-key"))) {
-                var service = new RetentionService(new RetentionRepository(JdbcClient.create(source),
-                        new JdbcTransactionManager(source)), RetentionConfiguration.adapt(storage), Clock.systemUTC());
+                var service = new RetentionService(
+                        new RetentionRepository(
+                                JdbcClient.create(source),
+                                new JdbcTransactionManager(source)),
+                        RetentionConfiguration.adapt(storage),
+                        Clock.systemUTC());
                 if ("replay-ledger".equals(args[2])) {
-                    console.printf("Ledger replay completed for %d records. Verify restored data before reopening traffic.%n",
+                    console.printf(
+                            "Ledger replay completed for %d records. Verify restored data before reopening traffic.%n",
                             service.replayLedger());
                     return 0;
                 }
                 var result = service.purgeBatch(20);
-                console.printf("Expired-decision batch: %d purged, %d unconfirmed. Unconfirmed work retains its retry plan.%n",
-                        result.purged(), result.failed());
+                console.printf(
+                        "Expired-decision batch: %d purged, %d unconfirmed. Unconfirmed work retains its retry plan.%n",
+                        result.purged(),
+                        result.failed());
                 return result.failed() == 0 ? 0 : 1;
             }
         } catch (IOException | RuntimeException failure) {
@@ -92,29 +105,43 @@ public final class RetentionAdministration {
     private static StandardEnvironment settings() throws IOException {
         Properties defaults = new Properties();
         try (InputStream input = RetentionAdministration.class.getResourceAsStream("/application.properties")) {
-            if (input == null) throw new IllegalStateException("Application settings are unavailable.");
+            if (input == null) {
+                throw new IllegalStateException("Application settings are unavailable.");
+            }
             defaults.load(input);
         }
         var settings = new StandardEnvironment();
-        settings.getPropertySources().addLast(new PropertiesPropertySource("retentionDefaults", defaults));
+        settings.getPropertySources()
+                .addLast(new PropertiesPropertySource("retentionDefaults", defaults));
         return settings;
     }
 
-    static boolean hasExplicitDatabaseTarget(StandardEnvironment settings, String environment) {
-        if ("local".equals(environment)) return true;
+    static boolean hasExplicitDatabaseTarget(
+            StandardEnvironment settings,
+            String environment) {
+        if ("local".equals(environment)) {
+            return true;
+        }
         for (String[] names : new String[][] {
                 {"MEMORY_ARCHIVE_DB_URL", "spring.datasource.url"},
                 {"MEMORY_ARCHIVE_DB_USERNAME", "spring.datasource.username"},
-                {"MEMORY_ARCHIVE_DB_PASSWORD", "spring.datasource.password"}}) {
+                {"MEMORY_ARCHIVE_DB_PASSWORD", "spring.datasource.password"}
+        }) {
             boolean present = false;
             for (var source : settings.getPropertySources()) {
-                if ("retentionDefaults".equals(source.getName())) continue;
+                if ("retentionDefaults".equals(source.getName())) {
+                    continue;
+                }
                 for (var name : names) {
                     Object value = source.getProperty(name);
-                    if (value instanceof String text && !text.isBlank()) present = true;
+                    if (value instanceof String text && !text.isBlank()) {
+                        present = true;
+                    }
                 }
             }
-            if (!present) return false;
+            if (!present) {
+                return false;
+            }
         }
         return true;
     }
