@@ -305,3 +305,21 @@ while compact baseline/final JSON and text evidence remain outside the app
 package. The earlier centering evidence does not verify these new dialog and
 return-position behaviors. Physical-device, hosted and assistive-technology
 acceptance remain separate.
+
+## October 19, 2026 - combined misc delivery verification
+
+The enlarged-photo changes are now committed on `feature/misc-gallery-handoff`,
+based on main `15f60d2` after the retention, photo-upload confirmation and
+operations PRs merged. Independent source and consumer review found no
+actionable issue. The three gallery source/test hashes remain identical to the
+34-case browser snapshot above; those browser cases were not rerun for this
+combination.
+
+The combined checkout passes all **571 frontend tests**, ESLint, the production
+build and all **14 operational script-helper tests** on Node 24.21.0 / npm
+11.19.0. There are no test failures or skips. The build retains its existing
+chunk-size advisory. Backend source is unchanged in this misc delivery; its
+local suites were not rerun. Final logs are under ignored
+`logs/evening-handoff.local/` in the original personal-computer checkout.
+Exact-head CI and configured review remain PR gates; this record does not
+establish hosted, physical-device or assistive-technology acceptance.
