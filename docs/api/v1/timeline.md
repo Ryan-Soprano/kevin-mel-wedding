@@ -45,6 +45,10 @@ Deleting an event scrubs its metadata and removes relationships while preserving
 
 Additive V12 introduces `timeline_event`, `timeline_event_memory` and lazily created singleton `timeline_state`; V1–V11 remain unchanged. Fresh migration leaves these archive tables empty. Recovery v5 preserves the full timeline graph, revisions, partial dates and scrubbed tombstones. Exact reviewed v1–v4 packages restore upwards with empty timeline tables; v5 requires V12. Full graph validation precedes destination writes. Accounts, passwords, sessions and configuration remain excluded.
 
-Current independent memory-erasure evidence removes restored links and erased originals while preserving unrelated memories and events. Event-only deletion has no independent deletion ledger; an older valid backup can restore earlier event metadata or organization. It cannot bypass authoritative memory erasure. V12 closes binary rollback to a V11 artifact under the existing migration guard; use a verified compatible build, fix forward or reviewed isolated recovery.
+Version 5 is the first timeline-capable package. Reviewed V14 databases export version 7; the reviewed upward restore paths preserve timelines from v5–v6 packages too. Version 7 requires V14. Follow the current operator runbook for the complete source/target compatibility matrix.
+
+Current independent memory-erasure evidence removes restored links and erased originals while preserving unrelated memories and events. Event-only deletion has no independent deletion ledger; an older valid backup can restore earlier event metadata or organization. It cannot bypass authoritative memory erasure.
+
+V12 closes binary rollback to a V11 artifact under the migration guard. Later migrations require a build compatible with the current reviewed schema, now V14; a V12-only artifact is not a rollback target for that database. Use a verified compatible build, fix forward or reviewed isolated recovery.
 
 See [operator recovery](../../runbooks/operator-recovery.md) and [local verification](../../product/arc03-verification.md). Self-service couple export remains ARC-05; real onboarding, feedback, device and hosted acceptance remain separate release work.

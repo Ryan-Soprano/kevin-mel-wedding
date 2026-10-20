@@ -2648,3 +2648,168 @@ supersedes the normal user-created-PR boundary for this follow-up. The focused
 Notion issue records the published head, actual checks and merge result after
 this documentation commit. Backend timeline is next after the merge; broader
 operational/release acceptance remains separate.
+
+## Backend timeline decisions — October 20, 2026
+
+This formal batch starts from merged main `c998298` (PR 94) and reviews all
+**eight production files** in `backend/src/main/java/com/kevinmel/archive/timeline/`
+plus the existing `TimelineContractTest.java`. The eleven existing real
+HTTP/session/PostgreSQL cases in `media/TimelineHttpTest.java` are traced as
+consumers alongside the three contract cases. No tracked test file is added.
+
+| File in `timeline/` | Decision and preserved boundary |
+|---|---|
+| `TimelineController.java` | Simplify: expand route signatures/control flow and name the repeated private cache header/policy. Keep contract/origin checks, status codes, response bodies and agreeing ETags. |
+| `TimelineCursor.java` | Simplify: expand the record and separate listing/member decode validation into two cohesive helpers. Preserve canonical opaque bytes, filter/event scope, legacy member identities, first-error behavior and redacted diagnostics. |
+| `TimelineEvent.java` | Keep behavior; expand the record layout and redacted diagnostic method. Event dates and organization remain distinct from original memory metadata and content. |
+| `TimelineMemberships.java` | Simplify: expand control blocks and name the repeated memory parameter. Keep the noninitializing fast path, state lock, sorted event locks, defensive edge deletion and affected event/catalogue token changes. |
+| `TimelineQuery.java` | Keep behavior; expand validation and parameter layout. Preserve bounds, filter normalization, duplicate/unknown parameter refusal and query-versus-cursor validation order. |
+| `TimelineRepository.java` | Simplify: expand SQL call/mapping layout and name repeated parameter keys. Preserve SQL/text-block values, one-statement revision/anchor/count/page snapshots, chronological/member ordering, conditional writes and lazy state initialization. |
+| `TimelineRequest.java` | Simplify: expand validation/record layout and name the repeated event-date field. Preserve raw UTF-16 bounds, storable Unicode, canonical partial dates, strong conditions and ordered validation errors. |
+| `TimelineService.java` | Keep behavior; expand statements and transaction flow. Preserve fresh authority around lock waits/returns, memory-before-state/event locking, revision checks, real no-op tokens, monotonic timestamps and terminal identities. |
+| Existing `TimelineContractTest.java` | Keep all three tests and assertions; expand their compressed layout and existing control bodies only. |
+
+Consumer tracing covers the private frontend timeline decoder/coordinator and
+existing tests, HTTP controller/security/body-limit routes, the shared inbox
+eligibility/mapping/locking contract, review deletion, retention and authoritative
+erasure replay, album-before-timeline and timeline-before-tag lock order, portable
+organization capture/fingerprints, recovery graph/version validation and import
+replay, operations schema checks and additive V12. Consumer inspection does not
+complete a formal library/sharing/resources review.
+
+No concrete behavior defect is found or claimed, and no runtime performance
+improvement is claimed. State and event locks remain distinct: timeline add
+locks the memory before state/event; other event writes lock state then event
+without subsequently taking a memory lock. Review/retention detach preserve the
+shared memory → albums → timeline state → sorted events → tags order. Listing
+and member pages retain their one-statement snapshots, with stale organization
+revisions checked before current-anchor validity. Genuine no-ops retain tokens.
+Event-only deletion still has no independent deletion ledger.
+
+The API recovery note is clarified separately: v5 introduced timeline-capable
+packages, while reviewed V14 exports v7 and requires a currently compatible
+build. Supported v5/v6 upward imports preserve timelines; the historical v1–v4
+empty-timeline import and current independent memory-erasure requirements remain.
+No migration, recovery format or rollback guard is changed.
+
+The mechanical phase is committed separately at
+`03eaa20eceae62b0e5434e865aa1c83c69080cce`. It expands all nine reviewed sources
+without changing their expressions or meaningful scopes. Strict AST comparison
+passes all **nine sources**, **18 controls (six positive/twelve negative)** and
+malformed-source refusal. It compares public JDK 25 parse trees without type
+resolution; this is not a general semantic-equivalence proof.
+The separate exact `javap -c -p -constants -s` comparison passes **15 classes:
+14 production and one test**. It compares unmodified output bytes, including
+private members, descriptors, instructions and constant-pool references; it does
+not compare every classfile attribute/debug field or establish raw class-byte
+identity. The later intentional extraction is outside that mechanical proof.
+
+The second code phase is
+`2ed2f78a34d5d81338a4e1de3b3609e226c684b6`: five production files receive
+named constants or the two cursor helpers. The actual baseline has
+**14 selected findings over the whole backend: eight timeline and six library**.
+Every timeline finding has a **fix** disposition:
+
+| Baseline location/symbol | Rule and measured baseline | Disposition and verification |
+|---|---|---|
+| `TimelineController.java:25`, private response policy | S1192: `"no-store"` occurs three times; threshold three | Fix with one private policy constant, retaining all three response values. |
+| `TimelineController.java:25`, response header identity | S1192: `"Cache-Control"` occurs three times; threshold three | Fix with the existing framework `HttpHeaders.CACHE_CONTROL` identity, retaining the header spelling and response order. |
+| `TimelineCursor.java:20`, `decode` | S1541: cyclomatic complexity 17; threshold 10 | Fix by separating listing/member shape and scope validation. The outer bounds/decode/canonical-round-trip/catch boundary remains. Final actual analysis reports no finding in this file. |
+| `TimelineMemberships.java:17`, `detach` parameter binding | S1192: `"memory"` occurs three times; threshold three | Fix with an owner-scoped parameter constant; SQL and statement/lock order remain unchanged. |
+| `TimelineRepository.java:117`, membership operations | S1192: `"event"` occurs three times; threshold three | Fix with an owner-scoped parameter constant, retaining all three bindings. |
+| `TimelineRepository.java:55`, list/create/edit | S1192: `"precision"` occurs three times; threshold three | Fix with an owner-scoped parameter constant, retaining query/write values. |
+| `TimelineRepository.java:117`, membership operations | S1192: `"memory"` occurs three times; threshold three | Fix with an owner-scoped parameter constant, retaining all three bindings. |
+| `TimelineRequest.java:12`, accepted/read event-date field | S1192: `"eventDate"` occurs three times; threshold three | Fix with an owner-scoped field constant; wire spelling, accepted keys and errors remain unchanged. |
+
+Baseline primary/secondary locations, exact tool/source/classpath identities and
+final reports remain under `logs/timeline-directory-review.local/`. No finding
+is suppressed, marked false positive or retained through weaker settings.
+
+## Backend timeline verification — October 20, 2026
+
+The baseline focused run passes **14 existing tests**, zero failures/errors/skips,
+after Docker is restarted. Its initial Docker-engine HTTP 500 failure remains
+in the retained log and is not counted as a pass. The existing frontend timeline
+API/component suites pass **20 tests**, zero failures/skips, with no frontend
+source changes; these do not rerun the historical mounted browser matrix.
+
+An ignored differential probe compares the baseline and final compiled timeline
+API classes in isolated class loaders with the same **158 dependency JARs**.
+It passes **27,008 comparisons and three negative controls**, checking request/
+query validation, mixed-invalid precedence, Unicode/date boundaries, identities,
+conditions, record shape, cursor scope and exact wire bytes. Its before/after
+input hashes remain unchanged during execution. This is selected API evidence,
+not equivalence proof for SQL, transaction execution, HTTP behavior, every input
+or concurrency schedule.
+
+Fresh frozen compilation records **212 backend source inputs**, **256 production
+classes** and **111 compiled test/fixture classes**. Analyzer inputs are bound to
+the exact frozen source, class and dependency manifests. The runtime uses Java
+**25.0.3+9-LTS**. The official SonarSource Marketplace extension bundle **6.1.1**
+is downloaded and extracted inside ignored task output, with engine
+**12.1.1.87771** and SonarJava **8.44.0.48651**; it is not installed into the IDE
+and no global settings are changed. Recorded package/runtime hashes bind the
+local artifacts to their official Marketplace source.
+
+Baseline and final use the same actual MAIN rules/settings: S3776
+`Threshold=15`, S1541 `Threshold=10`, S1192 `threshold=3`, `minimalLength=5`,
+empty `excludePatterns`. Final analysis completes with **190 recognized inputs:
+128 MAIN and 62 TEST**, zero failed inputs and **zero selected timeline findings**.
+The whole backend retains **six library findings**: one cognitive, two
+cyclomatic and three literal findings. The MAIN-only rules do not analyze test
+methods. Actual rule-score/boundary, TEST-classification and malformed-source
+controls pass; the known `No workDir in SonarLint` warning and result API's
+recognized-versus-completed-file limitation remain explicit.
+
+Both actual duplicated-block runs use official SonarQube **26.4.0.121862**,
+pinned commit `ab253503cc54df4bdfefd11eb783997d402b5147`, with all **68 verified
+runtime inputs** and **five controls**. Final CPD scans all **128 production
+files**, reporting **zero raw per-origin groups and zero unique complete
+endpoint groups**. Its ten-statement detector/settings and production scope are
+unchanged; the baseline also reports zero groups. These selected-rule and
+standalone CPD outcomes do not establish a hosted quality gate, full profile,
+coverage, duplication density or new-code metrics. Reproduction instructions
+remain in [the analyzer guide](backend-sonar.md).
+
+The fresh frozen-source full Maven `package` run exits **0** with an explicit
+`BUILD SUCCESS`: **474 total tests, 472 passed, zero failures/errors and two
+expected Windows skips**. It finishes in 14:24 without a Surefire shutdown-timeout
+diagnostic. Local options are `surefire.exitTimeout=120`, `forkCount=1`,
+`reuseForks=false` and `argLine=-Xmx1024m`; tracked build settings are unchanged.
+Runtime is Temurin 25.0.3+9-LTS, Maven 3.9.16, Spring Boot 4.1.1, Docker 29.7.2,
+PostgreSQL 17.11 and existing FFmpeg/ffprobe 9.0.2. Frontend consumer checks use
+Node 24.21.0 / npm 11.19.0. Unchanged frontend lint/build and unrelated suites
+are not rerun for this backend batch.
+
+Post-run integrity checks bind all **212 tracked backend inputs** to both the
+visible and frozen source. All **367 compiled inputs** retain their frozen
+hashes; the executable JAR contains all **256 production classes** with identical
+bytes and excludes all **111 compiled test/fixture identities and digests**.
+Its manifest names the expected Boot launcher/application. This checks direct
+class entries and manifest, not nested dependency JARs or non-class resources.
+The JAR SHA-256 is
+`c9850f7f5ad48340b50bc5bd99820273edff058d231732721751c42d257fb02d`.
+
+Read-only cleanup confirms all **48 exact created-container IDs** and **25 logged
+Spring-test JVM PIDs** observed across the successful baseline and full run are
+absent, with no Java command line containing the review path. This covers the
+observed identities/path, not every unlogged JVM or native child. Unrelated
+resources are untouched. The two Windows-disabled symlink cases remain explicit
+Linux CI checks:
+
+```text
+OwnedExportDirectoryTest.symlinkedArtifactsAreNeverFollowedAndOutsideBytesRemainUntouched
+OperatorRecoveryPostgresTest.symlinkedOriginalAndSymlinkedBundleRootAreRejectedBeforeAnyWrites
+```
+
+Independent final source and documentation reviews find no actionable issue.
+The branch is `feature/backend-timeline-review`; the ready PR description and
+source/analyzer/probe/package/cleanup evidence remain under ignored
+`logs/timeline-directory-review.local/`. The focused Notion issue records the
+published delivery and actual checks. Normal delivery is commit/push and a ready
+PR description; Ryan creates and merges the PR unless he explicitly authorizes
+another exception.
+Exact-current-head CI/configured review remains required before merging.
+The next formal package is **`library/`**, then `sharing/` and `health/`.
+Provider IO, physical devices, assistive technology, hosted operations and
+release acceptance remain separate.

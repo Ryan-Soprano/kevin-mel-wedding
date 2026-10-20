@@ -75,6 +75,72 @@ This frontend review supplements the earlier real-backend rehearsal; provider,
 device and hosted acceptance remains separate. Final-head CI/configured review
 is still required after PR creation.
 
+## October 20, 2026 — backend timeline directory review
+
+This supplement starts from merged main `c998298` (PR 94) and covers all eight
+backend timeline production files and the existing three-case contract suite,
+with the eleven existing HTTP/session/PostgreSQL cases and callers traced.
+It supplements the earlier frontend and packaged-browser records; historical
+counts belong to separate snapshots and are not additive.
+
+The mechanical phase `03eaa20eceae62b0e5434e865aa1c83c69080cce` expands records,
+parameters, statements and control blocks. Strict AST checks pass nine sources,
+18 controls (six positive/twelve negative) and malformed-source refusal. This
+public parse-tree check does not perform type resolution. Exact disassembly
+comparisons pass 15 classes (14 production/one test); this does not establish raw class-byte
+identity or compare every classfile attribute. The subsequent code phase
+`2ed2f78a34d5d81338a4e1de3b3609e226c684b6` resolves eight actual selected-rule
+findings with named constants and two listing/member cursor validation helpers.
+No tracked test file is added, no concrete behavior defect is claimed, and no
+measured performance improvement is claimed.
+
+Private authority, exact cursor bytes/filter scope, canonical partial dates,
+error precedence, one-statement page snapshots, genuine no-op revisions,
+terminal event identities and memory → albums → timeline state → sorted events
+→ tags lock order remain intact. Recovery guidance now distinguishes the first
+timeline-capable v5/V12 format from current v7/V14 requirements and supported
+upward recovery. Event-only deletion still lacks an independent deletion ledger;
+current memory-erasure authority remains mandatory.
+
+The baseline focused run passes **14 tests**, zero failures/errors/skips, after
+a Docker restart; the initial Docker-engine HTTP 500 failure log remains retained.
+Existing frontend timeline suites pass **20 tests**, zero failures/skips, with no
+frontend edits or new mounted browser matrix. A final compiled-class differential
+probe passes **27,008 comparisons and three negative controls**, sharing 158
+dependency JARs and checking API validation, error precedence, identities,
+conditions, record shape and exact cursor bytes. It does not establish SQL,
+transaction/HTTP execution or all concurrency schedules.
+
+Actual local SonarJava selected-rule analysis completes against frozen source:
+**zero timeline findings**, with the same six outstanding library findings.
+All 190 Java inputs are recognized (128 MAIN/62 TEST), with zero failed inputs.
+The official 6.1.1 extension bundle is extracted locally, not installed in the
+IDE; engine 12.1.1.87771 and SonarJava 8.44.0.48651 retain the same default
+complexity/literal thresholds. The rules are MAIN-only. Separate official
+26.4.0.121862 CPD scans 128 production files with five controls and reports zero
+raw/unique complete endpoint groups. These are local scoped checks, not a
+server quality gate or complete quality-profile/coverage claim.
+
+The fresh frozen-source full Maven package exits 0 with `BUILD SUCCESS`:
+**474 total tests, 472 passed, zero failures/errors and two expected Windows
+skips**. The run exits without a Surefire shutdown-timeout diagnostic. All 212
+tracked backend inputs match the visible/frozen source; all 367 compiled inputs
+retain their hashes. The executable JAR contains all 256 tested production
+classes as identical bytes and excludes all 111 test/fixture identities and
+digests. This checks direct classes and executable manifest, not nested
+dependencies or non-class resources. Read-only cleanup confirms all 48 observed
+created containers and 25 logged Spring-test JVM PIDs are absent, with no Java
+command line containing the review path; unlogged/native processes are outside
+that claim. Independent source/documentation review finds no actionable issue.
+The two existing Windows-disabled symlink cases remain Linux CI checks.
+
+Per-file decisions, all eight finding dispositions, exact proof limits and final
+delivery status belong in the [directory guide](../development/directory-review.md).
+Raw machine-local evidence remains under `logs/timeline-directory-review.local/`
+and does not transfer with Git. Ryan handles normal PR creation/merging; final
+head CI/configured review remains required. Hosted/device/provider and release
+acceptance below remains open.
+
 ## Retained acceptance
 
 Local engineering verification precedes Kevin and Melanie's real onboarding and feedback. REV-01/REV-03 acceptance remains open. Physical devices, actual screen readers, native dialogs, hidden-tab/BFCache behavior, live-provider originals and hosted network/capacity/recovery checks remain open. Controlled blur/resume and synthetic storage do not establish those behaviors. Audio was disabled in the original fixture; current audio settings and acceptance are recorded in the [voice memory runbook](../runbooks/voice-memories.md).
