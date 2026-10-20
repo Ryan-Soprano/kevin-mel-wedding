@@ -7,17 +7,17 @@ import java.time.temporal.ChronoUnit;
 import java.util.Map;
 import java.util.UUID;
 
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.kevinmel.archive.album.AlbumMemberships;
+import com.kevinmel.archive.library.TagMemberships;
 import com.kevinmel.archive.security.ArchiveAuthorization;
 import com.kevinmel.archive.security.ArchivePrincipal;
-import com.kevinmel.archive.web.ApiException;
-import com.kevinmel.archive.album.AlbumMemberships;
 import com.kevinmel.archive.timeline.TimelineMemberships;
-import com.kevinmel.archive.library.TagMemberships;
+import com.kevinmel.archive.web.ApiException;
 
 @Service
 public class ReviewService {
@@ -29,17 +29,38 @@ public class ReviewService {
     private final TimelineMemberships timeline;
     private final TagMemberships tags;
 
-    public ReviewService(ArchiveAuthorization authorization, InboxRepository repository, Clock clock) {
-        this(authorization,repository,clock,null,null,null);
+    public ReviewService(
+            ArchiveAuthorization authorization,
+            InboxRepository repository,
+            Clock clock) {
+        this(authorization, repository, clock, null, null, null);
     }
-    public ReviewService(ArchiveAuthorization authorization, InboxRepository repository, Clock clock, AlbumMemberships albums) {
-        this(authorization,repository,clock,albums,null,null);
+
+    public ReviewService(
+            ArchiveAuthorization authorization,
+            InboxRepository repository,
+            Clock clock,
+            AlbumMemberships albums) {
+        this(authorization, repository, clock, albums, null, null);
     }
-    public ReviewService(ArchiveAuthorization authorization, InboxRepository repository, Clock clock, AlbumMemberships albums, TimelineMemberships timeline) {
-        this(authorization,repository,clock,albums,timeline,null);
+
+    public ReviewService(
+            ArchiveAuthorization authorization,
+            InboxRepository repository,
+            Clock clock,
+            AlbumMemberships albums,
+            TimelineMemberships timeline) {
+        this(authorization, repository, clock, albums, timeline, null);
     }
+
     @Autowired
-    public ReviewService(ArchiveAuthorization authorization, InboxRepository repository, Clock clock, AlbumMemberships albums, TimelineMemberships timeline, TagMemberships tags) {
+    public ReviewService(
+            ArchiveAuthorization authorization,
+            InboxRepository repository,
+            Clock clock,
+            AlbumMemberships albums,
+            TimelineMemberships timeline,
+            TagMemberships tags) {
         this.authorization = authorization;
         this.repository = repository;
         this.clock = clock;
@@ -49,42 +70,74 @@ public class ReviewService {
     }
 
     @Transactional
-    public MemoryDetail review(UUID memoryId, Map<String, Object> body, String ifMatch) {
+    public MemoryDetail review(
+            UUID memoryId,
+            Map<String, Object> body,
+            String ifMatch) {
         authorization.requireCoupleAccess();
         var request = ReviewRequest.from(body, ifMatch);
-        var current = repository.lockDetail(memoryId).orElseThrow(ReviewService::unavailable);
+        var current = repository.lockDetail(memoryId)
+                .orElseThrow(ReviewService::unavailable);
         // A queued mutation must not retain authority after account revocation while waiting.
         authorization.requireCoupleAccess();
-        Instant now = clock.instant().truncatedTo(ChronoUnit.MICROS);
+        Instant now = clock.instant()
+                .truncatedTo(ChronoUnit.MICROS);
         // A lock can wait across the deadline; recheck after it has actually been acquired.
-        if ("DELETE".equals(current.reviewStatus()) && !now.isBefore(current.deleteAfter())) throw unavailable();
-        if (current.revision() != request.revision()) throw conflict();
-        String visibility = request.visibility() == null ? current.visibility() : request.visibility();
+        if ("DELETE".equals(current.reviewStatus()) && !now.isBefore(current.deleteAfter())) {
+            throw unavailable();
+        }
+        if (current.revision() != request.revision()) {
+            throw conflict();
+        }
+        String visibility = request.visibility() == null
+                ? current.visibility()
+                : request.visibility();
         // Restoring a deleted memory never restores its previous audience or a secret link.
-        if (!"KEEP".equals(request.reviewStatus()) || "DELETE".equals(current.reviewStatus())) visibility = "COUPLE_ONLY";
-        if (current.reviewStatus().equals(request.reviewStatus()) && current.visibility().equals(visibility)) return current;
-        if (current.revision() == Integer.MAX_VALUE) throw conflict();
+        if (!"KEEP".equals(request.reviewStatus()) || "DELETE".equals(current.reviewStatus())) {
+            visibility = "COUPLE_ONLY";
+        }
+        if (current.reviewStatus().equals(request.reviewStatus()) && current.visibility().equals(visibility)) {
+            return current;
+        }
+        if (current.revision() == Integer.MAX_VALUE) {
+            throw conflict();
+        }
 
         // Keep timestamps monotonic if a wall-clock adjustment occurs.
-        Instant actedAt = now.isBefore(current.updatedAt()) ? current.updatedAt() : now;
-        Instant deleteAfter = "DELETE".equals(request.reviewStatus()) ? now.plus(RETENTION) : null;
+        Instant actedAt = now.isBefore(current.updatedAt())
+                ? current.updatedAt()
+                : now;
+        Instant deleteAfter = "DELETE".equals(request.reviewStatus())
+                ? now.plus(RETENTION)
+                : null;
         var changed = current.visibility().equals(visibility)
-                ? repository.changeReview(current, request.reviewStatus(), deleteAfter, actedAt)
-                : repository.changeReviewAndVisibility(current, request.reviewStatus(), visibility, deleteAfter, actedAt);
+                ? repository.changeReview(
+                        current,
+                        request.reviewStatus(),
+                        deleteAfter,
+                        actedAt)
+                : repository.changeReviewAndVisibility(
+                        current,
+                        request.reviewStatus(),
+                        visibility,
+                        deleteAfter,
+                        actedAt);
         repository.revokeShareLink(memoryId);
         if ("DELETE".equals(request.reviewStatus()) && albums != null) {
-            albums.detach(memoryId,actedAt);
+            albums.detach(memoryId, actedAt);
             authorization.requireCoupleAccess();
         }
         if ("DELETE".equals(request.reviewStatus()) && timeline != null) {
-            timeline.detach(memoryId,actedAt);
+            timeline.detach(memoryId, actedAt);
             authorization.requireCoupleAccess();
         }
         if ("DELETE".equals(request.reviewStatus()) && tags != null) {
-            tags.detach(memoryId,actedAt);
+            tags.detach(memoryId, actedAt);
             authorization.requireCoupleAccess();
         }
-        var principal = (ArchivePrincipal) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        var principal = (ArchivePrincipal) SecurityContextHolder.getContext()
+                .getAuthentication()
+                .getPrincipal();
         repository.auditReview(current, changed, principal.getAccountId(), actedAt);
         authorization.requireCoupleAccess();
         return changed;
@@ -93,7 +146,11 @@ public class ReviewService {
     private static ApiException unavailable() {
         return new ApiException(404, "NOT_FOUND", "That memory is unavailable.");
     }
+
     private static ApiException conflict() {
-        return new ApiException(412, "REVIEW_CONFLICT", "This memory changed. Reload it before reviewing it again.");
+        return new ApiException(
+                412,
+                "REVIEW_CONFLICT",
+                "This memory changed. Reload it before reviewing it again.");
     }
 }

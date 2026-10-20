@@ -73,3 +73,171 @@ reduced motion, slideshow and cleanup behavior. The previous focus loss was
 reproduced at all three widths before the fix. These synthetic checks retain the
 separate device/provider/release acceptance boundaries above. Full batch evidence
 and file decisions are in the [directory review guide](../development/directory-review.md).
+
+## October 19, 2026 - complete supplied-photo review
+
+Ryan requested a duplicate check of the scanned PDF and the two later couple
+photos, followed by adding every missing non-duplicate photograph to the guest
+slideshow. This supersedes the historical scan exclusions above.
+
+The review covered all 52 PDF pages, the 30 saved `image_page*.jpg` files and both
+later couple photos against the existing 218 gallery photos and one another.
+The PDF pages were rendered with Poppler, and their embedded JPEGs were extracted
+without changing the supplied PDF. Perceptual hashes identified comparison
+candidates; visual contact-sheet and full-image reviews determined duplicates.
+Different expressions, poses and group compositions remain included.
+
+| Supplied material | Reviewed | Added | Gallery IDs |
+| --- | ---: | ---: | --- |
+| Scanned PDF | 52 pages | 50 | 219-268 |
+| Saved scan JPEGs | 30 | 30 | 269-298 |
+| Later archway and globe couple photos | 2 | 2 | 299-300 |
+| Total | 84 | 82 | 219-300 |
+
+PDF pages 21/22 contain the same two-women photograph, and pages 23/24 contain
+the same mother/newborn photograph. The upright, cleaner scans on pages 22 and
+24 represent those photographs as gallery photos 239 and 240. The 30 saved JPEGs
+are additional scenes, despite their historical "scan-review extract" label;
+their filenames do not correspond to the current PDF page numbers. All 30 are
+distinct from the PDF, the original gallery and one another. The two later couple
+photos are also distinct. JPEG `image_page15.jpg` receives a 180-degree display
+rotation; its supplied source remains unchanged.
+
+The [source audit](guest-gallery-source-audit.json) records every reviewed source,
+inclusion or duplicate decision, gallery ID, dimensions and SHA-256 hashes. The
+later couple primaries were recovered byte-for-byte from their previously
+reviewed Git assets because the original PNGs are not present in this checkout.
+Their existing 768 x 1024 primary copies are retained, with new 560-pixel copies
+derived for the gallery's responsive sizing.
+
+The current slideshow and thumbnail browser contain **300 photos**. All original
+218 descriptors, order and 401 image hashes are unchanged. The 164 new WebP files
+total 8,665,260 bytes; the complete 565-file image collection totals 56,644,952
+bytes. New copies preserve framing and aspect ratio, use profile-aware sRGB
+conversion, strip metadata and remain within 1120 x 1600 pixels without
+upscaling. Original source files remain unchanged and outside the application
+package. Independent source/asset and visual review confirmed the mappings,
+duplicate decisions, rotation and preserved originals.
+
+All **567 frontend tests**, ESLint and the final production build pass. Eight
+focused gallery tests include complete 84-source accounting, both duplicate
+representatives, all 82 added IDs, recorded output hashes, unchanged original
+descriptors and exact coverage of all 565 metadata-free image files. The initial
+sandboxed run could not connect to four disposable redirect-test servers
+(`connect EACCES`); the complete suite passed with local loopback access.
+
+Headless Edge exercised the final production build at 1280, 390 and 320 pixels.
+All 565 built image assets decoded; all 300 thumbnails were reachable at each
+width. Every one of the 82 additions opened and decoded in the desktop viewer,
+with seven representative additions also checked at each narrow width. The
+actual five-second timer crossed photo 218 to 219 and wrapped 300 to 1. No
+JavaScript page errors or horizontal overflow were observed. Screenshots of the rotated beach
+scan and final globe photo were inspected. Owned browser/server resources were
+closed. Local evidence is under ignored `logs/gallery-completion.local/`.
+
+The build retains its non-fatal JavaScript chunk-size advisory. These results
+cover the local source and static production frontend build, without a backend;
+deployment and physical phone acceptance remain separate.
+
+## October 19, 2026 - return to the currently viewed thumbnail
+
+Both thumbnail-entry paths now use the currently displayed photo. Browsing the
+slideshow and choosing **Browse all 300 photos** opens the thumbnail batch that
+contains that photo. Opening photo 86, navigating to photo 124 and choosing
+**Back to thumbnails** returns to photo 124; Escape follows the same path.
+
+Previously the preview always targeted the first thumbnail, while the viewer
+restored the originally clicked thumbnail and its old page scroll coordinates.
+Mounted desktop and narrow-browser reproduction confirmed that photo 300 was
+absent after preview-to-grid navigation, and that returning after 86 to 124
+focused photo 86 while photo 124 was still outside the rendered batches.
+
+The return action exposes enough 24-photo batches to include the current photo,
+capped at the collection size, while preserving any larger already-opened batch.
+It then focuses and scrolls that thumbnail into view. The current thumbnail has
+an `aria-current` marker and an inset border without changing cell dimensions.
+Removing the original-click scroll snapshot also avoids restoring stale page
+coordinates after viewport changes. The selection stays in component state;
+gallery photos, slideshow timing and private archive boundaries are unchanged.
+
+All 567 frontend tests, ESLint and the production build pass. Existing gallery
+tests verify the current-thumbnail semantics for photos 1, 124 and 300, including
+that photo 86 is no longer marked current after navigating to 124. These static
+rendering checks do not substitute for mounted state/focus/scroll verification.
+
+The final production frontend passes **39 mounted Edge browser states**, 13 each
+at 1280 x 900, 390 x 900 and 320 x 900. Checks cover preview-to-grid navigation,
+86 to 124 and back, reverse navigation with Escape, first/last wrapping,
+unchanged selection, preserved larger batches, manual Show more focus, passive
+loading without stolen focus, viewport resizing, slideshow progression/stop and
+reduced motion. Each return checks the current thumbnail, keyboard focus and
+visible position; thumbnail bounds allow one pixel for browser scroll rounding.
+All checked layouts have no horizontal overflow or JavaScript page errors.
+Screenshots of the restored photo 124 and its current marker were inspected at
+all three widths. Evidence and source hashes are under ignored
+`logs/gallery-navigation.local/`; owned browsers and the local server are closed.
+These static frontend checks do not establish hosted/backend or physical-phone
+acceptance. No new dependency or test file was introduced, and the reserved
+`frontend/e2e/.gitkeep` remains unchanged.
+
+## October 19, 2026 - welcome photo selection
+
+Ryan selected gallery photo 151, the sunny city-street selfie, as the main welcome
+photo in place of photo 148. The opening print and its full-photo dialog now use
+photo 151's existing assets and dimensions, with a matching alternative
+description. The caption remains "Her entrance. His perfect hair." The gallery's
+300 entries and ordering are unchanged. The five focused gallery tests, edited
+JavaScript lint checks and production build pass.
+
+## October 19, 2026 - Melanie's final welcome photo choice
+
+Melanie selected gallery photo 92, the garden selfie, for the main welcome photo
+with no caption. This replaces the photo 151 choice above. The opening print and
+full-photo dialog reuse photo 92's existing responsive assets, dimensions and a
+matching alternative description. The caption markup and its unused CSS are
+removed; the gallery's 300 photos and ordering remain unchanged.
+
+All five focused gallery tests, edited JavaScript lint checks and the production
+build pass. Edge checks at 1280 and 390 pixels confirm photo 92 loads in the
+welcome and full-photo dialog, no caption appears, Escape restores button focus,
+and there is no horizontal overflow or JavaScript page error. Screenshots were
+inspected; temporary previews and the browser helper were removed afterward.
+
+## October 19, 2026 - center the current thumbnail on return
+
+Ryan clarified that the selected thumbnail was correct but appeared at the bottom
+of the screen. The earlier return behavior used the nearest visible position;
+its visibility and focus checks did not require centering the selected row.
+Browse all, Back to thumbnails and viewer Escape now request vertical centering
+for the current thumbnail. Browser scroll limits apply at the document edges.
+Opening a full photo and manually loading another thumbnail batch retain their
+existing nearest-position scrolling.
+
+All eight existing gallery/loading tests, edited JavaScript lint checks and the
+production build pass. The built frontend passes 29 mounted Edge checks: 27 at
+1280, 390 and 320 pixels, plus first/last-photo document-limit checks at a tall
+viewport. Returns center the current thumbnail within one pixel after images,
+fonts and passive batch loading settle; document-edge cases stop at the closest
+available scroll position. Checks include real manual navigation, photos 24/48
+at batch boundaries, 86 to 124 and back, reverse Escape, wrapping and unchanged
+manual Show more focus/scrolling. There is no horizontal overflow or JavaScript
+page error. Centered desktop/phone screenshots were inspected; owned resources
+and temporary previews/helpers were cleaned up. Small JSON summaries and the
+build log remain under ignored `logs/gallery-browse-recheck.local/`.
+
+## October 19, 2026 - PR 85 short-page centering correction
+
+Codex identified a gap in the centering checks above: with little or no content
+after the gallery, a return to photo 24 or 48 can initially hit the document's
+bottom scroll limit. Passive loading then adds rows after the return request was
+consumed, leaving the selected thumbnail off-center. A minimal mounted gallery
+with no following public section reproduces all four desktop/phone cases, with
+settled errors of about 199 pixels at 1280 pixels wide and 259 pixels at 390.
+
+The return now prepares enough thumbnail rows in a layout effect before focusing
+and centering once. If the requested centered position exceeds the document's
+current bottom limit and more photos exist, the request remains pending for the
+next batch render. Missing targets or an inactive gallery discard the request.
+After the return completes, later passive loading has no retained focus request.
+First/last document limits and nearest-position viewer/Show more behavior remain
+unchanged.

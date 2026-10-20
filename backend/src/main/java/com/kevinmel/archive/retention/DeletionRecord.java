@@ -9,7 +9,10 @@ import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.core.StreamReadFeature;
 import tools.jackson.databind.DeserializationFeature;
 
-/** Immutable, content-free write-ahead record kept independently of database backups. */
+/**
+ * Immutable, content-free write-ahead record kept independently of database
+ * backups.
+ */
 public record DeletionRecord(UUID memoryId, UUID contributionId, UUID assetId,
         String submissionKeyDigest, Instant deleteAfter, Instant recordedAt) {
     private static final JsonMapper JSON = JsonMapper.builder()
@@ -27,37 +30,54 @@ public record DeletionRecord(UUID memoryId, UUID contributionId, UUID assetId,
 
     public byte[] encode() {
         Map<String, Object> data = new LinkedHashMap<>();
-        data.put("version", 1); data.put("eventKey", "kevin-mel-wedding");
-        data.put("memoryId", memoryId.toString()); data.put("contributionId", contributionId.toString());
+        data.put("version", 1);
+        data.put("eventKey", "kevin-mel-wedding");
+        data.put("memoryId", memoryId.toString());
+        data.put("contributionId", contributionId.toString());
         data.put("assetId", assetId == null ? null : assetId.toString());
         data.put("submissionKeyDigest", submissionKeyDigest);
-        data.put("deleteAfter", deleteAfter.toString()); data.put("recordedAt", recordedAt.toString());
+        data.put("deleteAfter", deleteAfter.toString());
+        data.put("recordedAt", recordedAt.toString());
         return JSON.writeValueAsBytes(data);
     }
 
     public static DeletionRecord decode(byte[] bytes) {
-        if (bytes == null || bytes.length == 0 || bytes.length > MAX_BYTES) throw invalid();
+        if (bytes == null || bytes.length == 0 || bytes.length > MAX_BYTES)
+            throw invalid();
         try {
             var data = JSON.readTree(bytes);
             if (!data.isObject() || data.size() != 8 || !data.has("assetId")
                     || !data.path("version").isInt() || data.path("version").intValue() != 1
-                    || !"kevin-mel-wedding".equals(data.path("eventKey").asString())) throw invalid();
+                    || !"kevin-mel-wedding".equals(data.path("eventKey").asString()))
+                throw invalid();
             String asset = data.get("assetId").isNull() ? null : text(data.get("assetId"));
             return new DeletionRecord(uuid(text(data.get("memoryId"))), uuid(text(data.get("contributionId"))),
                     asset == null ? null : uuid(asset), text(data.get("submissionKeyDigest")),
                     Instant.parse(text(data.get("deleteAfter"))), Instant.parse(text(data.get("recordedAt"))));
-        } catch (RuntimeException failure) { throw invalid(); }
+        } catch (RuntimeException failure) {
+            throw invalid();
+        }
     }
 
     private static String text(tools.jackson.databind.JsonNode node) {
-        if (node == null || !node.isString()) throw invalid();
+        if (node == null || !node.isString())
+            throw invalid();
         return node.asString();
     }
+
     private static UUID uuid(String text) {
         UUID id = UUID.fromString(text);
-        if (!id.toString().equals(text)) throw invalid();
+        if (!id.toString().equals(text))
+            throw invalid();
         return id;
     }
-    private static IllegalArgumentException invalid() { return new IllegalArgumentException("Invalid deletion record."); }
-    @Override public String toString() { return "DeletionRecord[memoryId=" + memoryId + "]"; }
+
+    private static IllegalArgumentException invalid() {
+        return new IllegalArgumentException("Invalid deletion record.");
+    }
+
+    @Override
+    public String toString() {
+        return "DeletionRecord[memoryId=" + memoryId + "]";
+    }
 }

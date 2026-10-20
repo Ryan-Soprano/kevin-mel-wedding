@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { couplePhotos } from "./photos.js";
 import "./coupleScrapbook.css";
 
-const photo = couplePhotos.find((selection) => selection.id === 148);
-const alt = "Melanie and Kevin leaning together and smiling for a selfie.";
+const photo = couplePhotos.find((selection) => selection.id === 92);
+const alt = "Melanie and Kevin smiling together in a flower-filled garden.";
 
 export default function CoupleScrapbook() {
   const dialog = useRef(null);
@@ -36,9 +36,6 @@ export default function CoupleScrapbook() {
               decoding="async"
             />
           </button>
-          <figcaption className="scrapbook-caption">
-            Her entrance.<br />His perfect hair.
-          </figcaption>
         </figure>
       </div>
       <dialog

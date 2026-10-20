@@ -69,16 +69,25 @@ export default function App({
   const homeReturn = useRef({ kind: null, scrollY: null, showOpening: false });
   const [homeRevision, setHomeRevision] = useState(0);
   const previousHomeRevision = useRef(0);
-  const getHomeView = useCallback(() => ({
-    ...homeReturn.current,
-    // A browser traversal can leave home without another memory-button click.
-    // During a form transition, keep the position captured before its DOM replaced home.
-    scrollY: flow.screen === "welcome" ? window.scrollY : homeReturn.current.scrollY,
-    showOpening: homeReturn.current.showOpening
-      && (flow.screen !== "welcome" || window.scrollY <= 0),
-  }), [flow.screen]);
+  const getHomeView = useCallback(
+    () => ({
+      ...homeReturn.current,
+      // A browser traversal can leave home without another memory-button click.
+      // During a form transition, keep the position captured before its DOM replaced home.
+      scrollY:
+        flow.screen === "welcome" ? window.scrollY : homeReturn.current.scrollY,
+      showOpening:
+        homeReturn.current.showOpening &&
+        (flow.screen !== "welcome" || window.scrollY <= 0),
+    }),
+    [flow.screen],
+  );
   const restoreHomeView = useCallback((view) => {
-    homeReturn.current = view ?? { kind: null, scrollY: null, showOpening: true };
+    homeReturn.current = view ?? {
+      kind: null,
+      scrollY: null,
+      showOpening: true,
+    };
     setHomeRevision((revision) => revision + 1);
   }, []);
   useGuestHistory(flow, dispatch, { getHomeView, restoreHomeView });
@@ -104,12 +113,20 @@ export default function App({
     [],
   );
   const prepareGalleryReturn = useCallback((kind = null) => {
-    homeReturn.current = { kind, scrollY: null, showOpening: false, target: "gallery" };
+    homeReturn.current = {
+      kind,
+      scrollY: null,
+      showOpening: false,
+      target: "gallery",
+    };
   }, []);
-  const finishMemory = useCallback((kind) => {
-    prepareGalleryReturn(kind);
-    dispatch({ type: "FINISHED", kind });
-  }, [prepareGalleryReturn]);
+  const finishMemory = useCallback(
+    (kind) => {
+      prepareGalleryReturn(kind);
+      dispatch({ type: "FINISHED", kind });
+    },
+    [prepareGalleryReturn],
+  );
   const returnToGallery = useCallback(() => {
     prepareGalleryReturn();
     dispatch({ type: "NAVIGATE", screen: "welcome" });
@@ -141,11 +158,14 @@ export default function App({
       delete homeReturn.current.target;
     }
     if (flow.screen === "welcome" && (previous !== "welcome" || restoredHome)) {
-      if (restoreGuestHomeView(homeReturn.current, {
-        choices: choices.current,
-        gallery: homeAlbum.current,
-        restoredHome,
-      })) return;
+      if (
+        restoreGuestHomeView(homeReturn.current, {
+          choices: choices.current,
+          gallery: homeAlbum.current,
+          restoredHome,
+        })
+      )
+        return;
     }
     heading.current?.focus({ preventScroll: true });
     window.scrollTo({ top: 0, behavior: "instant" });
@@ -162,7 +182,7 @@ export default function App({
   }, [unfinished]);
 
   const title = {
-    welcome: "A little love for Kevin & Melanie",
+    welcome: "Lot's of love for Kevin & Melanie",
     note: "A note for Kevin and Melanie",
     photos: "Photos for Kevin and Melanie",
     audio: "A voice memory for Kevin and Melanie",
@@ -199,15 +219,21 @@ export default function App({
     event.preventDefault();
     target.focus({ preventScroll: true });
     target.scrollIntoView({ block: "start", behavior: "instant" });
-    homeReturn.current = { kind: null, scrollY: window.scrollY, showOpening: false };
+    homeReturn.current = {
+      kind: null,
+      scrollY: window.scrollY,
+      showOpening: false,
+    };
   }
 
   return (
     <main className={`guest-page guest-page--${flow.screen}`}>
       <div className={welcome ? "guest-opening" : undefined}>
-        <header className={`guest-header${welcome ? " guest-header--welcome" : ""}`}>
+        <header
+          className={`guest-header${welcome ? " guest-header--welcome" : ""}`}
+        >
           {welcome ? (
-            <p className="guest-eyebrow">A little love for</p>
+            <p className="guest-eyebrow">Lot's of love for</p>
           ) : (
             <p className="guest-couple">Kevin &amp; Melanie</p>
           )}
@@ -216,7 +242,9 @@ export default function App({
               <>
                 Kevin <span className="guest-ampersand">&amp;</span> Melanie
               </>
-            ) : title}
+            ) : (
+              title
+            )}
           </h1>
         </header>
 
@@ -224,8 +252,9 @@ export default function App({
         {welcome && (
           <div className="guest-invitation">
             <p className="guest-invitation-copy">
-              A favorite photo. A good story.<br />
-              A little love for their next chapter.
+              A favorite photo. A good story.
+              <br />
+              Help kickstart their next chapter.
             </p>
           </div>
         )}
@@ -241,22 +270,28 @@ export default function App({
             <h2 id="share-wedding-memory" tabIndex={-1}>
               Share a memory
             </h2>
-            <p className="guest-help">No account needed. Your name is optional.</p>
+            <p className="guest-help">
+              No account needed. Your name is optional.
+            </p>
           </div>
           {unfinished && (
             <p className="guest-draft-notice" role="status">
-              You have an unfinished memory here. Choose its memory type below to
-              continue. Refreshing or closing this page can clear unsent drafts.
+              You have an unfinished memory here. Choose its memory type below
+              to continue. Refreshing or closing this page can clear unsent
+              drafts.
             </p>
           )}
-          <div className={`memory-choices${flow.audioEnabled ? " memory-choices--three" : ""}`}>
+          <div
+            className={`memory-choices${flow.audioEnabled ? " memory-choices--three" : ""}`}
+          >
             <MemoryChoice
               kind="photos"
               prompt="Caught a good moment?"
               title={photosChoiceLabel}
               onClick={() => openMemory("photos")}
             >
-              A favorite snapshot or a few from the day. Up to 5 photos · 10 MB each.
+              A favorite snapshot or a few from the day. Up to 5 photos · 10 MB
+              each.
             </MemoryChoice>
             <MemoryChoice
               kind="note"
@@ -273,19 +308,25 @@ export default function App({
                 title={audioChoiceLabel}
                 onClick={() => openMemory("audio")}
               >
-                Say it in your own voice. Record or upload a clip up to two minutes.
+                Say it in your own voice. Record or upload a clip up to two
+                minutes.
               </MemoryChoice>
             )}
           </div>
           <p className="guest-help guest-privacy">
-            Sent privately to Kevin and Melanie. They choose which memories to share.
+            Sent privately to Kevin and Melanie. They choose which memories to
+            share.
           </p>
         </section>
       )}
 
       {/* Retain the home album and loaded public content so history restores the page guests left. */}
       <div ref={homeAlbum} hidden={!welcome}>
-        <GuestGallery deferInitialPhoto active={welcome} onBackToSharing={returnToSharing} />
+        <GuestGallery
+          deferInitialPhoto
+          active={welcome}
+          onBackToSharing={returnToSharing}
+        />
         <Suspense fallback={null}>
           <PublicMemories active={welcome} />
         </Suspense>
@@ -367,7 +408,11 @@ export default function App({
               ? "Continue or share another memory"
               : "Share another memory"}
           </button>
-          <button type="button" className="button-secondary" onClick={returnToGallery}>
+          <button
+            type="button"
+            className="button-secondary"
+            onClick={returnToGallery}
+          >
             Back to our photos
           </button>
         </section>

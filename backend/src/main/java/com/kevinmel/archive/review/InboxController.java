@@ -15,7 +15,9 @@ import com.kevinmel.archive.security.SessionService;
 public class InboxController {
     private final InboxService inbox;
 
-    public InboxController(InboxService inbox) { this.inbox = inbox; }
+    public InboxController(InboxService inbox) {
+        this.inbox = inbox;
+    }
 
     @GetMapping(value = "/api/memories", produces = "application/json")
     public InboxService.InboxPage list(
@@ -28,11 +30,14 @@ public class InboxController {
     }
 
     @GetMapping(value = "/api/memories/{memoryId}", produces = "application/json")
-    public ResponseEntity<MemoryDetail> detail(@PathVariable UUID memoryId,
+    public ResponseEntity<MemoryDetail> detail(
+            @PathVariable UUID memoryId,
             @RequestHeader(value = "X-Api-Contract", required = false) String version) {
         SessionService.requireContract(version);
         var memory = inbox.detail(memoryId);
-        return ResponseEntity.ok().header("Cache-Control", "no-store")
-                .eTag(Integer.toString(memory.revision())).body(memory);
+        return ResponseEntity.ok()
+                .header("Cache-Control", "no-store")
+                .eTag(Integer.toString(memory.revision()))
+                .body(memory);
     }
 }
