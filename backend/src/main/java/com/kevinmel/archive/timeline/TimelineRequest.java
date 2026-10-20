@@ -12,8 +12,10 @@ public record TimelineRequest(
         String description,
         String eventDate,
         String datePrecision) {
+    private static final String EVENT_DATE = "eventDate";
+
     public static TimelineRequest from(Map<String, Object> body) {
-        if (body == null || !body.keySet().equals(Set.of("title", "description", "eventDate", "datePrecision"))) {
+        if (body == null || !body.keySet().equals(Set.of("title", "description", EVENT_DATE, "datePrecision"))) {
             throw invalid();
         }
         if (!(body.get("title") instanceof String raw) || raw.length() > 200 || !ContributionRequest.storable(raw)
@@ -22,8 +24,8 @@ public record TimelineRequest(
         }
         // Reuse the existing exact partial-date, Gregorian, Unicode and raw UTF-16 metadata contract.
         var metadata = new java.util.HashMap<>(body);
-        metadata.remove("eventDate");
-        metadata.put("memoryDate", body.get("eventDate"));
+        metadata.remove(EVENT_DATE);
+        metadata.put("memoryDate", body.get(EVENT_DATE));
         var valid = MemoryMetadataRequest.from(metadata, "\"1\"");
         return new TimelineRequest(
                 valid.title(),

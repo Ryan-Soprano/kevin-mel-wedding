@@ -18,6 +18,9 @@ import com.kevinmel.archive.review.MemoryDetail;
 @Repository
 public class TimelineRepository {
     public static final UUID EMPTY_REVISION = UUID.fromString("00000000-0000-4000-8000-000000000000");
+    private static final String EVENT_PARAMETER = "event";
+    private static final String MEMORY_PARAMETER = "memory";
+    private static final String PRECISION_PARAMETER = "precision";
     private static final String ELIGIBLE = InboxRepository.AVAILABLE + " AND m.review_status <> 'DELETE' ";
     private static final String MEMBER_FROM = " FROM timeline_event_memory tm JOIN memory m ON m.id=tm.memory_id "
             + InboxRepository.MEMORY_JOINS;
@@ -63,7 +66,7 @@ public class TimelineRepository {
                 .param("baseline", EMPTY_REVISION)
                 .param("anchor", query.cursor() == null ? null : query.cursor().anchorId())
                 .param("hasCursor", query.cursor() != null)
-                .param("precision", query.datePrecision())
+                .param(PRECISION_PARAMETER, query.datePrecision())
                 .param("fromYear", query.fromYear())
                 .param("toYear", query.toYear())
                 .param("limit", query.limit() + 1)
@@ -140,7 +143,7 @@ public class TimelineRepository {
                 .param("title", request.title())
                 .param("description", request.description())
                 .param("date", request.eventDate())
-                .param("precision", request.datePrecision())
+                .param(PRECISION_PARAMETER, request.datePrecision())
                 .param("at", time(at))
                 .update() == 1;
     }
@@ -157,7 +160,7 @@ public class TimelineRepository {
                 .param("title", request.title())
                 .param("description", request.description())
                 .param("date", request.eventDate())
-                .param("precision", request.datePrecision())
+                .param(PRECISION_PARAMETER, request.datePrecision())
                 .param("at", time(at))
                 .update();
     }
@@ -205,8 +208,8 @@ public class TimelineRepository {
             UUID event,
             UUID memory) {
         return db.sql("SELECT EXISTS(SELECT 1 FROM timeline_event_memory WHERE event_id=:event AND memory_id=:memory)")
-                .param("event", event)
-                .param("memory", memory)
+                .param(EVENT_PARAMETER, event)
+                .param(MEMORY_PARAMETER, memory)
                 .query(Boolean.class)
                 .single();
     }
@@ -215,8 +218,8 @@ public class TimelineRepository {
             UUID event,
             UUID memory) {
         db.sql("INSERT INTO timeline_event_memory(event_id,memory_id) VALUES(:event,:memory)")
-                .param("event", event)
-                .param("memory", memory)
+                .param(EVENT_PARAMETER, event)
+                .param(MEMORY_PARAMETER, memory)
                 .update();
     }
 
@@ -224,8 +227,8 @@ public class TimelineRepository {
             UUID event,
             UUID memory) {
         return db.sql("DELETE FROM timeline_event_memory WHERE event_id=:event AND memory_id=:memory")
-                .param("event", event)
-                .param("memory", memory)
+                .param(EVENT_PARAMETER, event)
+                .param(MEMORY_PARAMETER, memory)
                 .update() > 0;
     }
 

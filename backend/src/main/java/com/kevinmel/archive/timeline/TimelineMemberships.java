@@ -8,6 +8,7 @@ import org.springframework.stereotype.Component;
 
 @Component
 public class TimelineMemberships {
+    private static final String MEMORY_PARAMETER = "memory";
     private final JdbcClient db;
 
     public TimelineMemberships(JdbcClient db) {
@@ -27,7 +28,7 @@ public class TimelineMemberships {
             Instant at) {
         // Avoid initializing catalogue state during an unrelated purge or an empty legacy import.
         if (!db.sql("SELECT EXISTS(SELECT 1 FROM timeline_event_memory WHERE memory_id=:memory)")
-                .param("memory", memory)
+                .param(MEMORY_PARAMETER, memory)
                 .query(Boolean.class)
                 .single()) {
             return;
@@ -43,11 +44,11 @@ public class TimelineMemberships {
                     AND EXISTS(SELECT 1 FROM timeline_event_memory tm WHERE tm.event_id=te.id AND tm.memory_id=:memory)
                 ORDER BY te.id FOR UPDATE OF te
                 """)
-                .param("memory", memory)
+                .param(MEMORY_PARAMETER, memory)
                 .query(UUID.class)
                 .list();
         int removed = db.sql("DELETE FROM timeline_event_memory WHERE memory_id=:memory")
-                .param("memory", memory)
+                .param(MEMORY_PARAMETER, memory)
                 .update();
         for (UUID event : events) {
             db.sql("""

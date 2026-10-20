@@ -4,6 +4,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.Set;
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import com.kevinmel.archive.security.ArchiveAccessPolicy;
@@ -12,6 +13,7 @@ import com.kevinmel.archive.security.SessionService;
 @RestController
 @RequestMapping("/api/timeline/events")
 public class TimelineController {
+    private static final String NO_STORE = "no-store";
     private final TimelineService timeline;
     private final ArchiveAccessPolicy policy;
 
@@ -42,7 +44,7 @@ public class TimelineController {
                 toYear,
                 datePrecision);
         return ResponseEntity.ok()
-                .header("Cache-Control", "no-store")
+                .header(HttpHeaders.CACHE_CONTROL, NO_STORE)
                 .eTag(page.revision().toString())
                 .body(page);
     }
@@ -66,7 +68,7 @@ public class TimelineController {
         SessionService.requireContract(version);
         var page = timeline.members(eventId, limit, cursor);
         return ResponseEntity.ok()
-                .header("Cache-Control", "no-store")
+                .header(HttpHeaders.CACHE_CONTROL, NO_STORE)
                 .eTag(page.event().revision().toString())
                 .body(page);
     }
@@ -136,7 +138,7 @@ public class TimelineController {
             TimelineEvent event,
             int status) {
         return ResponseEntity.status(status)
-                .header("Cache-Control", "no-store")
+                .header(HttpHeaders.CACHE_CONTROL, NO_STORE)
                 .eTag(event.revision().toString())
                 .body(event);
     }

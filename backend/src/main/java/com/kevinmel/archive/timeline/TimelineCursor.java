@@ -58,25 +58,9 @@ public record TimelineCursor(
         }
         try {
             String[] parts = new String(Base64.getUrlDecoder().decode(encoded), StandardCharsets.UTF_8).split("\\|", -1);
-            TimelineCursor cursor;
-            if (eventId == null) {
-                if (parts.length != 7 || !"1".equals(parts[0]) || !"EVENTS".equals(parts[1]) || !precision.equals(parts[3])
-                        || !year(from).equals(parts[4]) || !year(to).equals(parts[5])) {
-                    throw TimelineRequest.invalidCursor();
-                }
-                cursor = listing(
-                        uuid(parts[2], true),
-                        uuid(parts[6], true),
-                        precision,
-                        from,
-                        to);
-            } else {
-                if (parts.length != 5 || !"1".equals(parts[0]) || !"MEMORIES".equals(parts[1])
-                        || !eventId.equals(uuid(parts[2], true))) {
-                    throw TimelineRequest.invalidCursor();
-                }
-                cursor = members(eventId, uuid(parts[3], true), uuid(parts[4], false));
-            }
+            TimelineCursor cursor = eventId == null
+                    ? decodeListing(parts, precision, from, to)
+                    : decodeMembers(parts, eventId);
             if (!cursor.encode().equals(encoded)) {
                 throw TimelineRequest.invalidCursor();
             }
@@ -84,6 +68,33 @@ public record TimelineCursor(
         } catch (IllegalArgumentException malformed) {
             throw TimelineRequest.invalidCursor();
         }
+    }
+
+    private static TimelineCursor decodeListing(
+            String[] parts,
+            String precision,
+            Integer from,
+            Integer to) {
+        if (parts.length != 7 || !"1".equals(parts[0]) || !"EVENTS".equals(parts[1]) || !precision.equals(parts[3])
+                || !year(from).equals(parts[4]) || !year(to).equals(parts[5])) {
+            throw TimelineRequest.invalidCursor();
+        }
+        return listing(
+                uuid(parts[2], true),
+                uuid(parts[6], true),
+                precision,
+                from,
+                to);
+    }
+
+    private static TimelineCursor decodeMembers(
+            String[] parts,
+            UUID eventId) {
+        if (parts.length != 5 || !"1".equals(parts[0]) || !"MEMORIES".equals(parts[1])
+                || !eventId.equals(uuid(parts[2], true))) {
+            throw TimelineRequest.invalidCursor();
+        }
+        return members(eventId, uuid(parts[3], true), uuid(parts[4], false));
     }
 
     private static UUID uuid(
