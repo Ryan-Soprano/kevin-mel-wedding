@@ -241,3 +241,14 @@ next batch render. Missing targets or an inactive gallery discard the request.
 After the return completes, later passive loading has no retained focus request.
 First/last document limits and nearest-position viewer/Show more behavior remain
 unchanged.
+
+All 567 frontend tests, full ESLint and the production build pass on the isolated
+PR snapshot, excluding concurrent frontend copy/test edits. Twenty-four mounted
+Edge checks pass against that exact source and build: short-page boundary photos
+24/48 at 1280 and 390 pixels, Back/Escape, operation without IntersectionObserver,
+later passive loading without focus/scroll restoration, manual Show more and
+true document limits, plus the full production welcome at both widths. Settled
+centering errors stay below half a pixel. There are no page errors or horizontal
+overflow. Screenshots were inspected, and owned browsers/servers are closed.
+Temporary sources, links and previews are removed after publication; small
+baseline/final JSON reports and test/build logs remain outside the app package.

@@ -1646,8 +1646,34 @@ proofs, both backend runs/packages, exact landing red/green diff and App hash
 preservation, frontend checks and independent source/documentation reviews are
 recorded under `logs/backend-review-directory.local/`, together with the ready PR
 description. The original user commit stays intact; the follow-up commit adds
-the two existing test assertion changes and these review notes. Concurrent
-gallery/tester/release documentation edits remain unstaged and are preserved.
+the two existing test assertion changes and these review notes. At that checkpoint,
+concurrent gallery/tester/release documentation edits remained unstaged and were
+preserved for the subsequent main reconciliation below.
+
+### Main reconciliation after the landing fix
+
+Main advanced to `37beb863` with gallery PR **85** before delivery. A merge
+preflight found overlapping edits in the gallery test and three gallery/tester/
+release documents. The working versions and a named three-document stash were
+saved before merging main without rewriting `bddb680` or the two-file follow-up
+`2e3d6e0`.
+The three saved documents already contain the exact combined content, matching
+main after CRLF normalization while retaining every prior branch line. Those
+saved bytes supply their resolution.
+
+An Espree AST comparison confirms the two gallery test versions have identical
+declarations, calls, arguments and coverage except for the two deliberate copy
+regexes. Keep the expanded branch version with Ryan's invitation/eyebrow checks;
+no upstream gallery assertions are discarded. All five saved App/test/document
+files retain their exact working hashes. Conflict markers are absent after
+resolution, and incoming CI configuration matches main.
+
+After resolution, all **567 frontend tests** pass again with zero skips, along
+with lint/build and **14 operational script helper tests** required by main's
+workflow. All **211 backend source hashes** remain unchanged from the separately
+verified combined backend, so that completed full suite/package remains applicable.
+Merge-resolution proofs, backups, stash identity and post-merge check logs are
+saved with the batch evidence. The original landing text is unchanged.
 
 Ryan creates/merges the PR after exact-head CI/configured review and Linux-only
 checks. Local fixture/HTTP/database evidence does not establish provider,
