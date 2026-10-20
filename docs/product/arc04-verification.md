@@ -2,11 +2,11 @@
 
 ARC-04 adds database-backed private library browsing and tag organization. Search uses literal text metadata, inclusive known memory-date years, date precision, type, review status and one selected tag. Results sort by saved time and identity; tags reference originals and support bounded catalogue, member and attachment pages. See the [library contract](../api/v1/library.md).
 
-The feature branch is `feature/private-library`, based on main `b0c4458`. Final-head CI and merge identities belong in the ARC-04 tracker and pull request.
+The original feature delivery used `feature/private-library`, based on main `b0c4458`. The initial automated/browser evidence below describes that historical snapshot; subsequent review sections identify their own branches and counts. Final-head CI and merge identities belong in the ARC-04 tracker and pull request.
 
 ## Automated verification
 
-The final frozen source passes 396 backend tests with zero failures, errors or skips in the disposable Linux Java 25.0.4.1/Maven/FFmpeg and PostgreSQL 17 rehearsal. All 358 frontend tests, full ESLint and the production Vite build pass; seven existing rehearsal-helper tests also pass. Independent backend, frontend, recovery and documentation reviews have no remaining blocker.
+The original feature's final frozen source passes 396 backend tests with zero failures, errors or skips in the disposable Linux Java 25.0.4.1/Maven/FFmpeg and PostgreSQL 17 rehearsal. All 358 frontend tests, full ESLint and the production Vite build pass; seven existing rehearsal-helper tests also pass. Independent backend, frontend, recovery and documentation reviews have no remaining blocker.
 
 Coverage includes literal punctuation across all six searched fields, combined partial-date/type/review/tag filters, saved-time order, 53-item catalogue/member/attachment pagination, supported legacy memory IDs, deleted/unfinished/purging exclusions, bounded/malformed requests, reveal/role/session/CSRF authority, no-op tokens, terminal tag deletion, revocation after lock waits and competing original Delete/tag attachment. A separate verified PHOTO/AUDIO scenario preserves original bytes and metadata. The mock/real API and actual rendered React tests check decoding, escaping, state clearing, shared write fences and deliberate retry after uncertain outcomes.
 
@@ -24,9 +24,61 @@ The disposable fixture uses synthetic private data, nonroot/read-only applicatio
 
 Packaged runtime image: `sha256:0c9451d295937885783a5a1d3b8ee7ab59b59ded0bf4ec965f20c9733132b4bf`. JAR SHA-256: `28f81e78fffdd6f118bb9ea25acda51f6e8e066dcd014cf38d8175b6cc9b01fa`. Final full-suite compilation image: `sha256:abae7d32dd0e27c81ca652413c041901884343cfc390753d70756d29df1a73af`.
 
+## Backend library directory review — 2026-10-20
+
+The formal backend review covers all twelve `library/` production files, the
+existing `LibraryContractTest` and their consumers. Branch
+`feature/backend-library-review` starts from tested timeline delivery
+`0678eaf`. Timeline was unmerged at the start of this batch; PR 95 merged as
+`8fb3fa0` during verification, with its tree identical to that tested head.
+The library PR can target main. Mechanical
+layout changes (`0d5d2a1`) are separate from validation/helper and tag-literal
+refactors (`a6883de`). No behavior defect or speed improvement is claimed.
+Duplicate tag names, literal search, private cursors, SQL snapshots, strong
+conditions, lock and authorization order, no-op tokens and originals remain.
+The API document now distinguishes current V14/v7 recovery from the historical
+V13/v6 tag introduction; no schema or package format changes.
+
+The frozen baseline passes twelve existing library contract/HTTP/PostgreSQL
+tests. Existing frontend API/presentation consumers pass 29 tests with zero
+failures/skips. All thirteen mechanical source ASTs and 21 exact disassemblies
+match, with eighteen AST controls and malformed-source rejection. The frozen
+final source compiles all 190 Java inputs. Actual SonarJava 8.44.0.48651 removes
+all six baseline findings under unchanged cognitive/cyclomatic/literal defaults,
+recognizing 128 MAIN and 62 TEST inputs with zero failed inputs and zero final
+findings. The three rules apply to MAIN only; recognition is not a separate
+completed-file count. Official Java CPD remains zero across 128 production
+files, with five controls and the unchanged ten-statement detector.
+
+The baseline/final differential passes 72,502 comparisons, 64 positive controls
+and five comparator negative controls against 158 identical dependency JARs.
+It checks selected library/tag validation, cursor/framing bytes and observable
+errors. Identical safe errors cannot reveal ordering among two invalid filters;
+SQL, transactions and concurrency remain covered by the existing suites.
+
+The fresh full backend package exits 0 with `BUILD SUCCESS` in 14:14:
+**474 total tests, 472 passed, zero failures/errors and two expected Windows
+skips**. No Surefire shutdown timeout occurs. All 212 backend inputs and 367
+compiled inputs retain their frozen hashes. The JAR packages all 256 tested
+production classes as identical bytes and excludes all 111 test/fixture
+identities and digests. This checks direct classes and executable manifest,
+not nested dependencies or non-class resources. Read-only cleanup confirms all
+48 observed created containers and 25 logged Spring-test JVM PIDs are absent,
+with no review-path Java process; unlogged/native processes remain outside
+that claim. The two Windows-disabled symlink cases remain Linux CI checks.
+Independent final source and documentation reviews are clear.
+
+The [directory guide](../development/directory-review.md#backend-library-decisions--october-20-2026)
+records each file/finding, tool identity, evidence and limits. Ignored backend
+evidence is under `logs/library-directory-review.local/`. These local selected
+rules/CPD results do not establish a hosted quality gate or repeat the earlier
+browser matrix, actual-provider IO, physical devices or release acceptance.
+Ryan creates the normal PR; exact-current-head CI/configured review must pass
+before merge.
+
 ## Retained acceptance
 
-Kevin and Melanie's real onboarding and product feedback remain open under REV-01/REV-03. Physical-device, actual screen-reader/native-dialog, hidden-tab/BFCache, live-provider originals and hosted network/capacity/recovery acceptance remain open. Local synthetic archive-size observations do not establish reception traffic or hosted capacity. Audio gates remain off for release.
+Kevin and Melanie's real onboarding and product feedback remain open under REV-01/REV-03. Physical-device, actual screen-reader/native-dialog, hidden-tab/BFCache, live-provider originals and hosted network/capacity/recovery acceptance remain open. Local synthetic archive-size observations do not establish reception traffic or hosted capacity. Audio was disabled in the original ARC-04 fixture; current settings and acceptance require live verification under the [voice memory runbook](../runbooks/voice-memories.md).
 
 No paid resources, deployment, provider/runtime configuration, dependencies, real account activation, invitation or tester message is included. Self-service couple export remains ARC-05. Operator recovery excludes accounts, passwords, sessions and configuration. Tag-only deletion has no independent deletion ledger; an older valid package can restore earlier labels or organization while current memory-erasure authority still removes erased members and originals. V13 closes binary rollback to a V12 artifact under the existing migration guard.
 
