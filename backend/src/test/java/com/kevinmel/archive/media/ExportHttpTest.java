@@ -86,6 +86,40 @@ class ExportHttpTest {
         assertThat(download(couple,id,1,UUID.randomUUID().toString(),Map.of()).statusCode()).isEqualTo(409);
     }
 
+    @Test
+    void uppercaseJobAndGenerationAliasesResolveWhileAttemptHeadersRemainCanonical() throws Exception {
+        note("Synthetic identity alias export");
+        UUID id = create();
+        await(id, "READY");
+        String uppercasePath = "/api/exports/" + id.toString().toUpperCase(java.util.Locale.ROOT);
+        var aliasedStatus = get(uppercasePath);
+        assertThat(aliasedStatus.statusCode()).isEqualTo(200);
+        assertThat(text(aliasedStatus, "$.exportId")).isEqualTo(id.toString());
+        assertThat(send(
+                couple,
+                "POST",
+                path(id) + "/parts/1/prepare",
+                null,
+                Map.of("Idempotency-Key", "AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA"))
+                .statusCode()).isEqualTo(400);
+
+        assertThat(prepare(id, 1, UUID.randomUUID()).statusCode()).isEqualTo(202);
+        var ready = prepared(id);
+        String generation = text(ready, "$.preparedPart.generation");
+        String uppercaseGeneration = generation.toUpperCase(java.util.Locale.ROOT);
+        var response = couple.client().send(
+                request(
+                        couple,
+                        uppercasePath + "/parts/1/download?generation=" + uppercaseGeneration,
+                        Map.of())
+                        .GET()
+                        .build(),
+                HttpResponse.BodyHandlers.ofByteArray());
+        assertThat(response.statusCode()).isEqualTo(200);
+        assertThat(hash(response.body())).isEqualTo(text(ready, "$.preparedPart.sha256"));
+        assertThat(get(path(id)).body()).contains(generation);
+    }
+
     @Test void allPrivateRoutesEnforceSessionCsrfOriginBodyAndStrictVersionQueryContracts()throws Exception {
         var anonymous=new Session(UUID.randomUUID(),"unused",client(),null);UUID id=UUID.randomUUID();
         for(String suffix:List.of("/current","/"+id,"/"+id+"/parts","/"+id+"/issues","/"+id+"/attempts/"+UUID.randomUUID(),"/"+id+"/parts/1/download?generation="+UUID.randomUUID(),"/"+id+"/"))

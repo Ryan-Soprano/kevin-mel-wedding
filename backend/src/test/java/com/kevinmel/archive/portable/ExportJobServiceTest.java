@@ -175,6 +175,66 @@ class ExportJobServiceTest {
         assertThat(jobs.cancel(id,cancel.toString()).state()).isEqualTo("CANCELLED");UUID fresh=create();assertThat(jobs.current().exportId()).isEqualTo(fresh);
     }
 
+    @Test
+    void clockRollbackNeverShortensAnActiveDeadlineOrBreaksStatusOrdering() throws Exception {
+        UUID id = create();
+        clock.now = clock.now.plus(Duration.ofMinutes(10));
+        var extended = jobs.get(id);
+        clock.now = clock.now.minus(Duration.ofHours(1));
+        var rolled = jobs.get(id);
+        System.out.println("ROLLBACK_EXPIRY_STATUS=" + PortableExportRepository.JSON.writeValueAsString(rolled));
+        assertThat(rolled.expiresAt()).isEqualTo(extended.expiresAt());
+        assertThat(rolled.expiresAt()).isAfterOrEqualTo(rolled.createdAt());
+        assertThat(rolled.expiresAt()).isBeforeOrEqualTo(rolled.hardExpiresAt());
+        assertThat(rolled.state()).isEqualTo("READY");
+
+        clock.now = extended.createdAt().plus(Duration.ofMinutes(20));
+        jobs.get(id);
+        ExportStatus capped = null;
+        for (int activity = 0; activity < 48; activity++) {
+            clock.now = clock.now.plus(Duration.ofMinutes(29));
+            capped = jobs.get(id);
+            assertThat(capped.state()).isEqualTo("READY");
+            assertThat(capped.expiresAt()).isBeforeOrEqualTo(capped.hardExpiresAt());
+        }
+        assertThat(capped.expiresAt()).isEqualTo(extended.hardExpiresAt());
+        clock.now = extended.hardExpiresAt().minusNanos(1);
+        assertThat(jobs.get(id).expiresAt()).isEqualTo(extended.hardExpiresAt());
+        clock.now = extended.hardExpiresAt();
+        assertStatus(() -> jobs.get(id), 404);
+    }
+
+    @Test
+    void captureClockRollbackFailsClosedWithoutPublishingAnInvalidSnapshot() throws Exception {
+        var entered = new CountDownLatch(1);
+        var release = new CountDownLatch(1);
+        when(repository.capture()).thenAnswer(ignored -> {
+            entered.countDown();
+            assertThat(release.await(5, TimeUnit.SECONDS)).isTrue();
+            return snapshot(List.of());
+        });
+        UUID id = UUID.randomUUID();
+        jobs.create(id, "*");
+        try {
+            assertThat(entered.await(5, TimeUnit.SECONDS)).isTrue();
+            clock.now = clock.now.minus(Duration.ofHours(1));
+        } finally {
+            release.countDown();
+        }
+        var settled = ready(id);
+        System.out.println("ROLLBACK_CAPTURE_STATUS=" + PortableExportRepository.JSON.writeValueAsString(settled));
+        assertThat(settled.state()).isEqualTo("FAILED");
+        assertThat(settled.errorCode()).isEqualTo("EXPORT_FAILED");
+        assertThat(settled.capturedAt()).isNull();
+        assertThat(settled.totalMemories()).isZero();
+        assertThat(settled.preparedPart()).isNull();
+        verify(repository, never()).stillCurrent(any());
+        UUID replacement = create();
+        var fresh = jobs.get(replacement);
+        assertThat(fresh.state()).isEqualTo("READY");
+        assertThat(fresh.capturedAt()).isAfterOrEqualTo(fresh.createdAt());
+    }
+
     /** READY can precede release of the worker admission counter. Only that busy result permits a same-attempt retry. */
     private ExportJobService.Mutation prepareWhenIdle(UUID id,int part,String attempt)throws Exception {
         var result=new AtomicReference<ExportJobService.Mutation>();
