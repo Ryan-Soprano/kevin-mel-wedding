@@ -43,6 +43,7 @@ export default function PhotoBatchCard({
   onCaptionChange,
   onCaptionRef,
   onToggleRetry,
+  privateArchive = false,
 }) {
   const [captionExpanded, setCaptionExpanded] = useState(Boolean(photo.caption));
   const captionId = prefix + "-caption-" + photo.id;
@@ -89,7 +90,7 @@ export default function PhotoBatchCard({
         id={stateId}
         className={`photo-batch-state photo-batch-state--${item?.status || "queued"}`}
       >
-        {getPhotoStatusText(item)}
+        {getPhotoStatusText(item, privateArchive)}
       </p>}
       {item?.status === "rejected" && (
         <p className="photo-batch-help">

@@ -35,7 +35,8 @@ export default function PhotoBatchCompose({ view, privateArchive, onDialogStateC
           note="Keep this page open until every photo is confirmed. Your selected files are sent as originals."
           renderPhoto={(photo, index) => <PhotoBatchCard photo={photo} index={index} prefix={prefix} item={byId.get(photo.id)}
             locked={locked} busy={busy} globalWait={globalWait} error={fields[photo.id]} selected={selectedRetry.has(photo.id)}
-            onCaptionChange={actions.changeCaption} onCaptionRef={actions.registerCaptionInput} onToggleRetry={actions.toggleRetry} />} />
+            onCaptionChange={actions.changeCaption} onCaptionRef={actions.registerCaptionInput} onToggleRetry={actions.toggleRetry}
+            privateArchive={privateArchive} />} />
         {!privateArchive && photos.length > 0 && !retained && (
           <p className="guest-help">Not sent yet. Keep this page open—refreshing or closing can clear your selection.</p>
         )}
@@ -43,13 +44,13 @@ export default function PhotoBatchCompose({ view, privateArchive, onDialogStateC
         <p role="status" aria-live="polite" aria-atomic="true" className={summary ? "photo-batch-summary" : "visually-hidden"}>{summary}</p>
         {error && <p ref={errorNotice} className="form-error" role="alert" tabIndex={-1}>{error}</p>}
         {retained && <div className="photo-batch-result memory-success">
-          <h3 ref={result} tabIndex={-1}>{getPhotoResultLabel(complete, savedCount, totalCount)}</h3>
+          <h3 ref={result} tabIndex={-1}>{getPhotoResultLabel(complete, savedCount, totalCount, privateArchive)}</h3>
           {!complete && <p>Saved photos stay saved. Your original selection, name and captions are kept together until the remaining photos are resolved.</p>}
         </div>}
         <div className="memory-form-footer">
           {!retained && <p className="memory-privacy">
             <svg width="17" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false"><path d="M7 10V7a5 5 0 0 1 10 0v3M6 10h12v11H6zM12 14v3" /></svg>
-            {privateArchive ? "These photos start private." : "Sent privately to Kevin and Melanie. They may choose to share your photos."}
+            {privateArchive ? "These photos start private." : "Your photos go to Kevin and Melanie. They may choose to share them."}
           </p>}
           <PhotoBatchActions view={view} privateArchive={privateArchive} />
         </div>

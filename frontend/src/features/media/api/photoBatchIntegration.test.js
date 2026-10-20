@@ -31,7 +31,7 @@ function fixture(scenario = "success", count = 3) {
   return { mock, calls, photos, submission, raw: { guestName: " Test Guest ", photos } };
 }
 
-test("real batch presentation keeps retained originals locked, exposes deliberate selected retries and preserves guest/private review copy", async () => {
+test("real batch presentation preserves recovery controls until all photos are confirmed and then shows a clear guest/private success", async () => {
   // SSR checks real React markup from real coordinator snapshots. It does not
   // execute effects or claim browser focus, StrictMode or upload acceptance.
   const f = fixture("partialUpload");
@@ -44,6 +44,7 @@ test("real batch presentation keeps retained originals locked, exposes deliberat
     const { default: PhotoBatchForm } = await server.ssrLoadModule("/src/features/media/components/PhotoBatchForm.jsx");
     const { default: PhotoBatchReview } = await server.ssrLoadModule("/src/features/media/components/PhotoBatchReview.jsx");
     const { default: PhotoBatchCompose } = await server.ssrLoadModule("/src/features/media/components/PhotoBatchCompose.jsx");
+    const { default: PhotoBatchSuccess } = await server.ssrLoadModule("/src/features/media/components/PhotoBatchSuccess.jsx");
     const { default: PhotoBatchCard } = await server.ssrLoadModule("/src/features/media/components/PhotoBatchCard.jsx");
     const { default: PhotoBatchActions } = await server.ssrLoadModule("/src/features/media/components/PhotoBatchActions.jsx");
     const { default: PhotoPicker } = await server.ssrLoadModule("/src/features/media/components/PhotoPicker.jsx");
@@ -86,6 +87,8 @@ test("real batch presentation keeps retained originals locked, exposes deliberat
     assert.doesNotMatch(review, /photo-card__filename|test-0\.png/);
     assert.equal((review.match(/class="photo-review-caption"/g) ?? []).length, 1, "only a nonempty caption needs extra review copy");
     assert.match(review, />Send photos</);
+    assert.match(review, /Kevin and Melanie/);
+    assert.match(review, /may choose to share (?:them|your photos)/);
     assert.match(review, /role="status" aria-live="polite" aria-atomic="true"/);
     const privateReview = render(PhotoBatchReview, { view, privateArchive: true });
     assert.match(privateReview, /Ready to save your photos privately\?/);
@@ -93,7 +96,7 @@ test("real batch presentation keeps retained originals locked, exposes deliberat
     assert.doesNotMatch(privateReview, /From:|Guest &lt;visitor&gt;/);
     const sending = render(PhotoBatchReview, { view: { ...view, busy: true, globalWait: 7 }, privateArchive: false });
     assert.match(sending, /Preparing your original photos…/);
-    assert.match(sending, /disabled="">Saving photos…/);
+    assert.match(sending, /disabled="">Sending photos…/);
     assert.match(sending, /disabled="">Edit photos/);
     assert.doesNotMatch(sending, /Wait 7 seconds before sending/, "busy status wins over the wait label");
     const delayed = render(PhotoBatchReview, { view: { ...view, globalWait: 7 }, privateArchive: false });
@@ -104,12 +107,26 @@ test("real batch presentation keeps retained originals locked, exposes deliberat
     assert.match(retained, /<textarea[^>]*disabled=""/);
     assert.match(retained, /<input[^>]*type="file"[^>]*disabled=""/);
     assert.doesNotMatch(retained, /class="photo-card__remove"/, "retained originals cannot be removed during an uncertain result");
-    assert.match(retained, /2 of 3 photos are confirmed saved/);
+    assert.match(retained, /2 of 3 photos sent\./);
+    assert.match(retained, />Sent</);
+    assert.match(retained, />Needs retry</);
+    assert.match(retained, /Select photo 2 to retry/);
+    assert.doesNotMatch(retained, /Saved privately|You can close this page|Thanks for sharing/);
     assert.match(retained, /disabled="">Retry selected photos/);
     assert.doesNotMatch(retained, />Review photos<|Start a new batch/);
+    const privateRetained = render(PhotoBatchCompose, { view, privateArchive: true });
+    assert.match(privateRetained, /2 of 3 photos are confirmed saved/);
+    assert.match(privateRetained, />Saved privately</);
+    assert.doesNotMatch(privateRetained, /You can close this page/);
     const partialActions = render(PhotoBatchActions, { view: { ...view, selectedEligible: [partial.items[1]] }, privateArchive: false });
     assert.match(partialActions, /<button type="button">Retry selected photos<\/button>/);
     assert.match(partialActions, /Confirmed photos will not be uploaded again/);
+    const busyActions = render(PhotoBatchActions, { view: { ...view, busy: true, selectedEligible: [partial.items[1]] }, privateArchive: false });
+    assert.match(busyActions, /disabled="">Sending photos…/);
+    assert.doesNotMatch(busyActions, /Back to our photos|Share another memory|Share another batch|You can close this page/);
+    const busyCard = render(PhotoBatchCard, { photo: f.photos[1], index: 1, prefix: view.prefix, item: partial.items[1],
+      busy: true, locked: true, selected: true, globalWait: 0, onCaptionRef: noop });
+    assert.match(busyCard, /type="checkbox" disabled=""[^>]*checked=""/);
 
     const cardProps = {
       photo: f.photos[1], index: 1, prefix: view.prefix, item: partial.items[1], locked: true, busy: false,
@@ -130,13 +147,66 @@ test("real batch presentation keeps retained originals locked, exposes deliberat
     const known = render(PhotoBatchCard, cardProps);
     assert.match(known, />Needs retry</);
     const savedCard = render(PhotoBatchCard, { ...cardProps, item: partial.items[0] });
-    assert.match(savedCard, />Saved privately</);
+    assert.match(savedCard, />Sent</);
     assert.doesNotMatch(savedCard, /type="checkbox"|Select photo 2 to retry/);
+    const privateSavedCard = render(PhotoBatchCard, { ...cardProps, item: partial.items[0], privateArchive: true });
+    assert.match(privateSavedCard, />Saved privately</);
     const terminalCard = render(PhotoBatchCard, { ...cardProps, item: { ...partial.items[1], status: "rejected", terminal: true } });
     assert.match(terminalCard, />Photo rejected</);
     assert.doesNotMatch(terminalCard, /type="checkbox"/);
 
-    const finishedView = { ...view, complete: true, selectedEligible: [], shellActions: true, snapshot: { ...partial, canStartAnother: true } };
+    const callsBeforeRecovery = f.calls.length;
+    f.mock.setScenario("success");
+    const recovered = await f.submission.retry([f.photos[1].id]);
+    assert.equal(recovered.complete, true);
+    assert.equal(f.calls.slice(callsBeforeRecovery).filter(call => call.method === "uploadMedia").length, 1,
+      "completing the display's failed item does not resend its confirmed siblings");
+    const finishedView = { ...view, complete: recovered.complete, savedCount: recovered.savedCount, totalCount: recovered.totalCount,
+      byId: new Map(recovered.items.map(item => [item.id, item])), selectedEligible: [], retryCandidates: [], shellActions: true, snapshot: recovered };
+    const success = render(PhotoBatchSuccess, { view: finishedView, privateArchive: false });
+    assert.match(success, /<h2[^>]*tabindex="-1"[^>]*>Your 3 photos have been sent to Kevin and Melanie!<\/h2>/);
+    assert.match(success, /Thanks for sharing\. You can close this page\./);
+    assert.match(success, />Back to our photos</);
+    assert.match(success, />Share another memory</);
+    assert.doesNotMatch(success, /<form|<input|<textarea|<img|photo-card|photo-grid|photo-picker|Saved privately|saved privately|Retry selected|Keep this page open|sent as originals|Select photos/,
+      "a fully recovered batch has a confirmation without another apparent upload task");
+    const privateSuccess = render(PhotoBatchSuccess, { view: finishedView, privateArchive: true });
+    assert.match(privateSuccess, /All your photos were saved privately\./);
+    assert.match(privateSuccess, /Your original photos are saved in your private archive\./);
+    assert.match(privateSuccess, />View added memory</);
+    assert.doesNotMatch(privateSuccess, /sent to Kevin and Melanie|Thanks for sharing|<input|<textarea|<img|photo-card|Retry selected/);
+    const standaloneSuccess = render(PhotoBatchSuccess, { view: { ...finishedView, shellActions: false }, privateArchive: false });
+    assert.match(standaloneSuccess, />Share another batch</);
+    assert.doesNotMatch(standaloneSuccess, />Back to our photos<|>Share another memory</);
+    const single = fixture("success", 1);
+    try {
+      const confirmed = await single.submission.submit(single.raw);
+      const singleSuccess = render(PhotoBatchSuccess, { view: { ...finishedView, photos: single.photos, snapshot: confirmed,
+        complete: confirmed.complete, savedCount: confirmed.savedCount, totalCount: confirmed.totalCount }, privateArchive: false });
+      assert.match(singleSuccess, /Your photo has been sent to Kevin and Melanie!/);
+      assert.doesNotMatch(singleSuccess, /Your 1 photos|<input|<textarea|<img|photo-card/);
+    } finally { single.submission.dispose(); }
+
+    const uncertain = fixture("uncertainSubmission");
+    try {
+      await assert.rejects(uncertain.submission.submit(uncertain.raw), { code: "NETWORK_ERROR", unknownOutcome: true });
+      const snapshot = uncertain.submission.snapshot;
+      const pendingView = { ...view, photos: uncertain.photos, snapshot, complete: snapshot.complete,
+        savedCount: snapshot.savedCount, totalCount: snapshot.totalCount,
+        byId: new Map(snapshot.items.map(item => [item.id, item])), retryCandidates: snapshot.items,
+        selectedRetry: new Set([snapshot.items[0].id]), selectedEligible: [snapshot.items[0]],
+        summary: getPhotoBatchSummary({ busy: false, retained: true, savedCount: snapshot.savedCount, totalCount: snapshot.totalCount }),
+        error: getPhotoBatchSafeError(snapshot.error) };
+      const unconfirmed = render(PhotoBatchCompose, { view: pendingView, privateArchive: false });
+      assert.match(unconfirmed, /0 of 3 photos sent\./);
+      assert.match(unconfirmed, /Keep this page open/);
+      assert.match(unconfirmed, /<input[^>]*type="file"[^>]*disabled=""/);
+      assert.match(unconfirmed, /Select photo 1 to retry/);
+      assert.match(unconfirmed, /<button type="button">Retry selected photos<\/button>/);
+      assert.match(unconfirmed, /role="alert"/);
+      assert.doesNotMatch(unconfirmed, /You can close this page|Thanks for sharing|Start a new batch|Back to our photos|Share another memory/);
+    } finally { uncertain.submission.dispose(); }
+
     const guestFinished = render(PhotoBatchActions, { view: finishedView, privateArchive: false });
     assert.match(guestFinished, />Back to our photos</);
     assert.match(guestFinished, />Share another memory</);
@@ -152,7 +222,7 @@ test("real batch presentation keeps retained originals locked, exposes deliberat
     assert.doesNotMatch(rejectedActions, /Retry selected photos/);
     assert.equal(getPhotoBatchSafeError({ status: 503, retryAfterSeconds: 4, message: "private transport diagnostic" }), "Please wait before retrying. Keep this page open; your original photos are still here.");
     assert.doesNotMatch(getPhotoBatchSafeError({ status: 500, message: "private transport diagnostic" }), /diagnostic/);
-    assert.equal(getPhotoBatchSummary({ busy: true, activeItem: { status: "finalizing", fileName: "test-1.png" }, savedCount: 1, totalCount: 3 }), "Verifying original photo: test-1.png. 1 of 3 photos saved.");
+    assert.equal(getPhotoBatchSummary({ busy: true, activeItem: { status: "finalizing", fileName: "test-1.png" }, savedCount: 1, totalCount: 3 }), "Verifying original photo: test-1.png. 1 of 3 photos sent.");
     f.photos.forEach((photo, index) => assert.equal(photo.file, originalFiles[index], "rendering does not replace the input File references"));
   } finally { await server.close(); f.submission.dispose(); }
 });

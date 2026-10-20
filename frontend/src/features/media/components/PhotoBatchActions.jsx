@@ -8,7 +8,7 @@ export default function PhotoBatchActions({ view, privateArchive }) {
         {!retained && <button type="submit" disabled={busy || globalWait > 0}>{getPhotoReviewLabel(globalWait)}</button>}
         {retained && !complete && retryCandidates.length > 0 && (
           <button type="button" onClick={actions.retry} disabled={busy || globalWait > 0 || !selectedEligible.length}>
-            {getPhotoRetryLabel(busy, globalWait)}
+            {getPhotoRetryLabel(busy, globalWait, privateArchive)}
           </button>
         )}
         {complete && shellActions && !busy && (

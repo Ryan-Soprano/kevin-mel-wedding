@@ -77,7 +77,7 @@ export function usePhotoBatchForm({ createSubmission, active, onFlowStateChange,
   const eligible = retryCandidates.filter(item => item.retryEligible);
   const selectedEligible = eligible.filter(item => selectedRetry.has(item.id) && !(item.retryAfterSeconds > 0));
   const activeItem = snapshot.items.find(item => ["preparing", "uploading", "finalizing"].includes(item.status));
-  const summary = getPhotoBatchSummary({ busy, activeItem, savedCount, totalCount, retained });
+  const summary = getPhotoBatchSummary({ busy, activeItem, savedCount, totalCount, retained, privateArchive });
   const complete = snapshot.complete || snapshot.phase === "complete";
   const flowBusy = busy || globalWait > 0;
   const pending = retained && !complete;
