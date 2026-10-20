@@ -23,11 +23,15 @@ Ryan will also identify whether test photo storage is available. When it is disa
 Keep the page open while sending or recovering an uncertain result. Refreshing, closing the tab or restarting the browser loses unfinished drafts, selected files and retry state. It does not remove a memory already saved. Selecting files again starts a new attempt, rather than recovering the earlier one.
 
 For gallery scenario G0, use the slideshow arrows before choosing **Browse all
-300 photos** and confirm the currently viewed photo's thumbnail is visible and
-marked. Then open photo 86, advance to photo 124 and choose **Back to thumbnails**;
-the gallery should focus and show photo 124. Repeat with reverse navigation and
+300 photos** and confirm the currently viewed photo's thumbnail is marked and
+centered on screen when the page has room. Then open photo 86, advance to photo
+124 and choose **Back to thumbnails**; the gallery should focus and center photo
+124. Repeat with reverse navigation and
 Escape. Returning should preserve the current photo even across a thumbnail batch
 boundary or a viewport resize.
+
+Also return to photos 24 and 48 when few or no shared memories follow the gallery.
+After the next thumbnail batch loads, the selected photo should stay centered.
 
 | ID | Try this | What to look for |
 |---|---|---|
