@@ -33,16 +33,7 @@ public record InboxCursor(
         try {
             String value = new String(Base64.getUrlDecoder().decode(encoded), StandardCharsets.UTF_8);
             String[] fields = value.split("\\|", -1);
-            if (fields.length != 4 || !"1".equals(fields[0]) || !expectedStatus.equals(fields[1])) {
-                throw invalid();
-            }
-            Instant createdAt = Instant.parse(fields[2]);
-            int year = createdAt.atOffset(ZoneOffset.UTC).getYear();
-            if (year < 1 || year > 9999 || createdAt.getNano() % 1000 != 0
-                    || !fields[3].matches("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")) {
-                throw invalid();
-            }
-            var cursor = new InboxCursor(expectedStatus, createdAt, UUID.fromString(fields[3]));
+            var cursor = position(fields, expectedStatus);
             if (!cursor.encode().equals(encoded)) {
                 throw invalid();
             }
@@ -50,6 +41,19 @@ public record InboxCursor(
         } catch (IllegalArgumentException | DateTimeException malformed) {
             throw invalid();
         }
+    }
+
+    private static InboxCursor position(String[] fields, String expectedStatus) {
+        if (fields.length != 4 || !"1".equals(fields[0]) || !expectedStatus.equals(fields[1])) {
+            throw invalid();
+        }
+        Instant createdAt = Instant.parse(fields[2]);
+        int year = createdAt.atOffset(ZoneOffset.UTC).getYear();
+        if (year < 1 || year > 9999 || createdAt.getNano() % 1000 != 0
+                || !fields[3].matches("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")) {
+            throw invalid();
+        }
+        return new InboxCursor(expectedStatus, createdAt, UUID.fromString(fields[3]));
     }
 
     private static ApiException invalid() {

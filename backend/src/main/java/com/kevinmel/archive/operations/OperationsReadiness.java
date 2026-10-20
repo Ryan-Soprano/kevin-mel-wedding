@@ -84,12 +84,7 @@ public final class OperationsReadiness {
             }
             var totals = new Totals(original, staging, pending, failed, live, overdue, plans);
             connection.rollback();
-            boolean action = capacity(original, gates.maxOriginalBytes()) != Capacity.BELOW_WARNING
-                    || capacity(staging, gates.maxStagingBytes()) != Capacity.BELOW_WARNING
-                    || failed > 0
-                    || overdue > 0
-                    || plans > 0
-                    || (gates.retentionEnabled() && !gates.storageEnabled());
+            boolean action = requiresAction(totals);
             return new Report(
                     Database.AVAILABLE,
                     Schema.REVIEWED,
@@ -105,6 +100,15 @@ public final class OperationsReadiness {
                     gates,
                     null);
         }
+    }
+
+    private boolean requiresAction(Totals totals) {
+        return capacity(totals.reservedOriginalBytes(), gates.maxOriginalBytes()) != Capacity.BELOW_WARNING
+                || capacity(totals.reservedStagingBytes(), gates.maxStagingBytes()) != Capacity.BELOW_WARNING
+                || totals.failedMedia() > 0
+                || totals.overdueRetention() > 0
+                || totals.unfinishedDeletionPlans() > 0
+                || (gates.retentionEnabled() && !gates.storageEnabled());
     }
 
     static void readOnly(Connection connection) throws SQLException {

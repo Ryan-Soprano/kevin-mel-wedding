@@ -18,6 +18,8 @@ import com.kevinmel.archive.media.R2ObjectStorage;
 
 /** Offline, console-only maintenance. No HTTP listener, moderation choices or component scan. */
 public final class RetentionAdministration {
+    private static final String LOCAL_ENVIRONMENT = "local";
+
 
     private RetentionAdministration() {
     }
@@ -38,9 +40,7 @@ public final class RetentionAdministration {
                     """);
             return 0;
         }
-        if (args.length != 3 || !"--expect-environment".equals(args[0])
-                || !Set.of("local", "staging", "production").contains(args[1])
-                || !Set.of("purge-expired", "replay-ledger").contains(args[2])) {
+        if (!validCommand(args)) {
             System.err.println("Use --help. A target environment and supported maintenance command are required.");
             return 2;
         }
@@ -54,7 +54,7 @@ public final class RetentionAdministration {
             LoggingSystem.get(RetentionAdministration.class.getClassLoader())
                     .setLogLevel(LoggingSystem.ROOT_LOGGER_NAME, LogLevel.OFF);
             StandardEnvironment settings = settings();
-            if (!args[1].equals(settings.getProperty("archive.environment", "local"))
+            if (!args[1].equals(settings.getProperty("archive.environment", LOCAL_ENVIRONMENT))
                     || !"true".equals(settings.getProperty("archive.storage.enabled", "false"))) {
                 System.err.println("The configured target/storage does not match this command; no maintenance was started.");
                 return 2;
@@ -68,37 +68,47 @@ public final class RetentionAdministration {
                 System.err.println("Confirmation did not match; no maintenance was started.");
                 return 2;
             }
-            var source = new DriverManagerDataSource(
-                    settings.getRequiredProperty("spring.datasource.url"),
-                    settings.getRequiredProperty("spring.datasource.username"),
-                    settings.getRequiredProperty("spring.datasource.password"));
-            try (var storage = R2ObjectStorage.openPrivate(
-                    settings.getRequiredProperty("archive.storage.endpoint"),
-                    settings.getRequiredProperty("archive.storage.bucket"),
-                    settings.getRequiredProperty("archive.storage.access-key-id"),
-                    settings.getRequiredProperty("archive.storage.secret-access-key"))) {
-                var service = new RetentionService(
-                        new RetentionRepository(
-                                JdbcClient.create(source),
-                                new JdbcTransactionManager(source)),
-                        RetentionConfiguration.adapt(storage),
-                        Clock.systemUTC());
-                if ("replay-ledger".equals(args[2])) {
-                    console.printf(
-                            "Ledger replay completed for %d records. Verify restored data before reopening traffic.%n",
-                            service.replayLedger());
-                    return 0;
-                }
-                var result = service.purgeBatch(20);
-                console.printf(
-                        "Expired-decision batch: %d purged, %d unconfirmed. Unconfirmed work retains its retry plan.%n",
-                        result.purged(),
-                        result.failed());
-                return result.failed() == 0 ? 0 : 1;
-            }
+            return maintain(args[2], console, settings);
         } catch (IOException | RuntimeException failure) {
             System.err.println("Maintenance is unconfirmed and may be partial. Keep recovery traffic stopped; inspect private diagnostics and retry.");
             return 1;
+        }
+    }
+
+    private static boolean validCommand(String[] args) {
+        return args.length == 3 && "--expect-environment".equals(args[0])
+                && Set.of(LOCAL_ENVIRONMENT, "staging", "production").contains(args[1])
+                && Set.of("purge-expired", "replay-ledger").contains(args[2]);
+    }
+
+    private static int maintain(String command, java.io.Console console, StandardEnvironment settings) {
+        var source = new DriverManagerDataSource(
+                settings.getRequiredProperty("spring.datasource.url"),
+                settings.getRequiredProperty("spring.datasource.username"),
+                settings.getRequiredProperty("spring.datasource.password"));
+        try (var storage = R2ObjectStorage.openPrivate(
+                settings.getRequiredProperty("archive.storage.endpoint"),
+                settings.getRequiredProperty("archive.storage.bucket"),
+                settings.getRequiredProperty("archive.storage.access-key-id"),
+                settings.getRequiredProperty("archive.storage.secret-access-key"))) {
+            var service = new RetentionService(
+                    new RetentionRepository(
+                            JdbcClient.create(source),
+                            new JdbcTransactionManager(source)),
+                    RetentionConfiguration.adapt(storage),
+                    Clock.systemUTC());
+            if ("replay-ledger".equals(command)) {
+                console.printf(
+                        "Ledger replay completed for %d records. Verify restored data before reopening traffic.%n",
+                        service.replayLedger());
+                return 0;
+            }
+            var result = service.purgeBatch(20);
+            console.printf(
+                    "Expired-decision batch: %d purged, %d unconfirmed. Unconfirmed work retains its retry plan.%n",
+                    result.purged(),
+                    result.failed());
+            return result.failed() == 0 ? 0 : 1;
         }
     }
 
@@ -119,7 +129,7 @@ public final class RetentionAdministration {
     static boolean hasExplicitDatabaseTarget(
             StandardEnvironment settings,
             String environment) {
-        if ("local".equals(environment)) {
+        if (LOCAL_ENVIRONMENT.equals(environment)) {
             return true;
         }
         for (String[] names : new String[][] {
@@ -127,22 +137,26 @@ public final class RetentionAdministration {
                 {"MEMORY_ARCHIVE_DB_USERNAME", "spring.datasource.username"},
                 {"MEMORY_ARCHIVE_DB_PASSWORD", "spring.datasource.password"}
         }) {
-            boolean present = false;
-            for (var source : settings.getPropertySources()) {
-                if ("retentionDefaults".equals(source.getName())) {
-                    continue;
-                }
-                for (var name : names) {
-                    Object value = source.getProperty(name);
-                    if (value instanceof String text && !text.isBlank()) {
-                        present = true;
-                    }
-                }
-            }
-            if (!present) {
+            if (!hasExplicitProperty(settings, names)) {
                 return false;
             }
         }
         return true;
+    }
+
+    private static boolean hasExplicitProperty(StandardEnvironment settings, String[] names) {
+        boolean present = false;
+        for (var source : settings.getPropertySources()) {
+            if ("retentionDefaults".equals(source.getName())) {
+                continue;
+            }
+            for (var name : names) {
+                Object value = source.getProperty(name);
+                if (value instanceof String text && !text.isBlank()) {
+                    present = true;
+                }
+            }
+        }
+        return present;
     }
 }

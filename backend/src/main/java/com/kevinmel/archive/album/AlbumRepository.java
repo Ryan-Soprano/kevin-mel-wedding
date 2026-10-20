@@ -15,6 +15,10 @@ import com.kevinmel.archive.review.MemoryDetail;
 
 @Repository
 public class AlbumRepository {
+    private static final String ALBUM_PARAM = "album";
+    private static final String MEMORY_PARAM = "memory";
+    private static final String POSITION_FIELD = "position";
+
     private static final String ELIGIBLE = InboxRepository.AVAILABLE + " AND m.review_status <> 'DELETE' ";
     private static final String MEMBER_FROM = " FROM album_membership am JOIN memory m ON m.id=am.memory_id "
             + InboxRepository.MEMORY_JOINS;
@@ -24,6 +28,7 @@ public class AlbumRepository {
                         al.updated_at AS album_updated_at, al.deleted_at AS album_deleted_at,
                         (SELECT count(*)
                         """ + MEMBER_FROM + " WHERE am.album_id=al.id AND " + ELIGIBLE + ") AS member_count ";
+    private static final String SELECT_ALBUM = "SELECT " + COLUMNS;
     private final JdbcClient db;
 
     public AlbumRepository(JdbcClient db) {
@@ -31,7 +36,7 @@ public class AlbumRepository {
     }
 
     public List<AlbumDetail> list(AlbumQuery query, Instant now) {
-        String sql = "SELECT " + COLUMNS + " FROM album al WHERE al.deleted_at IS NULL ";
+        String sql = SELECT_ALBUM + " FROM album al WHERE al.deleted_at IS NULL ";
         if (query.cursor() != null) {
             sql += " AND (al.created_at,al.id)<(:created,:id) ";
         }
@@ -51,7 +56,7 @@ public class AlbumRepository {
             UUID id,
             Instant now,
             boolean lock) {
-        return db.sql("SELECT " + COLUMNS + " FROM album al WHERE al.id=:id"
+        return db.sql(SELECT_ALBUM + " FROM album al WHERE al.id=:id"
                 + (lock ? " FOR UPDATE OF al" : ""))
                 .param("id", id)
                 .param("now", time(now))
@@ -66,7 +71,7 @@ public class AlbumRepository {
     public List<MemberRow> members(UUID id, AlbumQuery query, Instant now) {
         String neighbor = " EXISTS (SELECT 1 FROM album_membership neighbor JOIN memory m ON m.id=neighbor.memory_id "
                 + InboxRepository.MEMORY_JOINS + " WHERE neighbor.album_id=al.id AND " + ELIGIBLE;
-        String sql = "SELECT " + COLUMNS + ", page.* FROM album al LEFT JOIN LATERAL (SELECT "
+        String sql = SELECT_ALBUM + ", page.* FROM album al LEFT JOIN LATERAL (SELECT "
                 + InboxRepository.MEMORY_COLUMNS + ",am.position,"
                 + neighbor + " AND neighbor.position<am.position) AS can_move_earlier,"
                 + neighbor + " AND neighbor.position>am.position) AS can_move_later "
@@ -76,11 +81,11 @@ public class AlbumRepository {
                 .param("id", id)
                 .param("now", time(now))
                 .param("limit", query.limit() + 1)
-                .param("position", query.cursor() == null ? 0L : query.cursor().position())
+                .param(POSITION_FIELD, query.cursor() == null ? 0L : query.cursor().position())
                 .query((rs, row) -> new MemberRow(
                         map(rs, row),
                         rs.getObject("memory_id") == null ? null : InboxRepository.map(rs, row),
-                        rs.getLong("position"),
+                        rs.getLong(POSITION_FIELD),
                         rs.getBoolean("can_move_earlier"),
                         rs.getBoolean("can_move_later")))
                 .list();
@@ -127,15 +132,15 @@ public class AlbumRepository {
 
     public Optional<Long> position(UUID album, UUID memory) {
         return db.sql("SELECT position FROM album_membership WHERE album_id=:album AND memory_id=:memory")
-                .param("album", album)
-                .param("memory", memory)
+                .param(ALBUM_PARAM, album)
+                .param(MEMORY_PARAM, memory)
                 .query(Long.class)
                 .optional();
     }
 
     public void add(UUID album, UUID memory) {
         long max = db.sql("SELECT COALESCE(max(position),0) FROM album_membership WHERE album_id=:album")
-                .param("album", album)
+                .param(ALBUM_PARAM, album)
                 .query(Long.class)
                 .single();
         if (max == Long.MAX_VALUE) {
@@ -147,24 +152,24 @@ public class AlbumRepository {
                                         UPDATE album_membership am SET position=p.position FROM positions p
                                         WHERE am.album_id=:album AND am.memory_id=p.memory_id
                                         """)
-                    .param("album", album)
+                    .param(ALBUM_PARAM, album)
                     .update();
             max = db.sql("SELECT count(*) FROM album_membership WHERE album_id=:album")
-                    .param("album", album)
+                    .param(ALBUM_PARAM, album)
                     .query(Long.class)
                     .single();
         }
         db.sql("INSERT INTO album_membership(album_id,memory_id,position) VALUES(:album,:memory,:position)")
-                .param("album", album)
-                .param("memory", memory)
-                .param("position", max + 1)
+                .param(ALBUM_PARAM, album)
+                .param(MEMORY_PARAM, memory)
+                .param(POSITION_FIELD, max + 1)
                 .update();
     }
 
     public boolean remove(UUID album, UUID memory) {
         return db.sql("DELETE FROM album_membership WHERE album_id=:album AND memory_id=:memory")
-                .param("album", album)
-                .param("memory", memory)
+                .param(ALBUM_PARAM, album)
+                .param(MEMORY_PARAM, memory)
                 .update() > 0;
     }
 
@@ -183,12 +188,12 @@ public class AlbumRepository {
                 + ELIGIBLE
                 + " AND am.position" + (earlier ? "<" : ">") + ":position ORDER BY am.position "
                 + (earlier ? "DESC" : "ASC") + " LIMIT 1")
-                .param("album", album)
-                .param("position", current.get())
+                .param(ALBUM_PARAM, album)
+                .param(POSITION_FIELD, current.get())
                 .param("now", time(now))
                 .query((rs, row) -> new Position(
                         rs.getObject("memory_id", UUID.class),
-                        rs.getLong("position")))
+                        rs.getLong(POSITION_FIELD)))
                 .optional();
         if (next.isEmpty()) {
             return false;
@@ -197,10 +202,10 @@ public class AlbumRepository {
                                 UPDATE album_membership SET position=CASE WHEN memory_id=:memory THEN :otherPosition ELSE :position END
                                 WHERE album_id=:album AND memory_id IN (:memory,:other)
                                 """)
-                .param("album", album)
-                .param("memory", memory)
+                .param(ALBUM_PARAM, album)
+                .param(MEMORY_PARAM, memory)
                 .param("other", next.get().memoryId())
-                .param("position", current.get())
+                .param(POSITION_FIELD, current.get())
                 .param("otherPosition", next.get().position())
                 .update();
         return true;
@@ -212,8 +217,8 @@ public class AlbumRepository {
             Instant now) {
         return db.sql("SELECT EXISTS(SELECT 1 " + MEMBER_FROM
                 + " WHERE am.album_id=:album AND m.id=:memory AND " + ELIGIBLE + ")")
-                .param("album", album)
-                .param("memory", memory)
+                .param(ALBUM_PARAM, album)
+                .param(MEMORY_PARAM, memory)
                 .param("now", time(now))
                 .query(Boolean.class)
                 .single();

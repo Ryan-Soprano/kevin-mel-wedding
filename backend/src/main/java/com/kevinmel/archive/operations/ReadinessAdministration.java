@@ -24,6 +24,11 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource;
 
 /** Private read-only console. Starts no server, application context, migration, scheduler or provider client. */
 public final class ReadinessAdministration {
+    private static final String LOCAL_ENVIRONMENT = "local";
+    private static final String DB_URL_PROPERTY = "spring.datasource.url";
+    private static final String DB_USERNAME_PROPERTY = "spring.datasource.username";
+    private static final String DB_PASSWORD_PROPERTY = "spring.datasource.password";
+
 
     private static final String DEFAULTS = "operationsDefaults";
     private static final Set<String> BOUNDED_PROPERTIES = Set.of(
@@ -85,53 +90,75 @@ public final class ReadinessAdministration {
                 && "schema-check".equals(args[2])
                 && "--prior-jar".equals(args[3])
                 && !args[4].isBlank();
-        if ((!report && !guard)
-                || !"--expect-environment".equals(args[0])
-                || !Set.of("local", "staging", "production").contains(args[1])) {
+        if (!validCommand(args, report, guard)) {
             err.println("OPERATIONS_REFUSED: use --help and a supported target command.");
             return 2;
         }
         OperationsReadiness.Gates gates;
         try {
-            if (!args[1].equals(settings.getProperty("archive.environment", "local"))
-                    || !hasExplicitDatabaseTarget(settings, guard || !"local".equals(args[1]))) {
-                throw OperationsSchema.rejected();
-            }
-            gates = gates(settings);
-            boundedJdbcUrl(settings.getRequiredProperty("spring.datasource.url"));
-            if (settings.getRequiredProperty("spring.datasource.username").isBlank()
-                    || settings.getRequiredProperty("spring.datasource.password").isBlank()) {
-                throw OperationsSchema.rejected();
-            }
+            gates = verifiedSettings(settings, args[1], guard);
         } catch (RuntimeException invalid) {
             err.println("OPERATIONS_REFUSED: target or private settings are incomplete or invalid; no database check started.");
             return 2;
         }
         try {
-            // Validate the arbitrary prior artifact before contacting the database.
-            var current = guard ? OperationsSchema.bundled() : null;
-            if (guard && !current.equals(OperationsSchema.priorJar(Path.of(args[4])))) {
-                throw OperationsSchema.rejected();
-            }
-            DataSource source = databaseFactory.apply(settings);
-            if (guard) {
-                try (var connection = source.getConnection()) {
-                    OperationsReadiness.readOnly(connection);
-                    OperationsSchema.requireCurrent(connection, current);
-                    connection.rollback();
-                }
-                out.println("ROLLBACK_SCHEMA_MATCH");
-                return 0;
-            }
-            var result = new OperationsReadiness(source, gates).inspect();
-            print(result, out);
-            return result.exitCode();
+            return inspect(args, settings, databaseFactory, out, gates, guard);
         } catch (Exception failure) {
             err.println(guard
                     ? "ROLLBACK_SCHEMA_UNCONFIRMED"
                     : "OPERATIONS_UNCONFIRMED: no readiness claim; private checks did not complete.");
             return 1;
         }
+    }
+
+    private static boolean validCommand(String[] args, boolean report, boolean guard) {
+        return (report || guard)
+                && "--expect-environment".equals(args[0])
+                && Set.of(LOCAL_ENVIRONMENT, "staging", "production").contains(args[1]);
+    }
+
+    private static OperationsReadiness.Gates verifiedSettings(
+            StandardEnvironment settings,
+            String environment,
+            boolean guard) {
+        if (!environment.equals(settings.getProperty("archive.environment", LOCAL_ENVIRONMENT))
+                || !hasExplicitDatabaseTarget(settings, guard || !LOCAL_ENVIRONMENT.equals(environment))) {
+            throw OperationsSchema.rejected();
+        }
+        var gates = gates(settings);
+        boundedJdbcUrl(settings.getRequiredProperty(DB_URL_PROPERTY));
+        if (settings.getRequiredProperty(DB_USERNAME_PROPERTY).isBlank()
+                || settings.getRequiredProperty(DB_PASSWORD_PROPERTY).isBlank()) {
+            throw OperationsSchema.rejected();
+        }
+        return gates;
+    }
+
+    private static int inspect(
+            String[] args,
+            StandardEnvironment settings,
+            Function<StandardEnvironment, DataSource> databaseFactory,
+            PrintStream out,
+            OperationsReadiness.Gates gates,
+            boolean guard) throws Exception {
+        // Validate the arbitrary prior artifact before contacting the database.
+        var current = guard ? OperationsSchema.bundled() : null;
+        if (guard && !current.equals(OperationsSchema.priorJar(Path.of(args[4])))) {
+            throw OperationsSchema.rejected();
+        }
+        DataSource source = databaseFactory.apply(settings);
+        if (guard) {
+            try (var connection = source.getConnection()) {
+                OperationsReadiness.readOnly(connection);
+                OperationsSchema.requireCurrent(connection, current);
+                connection.rollback();
+            }
+            out.println("ROLLBACK_SCHEMA_MATCH");
+            return 0;
+        }
+        var result = new OperationsReadiness(source, gates).inspect();
+        print(result, out);
+        return result.exitCode();
     }
 
     static void print(
@@ -206,32 +233,36 @@ public final class ReadinessAdministration {
             return true;
         }
         for (String[] names : new String[][] {
-                {"MEMORY_ARCHIVE_DB_URL", "spring.datasource.url"},
-                {"MEMORY_ARCHIVE_DB_USERNAME", "spring.datasource.username"},
-                {"MEMORY_ARCHIVE_DB_PASSWORD", "spring.datasource.password"}}) {
-            boolean present = false;
-            for (var source : settings.getPropertySources()) {
-                if (DEFAULTS.equals(source.getName())) {
-                    continue;
-                }
-                for (String name : names) {
-                    if (source.getProperty(name) instanceof String value && !value.isBlank()) {
-                        present = true;
-                    }
-                }
-            }
-            if (!present) {
+                {"MEMORY_ARCHIVE_DB_URL", DB_URL_PROPERTY},
+                {"MEMORY_ARCHIVE_DB_USERNAME", DB_USERNAME_PROPERTY},
+                {"MEMORY_ARCHIVE_DB_PASSWORD", DB_PASSWORD_PROPERTY}}) {
+            if (!hasExplicitProperty(settings, names)) {
                 return false;
             }
         }
         return true;
     }
 
+    private static boolean hasExplicitProperty(StandardEnvironment settings, String[] names) {
+        boolean present = false;
+        for (var source : settings.getPropertySources()) {
+            if (DEFAULTS.equals(source.getName())) {
+                continue;
+            }
+            for (String name : names) {
+                if (source.getProperty(name) instanceof String value && !value.isBlank()) {
+                    present = true;
+                }
+            }
+        }
+        return present;
+    }
+
     private static DataSource database(StandardEnvironment settings) {
         return new DriverManagerDataSource(
-                boundedJdbcUrl(settings.getRequiredProperty("spring.datasource.url")),
-                settings.getRequiredProperty("spring.datasource.username"),
-                settings.getRequiredProperty("spring.datasource.password"));
+                boundedJdbcUrl(settings.getRequiredProperty(DB_URL_PROPERTY)),
+                settings.getRequiredProperty(DB_USERNAME_PROPERTY),
+                settings.getRequiredProperty(DB_PASSWORD_PROPERTY));
     }
 
     static String boundedJdbcUrl(String raw) {
@@ -239,6 +270,20 @@ public final class ReadinessAdministration {
             throw OperationsSchema.rejected();
         }
         URI uri = URI.create(raw.substring(5));
+        requireJdbcLocation(uri);
+        var query = unboundedQuery(uri);
+        query.addAll(List.of(
+                "connectTimeout=5",
+                "socketTimeout=10",
+                "loginTimeout=10",
+                "cancelSignalTimeout=2",
+                "readOnly=true",
+                "readOnlyMode=always",
+                "options=" + URLEncoder.encode("-c statement_timeout=5000 -c lock_timeout=2000", StandardCharsets.UTF_8)));
+        return raw.split("\\?", 2)[0] + "?" + String.join("&", query);
+    }
+
+    private static void requireJdbcLocation(URI uri) {
         if (uri.getHost() == null
                 || uri.getRawUserInfo() != null
                 || uri.getRawFragment() != null
@@ -248,6 +293,9 @@ public final class ReadinessAdministration {
                 || uri.getRawPath().length() < 2) {
             throw OperationsSchema.rejected();
         }
+    }
+
+    private static List<String> unboundedQuery(URI uri) {
         var query = new ArrayList<String>();
         if (uri.getRawQuery() != null) {
             for (String parameter : uri.getRawQuery().split("&", -1)) {
@@ -261,15 +309,7 @@ public final class ReadinessAdministration {
                 }
             }
         }
-        query.addAll(List.of(
-                "connectTimeout=5",
-                "socketTimeout=10",
-                "loginTimeout=10",
-                "cancelSignalTimeout=2",
-                "readOnly=true",
-                "readOnlyMode=always",
-                "options=" + URLEncoder.encode("-c statement_timeout=5000 -c lock_timeout=2000", StandardCharsets.UTF_8)));
-        return raw.split("\\?", 2)[0] + "?" + String.join("&", query);
+        return query;
     }
 
     private static StandardEnvironment settings() throws IOException {

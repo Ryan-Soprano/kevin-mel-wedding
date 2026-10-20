@@ -18,6 +18,21 @@ public record MemoryMetadataRequest(
     public static MemoryMetadataRequest from(
             Map<String, Object> body,
             String ifMatch) {
+        int revision = revision(ifMatch);
+        if (body == null || !body.keySet().equals(Set.of("title", "description", "memoryDate", "datePrecision"))) {
+            throw invalid();
+        }
+        String title = text(body.get("title"), 200);
+        String description = text(body.get("description"), 2000);
+        if (!(body.get("datePrecision") instanceof String precision)
+                || !Set.of("UNKNOWN", "YEAR", "MONTH", "DAY").contains(precision)) {
+            throw invalid();
+        }
+        String date = date(body.get("memoryDate"), precision);
+        return new MemoryMetadataRequest(title, description, date, precision, revision);
+    }
+
+    private static int revision(String ifMatch) {
         if (ifMatch == null) {
             throw new ApiException(
                     428,
@@ -28,60 +43,55 @@ public record MemoryMetadataRequest(
             throw invalid();
         }
         long revision = Long.parseLong(ifMatch.substring(1, ifMatch.length() - 1));
-        if (revision > Integer.MAX_VALUE || body == null
-                || !body.keySet().equals(Set.of("title", "description", "memoryDate", "datePrecision"))) {
+        if (revision > Integer.MAX_VALUE) {
             throw invalid();
         }
-        String title = text(body.get("title"), 200);
-        String description = text(body.get("description"), 2000);
-        if (!(body.get("datePrecision") instanceof String precision)
-                || !Set.of("UNKNOWN", "YEAR", "MONTH", "DAY").contains(precision)) {
-            throw invalid();
-        }
-        Object rawDate = body.get("memoryDate");
+        return (int) revision;
+    }
+
+    private static String date(Object rawDate, String precision) {
         String date = rawDate instanceof String value ? value : null;
         if ("UNKNOWN".equals(precision)) {
             if (rawDate != null) {
                 throw invalid();
             }
-        } else {
-            if (date == null
-                    || date.length() < 4
-                    || !date.substring(0, 4).matches("[0-9]{4}")
-                    || date.startsWith("0000")) {
-                throw invalid();
-            }
-            try {
-                switch (precision) {
-                    case "YEAR" -> {
-                        if (!date.matches("[0-9]{4}")) {
-                            throw invalid();
-                        }
-                    }
-                    case "MONTH" -> {
-                        if (!date.matches("[0-9]{4}-[0-9]{2}")) {
-                            throw invalid();
-                        }
-                        YearMonth.parse(date);
-                    }
-                    case "DAY" -> {
-                        if (!date.matches("[0-9]{4}-[0-9]{2}-[0-9]{2}")) {
-                            throw invalid();
-                        }
-                        LocalDate.parse(date);
-                    }
-                    default -> throw invalid();
-                }
-            } catch (DateTimeException failure) {
-                throw invalid();
-            }
+            return date;
         }
-        return new MemoryMetadataRequest(
-                title,
-                description,
-                date,
-                precision,
-                (int) revision);
+        if (date == null
+                || date.length() < 4
+                || !date.substring(0, 4).matches("[0-9]{4}")
+                || date.startsWith("0000")) {
+            throw invalid();
+        }
+        requireDateFormat(date, precision);
+        return date;
+    }
+
+    private static void requireDateFormat(String date, String precision) {
+        try {
+            switch (precision) {
+                case "YEAR" -> {
+                    if (!date.matches("[0-9]{4}")) {
+                        throw invalid();
+                    }
+                }
+                case "MONTH" -> {
+                    if (!date.matches("[0-9]{4}-[0-9]{2}")) {
+                        throw invalid();
+                    }
+                    YearMonth.parse(date);
+                }
+                case "DAY" -> {
+                    if (!date.matches("[0-9]{4}-[0-9]{2}-[0-9]{2}")) {
+                        throw invalid();
+                    }
+                    LocalDate.parse(date);
+                }
+                default -> throw invalid();
+            }
+        } catch (DateTimeException failure) {
+            throw invalid();
+        }
     }
 
     private static String text(

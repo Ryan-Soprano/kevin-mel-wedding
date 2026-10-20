@@ -19,6 +19,8 @@ import com.kevinmel.archive.timeline.TimelineMemberships;
 /** Database claims freeze the plan; external IO happens after claim commit and before scrubbing. */
 @Repository
 public class RetentionRepository {
+    private static final String CONTRIBUTION_ID_COLUMN = "contribution_id";
+
     private final JdbcClient db;
     private final TransactionTemplate tx;
     private final boolean scrubArchiveMetadata;
@@ -129,7 +131,7 @@ public class RetentionRepository {
                     .param("limit", limit)
                     .query((rs, row) -> new DeletionRecord(
                             rs.getObject("id", UUID.class),
-                            rs.getObject("contribution_id", UUID.class),
+                            rs.getObject(CONTRIBUTION_ID_COLUMN, UUID.class),
                             rs.getObject("asset_id", UUID.class),
                             SubmissionKeyDigest.sha256(rs.getString("idempotency_key")),
                             rs.getObject("delete_after", OffsetDateTime.class).toInstant(),
@@ -183,34 +185,14 @@ public class RetentionRepository {
                 """ + (lock ? " FOR UPDATE OF m" : ""))
                 .param("id", record.memoryId())
                 .query((rs, row) -> new Existing(
-                        rs.getObject("contribution_id", UUID.class),
+                        rs.getObject(CONTRIBUTION_ID_COLUMN, UUID.class),
                         rs.getString("event_key"),
                         SubmissionKeyDigest.sha256(rs.getString("idempotency_key")),
                         rs.getString("memory_type")))
                 .optional();
         if (memory.isPresent()) {
-            var existing = memory.get();
-            if (!record.contributionId().equals(existing.contributionId())
-                    || !"kevin-mel-wedding".equals(existing.eventKey())
-                    || !record.submissionKeyDigest().equals(existing.keyDigest())
-                    || ("TEXT".equals(existing.memoryType()) && record.assetId() != null)
-                    || (List.of("PHOTO", "AUDIO").contains(existing.memoryType()) && record.assetId() == null)
-                    || !List.of("TEXT", "PHOTO", "AUDIO").contains(existing.memoryType())) {
-                throw invalidPlan();
-            }
-            var asset = db.sql("SELECT id, object_key FROM media_asset WHERE memory_id = :id")
-                    .param("id", record.memoryId())
-                    .query((rs, row) -> {
-                        UUID id = rs.getObject("id", UUID.class);
-                        if (!("originals/" + id).equals(rs.getString("object_key"))) {
-                            throw invalidPlan();
-                        }
-                        return id;
-                    })
-                    .optional();
-            if (asset.isPresent() && !asset.get().equals(record.assetId())) {
-                throw invalidPlan();
-            }
+            requireMemoryIdentity(record, memory.get());
+            requireMemoryAsset(record);
         }
         if (record.assetId() != null) {
             var owner = db.sql("SELECT memory_id FROM media_asset WHERE id = :id")
@@ -220,6 +202,33 @@ public class RetentionRepository {
             if (owner.isPresent() && !owner.get().equals(record.memoryId())) {
                 throw invalidPlan();
             }
+        }
+    }
+
+    private static void requireMemoryIdentity(DeletionRecord record, Existing existing) {
+        if (!record.contributionId().equals(existing.contributionId())
+                || !"kevin-mel-wedding".equals(existing.eventKey())
+                || !record.submissionKeyDigest().equals(existing.keyDigest())
+                || ("TEXT".equals(existing.memoryType()) && record.assetId() != null)
+                || (List.of("PHOTO", "AUDIO").contains(existing.memoryType()) && record.assetId() == null)
+                || !List.of("TEXT", "PHOTO", "AUDIO").contains(existing.memoryType())) {
+            throw invalidPlan();
+        }
+    }
+
+    private void requireMemoryAsset(DeletionRecord record) {
+        var asset = db.sql("SELECT id, object_key FROM media_asset WHERE memory_id = :id")
+                .param("id", record.memoryId())
+                .query((rs, row) -> {
+                    UUID id = rs.getObject("id", UUID.class);
+                    if (!("originals/" + id).equals(rs.getString("object_key"))) {
+                        throw invalidPlan();
+                    }
+                    return id;
+                })
+                .optional();
+        if (asset.isPresent() && !asset.get().equals(record.assetId())) {
+            throw invalidPlan();
         }
     }
 
@@ -323,7 +332,7 @@ public class RetentionRepository {
             int row) throws java.sql.SQLException {
         return new DeletionRecord(
                 rs.getObject("memory_id", UUID.class),
-                rs.getObject("contribution_id", UUID.class),
+                rs.getObject(CONTRIBUTION_ID_COLUMN, UUID.class),
                 rs.getObject("asset_id", UUID.class),
                 rs.getString("submission_key_digest"),
                 rs.getObject("delete_after", OffsetDateTime.class).toInstant(),

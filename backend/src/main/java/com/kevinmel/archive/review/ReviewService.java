@@ -22,6 +22,7 @@ import com.kevinmel.archive.web.ApiException;
 @Service
 public class ReviewService {
     private static final Duration RETENTION = Duration.ofDays(30);
+    private static final String DELETED = "DELETE";
     private final ArchiveAuthorization authorization;
     private final InboxRepository repository;
     private final Clock clock;
@@ -83,19 +84,13 @@ public class ReviewService {
         Instant now = clock.instant()
                 .truncatedTo(ChronoUnit.MICROS);
         // A lock can wait across the deadline; recheck after it has actually been acquired.
-        if ("DELETE".equals(current.reviewStatus()) && !now.isBefore(current.deleteAfter())) {
+        if (DELETED.equals(current.reviewStatus()) && !now.isBefore(current.deleteAfter())) {
             throw unavailable();
         }
         if (current.revision() != request.revision()) {
             throw conflict();
         }
-        String visibility = request.visibility() == null
-                ? current.visibility()
-                : request.visibility();
-        // Restoring a deleted memory never restores its previous audience or a secret link.
-        if (!"KEEP".equals(request.reviewStatus()) || "DELETE".equals(current.reviewStatus())) {
-            visibility = "COUPLE_ONLY";
-        }
+        String visibility = visibility(current, request);
         if (current.reviewStatus().equals(request.reviewStatus()) && current.visibility().equals(visibility)) {
             return current;
         }
@@ -107,7 +102,7 @@ public class ReviewService {
         Instant actedAt = now.isBefore(current.updatedAt())
                 ? current.updatedAt()
                 : now;
-        Instant deleteAfter = "DELETE".equals(request.reviewStatus())
+        Instant deleteAfter = DELETED.equals(request.reviewStatus())
                 ? now.plus(RETENTION)
                 : null;
         var changed = current.visibility().equals(visibility)
@@ -123,24 +118,42 @@ public class ReviewService {
                         deleteAfter,
                         actedAt);
         repository.revokeShareLink(memoryId);
-        if ("DELETE".equals(request.reviewStatus()) && albums != null) {
-            albums.detach(memoryId, actedAt);
-            authorization.requireCoupleAccess();
-        }
-        if ("DELETE".equals(request.reviewStatus()) && timeline != null) {
-            timeline.detach(memoryId, actedAt);
-            authorization.requireCoupleAccess();
-        }
-        if ("DELETE".equals(request.reviewStatus()) && tags != null) {
-            tags.detach(memoryId, actedAt);
-            authorization.requireCoupleAccess();
-        }
+        detachDeletedMemberships(memoryId, request.reviewStatus(), actedAt);
         var principal = (ArchivePrincipal) SecurityContextHolder.getContext()
                 .getAuthentication()
                 .getPrincipal();
         repository.auditReview(current, changed, principal.getAccountId(), actedAt);
         authorization.requireCoupleAccess();
         return changed;
+    }
+
+    private static String visibility(MemoryDetail current, ReviewRequest request) {
+        String visibility = request.visibility() == null
+                ? current.visibility()
+                : request.visibility();
+        // Restoring a deleted memory never restores its previous audience or a secret link.
+        if (!"KEEP".equals(request.reviewStatus()) || DELETED.equals(current.reviewStatus())) {
+            return "COUPLE_ONLY";
+        }
+        return visibility;
+    }
+
+    private void detachDeletedMemberships(UUID memoryId, String status, Instant actedAt) {
+        if (!DELETED.equals(status)) {
+            return;
+        }
+        if (albums != null) {
+            albums.detach(memoryId, actedAt);
+            authorization.requireCoupleAccess();
+        }
+        if (timeline != null) {
+            timeline.detach(memoryId, actedAt);
+            authorization.requireCoupleAccess();
+        }
+        if (tags != null) {
+            tags.detach(memoryId, actedAt);
+            authorization.requireCoupleAccess();
+        }
     }
 
     private static ApiException unavailable() {

@@ -128,17 +128,7 @@ final class OperationsSchema {
         var resources = new LinkedHashMap<String, org.springframework.core.io.Resource>();
         var resolver = new PathMatchingResourcePatternResolver(loader);
         resolver.setUseCaches(false);
-        var roots = new ArrayList<String>();
-
-        for (var root : resolver.getResources("classpath*:db/migration/")) {
-            String location = root.getURL().toExternalForm();
-
-            if (!location.endsWith("/")) {
-                throw rejected();
-            }
-
-            roots.add(location);
-        }
+        var roots = migrationRoots(resolver);
 
         for (var resource : resolver.getResources("classpath*:db/migration/**/*")) {
             String script = resource.getFilename();
@@ -178,6 +168,18 @@ final class OperationsSchema {
         return List.copyOf(result);
     }
 
+    private static List<String> migrationRoots(PathMatchingResourcePatternResolver resolver) throws IOException {
+        var roots = new ArrayList<String>();
+        for (var root : resolver.getResources("classpath*:db/migration/")) {
+            String location = root.getURL().toExternalForm();
+            if (!location.endsWith("/")) {
+                throw rejected();
+            }
+            roots.add(location);
+        }
+        return roots;
+    }
+
     /** Read only regular bounded executable JARs; never extract or load their classes. */
     static List<Migration> priorJar(Path path) throws Exception {
         if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS) || Files.size(path) > 268_435_456L) {
@@ -185,74 +187,8 @@ final class OperationsSchema {
         }
 
         try (var jar = new ZipFile(path.toFile(), StandardCharsets.UTF_8)) {
-            if (jar.size() > 20_000) {
-                throw rejected();
-            }
-
-            var manifestEntry = jar.getEntry("META-INF/MANIFEST.MF");
-            var applicationEntry = jar.getEntry("BOOT-INF/classes/com/kevinmel/archive/MemoryArchiveApplication.class");
-
-            if (manifestEntry == null || manifestEntry.getSize() < 1 || manifestEntry.getSize() > 8192
-                    || applicationEntry == null || applicationEntry.getSize() < 4 || applicationEntry.getSize() > 1_048_576) {
-                throw rejected();
-            }
-
-            try (var input = jar.getInputStream(manifestEntry)) {
-                byte[] bytes = input.readNBytes(8193);
-
-                if (bytes.length > 8192) {
-                    throw rejected();
-                }
-
-                var attributes = new Manifest(new ByteArrayInputStream(bytes)).getMainAttributes();
-
-                if (!"org.springframework.boot.loader.launch.JarLauncher".equals(attributes.getValue("Main-Class"))
-                        || !"com.kevinmel.archive.MemoryArchiveApplication".equals(attributes.getValue("Start-Class"))) {
-                    throw rejected();
-                }
-            }
-
-            try (var input = jar.getInputStream(applicationEntry)) {
-                if (!java.util.Arrays.equals(
-                        input.readNBytes(4),
-                        new byte[]{(byte) 0xca, (byte) 0xfe, (byte) 0xba, (byte) 0xbe}
-                )) {
-                    throw rejected();
-                }
-            }
-
-            var entries = new LinkedHashMap<String, java.util.zip.ZipEntry>();
-            var all = jar.entries();
-
-            while (all.hasMoreElements()) {
-                var entry = all.nextElement();
-
-                if (entry.getName().startsWith(PREFIX) && !entry.isDirectory()) {
-                    String script = entry.getName().substring(PREFIX.length());
-
-                    if (".gitkeep".equals(script)) {
-                        if (entry.getSize() < 0 || entry.getSize() > 2) {
-                            throw rejected();
-                        }
-
-                        try (var input = jar.getInputStream(entry)) {
-                            requireMarker(input);
-                        }
-
-                        continue;
-                    }
-
-                    if (!SCRIPTS.contains(script) || entry.getSize() < 1 || entry.getSize() > MAX_SCRIPT_BYTES
-                            || entries.putIfAbsent(script, entry) != null) {
-                        throw rejected();
-                    }
-                }
-            }
-
-            if (entries.size() != SCRIPTS.size()) {
-                throw rejected();
-            }
-
+            requireExecutableJar(jar);
+            var entries = migrationEntries(jar);
             var result = new ArrayList<Migration>();
 
             for (int i = 0; i < SCRIPTS.size(); i++) {
@@ -265,10 +201,95 @@ final class OperationsSchema {
         }
     }
 
+    private static void requireExecutableJar(ZipFile jar) throws IOException {
+        if (jar.size() > 20_000) {
+            throw rejected();
+        }
+        var manifestEntry = jar.getEntry("META-INF/MANIFEST.MF");
+        var applicationEntry = jar.getEntry("BOOT-INF/classes/com/kevinmel/archive/MemoryArchiveApplication.class");
+        if (manifestEntry == null || manifestEntry.getSize() < 1 || manifestEntry.getSize() > 8192
+                || applicationEntry == null || applicationEntry.getSize() < 4 || applicationEntry.getSize() > 1_048_576) {
+            throw rejected();
+        }
+        requireManifest(jar, manifestEntry);
+        try (var input = jar.getInputStream(applicationEntry)) {
+            if (!java.util.Arrays.equals(
+                    input.readNBytes(4),
+                    new byte[]{(byte) 0xca, (byte) 0xfe, (byte) 0xba, (byte) 0xbe})) {
+                throw rejected();
+            }
+        }
+    }
+
+    private static void requireManifest(ZipFile jar, java.util.zip.ZipEntry manifestEntry) throws IOException {
+        try (var input = jar.getInputStream(manifestEntry)) {
+            byte[] bytes = input.readNBytes(8193);
+            if (bytes.length > 8192) {
+                throw rejected();
+            }
+            var attributes = new Manifest(new ByteArrayInputStream(bytes)).getMainAttributes();
+            if (!"org.springframework.boot.loader.launch.JarLauncher".equals(attributes.getValue("Main-Class"))
+                    || !"com.kevinmel.archive.MemoryArchiveApplication".equals(attributes.getValue("Start-Class"))) {
+                throw rejected();
+            }
+        }
+    }
+
+    private static Map<String, java.util.zip.ZipEntry> migrationEntries(ZipFile jar) throws IOException {
+        var entries = new LinkedHashMap<String, java.util.zip.ZipEntry>();
+        var all = jar.entries();
+        while (all.hasMoreElements()) {
+            var entry = all.nextElement();
+            if (entry.getName().startsWith(PREFIX) && !entry.isDirectory()) {
+                addMigrationEntry(jar, entry, entries);
+            }
+        }
+        if (entries.size() != SCRIPTS.size()) {
+            throw rejected();
+        }
+        return entries;
+    }
+
+    private static void addMigrationEntry(
+            ZipFile jar,
+            java.util.zip.ZipEntry entry,
+            Map<String, java.util.zip.ZipEntry> entries) throws IOException {
+        String script = entry.getName().substring(PREFIX.length());
+        if (".gitkeep".equals(script)) {
+            if (entry.getSize() < 0 || entry.getSize() > 2) {
+                throw rejected();
+            }
+            try (var input = jar.getInputStream(entry)) {
+                requireMarker(input);
+            }
+            return;
+        }
+        if (!SCRIPTS.contains(script) || entry.getSize() < 1 || entry.getSize() > MAX_SCRIPT_BYTES
+                || entries.putIfAbsent(script, entry) != null) {
+            throw rejected();
+        }
+    }
+
     static void requireCurrent(
             Connection connection,
             List<Migration> bundled
     ) throws SQLException {
+        var history = migrationHistory(connection);
+        if (history.size() != bundled.size()) {
+            throw rejected();
+        }
+        for (int i = 0; i < bundled.size(); i++) {
+            var expected = bundled.get(i);
+            var actual = history.get(i);
+            if (!expected.version().equals(actual.version()) || !expected.script().equals(actual.script())
+                    || expected.checksum() != actual.checksum()) {
+                throw rejected();
+            }
+        }
+        requireColumns(connection);
+    }
+
+    private static List<Migration> migrationHistory(Connection connection) throws SQLException {
         var history = new ArrayList<Migration>();
         boolean marker = false;
 
@@ -281,48 +302,36 @@ final class OperationsSchema {
             try (var rows = statement.executeQuery()) {
                 while (rows.next()) {
                     if ("SCHEMA".equals(rows.getString("type"))) {
-                        if (marker || !history.isEmpty() || rows.getString("version") != null || !rows.getBoolean("success")) {
-                            throw rejected();
-                        }
-
+                        requireSchemaMarker(rows, history, marker);
                         marker = true;
                     } else {
-                        if (!"SQL".equals(rows.getString("type")) || !rows.getBoolean("success")) {
-                            throw rejected();
-                        }
-
-                        Object checksum = rows.getObject("checksum");
-
-                        if (!(checksum instanceof Integer number)) {
-                            throw rejected();
-                        }
-
-                        history.add(new Migration(
-                                rows.getString("version"),
-                                rows.getString("script"),
-                                number,
-                                null
-                        ));
+                        history.add(historyMigration(rows));
                     }
                 }
             }
         }
 
-        if (history.size() != bundled.size()) {
+        return history;
+    }
+
+    private static void requireSchemaMarker(
+            java.sql.ResultSet rows,
+            List<Migration> history,
+            boolean marker) throws SQLException {
+        if (marker || !history.isEmpty() || rows.getString("version") != null || !rows.getBoolean("success")) {
             throw rejected();
         }
+    }
 
-        for (int i = 0; i < bundled.size(); i++) {
-            var expected = bundled.get(i);
-            var actual = history.get(i);
-
-            if (!expected.version().equals(actual.version()) || !expected.script().equals(actual.script())
-                    || expected.checksum() != actual.checksum()) {
-                throw rejected();
-            }
+    private static Migration historyMigration(java.sql.ResultSet rows) throws SQLException {
+        if (!"SQL".equals(rows.getString("type")) || !rows.getBoolean("success")) {
+            throw rejected();
         }
-
-        requireColumns(connection);
+        Object checksum = rows.getObject("checksum");
+        if (!(checksum instanceof Integer number)) {
+            throw rejected();
+        }
+        return new Migration(rows.getString("version"), rows.getString("script"), number, null);
     }
 
     private static void requireColumns(Connection connection) throws SQLException {
