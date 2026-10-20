@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { couplePhotos } from "./photos.js";
 import { startSlideshow } from "./slideshow.js";
 import { observeMorePhotos } from "./thumbnailLoading.js";
@@ -132,14 +139,30 @@ export default function GuestGallery({ photos = couplePhotos, deferInitialPhoto 
     );
   }, [rotating, photos.length]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const target = pendingFocus.current;
     if (!target) return;
-    pendingFocus.current = null;
     const element = gallery.current?.querySelector(`#${target.id}`);
-    element?.focus({ preventScroll: true });
-    element?.scrollIntoView({ block: target.block ?? "nearest", behavior: "instant" });
-  }, [view, visibleCount]);
+    if (!active || !element) {
+      pendingFocus.current = null;
+      return;
+    }
+    if (view === "grid" && target.block === "center" && visibleCount < photos.length) {
+      const bounds = element.getBoundingClientRect();
+      const centeredTop = window.scrollY + bounds.top + (bounds.height - window.innerHeight) / 2;
+      const scrollRoot = document.scrollingElement ?? document.documentElement;
+      const maximumTop = Math.max(0, scrollRoot.scrollHeight - window.innerHeight);
+      // Prepare enough rows before focusing, so a later passive batch cannot
+      // leave this return stuck at the old document's bottom scroll limit.
+      if (centeredTop > maximumTop + 1) {
+        appendPhotos();
+        return;
+      }
+    }
+    pendingFocus.current = null;
+    element.focus({ preventScroll: true });
+    element.scrollIntoView({ block: target.block ?? "nearest", behavior: "instant" });
+  }, [active, appendPhotos, photos.length, view, visibleCount]);
 
   function move(direction) {
     setPlaying(false);

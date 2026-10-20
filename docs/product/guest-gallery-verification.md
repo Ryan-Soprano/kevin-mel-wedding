@@ -224,3 +224,31 @@ manual Show more focus/scrolling. There is no horizontal overflow or JavaScript
 page error. Centered desktop/phone screenshots were inspected; owned resources
 and temporary previews/helpers were cleaned up. Small JSON summaries and the
 build log remain under ignored `logs/gallery-browse-recheck.local/`.
+
+## October 19, 2026 - PR 85 short-page centering correction
+
+Codex identified a gap in the centering checks above: with little or no content
+after the gallery, a return to photo 24 or 48 can initially hit the document's
+bottom scroll limit. Passive loading then adds rows after the return request was
+consumed, leaving the selected thumbnail off-center. A minimal mounted gallery
+with no following public section reproduces all four desktop/phone cases, with
+settled errors of about 199 pixels at 1280 pixels wide and 259 pixels at 390.
+
+The return now prepares enough thumbnail rows in a layout effect before focusing
+and centering once. If the requested centered position exceeds the document's
+current bottom limit and more photos exist, the request remains pending for the
+next batch render. Missing targets or an inactive gallery discard the request.
+After the return completes, later passive loading has no retained focus request.
+First/last document limits and nearest-position viewer/Show more behavior remain
+unchanged.
+
+All 567 frontend tests, full ESLint and the production build pass on the isolated
+PR snapshot, excluding concurrent frontend copy/test edits. Twenty-four mounted
+Edge checks pass against that exact source and build: short-page boundary photos
+24/48 at 1280 and 390 pixels, Back/Escape, operation without IntersectionObserver,
+later passive loading without focus/scroll restoration, manual Show more and
+true document limits, plus the full production welcome at both widths. Settled
+centering errors stay below half a pixel. There are no page errors or horizontal
+overflow. Screenshots were inspected, and owned browsers/servers are closed.
+Temporary sources, links and previews are removed after publication; small
+baseline/final JSON reports and test/build logs remain outside the app package.

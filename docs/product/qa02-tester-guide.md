@@ -30,6 +30,9 @@ centered on screen when the page has room. Then open photo 86, advance to photo
 Escape. Returning should preserve the current photo even across a thumbnail batch
 boundary or a viewport resize.
 
+Also return to photos 24 and 48 when few or no shared memories follow the gallery.
+After the next thumbnail batch loads, the selected photo should stay centered.
+
 | ID | Try this | What to look for |
 |---|---|---|
 | G0 — Couple gallery | On the guest welcome, browse the approved photos with Previous/Next or the arrow keys and use Browse all 300 photos to open thumbnails. Check each source group, including IDs 219-300, against the [expected source set](wedding-release-checklist.md#expected-public-gallery-source-set). Try Play/Pause slideshow, then use Share a memory above the gallery. | All 300 approved photos are available without sign-in, beginning with the original Grand Central photo. The added group includes 50 PDF photos, 30 saved scan JPEGs and both later couple photos. Confirm advancement from 218 to 219, wraparound from 300 to 1 and access to all 300 thumbnails. In the slideshow, only the current slide loads; its full framing and readable description remain clear. Optional playback advances every five seconds, pauses while hovered or hidden, and stops after manual navigation or keyboard focus. Reduced-motion settings keep manual browsing available. Sharing stays easy to reach. Viewing the gallery does not reveal private guest submissions. Use only the separate synthetic files Ryan supplies for upload tests. |
