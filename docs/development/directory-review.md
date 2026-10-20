@@ -2253,3 +2253,130 @@ Ryan creates/merges the PR after exact-current-head CI/configured review and
 Linux-only checks. The focused Notion issue records review delivery without
 closing operational acceptance. The next suggested formal package is backend
 `album/`, after a fresh inventory and consumer review.
+
+## Backend album decisions — October 20, 2026
+
+This batch covers all **eight production files** and the **one existing contract
+suite** under backend `album/`: **nine tracked paths**, with no placeholder.
+The nine-case actual HTTP consumer suite in `media/AlbumHttpTest.java` is also
+read and executed. It starts on `feature/backend-album-review` from clean main
+`f602f47`, after portable PR 92 merges. All **211 tracked backend inputs** are
+frozen before edits; there are no unrelated working changes at entry.
+
+No concrete runtime correctness or privacy defect is reproduced in the album
+implementation. Keep its behavior and expand its presentation in the separate
+mechanical commit `4b913d1`. All eight source files pass parser/import comparison
+against the frozen baseline, with **40 rejected negative controls**. Only simple
+single-statement control bodies are normalized; there are **no compound-body
+exceptions**. Imports, declarations, literal/SQL values, order and other scopes
+remain exact. This is parse-only evidence, without type attribution; compilation
+and execution complement it. No runtime efficiency improvement is claimed.
+
+| File in production `album/` | Decision and reason |
+|---|---|
+| `AlbumController.java` | Simplify layout; keep private session/contract/CSRF/origin boundaries, existing request-body limits, route bindings, no-store JSON and response/ETag agreement. Unknown body fields are rejected; do not claim a servlet query-name allowlist that this controller does not implement. |
+| `AlbumCursor.java` | Simplify layout; keep canonical unpadded base64url round trips, list/member kind and album scope, V4/variant identities, canonical UTC microsecond timestamps in years 1–9999 and positive signed BIGINT member positions. The browser retains an opaque cursor rather than a lossy numeric position. |
+| `AlbumDetail.java` | Simplify record layout; keep the existing immutable album identity/name/private visibility/revision/count/timestamp shape and content-free tombstone representation. |
+| `AlbumMemberships.java` | Simplify layout; keep the caller's memory lock/transaction, deterministic album-row lock order, complete link detachment and fresh affected-album revisions with nondecreasing timestamps. Preserve its reviewed offline recovery caller too. |
+| `AlbumQuery.java` | Simplify layout; keep default/bounded 1–50 page sizes and route-scoped cursor decoding. No speculative parser or query-policy abstraction is needed. |
+| `AlbumRepository.java` | Simplify framing, guards, JDBC chains and records; preserve all literal/SQL values. Keep parameterized keyset queries, one-statement member/token/count visibility, shared completed-memory eligibility, equality-token changes, terminal identity retention, deferred-unique swaps and BIGINT append compaction. |
+| `AlbumRequest.java` | Simplify layout; keep the raw UTF-16 name limit, ECMAScript-compatible trimming and storable Unicode rules, exact allowed body fields/directions, strict strong quoted V4 revision tokens and distinct missing/malformed preconditions. Album identities are V4; legacy memory UUIDs remain supported. |
+| `AlbumService.java` | Simplify layout; keep transactional changes, current couple/reveal authority before work and after waits/results, memory-before-album lock ordering, equality revision fences, no-op token preservation, microsecond timestamps and server-resolved adjacent-member moves. |
+
+| Existing test file | Decision and reason |
+|---|---|
+| `album/AlbumContractTest.java` | Keep all three cases unchanged: Unicode/raw length and unknown body fields, list/member cursor and strong revision boundaries, bounded pages and distinct preconditions. No behavior change warrants a new test file. |
+| `media/AlbumHttpTest.java` (consumer) | Keep all nine cases unchanged: creation/rename/no-op/tombstone retries, many-to-many paging and cross-page moves, memory Delete/Restore and erasure replay, large pages/MAX_VALUE compaction, concurrent create/edit winners, queued revocation, incomplete/verified originals, private request boundaries, audio/review states and legacy memory identities. |
+
+Consumer tracing includes the frontend album API, strict DTO/ETag decoding,
+opaque paging and server-side movement controls, exact retry/privacy/write-fence
+lifecycle and synthetic mock; shared text/Unicode/body/session policies; memory
+review and retention; portable capture/currentness; and versioned offline
+recovery. These traces do not newly mark those other directories as formal
+reviews or rerun their historical browser/device acceptance.
+
+Album mutation serializes on its row, while add and memory deletion consistently
+lock the memory first. Remove, move and album-only deletion acquire no reverse
+memory lock. Detachment locks affected albums in database identity order before
+changing their links/revisions. The member page returns its album token, eligible
+count, cards and movement flags from one PostgreSQL statement; page-to-page
+organization changes are fenced by the album revision. That is not a frozen
+multi-request snapshot of independently editable memory metadata.
+
+Ordering remains server-owned. Moves swap positions with the adjacent available
+member, including beyond a page; deferred uniqueness permits the swap, and append
+compacts existing sparse positions at BIGINT maximum without reordering siblings.
+Deleting an album scrubs its name and links, preserving terminal identity and all
+original memories/media. Authoritative memory deletion detaches relationships;
+restore does not automatically rejoin them. Album-only organization has no
+independent deletion ledger, so the existing older-backup limitation remains.
+
+Tests remain byte-identical to the frozen baseline. Additional malformed-cursor
+matrices, shared-audience organization, direct rollback across every mutation
+and every queued revocation/interleaving remain coverage gaps rather than
+invented defects. Existing source, statement-snapshot, lock and boundary evidence
+is retained without claiming exhaustive schedules or hosted capacity.
+
+Correct the album API's active recovery guidance: V4 remains the first
+album-capable package and V11 its minimum schema, while current V14 export uses
+package V7. A V11-only binary is not a compatible rollback target for a V14
+database. Keep the historical introduction and recovery limitations intact; no
+migration, dependency, application behavior or production setting is changed.
+
+## Backend album verification — October 20, 2026
+
+The frozen baseline passes **12 tests: three contract and nine actual HTTP**,
+with zero failures, errors or skips, Maven exit 0 and explicit successful-build
+marker. No red regression is claimed because no concrete defect is reproduced.
+Independent source, request-boundary and test reviews find no actionable issue.
+
+Runtime is Windows, Microsoft OpenJDK **25.0.4+7**, wrapper Maven **3.9.16**,
+Spring Boot **4.1.1**, disposable PostgreSQL **17.11**, Docker **29.8.0** and
+previously checksum-verified FFmpeg/ffprobe **9.0.2**. Reuse the ignored
+`MAVEN_USER_HOME` workaround for this machine's hidden `.m2` directory. Final
+verification uses one fork at a time, with a fresh JVM for each top-level test
+class and a 1 GiB heap
+(`forkCount=1`, `reuseForks=false`, `argLine=-Xmx1024m`) and a 120-second local
+Surefire exit grace. Tracked build configuration is unchanged. Frontend source
+and operational scripts are unchanged; their full suites are not rerun here.
+
+The fresh frozen tree at code commit `4b913d1` completes the full backend
+`package` run with Maven exit 0 and `BUILD SUCCESS`: **474 total, 472 passed,
+zero failures/errors and two expected Windows skips**. The three album contract
+and nine album HTTP cases pass within that full run too. All **211 tracked
+backend inputs** match their frozen intended hashes after execution and final
+verification; only the eight reviewed production files differ from baseline.
+
+All **13 album classes**, including nested records, have identical baseline and
+final `javap -c -p -constants -s` output, with **no exclusions**. All other
+production class bytes remain identical to baseline. This disassembly comparison
+does not include annotation, bootstrap or debug metadata; the parser checks,
+compilation and execution provide complementary evidence.
+
+All **248 packaged production classes** match the tested bytes. The JAR's direct
+class entries exclude the identities and byte digests of all **111 compiled
+test/fixture classes**, and its launcher/application manifest is correct. This
+does not audit nested dependency JAR contents or non-class resources. Packaged
+recovery console help exits 0; noninteractive export exits 2 with the expected
+safe diagnostic before recovery starts.
+
+Read-only cleanup confirms all **48 observed test containers** in retained album
+logs are absent. All **28 logged Spring-test JVM PIDs** are absent from Java
+processes, and no JVM with the review path remains. This does not claim discovery
+of every unlogged process or native child. Frozen inputs, proof/source hashes,
+test and package results, cleanup and the ready PR description remain under
+`logs/album-directory-review.local/`.
+
+The exact Windows-disabled cases are
+`OwnedExportDirectoryTest.symlinkedArtifactsAreNeverFollowedAndOutsideBytesRemainUntouched`
+and
+`OperatorRecoveryPostgresTest.symlinkedOriginalAndSymlinkedBundleRootAreRejectedBeforeAnyWrites`.
+Linux execution, live-provider IO, browser/device save and extraction, hosted
+capacity, operational durability and release acceptance remain separate checks.
+The local evidence does not establish those outcomes or every possible
+authorization, mutation, download or cleanup interleaving.
+
+Ryan creates/merges the PR after exact-current-head CI/configured review and
+Linux-only checks. The focused Notion issue records review delivery without
+closing operational acceptance. The next suggested formal package is backend
+`timeline/`, after a fresh inventory and consumer review.
