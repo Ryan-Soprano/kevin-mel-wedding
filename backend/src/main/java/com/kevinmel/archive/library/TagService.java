@@ -19,7 +19,11 @@ public class TagService {
     private final InboxRepository memories;
     private final Clock clock;
 
-    public TagService(ArchiveAuthorization authorization, TagRepository tags, InboxRepository memories, Clock clock) {
+    public TagService(
+            ArchiveAuthorization authorization,
+            TagRepository tags,
+            InboxRepository memories,
+            Clock clock) {
         this.authorization = authorization;
         this.tags = tags;
         this.memories = memories;
@@ -27,12 +31,18 @@ public class TagService {
     }
 
     @Transactional(readOnly = true)
-    public Page list(String limit, String cursor, String q) {
+    public Page list(
+            String limit,
+            String cursor,
+            String q) {
         return listing(TagQuery.listing(limit, cursor, q, null));
     }
 
     @Transactional(readOnly = true)
-    public AttachedPage attached(UUID memory, String limit, String cursor) {
+    public AttachedPage attached(
+            UUID memory,
+            String limit,
+            String cursor) {
         var page = listing(TagQuery.listing(limit, cursor, null, memory));
         return new AttachedPage(memory, page.items(), page.nextCursor());
     }
@@ -40,11 +50,16 @@ public class TagService {
     private Page listing(TagQuery query) {
         authorization.requireCoupleAccess();
         var rows = tags.list(query, now());
-        if (!rows.getFirst().memoryValid())
+        if (!rows.getFirst().memoryValid()) {
             throw LibraryRequest.missing();
-        if (!rows.getFirst().anchorValid())
+        }
+        if (!rows.getFirst().anchorValid()) {
             throw LibraryRequest.tagConflict();
-        var cards = rows.stream().map(TagRepository.ListRow::tag).filter(java.util.Objects::nonNull).toList();
+        }
+        var cards = rows.stream()
+                .map(TagRepository.ListRow::tag)
+                .filter(java.util.Objects::nonNull)
+                .toList();
         boolean more = cards.size() > query.limit();
         var items = more ? cards.subList(0, query.limit()) : cards;
         String cursorType = query.memoryId() == null ? "TAGS" : "ATTACHED";
@@ -63,29 +78,42 @@ public class TagService {
     }
 
     @Transactional(readOnly = true)
-    public MemberPage members(UUID id, String limit, String cursor) {
+    public MemberPage members(
+            UUID id,
+            String limit,
+            String cursor) {
         authorization.requireCoupleAccess();
         LibraryRequest.tagId(id);
         var query = TagQuery.members(id, limit, cursor);
         var rows = tags.members(id, query, now());
-        if (rows.isEmpty())
+        if (rows.isEmpty()) {
             throw LibraryRequest.missing();
+        }
         var tag = rows.getFirst().tag();
-        if (query.cursor() != null && !tag.revision().equals(query.cursor().revision()))
+        if (query.cursor() != null && !tag.revision().equals(query.cursor().revision())) {
             throw LibraryRequest.tagConflict();
-        if (!rows.getFirst().anchorValid())
+        }
+        if (!rows.getFirst().anchorValid()) {
             throw LibraryRequest.tagConflict();
-        var cards = rows.stream().map(TagRepository.MemberRow::memory).filter(java.util.Objects::nonNull).toList();
+        }
+        var cards = rows.stream()
+                .map(TagRepository.MemberRow::memory)
+                .filter(java.util.Objects::nonNull)
+                .toList();
         boolean more = cards.size() > query.limit();
         var items = more ? cards.subList(0, query.limit()) : cards;
-        String next = more ? new LibraryCursor("MEMBERS", null, items.getLast().memoryId(), id, tag.revision()).encode()
+        String next = more
+                ? new LibraryCursor("MEMBERS", null, items.getLast().memoryId(), id, tag.revision()).encode()
                 : null;
         authorization.requireCoupleAccess();
         return new MemberPage(tag, items.stream().map(Member::new).toList(), next);
     }
 
     @Transactional
-    public TagDetail create(UUID id, Map<String, Object> body, String condition) {
+    public TagDetail create(
+            UUID id,
+            Map<String, Object> body,
+            String condition) {
         authorization.requireCoupleAccess();
         LibraryRequest.tagId(id);
         LibraryRequest.createCondition(condition);
@@ -97,7 +125,10 @@ public class TagService {
     }
 
     @Transactional
-    public TagDetail rename(UUID id, Map<String, Object> body, String condition) {
+    public TagDetail rename(
+            UUID id,
+            Map<String, Object> body,
+            String condition) {
         authorization.requireCoupleAccess();
         LibraryRequest.tagId(id);
         UUID revision = LibraryRequest.revision(condition);
@@ -111,7 +142,9 @@ public class TagService {
     }
 
     @Transactional
-    public TagDetail delete(UUID id, String condition) {
+    public TagDetail delete(
+            UUID id,
+            String condition) {
         authorization.requireCoupleAccess();
         LibraryRequest.tagId(id);
         var current = locked(id, LibraryRequest.revision(condition));
@@ -122,14 +155,18 @@ public class TagService {
     }
 
     @Transactional
-    public TagDetail add(UUID id, UUID memory, String condition) {
+    public TagDetail add(
+            UUID id,
+            UUID memory,
+            String condition) {
         authorization.requireCoupleAccess();
         LibraryRequest.tagId(id);
         UUID revision = LibraryRequest.revision(condition);
         var original = memories.lockDetail(memory).orElseThrow(LibraryRequest::missing);
         authorization.requireCoupleAccess();
-        if ("DELETE".equals(original.reviewStatus()))
+        if ("DELETE".equals(original.reviewStatus())) {
             throw LibraryRequest.missing();
+        }
         var current = locked(id, revision);
         active(current);
         if (!tags.linked(id, memory)) {
@@ -140,7 +177,10 @@ public class TagService {
     }
 
     @Transactional
-    public TagDetail remove(UUID id, UUID memory, String condition) {
+    public TagDetail remove(
+            UUID id,
+            UUID memory,
+            String condition) {
         authorization.requireCoupleAccess();
         LibraryRequest.tagId(id);
         var current = locked(id, LibraryRequest.revision(condition));
@@ -151,7 +191,9 @@ public class TagService {
         return result(id);
     }
 
-    private TagDetail locked(UUID id, UUID revision) {
+    private TagDetail locked(
+            UUID id,
+            UUID revision) {
         var current = tags.detail(id, now(), true).orElseThrow(LibraryRequest::missing);
         authorization.requireCoupleAccess();
         if (!current.revision().equals(revision)) {
@@ -167,23 +209,33 @@ public class TagService {
     }
 
     private static void active(TagDetail tag) {
-        if (tag.deletedAt() != null)
+        if (tag.deletedAt() != null) {
             throw LibraryRequest.missing();
+        }
     }
 
     private Instant now() {
-        return clock.instant().truncatedTo(ChronoUnit.MICROS);
+        return clock.instant()
+                .truncatedTo(ChronoUnit.MICROS);
     }
 
-    public record Page(List<TagDetail> items, String nextCursor) {
+    public record Page(
+            List<TagDetail> items,
+            String nextCursor) {
     }
 
-    public record AttachedPage(UUID memoryId, List<TagDetail> items, String nextCursor) {
+    public record AttachedPage(
+            UUID memoryId,
+            List<TagDetail> items,
+            String nextCursor) {
     }
 
     public record Member(MemoryDetail memory) {
     }
 
-    public record MemberPage(TagDetail tag, List<Member> items, String nextCursor) {
+    public record MemberPage(
+            TagDetail tag,
+            List<Member> items,
+            String nextCursor) {
     }
 }

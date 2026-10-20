@@ -2813,3 +2813,219 @@ Exact-current-head CI/configured review remains required before merging.
 The next formal package is **`library/`**, then `sharing/` and `health/`.
 Provider IO, physical devices, assistive technology, hosted operations and
 release acceptance remain separate.
+
+## Backend library decisions — October 20, 2026
+
+This formal batch reviews all **twelve production files** in
+`backend/src/main/java/com/kevinmel/archive/library/` and the existing
+`LibraryContractTest.java`. It starts from timeline delivery `0678eaf`, initially
+stacked on that unmerged branch above merged main `c998298` (PR 94). Before
+library delivery, [PR 95](https://github.com/Ryan-Soprano/kevin-mel-wedding/pull/95)
+merges timeline at `8fb3fa088aca3a28b09c74c0180f89575d3a684b`. The merged tracked
+tree matches timeline delivery `0678eaf`, so the library PR now targets **main**
+without a history rewrite or source change. No tracked test file is added.
+
+| File in `library/` | Decision and preserved boundary |
+|---|---|
+| `LibraryController.java` | Keep behavior; expand route signatures and call layout. Preserve contract-before-parameter validation, the private no-store response and delegation to current-authority services. |
+| `LibraryCursor.java` | Simplify: expand the record and separate listing/member decode phases. Preserve raw bounds before decoding, canonical opaque bytes, filter/memory/tag/revision scope, legacy memory identities, final round-trip validation and the existing `IllegalArgumentException` mapping. |
+| `LibraryQuery.java` | Simplify: separate filter validation and canonical tag parsing. Preserve query → years → combined filter validation → tag → fingerprint → limit → cursor evaluation order, including mixed-invalid precedence and redacted diagnostics. |
+| `LibraryRepository.java` | Keep behavior; expand signatures, mappings and call chains. Preserve exact SQL/text-block values, the shared eligible-memory predicate, one-statement tag/anchor/row snapshot, null sentinel rows, saved-time/identity keyset order and limit-plus-one paging. |
+| `LibraryRequest.java` | Keep behavior; expand control blocks and parameter layout. Preserve raw UTF-16 bounds, storable Unicode and trimming, exact accepted keys, UUID-v4 tag identities, strong conditional syntax and existing status/error precedence. |
+| `LibraryService.java` | Keep behavior; expand authorization and immutable page projection. Preserve authorization before parsing and before success, selected-tag 404 before anchor 412, current availability and opaque continuation state. |
+| `TagController.java` | Simplify: expand route layout and name repeated response header/policy values. Preserve contract and origin checks, query/body boundaries, response statuses, private no-store policy and revision/ETag agreement. |
+| `TagDetail.java` | Keep behavior; expand record layout. Preserve every wire field and diagnostics that omit the private name. |
+| `TagMemberships.java` | Keep behavior; expand calls and the inert loop-body block. Preserve callers' memory/album/timeline-first locks, sorted live-tag locks, unconditional defensive edge removal and refresh of affected live-tag revisions only. |
+| `TagQuery.java` | Keep behavior; expand normalization and record layout. Preserve query-before-limit/cursor validation, attached-memory fingerprint binding, distinct TAGS/ATTACHED/MEMBERS scopes and exclusion of search text from diagnostics. |
+| `TagRepository.java` | Simplify: expand signatures/mappings/calls and name the repeated memory parameter. Preserve exact SQL, binding/evaluation order, one-statement page snapshots, eligible-member counts, immutable ordering, terminal name scrubbing and monotonic timestamps. |
+| `TagService.java` | Keep behavior; expand transaction/control flow. Preserve fresh authority around lock waits and returns, memory-before-tag add locking, revision fences, real no-op tokens, duplicate-name allowance and permanently used terminal UUID identities. |
+| Existing `LibraryContractTest.java` | Keep all three existing tests and assertions; expand compressed layout and inert control bodies only. |
+
+Consumer tracing covers the existing nine real HTTP/session/PostgreSQL cases in
+`media/LibraryHttpTest.java`, frontend library/tag API decoders, coordinators and
+Library/Tags/MemoryTags views, shared request/security/body-limit gates, the inbox
+eligibility/metadata contract, review deletion, retention and authoritative
+erasure replay, portable organization capture/fingerprints, recovery graph and
+version validation/import replay, operations schema checks and additive V13.
+Incidental consumer inspection does not complete the formal sharing, health or
+resources reviews.
+
+No concrete runtime behavior defect or performance improvement is claimed.
+Duplicate label names remain intentional: UUID-v4 identities distinguish them,
+and neither name uniqueness nor Unicode casefold deduplication is introduced.
+Search remains a parameter-bound literal PostgreSQL substring over existing
+metadata/content fields, with no wildcard interpretation or provider reads for
+each listing result. Original-memory deletion retains the memory → albums →
+timeline state/events → sorted tags lock order. Tag add owns the memory before
+the tag; tag-only mutations do not subsequently take a memory lock. Tag deletion
+and original-memory erasure retain their different terminal/restore semantics.
+Genuine no-ops keep their revision token.
+
+The API recovery clarification distinguishes the first tag-capable package,
+v6/V13, from current V14/v7 exports and supported v6 upward imports. Historical
+v1–v5 empty-tag imports, complete graph validation before writes, independent
+memory-erasure evidence and the requirement for a build compatible with the
+installed schema remain explicit. No migration or recovery format is changed.
+
+Mechanical layout changes are committed separately at `0d5d2a1`. They expand all
+thirteen reviewed sources without changing expressions or meaningful scopes.
+Strict AST comparison passes **13 sources**, **18 controls (six positive/twelve
+negative)** and malformed-source rejection. Imports retain exact identities and
+order. The only body normalization removes singleton return/throw/continue/
+break/expression-statement wrappers directly at if/loop body properties; there
+is no package-specific allowance. This compares public JDK 25 parse trees
+without type resolution and is not a general semantic-equivalence proof.
+
+Exact `javap -c -p -constants -s` comparison passes **21 classes: 20 production
+and one test**. Baseline and mechanical outputs match without normalization,
+including instructions, private members, descriptors and constant-pool
+references. Source/class inputs remain unchanged during comparison. This does
+not compare every classfile attribute/debug field or raw class bytes. The later
+intentional helper/constant extraction is outside that mechanical proof.
+
+The intentional phase is committed separately at
+`a6883defb2976d340bc40e8b22b0300070ef4192`: four production files receive the
+cohesive cursor/query validation helpers or repeated tag-literal constants.
+No tests, resources, migrations, dependencies or tracked build settings change
+in this second phase.
+
+The actual baseline has **six selected findings across the whole backend**,
+all in library: one cognitive, two cyclomatic and three repeated-literal
+findings. Each receives a **fix** disposition, resolved in final actual analysis:
+
+| Baseline primary location/symbol | Rule, measured baseline and secondary locations | Disposition and preserved boundary |
+|---|---|---|
+| `LibraryCursor.java:39`, `decode` | S1541: cyclomatic 14, threshold 10; fourteen score locations at lines 39–60 | Separate listing/member shape and scope validation while retaining bounds, decode/catch and canonical round-trip order. Final actual analysis reports no finding in this file. |
+| `LibraryQuery.java:8`, `from` | S3776: cognitive 18, threshold 15; sixteen contributing locations at lines 10–32 | Extract cohesive filter-validation and tag-parsing phases without reordering validation. Final actual analysis reports no cognitive finding in this file. |
+| `LibraryQuery.java:8`, `from` | S1541: cyclomatic 19, threshold 10; nineteen score locations at lines 8–32 | The same cohesive extraction retains normalized filters, fingerprint fields and complete errors. Final actual analysis reports no cyclomatic finding in this file. |
+| `TagController.java:30`, response header identity | S1192: `"Cache-Control"` occurs three times, threshold three; secondary lines 48 and 100 | Use framework `HttpHeaders.CACHE_CONTROL`, retaining the exact header spelling and response order. Final actual analysis reports no finding in this file. |
+| `TagController.java:30`, private response policy | S1192: `"no-store"` occurs three times, threshold three; secondary lines 48 and 100 | Use an owner-scoped private policy constant, retaining all three response values. Final actual analysis reports no finding in this file. |
+| `TagRepository.java:48`, memory parameter binding | S1192: `"memory"` occurs four times, threshold three; secondary lines 102, 107 and 112 | Use an owner-scoped parameter constant, retaining all four binding sites and SQL. Final actual analysis reports no finding in this file. |
+
+Exact primary/secondary ranges and score messages, source/runtime hashes and
+raw findings are retained in
+`logs/library-directory-review.local/baseline-rules/run-wj3dEE/analysis.json`.
+No suppression, threshold weakening or false-positive disposition is used.
+
+## Backend library verification — October 20, 2026
+
+The fresh frozen baseline passes **12 existing focused tests**: three library
+contract cases and nine real HTTP/PostgreSQL cases, zero failures/errors/skips,
+exit 0 with `BUILD SUCCESS`. Existing cases cover literal filters and dates,
+duplicate tag names, no-op/stale revisions, terminal identities, live cursor
+contexts, revocation after a queued tag lock, add versus memory deletion,
+concurrent creation/rename, privacy/body gates and bounded 10,000-memory pages.
+The recorded local plan uses the saved-time index; this is fixture evidence,
+not a hosted latency/capacity claim or proof of every concurrency interleaving.
+
+Existing frontend library/tag API and component suites pass **29 tests**, zero
+failures/skips and exit 0. Frontend source is unchanged. These consumer checks
+do not rerun the historical mounted-browser matrix or unrelated lint/build.
+
+Before reuse, all seven retained extension/provenance artifact hashes match;
+the extracted analyzer and identity entries also match the retained official
+VSIX. The existing official Marketplace bundle is **6.1.1**, analysis engine
+**12.1.1.87771**, SonarJava **8.44.0.48651**, on Java **25.0.3+9-LTS**. All **61
+pinned CPD sources and seven dependencies** match the tracked manifest. Reuse is
+offline with zero downloads, no IDE installation/global-setting change and no
+application-source upload. This binds the retained official HTTPS acquisition;
+no independent vendor checksum or IDE signature validation is claimed.
+
+Fresh frozen `test-compile` and classpath export exit 0 with `BUILD SUCCESS`,
+compiling all **190 Java inputs: 128 production and 62 test sources**. The frozen
+manifest records **367 classes: 256 production and 111 test/fixture classes**.
+This is fresh compilation evidence; final post-package integrity is recorded
+separately below.
+
+Baseline and final actual analysis recognize **190 Java inputs: 128 MAIN and
+62 TEST**, with zero failed inputs. Both use unchanged defaults: S3776 `Threshold=15`,
+S1541 `Threshold=10`, S1192 `threshold=3`, `minimalLength=5`, empty
+`excludePatterns`. Actual score/boundary, TEST-classification and malformed-source
+controls pass. These three rules are MAIN scoped; indexed TEST identities do
+not establish test-complexity cleanliness. The result API exposes recognition
+and failed inputs, not a separate completed-file rule count. The known exact
+`No workDir in SonarLint` warning is retained with that limitation. Final actual
+analysis exits 0 with **zero selected findings across the entire backend**, zero
+for each of these three rules; all six library baseline findings are resolved.
+
+Baseline and final actual CPD scan **128 production files**, run **five controls** and
+report **zero raw per-origin and zero unique complete endpoint groups**. The checker
+uses official SonarQube **26.4.0.121862**, pinned commit
+`ab253503cc54df4bdfefd11eb783997d402b5147`, and its unchanged ten-statement Java
+detector. These selected rules and the separate standalone CPD module do not
+establish a full profile, coverage, duplication density, new-code metrics or a
+hosted SonarQube quality gate. Reproduction remains in
+[the analyzer guide](backend-sonar.md). Final reports are retained in
+`logs/library-directory-review.local/final-rules/run-wZjnnp/` and
+`final-cpd/run-tAm4rw/`, bound to the exact frozen source/class/dependency inputs.
+
+An ignored differential probe compares baseline and final compiled library/tag
+API classes in isolated class loaders sharing the same **158 dependency JARs**.
+It passes **72,502 comparisons**, **64 positive controls** and **five comparator
+negative controls**; the baseline self-comparison passes the same checks.
+Coverage includes query/filter/name/conditional validation, Unicode/raw UTF-16
+bounds, canonical tag identities, cursor scope/revision/filter binding, exact
+wire/framing bytes, safe diagnostics and observable complete errors/precedence.
+All bound input hashes remain unchanged during execution. Negative controls
+reject deliberately different normalized values, error payloads, wire/framing
+bytes and order; they do not mutate application binaries. Identical safe errors
+cannot expose internal ordering among two invalid filters. This selected API
+evidence does not establish equivalence for SQL, HTTP/transaction execution,
+every input or concurrency schedule; existing runtime tests cover those actual
+paths separately.
+
+Independent final source review finds no actionable issue across the thirteen
+sources and traced consumers. Reviewed candidate/visible/frozen source hashes
+agree; the report is `independent-final-source-review.json` under the ignored
+library evidence directory. This source review is separate from execution and
+the independent final documentation review.
+
+The fresh frozen-source full Maven `package` run exits **0** with explicit
+`BUILD SUCCESS`: **474 total tests, 472 passed, zero failures/errors and two
+expected Windows skips**. It finishes in **14:14** without a Surefire shutdown
+timeout diagnostic. Local options are `surefire.exitTimeout=120`, `forkCount=1`,
+`reuseForks=false` and `argLine=-Xmx1024m`; tracked build settings are unchanged.
+Runtime is Temurin 25.0.3+9-LTS, Maven 3.9.16, Spring Boot 4.1.1, Docker 29.7.2,
+PostgreSQL 17.11 and verified existing FFmpeg/ffprobe 9.0.2. Frontend consumers
+use Node 24.21.0/npm 11.19.0. Unchanged frontend lint/build and unrelated suites
+are not rerun for this backend batch.
+
+Post-run integrity verifies all **212 tracked backend inputs** against both the
+visible and frozen source and all **367 compiled inputs** against their frozen
+hashes. All **256 production classes** are packaged as identical tested bytes;
+all **111 test/fixture identities and digests** are excluded. Duplicate JAR
+entries are refused and the executable manifest names the expected Boot
+launcher/application. This audits direct class entries and the manifest, not
+nested dependency JARs or non-class resources. The JAR SHA-256 is
+`fd7725c8f9a08d86ce2544c6f9d2538c53aa850a41432291340b9520e43b25f6`.
+The ignored integrity/cleanup helpers pass independent review and **26 isolated
+controls** covering bad exits/counts, source/class drift, JAR omissions/test
+leaks and inventory failures. These are verifier controls, not application tests.
+
+Read-only cleanup confirms all **48 exact created-container IDs** and **25
+logged Spring-test JVM PIDs** from the successful baseline/full run are absent,
+with no Java command line containing the review path. This covers observed
+identities/path only, not unlogged JVMs, native children or every system
+resource; unrelated resources are untouched. The two existing symlink cases
+remain explicit Linux CI checks:
+
+```text
+OwnedExportDirectoryTest.symlinkedArtifactsAreNeverFollowedAndOutsideBytesRemainUntouched
+OperatorRecoveryPostgresTest.symlinkedOriginalAndSymlinkedBundleRootAreRejectedBeforeAnyWrites
+```
+
+Integrity and cleanup reports are `final-delivery-verification.json` and
+`final-resource-audit.json` in the ignored library evidence directory.
+Independent final documentation review finds no actionable issue; current
+relative file links resolve. The focused Notion issue tracks delivery and the
+actual evidence, with readback after updates. The ready PR description is
+`logs/library-directory-review.local/pr-description.md`.
+
+The branch is `feature/backend-library-review`; ignored source/analyzer/proof/
+package/resource evidence remains under `logs/library-directory-review.local/`.
+Timeline's initial dependency is resolved by merged PR 95; the library PR base
+is **main**. Normal delivery is commit/push with a ready PR description; Ryan
+creates/merges the PR unless he authorizes another specific exception.
+Exact-current-head CI/configured review remains required before merge. The next formal package is
+**`sharing/`**, followed by `health/`; resources/build/configuration and broader
+provider/device/assistive-technology/hosted/release acceptance remain separate.
