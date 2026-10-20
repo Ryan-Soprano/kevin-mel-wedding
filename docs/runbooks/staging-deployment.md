@@ -16,8 +16,12 @@ No new resource, scaling or cost change is part of this documentation update.
 
 Initial inspection found PR 87 deployed. The subsequent authorized manual
 deploy `dep-dbbu350m7kps73d8tnog` became live on October 20 at 21:49:18 UTC,
-running commit `a4ad947cb2ba76b311a9c20ef0f35cdc348a443b`. The bounded checks
-below are repeated on that build. Further source changes require a deliberate
+running commit `a4ad947cb2ba76b311a9c20ef0f35cdc348a443b`. Following health
+PR 98's passing exact-head Linux CI/configured review and observed merge,
+deployment `dep-dbbujo61egvs73es5500` became live at **22:24:44.693684 UTC**
+with commit **`bcbb17b40541da55f1d493cbae420ae32820a56b`**. All twelve bounded
+GET checks pass again; served JavaScript/stylesheet decoded UTF-8 hashes match
+the earlier build. Further source changes require a deliberate
 deployment after current-head CI and configured AI review clear. Refresh the
 identity and repeat affected checks; a merge does not deploy this service.
 Ryan's [October 15 standing authority](../project-plan.md#standing-project-authorization)
@@ -36,8 +40,8 @@ this build's full-limit or mixed-media capacity. See the [Thursday readiness sup
 for exact scope and remaining acceptance. Keep the intentional coming-soon
 custom-domain site intact until the deliberate release/cutover step.
 
-A subsequent October 20 check runs the existing `ReadinessAdministration`
-through the authenticated Dashboard shell of this deployed service. It exits 0
+An October 20 check on the earlier `a4ad947` deployment runs the existing
+`ReadinessAdministration` through its authenticated Dashboard shell. It exits 0
 with the bounded database and reviewed-schema checks passing. The console uses
 base properties/environment plus an explicit staging finalization limit of one;
 it does not load profile properties automatically. Aggregate output remains
