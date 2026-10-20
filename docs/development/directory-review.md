@@ -3388,7 +3388,7 @@ pass. Runtime is Temurin
 PostgreSQL **17.11**, with FFmpeg/ffprobe **9.0.2** hashes and actual version
 invocations rechecked. No frontend source or health consumer changes; unrelated
 local frontend reruns and historical mounted-browser evidence are not relabeled.
-Exact-head CI remains a separate merge requirement.
+The final-head Linux CI receipt is recorded below.
 
 The original full-suite integrity verifier remains unchanged. A separate
 artifact-only adapter requires explicit skipped tests, no application-test
@@ -3434,19 +3434,24 @@ artifact helper, not application behavior. The report is
 `independent-artifact-verifier-review.json`. Independent final source and
 documentation reviews find no actionable issue; local links/anchors resolve.
 The focused Notion issue records the chosen execution strategy and delivery,
-with readback. Final-head Linux CI/configured review remains required before
-merge; its actual receipt belongs in the live issue/PR, rather than predicting
-the final commit identity in this document.
+with readback. Final execution is established by
+[CI run 39506606634](https://github.com/Ryan-Soprano/kevin-mel-wedding/actions/runs/39506606634)
+on exact PR head `d8f47da27abfaebb398550e9e44dbb75e100f568`: **474 backend
+tests, 571 frontend tests and 14 operational helper tests pass**, with zero
+failures/errors/skips. Configured review completes on that same head without
+findings. [PR 98](https://github.com/Ryan-Soprano/kevin-mel-wedding/pull/98)
+is observed merged as `bcbb17b40541da55f1d493cbae420ae32820a56b`. This completes
+the user-selected Linux execution requirement; local Windows failures and
+cancellation remain recorded as such.
 
-The two existing Windows-disabled symlink cases remain explicit Linux CI
-checks:
+Both existing Windows-disabled symlink cases pass in that Linux CI run:
 
 ```text
 OwnedExportDirectoryTest.symlinkedArtifactsAreNeverFollowedAndOutsideBytesRemainUntouched
 OperatorRecoveryPostgresTest.symlinkedOriginalAndSymlinkedBundleRootAreRejectedBeforeAnyWrites
 ```
 
-The branch is `feature/backend-health-review`; ignored snapshot/analyzer/proof/
+The review branch was `feature/backend-health-review`; ignored snapshot/analyzer/proof/
 package/resource evidence remains under `logs/health-directory-review.local/`.
 Ryan's October 20 standing authorization now includes PR creation and merging
 after exact-current-head CI and configured/requested review clear, superseding

@@ -19,8 +19,12 @@ The existing full application is available at
 from the intentional coming-soon page on `kevinandmel.com`. Initial read-only
 inspection found PR 87 deployed. The subsequent authorized manual deployment
 `dep-dbbu350m7kps73d8tnog` became live at 21:49:18 UTC on October 20 with commit
-`a4ad947cb2ba76b311a9c20ef0f35cdc348a443b`; the bounded checks below are repeated
-against that deployment. Automatic deployment remains off. The existing Ohio
+`a4ad947cb2ba76b311a9c20ef0f35cdc348a443b`. After health PR 98 passed exact-head
+Linux CI and configured review, the latest deployment
+`dep-dbbujo61egvs73es5500` became live at **22:24:44.693684 UTC** with merge
+commit **`bcbb17b40541da55f1d493cbae420ae32820a56b`**. All twelve bounded GET
+checks pass again; served JavaScript/stylesheet decoded UTF-8 hashes match the
+preceding `a4ad947` build. Automatic deployment remains off. The existing Ohio
 service has one 1-CPU/2-GB instance. An existing same-region PostgreSQL 17 database
 reports available with external access disabled. Refresh the build identity and
 repeat affected checks after a later deployment.
@@ -32,32 +36,42 @@ spike returns 404. These responses use `no-store`. The served JavaScript contain
 both preserved landing sentences and compiles the frontend audio option on.
 This does not establish effective server audio admission, complete guest saving,
 private playback, the entire gallery/device matrix, or database/storage readiness
-from `/api/health`. Before this deployment, sampled idle memory was about
-250.5 MB of 2 GiB and a severity-filtered 24-hour query returned no application
-error entries. Those earlier limited observations do not establish this build's
+from `/api/health`. Before the initial `a4ad947` deployment, sampled idle memory
+was about 250.5 MB of 2 GiB and a severity-filtered 24-hour query returned no
+application error entries. Those earlier limited observations do not establish this build's
 peak mixed-media capacity, uptime, logging privacy or alert delivery.
 
-A mounted in-app browser check on this deployment confirms the landing and
-photo form remain readable at a 390-by-844 viewport. Opening gallery photo 1,
-navigating to photo 3 and choosing **Back to gallery** restores the original
+A mounted in-app browser check on the earlier `a4ad947` deployment confirms the
+landing and photo form remain readable at a 390-by-844 viewport. Opening gallery
+photo 1, navigating to photo 3 and choosing **Back to gallery** restores the original
 1099-pixel scroll position and focus on photo 1. The page width stays within
 the viewport. This focused hosted check supplements the existing 34-case local
-gallery matrix; it does not rerun that matrix or establish physical-phone,
-screen-reader, microphone or saved-media acceptance.
+gallery matrix; it was not rerun by the final twelve-GET check and does not
+establish physical-phone, screen-reader, microphone or saved-media acceptance.
 
-A subsequent read-only console check inside the deployed service exits 0 and
+A read-only console check inside the earlier `a4ad947` deployment exits 0 and
 confirms the bounded database/migration/schema checks. Its aggregate output is
 private operator evidence. This check does not contact R2, verify retained
 backups or retention-job health, establish every running profile/session setting,
 or complete release acceptance. The [operations procedure](../runbooks/operations-and-rollback.md)
 defines its exact scope.
 
+A new October 20 provider logical database export is observed complete, with
+created time displayed as **5:19 PM America/Chicago**; the October 14 export
+remains retained. The Recovery UI reports a three-day
+point-in-time window and at least seven days of logical-export retention.
+No download or restore is performed. Independent database copies, R2 originals,
+current deletion-ledger preservation, enforced 30-day expiry for
+contribution-bearing backups/copies and a timed representative restore with RPO/RTO remain
+acceptance work. This database-only result does not establish a complete archive
+backup.
+
 Ryan's October 15 report credits successful recording and saving of a WebM
 memory. Device/browser versions, private-inbox playback and original
 download/export were not recorded for that report. Preserve that result while
 retaining the unobserved acceptance checks. The October 14 audio-enablement
 instruction remains in force; it is separate from completing those checks.
-After the updated staging link was supplied on October 20, Ryan reports
+After the `a4ad947` staging link was supplied on October 20, Ryan reports
 completing the requested note, photo, voice-memory, gallery-return and recording
 interruption checks on an iPhone using DuckDuckGo, with no failure reported. He
 also reports earlier Safari tests and Android Chrome tests performed by Kade.
