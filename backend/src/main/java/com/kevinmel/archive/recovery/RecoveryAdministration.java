@@ -24,6 +24,8 @@ import com.kevinmel.archive.retention.DeletionStorage;
 /**
  * Privileged offline archive-data recovery. No HTTP listener, migration,
  * scheduler or account access.
+ * Console diagnostics use process streams because dependency logging is disabled;
+ * raw exception details must never enter the output.
  */
 public final class RecoveryAdministration {
     private RecoveryAdministration() {
@@ -34,7 +36,7 @@ public final class RecoveryAdministration {
     }
 
     static int run(String[] args) {
-        if (args.length == 1 && "--help".equals(args[0])) {
+        if (isHelpRequest(args)) {
             System.out.println(
                     """
                             Offline note/photo/audio/album/timeline/tag archive-data export and restore (reviewed V8 through V14 migrations required):
@@ -51,11 +53,7 @@ public final class RecoveryAdministration {
                             """);
             return 0;
         }
-        if (args.length != 4
-                || !"--expect-environment".equals(args[0])
-                || !Set.of("local", "staging", "production").contains(args[1])
-                || !Set.of("export", "restore").contains(args[2])
-                || args[3].isBlank()) {
+        if (!isRecoveryRequest(args)) {
             System.err.println(
                     "Use --help. An environment, supported recovery command and private directory are required.");
             return 2;
@@ -70,10 +68,7 @@ public final class RecoveryAdministration {
                     .setLogLevel(LoggingSystem.ROOT_LOGGER_NAME, LogLevel.OFF);
             StandardEnvironment settings = settings();
             boolean restore = "restore".equals(args[2]);
-            if (!args[1].equals(settings.getProperty("archive.environment", "local"))
-                    || !"true".equals(settings.getProperty("archive.storage.enabled", "false"))
-                    || !"true".equals(settings.getProperty("MEMORY_ARCHIVE_RECOVERY_QUIESCED", "false"))
-                    || !hasExplicitDatabaseTarget(settings, restore || !"local".equals(args[1]))) {
+            if (!hasRequiredRecoveryContext(settings, args[1], restore)) {
                 System.err.println(
                         "Target, private storage or quiescence settings are incomplete; no recovery was started.");
                 return 2;
@@ -82,7 +77,7 @@ public final class RecoveryAdministration {
             String bucket = settings.getRequiredProperty("archive.storage.bucket");
             String authorityEndpoint = restore ? sourceSetting(settings, "ENDPOINT") : endpoint;
             String authorityBucket = restore ? sourceSetting(settings, "BUCKET") : bucket;
-            if (restore && !distinctStorage(endpoint, bucket, authorityEndpoint, authorityBucket)) {
+            if (!isValidRestoreTarget(restore, endpoint, bucket, authorityEndpoint, authorityBucket)) {
                 System.err.println("Restore requires a different isolated storage target; no recovery was started.");
                 return 2;
             }
@@ -145,11 +140,42 @@ public final class RecoveryAdministration {
                     return 0;
                 }
             }
-        } catch (IOException | RuntimeException failure) {
+        } catch (IOException | RuntimeException _) {
             System.err.println(
                     "Recovery is unconfirmed. A private incomplete export or partial isolated object copy may remain. Keep traffic stopped and verify the target before retrying.");
             return 1;
         }
+    }
+
+    private static boolean isHelpRequest(String[] args) {
+        return args.length == 1 && "--help".equals(args[0]);
+    }
+
+    private static boolean isRecoveryRequest(String[] args) {
+        return args.length == 4
+                && "--expect-environment".equals(args[0])
+                && Set.of("local", "staging", "production").contains(args[1])
+                && Set.of("export", "restore").contains(args[2])
+                && !args[3].isBlank();
+    }
+
+    private static boolean hasRequiredRecoveryContext(
+            StandardEnvironment settings,
+            String environment,
+            boolean restore) {
+        return environment.equals(settings.getProperty("archive.environment", "local"))
+                && "true".equals(settings.getProperty("archive.storage.enabled", "false"))
+                && "true".equals(settings.getProperty("MEMORY_ARCHIVE_RECOVERY_QUIESCED", "false"))
+                && hasExplicitDatabaseTarget(settings, restore || !"local".equals(environment));
+    }
+
+    private static boolean isValidRestoreTarget(
+            boolean restore,
+            String targetEndpoint,
+            String targetBucket,
+            String sourceEndpoint,
+            String sourceBucket) {
+        return !restore || distinctStorage(targetEndpoint, targetBucket, sourceEndpoint, sourceBucket);
     }
 
     private static String sourceSetting(
@@ -184,7 +210,7 @@ public final class RecoveryAdministration {
         try {
             return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
                     .digest((endpoint + "/" + bucket).getBytes(StandardCharsets.UTF_8)));
-        } catch (java.security.NoSuchAlgorithmException failure) {
+        } catch (java.security.NoSuchAlgorithmException _) {
             throw new IllegalStateException("Integrity algorithm unavailable.");
         }
     }
