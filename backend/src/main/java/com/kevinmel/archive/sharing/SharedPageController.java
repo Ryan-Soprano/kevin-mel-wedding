@@ -13,7 +13,10 @@ import org.springframework.web.bind.annotation.RestController;
 public class SharedPageController {
     @GetMapping(value = "/shared/{memoryId}", produces = "text/html;charset=UTF-8")
     public ResponseEntity<Resource> shared(@PathVariable UUID memoryId) {
-        return ResponseEntity.ok().header("Cache-Control", "no-store").header("Referrer-Policy", "no-referrer")
-                .header("X-Robots-Tag", "noindex, nofollow").body(new ClassPathResource("static/index.html"));
+        return ResponseEntity.ok()
+                .header("Cache-Control", "no-store")
+                .header("Referrer-Policy", "no-referrer")
+                .header("X-Robots-Tag", "noindex, nofollow")
+                .body(new ClassPathResource("static/index.html"));
     }
 }
