@@ -14,7 +14,7 @@ Use made-up names such as **Test guest A**, short test messages, generated sampl
 
 Keep sign-in details, private links, downloaded test media and screenshots out of the results report. Report the scenario, what you expected and what happened in plain words. Ryan handles environment setup and cleanup; you do not need to change settings or delete database records.
 
-Audio is hidden in the normal build today. Only try voice memories if Ryan has explicitly enabled them in the controlled synthetic test environment. Otherwise record the audio scenario as **Not tested — test option unavailable**. This does not establish wedding audio availability.
+Ryan requested voice-memory enablement on October 14. Confirm that the supplied synthetic test environment exposes the audio choice and admits uploads before trying this scenario. If it is unavailable, record **Not tested — test option unavailable**. Enablement and the October 15 user report of recording/save do not complete retained physical-device, private playback/original or provider acceptance.
 
 Ryan will also identify whether test photo storage is available. When it is disabled, check selection, review and accurate unsaved feedback; mark successful photo saving, playback and original download **Not tested — storage unavailable**. A successful partial-batch recovery requires the separate controlled scenario Ryan supplies.
 

@@ -4,7 +4,9 @@ The guest recorder and file picker share the existing private intent → grant �
 PUT → finalize → committed receipt lifecycle. An authorized private inbox reviewer
 can play or download the verified original, Keep/Archive/Restore/Delete it, and
 include it in console export and isolated restore. Original bytes are preserved;
-there is no transcription, editing or public playback.
+there is no transcription or editing. New memories remain private. Kevin or
+Melanie can explicitly share a kept audio memory publicly or through a current
+Friends & Family link under the [sharing contract](../api/v1/sharing.md).
 
 ## Admission and runtime
 
@@ -65,10 +67,13 @@ An unsupported player offers download. Owned URLs and private state are cleared
 on the existing inbox lifecycle boundaries. Issued signed URLs remain bearer
 permissions until expiry; logout does not revoke an already issued permission.
 
-Console recovery uses V9 bundle v2 for verified audio metadata. Legacy V8 bundle
-v1 note/photo imports remain supported by the reviewed V9 target. Follow the
-[recovery runbook](operator-recovery.md) and independent deletion-ledger safeguards.
-Before upgrading the decoder runtime, verify restores from retained packages:
+Verified audio metadata first entered console recovery in V9 package v2.
+Current reviewed V14 databases export package v7; use the
+[recovery compatibility matrix](operator-recovery.md#scope-and-access) for exact
+legacy/upward paths and independent deletion-ledger safeguards. Original media
+remain private in storage; shared playback issues a verified-original grant
+that expires within five minutes. Before upgrading the decoder runtime, verify
+restores from retained packages:
 decoded duration must still match the saved millisecond metadata exactly.
 
 ## Verification boundary
