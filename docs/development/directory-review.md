@@ -1806,3 +1806,119 @@ source/class hashes, proof limits, cleanup checks and ready PR description are
 under `logs/retention-directory-review.local/`. The focused Notion issue records
 delivery status. The next suggested boundary is operations/recovery after fresh
 inventory and consumer tracing.
+
+## Backend operations decisions — October 19, 2026
+
+This batch reviews all **three production files** and **two existing suites**
+under backend `operations/`: **five tracked paths**. It starts from main
+`7bf1d0d`, including merged retention PR 87. The original checkout has active
+photo-upload work on `feature/photo-upload-confirmation` with ten dirty paths at
+entry, so review edits use a separate managed checkout on
+`feature/backend-operations-review`. The frozen backend inventory contains
+**211 paths**; no photo-upload work is included in this batch.
+
+No concrete correctness, privacy or efficiency defect justifies a runtime
+behavior change. All three production files receive expanded formatting:
+separate statements, explicit control blocks, multiline records/parameters,
+structured inventories and readable report/JDBC calls. Existing imports,
+literal/SQL values, operation order and public interfaces remain unchanged.
+No abstraction, dependency, migration or tracked test is introduced. No runtime
+performance improvement is claimed.
+
+| File in production `operations/` | Decision and reason |
+|---|---|
+| `OperationsReadiness.java` | Simplify formatting; keep bounded read-only REPEATABLE READ observations, reviewed-schema checks before aggregates, conservative original/staging reservations, unfinished/overdue counts, overflow-safe 80% capacity thresholds and content-free unconfirmed failures. |
+| `OperationsSchema.java` | Simplify formatting; keep exact V1–V14 migration/resource inventory, bounded prior-JAR inspection without extraction/class loading, canonical migration CRC/digest equality, ordered successful Flyway history and known-column checks. All streams/JARs retain their existing resource owners. |
+| `ReadinessAdministration.java` | Simplify formatting; keep exact command/environment/explicit-database gates, bounded PostgreSQL URL overrides, prior-artifact checks before database access, offline lifecycle, logging suppression, fixed output/exit contracts and configured-versus-verified distinctions. |
+
+| File in test `operations/` | Decision and reason |
+|---|---|
+| `OperationsReadinessPostgresTest.java` | Keep unchanged: five real PostgreSQL cases cover conservative reservations, privacy/no mutation, capacity boundaries, mechanically enforced read-only/time bounds, consistent concurrent-admission snapshots and history/column drift refusal. |
+| `ReadinessAdministrationTest.java` | Keep unchanged: seven cases cover command/target/configuration refusal, sanitized failures, non-weakenable JDBC controls, observed-pass limits, recursive exact migration resources and bounded/exact prior JAR checks before connection. |
+
+Consumer tracing covers the direct classpath and packaged PropertiesLauncher
+commands, `scripts/local-review-helpers.mjs` and its tests, the report/schema
+guards in `scripts/smoke-rollback.mjs`, current application properties and
+migrations, media/grant/retention reservation semantics, and operations,
+rollback, staging and wedding-day runbooks. It does not mark those other
+directories fully reviewed.
+
+Correct two stale consumer-document counts: the API verification note said ten
+known tables and the operations runbook said seventeen. Both now say
+**18 known tables**; the current inventory has **119 columns** and **14
+migrations**. Clarify that physical checks compare column names, PostgreSQL
+`udt_name` values and nullability. They do not check type modifiers such as
+VARCHAR length, unrelated tables, indexes, constraints or defaults. The
+historical two-artifact rollback rehearsal remains dated to its actual evidence;
+matching migration manifests alone does not establish prior-binary behavior.
+
+## Backend operations verification — October 19, 2026
+
+The isolated baseline passes all **12 tests** in the two existing package
+suites, zero failures/errors/skips. Both test files retain their entry bytes.
+The existing operational helper suites pass **14 tests** on Node **24.21.0**,
+including exact packaged schema-check output/command and rollback helper
+contracts; no new container rollback rehearsal is claimed.
+
+All **three** canonical Java 25 AST/import comparisons pass, with **15** rejected
+negative controls and **11** exact compiled disassemblies. **Twelve source
+hashes** bind baseline, managed workspace, frozen and intended compile inputs.
+The normalizer ignores layout/comments and only narrow single terminal or
+expression control-body wrappers. One additional allowance is pinned to the
+`ReadinessAdministration.hasExplicitDatabaseTarget` enhanced-for `name : names`
+body: its new braces enclose exactly the existing IF subtree, including its
+condition, pattern binding and assignment. The initial strict comparison matched
+two files and identified only this wrapper in the third. Added declarations and
+changed IF conditions/assignments are separately rejected; no broad IF, loop,
+lambda or arbitrary scope flattening is permitted.
+
+Parsing performs no type attribution; `javap -c -p -constants -s` compares exact
+printed instructions/descriptors/constants without index normalization, while
+annotations/bootstrap/debug metadata remain outside disassembly. The AST and
+bytecode evidence complement the execution tests and do not prove provider or
+hosted behavior.
+
+All **211 intended backend inputs exactly match the managed checkout**; only
+the three reviewed production files differ from the baseline. The verified
+snapshot binds the managed Git head. An earlier local snapshot attempt could
+not read that checkout's Git metadata through the default sandbox; its file
+comparisons are retained separately, the helper now fails on a missing head,
+and the approved rerun records the complete identity.
+
+The full intended backend runs **468 tests: 466 passed, two skipped**, zero
+failures/errors, with Maven exit 0. Packaging succeeds: all **248 production
+classes** match frozen tested bytes, all **111 compiled test/fixture classes**
+are excluded by identity and bytes, all **211 source hashes** remain valid and
+the executable manifest names the expected launcher/application. The actual
+packaged PropertiesLauncher console also exits 0 for `--help` with its expected
+read-only command text. Independent source review finds no actionable issue.
+
+Read-only cleanup checks confirm all **26 containers observed across baseline
+and full runs** and both explicitly observed full-run JVMs (**one test fork and
+one Maven process**) are absent. The baseline fork PID was not separately
+captured; its Maven run completed successfully. The original checkout remains
+on its photo-upload branch, and all ten entry work-file hashes match at the
+preservation checkpoint. Later unrelated gallery/document work remains outside
+this batch and its isolated validation.
+
+Runtime is Windows, Temurin 25.0.3+9-LTS, Maven wrapper 3.9.16, Spring Boot 4.1.1,
+PostgreSQL 17, existing FFmpeg/ffprobe 9.0.2 and Node 24.21.0. Local Surefire exit
+grace is 120 seconds rather than its default 30; tracked configuration is
+unchanged and the full run exits without a fork-shutdown timeout. The two
+unexecuted Windows-disabled cases are
+`OwnedExportDirectoryTest.symlinkedArtifactsAreNeverFollowedAndOutsideBytesRemainUntouched`
+and
+`OperatorRecoveryPostgresTest.symlinkedOriginalAndSymlinkedBundleRootAreRejectedBeforeAnyWrites`.
+Frontend code is unchanged on this branch, and its suites are not rerun for this
+backend batch. No hosted or provider checks, actual retention job observation,
+new two-artifact rollback rehearsal, capacity measurement or release acceptance
+is established by these checks.
+
+Source/AST/disassembly proofs, both suites' baseline, full-suite/package/helper
+logs, packaged help, hashes, cleanup and independent reviews are under
+`logs/operations-directory-review.local/` in the original project checkout,
+including the ready PR description. Main remains `7bf1d0d` at the final fetch and
+is included in this branch. Ryan creates/merges the PR after exact-head
+CI/configured review and Linux-only checks. The focused Notion issue records
+delivery status. The next suggested directory is backend `recovery/`, with a
+fresh inventory and consumer review.
