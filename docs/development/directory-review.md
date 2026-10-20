@@ -3029,3 +3029,186 @@ creates/merges the PR unless he authorizes another specific exception.
 Exact-current-head CI/configured review remains required before merge. The next formal package is
 **`sharing/`**, followed by `health/`; resources/build/configuration and broader
 provider/device/assistive-technology/hosted/release acceptance remain separate.
+
+## Backend sharing decisions — October 20, 2026
+
+This formal batch reviews all **six production files** in
+`backend/src/main/java/com/kevinmel/archive/sharing/` and both existing package
+tests. It starts from library delivery `2fcd546`, initially stacked on that
+unmerged branch above main `8fb3fa0` (PR 95). The final remote refresh still
+finds library unmerged at `2fcd546`, with no PR found. The sharing review base
+is `feature/backend-library-review` while that dependency is unmerged; merge
+library first and retarget sharing to main before its merge. No tracked test
+file is added, and neither history nor the tested library source is rewritten.
+
+| File in `sharing/` | Decision and preserved boundary |
+|---|---|
+| `SharedMemory.java` | Keep behavior; expand projection and nested media records. Preserve the exact guest wire fields and null media mapping, excluding guest/account identity, private workflow metadata, filenames, checksums and storage/retry capabilities. Diagnostics retain only the memory identity. |
+| `SharedPageController.java` | Keep behavior; expand the response chain. Preserve UUID route conversion, the static application resource, exact HTML MIME value and no-store/no-referrer/noindex headers. Serving the shell performs no memory or account lookup. |
+| `ShareTokens.java` | Keep behavior; expand generation and validation control flow. Preserve 32 cryptographically random bytes, unpadded URL-safe encoding, exact 43-character/canonical bounds, SHA-256 over the token's UTF-8 bytes, null rejection and the existing impossible-algorithm failure mapping. |
+| `SharingController.java` | Keep behavior; expand route signatures and response chains. Preserve guest reads, contract-before-origin checks for issuance, existing no-body/security gates, exact response policy and the advanced integer ETag. |
+| `SharingRepository.java` | Keep behavior; expand signatures, JDBC chains and inert control blocks. Preserve exact SQL/text blocks, event/availability/KEEP/audience predicates, bound parameters, created-time/identity keyset order, limit-plus-one paging and digest-only rotation. Playback acquires the memory lock before opening a fresh capability statement. |
+| `SharingService.java` | Keep behavior; expand transaction/control flow and records. Preserve immutable pages, canonical digest-only reads, READ_COMMITTED playback and verified-original five-minute grants, current authority before parsing/after the memory lock/before return, conflict and audience precedence, monotonic microsecond timestamps and atomic rotation/revision/audit. Diagnostics omit content and capabilities. |
+| Existing `SharingHttpSecurityTest.java` | Keep all four cases/assertions; expand annotation, member and request/assertion layout. Preserve guest independence from the account store and rejection of missing CSRF, cross-origin/body-bearing, anonymous, operator and revoked issuance requests, plus success headers/revision. |
+| Existing `SharingServiceTest.java` | Keep all five cases/assertions; expand fixture and control/call layout. Preserve canonical capability validation, unavailable-read isolation, verified-original grant bounds, current-authority/revision/audit checks and disallowed-audience coverage. |
+
+Consumer tracing covers the public shared-memory page and listing, frontend
+sharing decoders, inbox mutation/revision state and memory-review controls,
+security routes and request-body gates, shared inbox eligibility and locking,
+review revocation/private restoration, playback verification/storage signing,
+retention erasure, portable export, recovery metadata/version validation and
+additive V14. Existing real HTTP/PostgreSQL tests verify audience durability,
+rotation/revocation, private projection, public discovery, stale revisions,
+archive/delete/private restoration and unsafe-media exclusion. The queued
+playback test establishes that its exact reader PID waits behind the owned
+memory writer, then rejects the old capability after rotation commits.
+Incidental tracing does not complete the formal health or resources reviews.
+
+No concrete runtime behavior defect or measured performance issue is found.
+The batch retains the existing implementation and expands its presentation;
+no cache, helper/constant extraction, route, migration, recovery format,
+dependency or tracked build-setting change is introduced. Public reads remain
+independent of couple accounts. A genuine review no-op retains an existing
+link; actual audience/status changes revoke it. Restoring a memory does not
+republish its prior audience or capability. Recovery/portable metadata retains
+audiences while secret-link capabilities remain excluded.
+
+The API document now distinguishes recovery package versions from database
+schema versions and corrects an inherited export claim: recovery v7 preserves
+review-audit audiences, while portable exports preserve memory audiences and
+do not include review audit. The operator runbook remains the compatibility
+authority; no recovery or export format is changed.
+
+The mechanical source commit is
+`b36746d2bf422710f7cb0e38988bc5a224cfe345`. Strict AST comparison passes **eight
+sources**, **18 controls (six positive/twelve negative)** and malformed-source
+rejection. Ordered import identities, expressions, meaningful scopes, literals
+and SQL values are retained. The only body normalization removes singleton
+return/throw/continue/break/expression-statement wrappers directly at if/loop
+body properties; there is no package-specific allowance. This compares public
+JDK 25 parse trees without type resolution and is not a general semantic proof.
+
+Exact `javap -c -p -constants -s` comparison passes **11 classes: nine production
+and two test**. Baseline and mechanical outputs match without normalization,
+including instructions, private members, descriptors and constant-pool
+references; bound source/class inputs remain unchanged during comparison.
+This does not compare every classfile attribute/debug field or raw class bytes.
+
+## Backend sharing verification — October 20, 2026
+
+The fresh frozen baseline passes **nine existing package tests** and a separate
+selection of **three existing real HTTP/PostgreSQL sharing consumer tests**:
+12 total across those two runs, zero failures/errors/skips and both exits 0
+with `BUILD SUCCESS`. These counts are separate from the final full-suite run.
+The existing frontend sharing, memory-review and archive-facade compatibility
+suites pass **14 tests**, zero failures/skips and exit 0. Frontend source is
+unchanged; these checks do not rerun historical mounted-browser evidence or
+unrelated lint/build.
+
+Retained analyzer artifacts are checked before offline reuse: all seven
+extension/provenance artifact hashes match, the extracted analyzer/identity
+entries match the retained official VSIX, and all **61 pinned CPD sources and
+seven dependencies** match their manifest. The official Marketplace bundle is
+**6.1.1**, analysis engine **12.1.1.87771**, SonarJava **8.44.0.48651**, on Java
+**25.0.3+9-LTS**. There are zero downloads, no IDE installation/global-setting
+change and no application-source upload. This binds the prior official HTTPS
+acquisition; no independent vendor checksum or IDE signature check is claimed.
+
+Baseline actual analysis recognizes **190 Java inputs: 128 MAIN and 62 TEST**,
+with zero failed inputs and **zero selected findings across the entire
+backend**, zero for each selected rule. Parameters remain S3776 `Threshold=15`,
+S1541 `Threshold=10`, S1192 `threshold=3`, `minimalLength=5` and empty
+`excludePatterns`; actual score/boundary, TEST-classification and malformed-input
+controls pass. There are no baseline findings requiring a fix/retain/false-
+positive disposition. These rules have MAIN scope; indexing TEST inputs does
+not establish test-complexity cleanliness. The result API exposes recognition
+and failed inputs, not a separate completed-file rule count. The known exact
+`No workDir in SonarLint` warning is retained with that limitation. Raw baseline
+evidence is `logs/sharing-directory-review.local/baseline-rules/run-tzgjaS/`.
+
+Baseline official Java CPD scans **128 production files**, passes **five
+controls** and reports **zero raw per-origin and zero unique complete endpoint
+groups**. It uses unchanged ten-statement detection from official SonarQube
+**26.4.0.121862**, pinned commit
+`ab253503cc54df4bdfefd11eb783997d402b5147`, without production-source exclusions.
+Evidence is `logs/sharing-directory-review.local/baseline-cpd/run-rFHsI1/`.
+These three rules and the standalone CPD module do not establish a full
+profile, coverage, duplication density, new-code metrics or a hosted quality
+gate; reproduction remains in [the analyzer guide](backend-sonar.md).
+
+Fresh frozen compilation/classpath export exits 0 with `BUILD SUCCESS` and
+compiles all **190 Java inputs**. The exact source manifest contains **212
+tracked backend inputs**; the pre-test compiled manifest contains **367
+classes: 256 production and 111 test/fixture classes**. These are frozen
+inventories; post-package byte integrity is verified separately below.
+
+Final actual SonarJava exits 0 with **zero selected findings**, recognizing the
+same **128 MAIN/62 TEST** inputs with zero failed inputs and passing controls.
+Final official CPD exits 0 with **zero raw and unique complete endpoint groups**
+over **128 production inputs**, with five passing controls and unchanged
+settings. Results are retained at
+`logs/sharing-directory-review.local/final-rules/run-K3W2xL/` and
+`final-cpd/run-v27xQI/`; the source/class/dependency fences bind the actual
+inputs. Baseline and final both remain clear within the stated rule/CPD scope.
+
+Independent final source review finds no actionable issue across all eight
+sources and their consumers. Candidate, visible, mechanically compiled and
+final frozen source hashes match. The report is `final-source-review.json` in
+the ignored sharing evidence directory. This review is separate from execution.
+
+The fresh frozen-source full Maven `package` run exits **0** with explicit
+`BUILD SUCCESS`: **474 total tests, 472 passed, zero failures/errors and two
+expected Windows skips**. It finishes in **12:12** without a Surefire shutdown
+timeout diagnostic. Local options are `surefire.exitTimeout=120`, `forkCount=1`,
+`reuseForks=false` and `argLine=-Xmx1024m`; tracked settings are unchanged.
+Runtime is Temurin 25.0.3+9-LTS, Maven 3.9.16, Spring Boot 4.1.1, Docker 29.7.2,
+PostgreSQL 17.11 and retained FFmpeg/ffprobe 9.0.2 binaries whose hashes are
+rechecked before this run. Frontend consumers use Node 24.21.0/npm 11.19.0.
+Unchanged frontend lint/build and historical mounted-browser matrices are not
+rerun for this backend-only batch.
+
+Post-run integrity checks all **212 tracked backend inputs** against the
+visible and frozen source, and all **367 compiled inputs** against their
+pre-test hashes. The executable JAR packages all **256 production classes** as
+identical tested bytes and excludes all **111 compiled test/fixture identities
+and digests**. Duplicate JAR entries are refused; its manifest names the
+expected Boot launcher and application. This audits direct classes and the
+manifest, not nested dependency JARs or non-class resources. The JAR SHA-256 is
+`bace5d55847c24579cf2c277480c17453955a287531716e14911a78aa15e3c11`.
+
+The independent helper audit confirms that the resource auditor is
+byte-identical to the earlier controlled library helper and the delivery
+verifier has the same executable Python AST, differing only in its module
+docstring. Syntax checks pass. The earlier **26 isolated helper controls** are
+bound to the exact original hashes and are not rerun or counted as new
+application tests. Inventories remain read-only and fail closed on errors;
+resource and direct-JAR coverage limits remain explicit in the final reports.
+
+Read-only cleanup confirms all **48 exact created-container IDs** and **25
+logged Spring-test JVM PIDs** observed across the successful baseline package,
+PostgreSQL consumer and full-package runs are absent, with no Java command line
+containing the review path. This covers those observed identities/path, not
+unlogged JVMs, native children or every system resource. Unrelated resources
+are untouched. The actual reports are `final-delivery-verification.json` and
+`final-resource-audit.json` in the ignored sharing evidence directory.
+Independent final source and documentation reviews find no actionable issue;
+relative file links and explicit anchors resolve. The focused Notion issue
+tracks the delivery/evidence with readback after updates. A ready-to-copy PR
+title and description are included in the final response and retained under
+`logs/sharing-directory-review.local/pr-description.md`.
+
+The two existing Windows-disabled symlink cases remain explicit Linux CI
+checks:
+
+```text
+OwnedExportDirectoryTest.symlinkedArtifactsAreNeverFollowedAndOutsideBytesRemainUntouched
+OperatorRecoveryPostgresTest.symlinkedOriginalAndSymlinkedBundleRootAreRejectedBeforeAnyWrites
+```
+
+The branch is `feature/backend-sharing-review`; ignored source/analyzer/proof/
+package/resource evidence belongs under `logs/sharing-directory-review.local/`.
+Normal delivery is commit/push with a ready PR description; Ryan creates and
+merges the PR unless he authorizes another specific exception. Exact-current-
+head CI/configured review remains required before merging. The next formal
+backend package is **`health/`**; resources/build/configuration and broader
+provider/device/assistive-technology/hosted/release acceptance remain separate.
