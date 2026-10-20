@@ -24,18 +24,35 @@ Keep the page open while sending or recovering an uncertain result. Refreshing, 
 
 For gallery scenario G0, use the slideshow arrows before choosing **Browse all
 300 photos** and confirm the currently viewed photo's thumbnail is marked and
-centered on screen when the page has room. Then open photo 86, advance to photo
-124 and choose **Back to thumbnails**; the gallery should focus and center photo
-124. Repeat with reverse navigation and
-Escape. Returning should preserve the current photo even across a thumbnail batch
-boundary or a viewport resize.
+centered on screen when the page has room. Scroll the gallery until photo 86 is
+partway down the screen, open it, advance to photo 124 and choose **Back to
+gallery**. The gallery should return to the exact scroll position it had before
+photo 86 opened, with keyboard focus on photo 86. It should not move to photo
+124. Repeat with reverse navigation, the top-right close button and Escape.
+Closing and reopening a photo should preserve the loaded thumbnail batches.
 
-Also return to photos 24 and 48 when few or no shared memories follow the gallery.
-After the next thumbnail batch loads, the selected photo should stay centered.
+Also click the main-page slideshow photo directly to enlarge it without first
+opening the gallery. Navigate with its arrows, then choose **Back to slideshow**,
+the close button or Escape. The slideshow should show the last viewed photo and
+the page should return to its original scroll position with focus on the photo
+button. Check keyboard opening with Enter and Space, and confirm Tab stays inside
+the enlarged photo while it is open.
+
+When entering the gallery with **Browse all 300 photos**, include photos 24 and
+48 when few or no shared memories follow it. After the next thumbnail batch
+loads, the selected photo should stay centered. Resize while an enlarged photo
+is open and check that closing preserves the gallery's place as far as the new
+layout allows, without hiding focus or causing horizontal overflow.
+
+The [gallery verification record](guest-gallery-verification.md#october-19-2026---enlarged-photo-return-position)
+contains 34 passing local mounted Edge cases for the dialog and return behavior,
+including a partially visible thumbnail opened with a real pointer click. These
+checks prepare G0; physical-phone, actual screen-reader and hosted/network results
+still need to be recorded below.
 
 | ID | Try this | What to look for |
 |---|---|---|
-| G0 — Couple gallery | On the guest welcome, browse the approved photos with Previous/Next or the arrow keys and use Browse all 300 photos to open thumbnails. Check each source group, including IDs 219-300, against the [expected source set](wedding-release-checklist.md#expected-public-gallery-source-set). Try Play/Pause slideshow, then use Share a memory above the gallery. | All 300 approved photos are available without sign-in, beginning with the original Grand Central photo. The added group includes 50 PDF photos, 30 saved scan JPEGs and both later couple photos. Confirm advancement from 218 to 219, wraparound from 300 to 1 and access to all 300 thumbnails. In the slideshow, only the current slide loads; its full framing and readable description remain clear. Optional playback advances every five seconds, pauses while hovered or hidden, and stops after manual navigation or keyboard focus. Reduced-motion settings keep manual browsing available. Sharing stays easy to reach. Viewing the gallery does not reveal private guest submissions. Use only the separate synthetic files Ryan supplies for upload tests. |
+| G0 — Couple gallery | On the guest welcome, browse the approved photos with Previous/Next or the arrow keys, click the slideshow photo to enlarge it, and use Browse all 300 photos to open thumbnails. Open a thumbnail and navigate in the enlarged photo before returning. Check each source group, including IDs 219-300, against the [expected source set](wedding-release-checklist.md#expected-public-gallery-source-set). Try Play/Pause slideshow, then use Share a memory above the gallery. | All 300 approved photos are available without sign-in, beginning with the original Grand Central photo. The added group includes 50 PDF photos, 30 saved scan JPEGs and both later couple photos. Confirm advancement from 218 to 219, wraparound from 300 to 1 and access to all 300 thumbnails. Closing an enlarged photo restores the page position and opening control; arrows do not change that return position. In the slideshow, only the current slide loads; its full framing and readable description remain clear. Optional playback advances every five seconds, pauses while hovered or hidden, and stops after manual navigation or keyboard focus. Reduced-motion settings keep manual browsing available. Sharing stays easy to reach. Viewing the gallery does not reveal private guest submissions. Use only the separate synthetic files Ryan supplies for upload tests. |
 | G1 — Named note | Choose **Write a note**. Try an empty message, then enter a made-up name and a short test note. Review it, edit it, review again and send. Tap Send twice quickly. | Clear validation keeps your work. Review shows the intended name/message. Sending produces one saved note and a clear confirmation. **Done** and **Share another memory** have distinct, understandable results. |
 | G2 — Unnamed note and draft | Start a note with the name blank. Before sending, go back to the memory choices and return. Send it, then choose another memory. | The draft survives in-page navigation. Leaving the name blank works. The inbox later says **Name not provided**. Returning to a saved result does not silently send again. |
 | G3 — Five photos | Select five supplied JPEG, PNG or WebP photos, each under 10 MB. Add a made-up name and different test captions. Review, edit, then send. | All five previews, filenames and captions stay associated with the correct photos. Progress distinguishes sending from saving. Only the confirmed saved count is celebrated. All five photos later appear in the private inbox with their matching captions. |

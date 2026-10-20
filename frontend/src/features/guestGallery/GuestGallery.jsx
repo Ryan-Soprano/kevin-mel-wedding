@@ -23,14 +23,27 @@ function subscribeToMotionPreference(notify) {
 const prefersReducedMotion = () =>
   window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-function Photo({ photo, index, total, deferLoading = false }) {
+function Photo({ photo, index, total, deferLoading = false, enlarged = false, onOpen }) {
   const responsive =
     photo.smallSrc && photo.smallWidth < photo.width
       ? {
           srcSet: `${photo.smallSrc} ${photo.smallWidth}w, ${photo.src} ${photo.width}w`,
-          sizes: SIZES,
+          sizes: enlarged ? "(max-width: 1152px) calc(100vw - 64px), 1086px" : SIZES,
         }
       : {};
+  const image = (
+    <img
+      src={photo.src}
+      width={photo.width}
+      height={photo.height}
+      alt={photo.alt}
+      loading={deferLoading ? "lazy" : "eager"}
+      fetchPriority={!deferLoading && index === 0 ? "high" : "auto"}
+      decoding="async"
+      style={{ maxWidth: photo.width }}
+      {...responsive}
+    />
+  );
   return (
     <figure
       className="guest-gallery-photo"
@@ -38,18 +51,48 @@ function Photo({ photo, index, total, deferLoading = false }) {
       aria-roledescription="slide"
       aria-label={`Photo ${index + 1} of ${total}`}
     >
-      <img
-        src={photo.src}
-        width={photo.width}
-        height={photo.height}
-        alt={photo.alt}
-        loading={deferLoading ? "lazy" : "eager"}
-        fetchPriority={!deferLoading && index === 0 ? "high" : "auto"}
-        decoding="async"
-        style={{ maxWidth: photo.width }}
-        {...responsive}
-      />
+      {onOpen ? (
+        <button
+          type="button"
+          className="guest-gallery-enlarge"
+          aria-label={`Enlarge photo ${index + 1} of ${total}: ${photo.alt}`}
+          aria-haspopup="dialog"
+          onClick={onOpen}
+        >
+          {image}
+        </button>
+      ) : image}
     </figure>
+  );
+}
+
+function PhotoControls({ index, total, slideId, onMove }) {
+  return (
+    <div className="guest-gallery-controls">
+      {total > 1 && (
+        <button
+          type="button"
+          className="button-secondary guest-gallery-arrow"
+          aria-label="Previous photo"
+          aria-controls={slideId}
+          onClick={() => onMove(-1)}
+        >
+          ←
+        </button>
+      )}
+      <p className="guest-gallery-position">Photo {index + 1} of {total}</p>
+      {total > 1 && (
+        <button
+          type="button"
+          className="button-secondary guest-gallery-arrow"
+          aria-label="Next photo"
+          aria-controls={slideId}
+          onClick={() => onMove(1)}
+        >
+          →
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -86,7 +129,8 @@ export function GalleryThumbnails({
               id={`couple-gallery-thumbnail-${photoIndex}`}
               aria-label={`View photo ${photoIndex + 1} of ${photos.length}: ${photo.alt}`}
               aria-current={photoIndex === currentIndex ? "true" : undefined}
-              onClick={() => onOpen(photoIndex)}
+              aria-haspopup="dialog"
+              onClick={(event) => onOpen(photoIndex, event.currentTarget)}
             >
               <img
                 src={photo.smallSrc || photo.src}
@@ -118,15 +162,18 @@ export default function GuestGallery({ photos = couplePhotos, deferInitialPhoto 
   const [playing, setPlaying] = useState(false);
   const [hovered, setHovered] = useState(false);
   const [view, setView] = useState("preview");
+  const [expanded, setExpanded] = useState(false);
   const [visibleCount, setVisibleCount] = useState(THUMBNAIL_BATCH);
   const gallery = useRef(null);
   const pendingFocus = useRef(null);
+  const dialog = useRef(null);
+  const viewerReturn = useRef(null);
   const reducedMotion = useSyncExternalStore(
     subscribeToMotionPreference,
     prefersReducedMotion,
     () => false,
   );
-  const rotating = active && playing && !hovered && !reducedMotion && view !== "grid";
+  const rotating = active && playing && !hovered && !reducedMotion && !expanded && view !== "grid";
   const currentIndex = index % (photos.length || 1);
   const appendPhotos = useCallback(() => {
     setVisibleCount((count) => Math.min(count + THUMBNAIL_BATCH, photos.length));
@@ -138,6 +185,26 @@ export default function GuestGallery({ photos = couplePhotos, deferInitialPhoto 
       setIndex((current) => (current + 1) % photos.length),
     );
   }, [rotating, photos.length]);
+
+  useLayoutEffect(() => {
+    if (!expanded || !active) return;
+    const element = dialog.current;
+    const root = document.documentElement;
+    const overflow = root.style.overflow;
+    const scrollbarGutter = root.style.scrollbarGutter;
+    // Preserve an existing scrollbar's space without adding a new gutter on
+    // phones with overlay scrollbars, which would resize the underlying grid.
+    if (window.innerWidth > root.clientWidth && getComputedStyle(root).scrollbarGutter === "auto") {
+      root.style.scrollbarGutter = "stable";
+    }
+    root.style.overflow = "hidden";
+    element.showModal();
+    return () => {
+      if (element.open) element.close();
+      root.style.overflow = overflow;
+      root.style.scrollbarGutter = scrollbarGutter;
+    };
+  }, [active, expanded]);
 
   useLayoutEffect(() => {
     const target = pendingFocus.current;
@@ -187,12 +254,36 @@ export default function GuestGallery({ photos = couplePhotos, deferInitialPhoto 
     setView("grid");
   }
 
-  function openPhoto(photoIndex) {
-    pendingFocus.current = { id: "couple-gallery-slide" };
+  function openPhoto(photoIndex, opener) {
+    viewerReturn.current = {
+      opener,
+      x: window.scrollX,
+      y: window.scrollY,
+      top: opener.getBoundingClientRect().top,
+      width: window.innerWidth,
+      height: window.innerHeight,
+    };
     setPlaying(false);
     setHovered(false);
     setIndex(photoIndex);
-    setView("viewer");
+    setExpanded(true);
+  }
+
+  function closePhoto() {
+    setExpanded(false);
+    const target = viewerReturn.current;
+    viewerReturn.current = null;
+    if (!active || !target?.opener.isConnected) return;
+    target.opener.focus({ preventScroll: true });
+    let top = target.y;
+    if (target.width !== window.innerWidth || target.height !== window.innerHeight) {
+      // A rotation or resize changes row geometry: keep the opening photo in
+      // view rather than restoring coordinates from the old layout.
+      const bounds = target.opener.getBoundingClientRect();
+      const visibleTop = Math.max(0, Math.min(target.top, window.innerHeight - bounds.height));
+      top = window.scrollY + bounds.top - visibleTop;
+    }
+    window.scrollTo({ left: target.x, top, behavior: "instant" });
   }
 
   function showMore() {
@@ -201,12 +292,12 @@ export default function GuestGallery({ photos = couplePhotos, deferInitialPhoto 
   }
 
   function navigate(event) {
-    if (view === "grid") return;
-    if (event.key === "Escape" && view === "viewer") {
+    if (event.key === "Escape" && expanded) {
       event.preventDefault();
-      showThumbnails();
+      dialog.current.close();
       return;
     }
+    if (view === "grid" && !expanded) return;
     if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
     event.preventDefault();
     move(event.key === "ArrowLeft" ? -1 : 1);
@@ -238,7 +329,7 @@ export default function GuestGallery({ photos = couplePhotos, deferInitialPhoto 
           currentIndex={currentIndex}
           onOpen={openPhoto}
           onMore={showMore}
-          onAutomaticMore={active ? appendPhotos : undefined}
+          onAutomaticMore={active && !expanded ? appendPhotos : undefined}
         />
       ) : (
         <>
@@ -273,49 +364,71 @@ export default function GuestGallery({ photos = couplePhotos, deferInitialPhoto 
             aria-atomic="true"
           >
             <Photo
-              key={photos[currentIndex].id}
               photo={photos[currentIndex]}
               index={currentIndex}
               total={photos.length}
-              deferLoading={deferInitialPhoto && view === "preview" && currentIndex === 0 && !playing}
+              deferLoading={deferInitialPhoto && currentIndex === 0 && !playing}
+              onOpen={(event) => openPhoto(currentIndex, event.currentTarget)}
             />
           </div>
-          <div className="guest-gallery-controls">
-            {photos.length > 1 && (
-              <button
-                type="button"
-                className="button-secondary guest-gallery-arrow"
-                aria-label="Previous photo"
-                aria-controls="couple-gallery-slide"
-                onClick={() => move(-1)}
-              >
-                ←
-              </button>
-            )}
-            <p className="guest-gallery-position">
-              Photo {currentIndex + 1} of {photos.length}
-            </p>
-            {photos.length > 1 && (
-              <button
-                type="button"
-                className="button-secondary guest-gallery-arrow"
-                aria-label="Next photo"
-                aria-controls="couple-gallery-slide"
-                onClick={() => move(1)}
-              >
-                →
-              </button>
-            )}
-          </div>
+          <PhotoControls
+            index={currentIndex}
+            total={photos.length}
+            slideId="couple-gallery-slide"
+            onMove={move}
+          />
         </>
       )}
       {photos.length > 1 && view !== "grid" && (
         <div className="guest-gallery-browse">
           <button type="button" className="button-secondary" onClick={showThumbnails}>
-            {view === "viewer" ? "Back to thumbnails" : `Browse all ${photos.length} photos`}
+            Browse all {photos.length} photos
           </button>
         </div>
       )}
+      <dialog
+        ref={dialog}
+        className="guest-gallery-dialog"
+        aria-label="Enlarged gallery photo"
+        onClose={closePhoto}
+      >
+        {expanded && (
+          <>
+            <button
+              type="button"
+              className="guest-gallery-dialog-close"
+              aria-label="Close photo"
+              onClick={() => dialog.current.close()}
+            >
+              <span aria-hidden="true">×</span>
+            </button>
+            <div id="couple-gallery-enlarged-slide" aria-live="polite" aria-atomic="true">
+              <Photo
+                key={photos[currentIndex].id}
+                photo={photos[currentIndex]}
+                index={currentIndex}
+                total={photos.length}
+                enlarged
+              />
+            </div>
+            <PhotoControls
+              index={currentIndex}
+              total={photos.length}
+              slideId="couple-gallery-enlarged-slide"
+              onMove={move}
+            />
+            <div className="guest-gallery-browse">
+              <button
+                type="button"
+                className="button-secondary"
+                onClick={() => dialog.current.close()}
+              >
+                {view === "grid" ? "Back to gallery" : "Back to slideshow"}
+              </button>
+            </div>
+          </>
+        )}
+      </dialog>
       {onBackToSharing && (
         <p className="guest-gallery-return">
           <a href="#share-wedding-memory" onClick={onBackToSharing}>

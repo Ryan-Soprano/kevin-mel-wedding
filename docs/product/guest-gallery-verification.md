@@ -141,6 +141,10 @@ deployment and physical phone acceptance remain separate.
 
 ## October 19, 2026 - return to the currently viewed thumbnail
 
+Historical behavior and evidence: the later **enlarged-photo return position**
+change supersedes the viewer-close behavior described here and in the centering
+corrections below. Centering still applies when entering with **Browse all**.
+
 Both thumbnail-entry paths now use the currently displayed photo. Browsing the
 slideshow and choosing **Browse all 300 photos** opens the thumbnail batch that
 contains that photo. Opening photo 86, navigating to photo 124 and choosing
@@ -252,3 +256,52 @@ centering errors stay below half a pixel. There are no page errors or horizontal
 overflow. Screenshots were inspected, and owned browsers/servers are closed.
 Temporary sources, links and previews are removed after publication; small
 baseline/final JSON reports and test/build logs remain outside the app package.
+
+## October 19, 2026 - enlarged-photo return position
+
+Trusted user feedback changed the return requirement: enlarging a thumbnail
+should preserve the gallery's exact prior scroll position. Navigating within an
+enlarged photo must not move the underlying gallery to the final viewed photo
+when the viewer closes. This supersedes the viewer-close centering behavior
+recorded above. **Browse all 300 photos** continues to center the current
+slideshow photo when entering the gallery, subject to document-edge limits.
+
+The intended change uses a native photo dialog while retaining the underlying
+gallery or slideshow. A thumbnail opens the dialog; **Back to gallery**, the
+top-right close button and Escape restore its opening control and saved page
+position. The main-page slideshow photo also opens this dialog directly, without
+requiring a trip through the thumbnails. Its return action is **Back to
+slideshow**. In both cases, arrow navigation retains the last viewed photo while
+preserving the original return location. Existing thumbnail batches stay loaded.
+An unavoidable viewport/layout change may limit exact pixel restoration.
+
+Mounted mobile verification found an additional scroll-lock issue: reserving a
+stable scrollbar gutter on a device that previously used overlay scrollbars
+changes the underlying grid's width. Closing then allowed scroll anchoring to
+move the page by 111 pixels. The dialog now reserves a gutter only when a visible
+scrollbar would otherwise disappear; existing gutter preferences are retained.
+The original failing report is preserved separately from the corrected result.
+
+The isolated final source passes **34 mounted Edge browser cases**, using
+1280 x 900, 390 x 844 and 320 x 720 viewports. The minimal fixture and complete
+welcome both restore the exact original scroll position, thumbnail DOM node,
+loaded batch count and focus after photo 86 to 124. Checks cover reverse
+navigation, first/last wraparound, all three close actions, direct slideshow
+enlargement with Enter and Space, native modal keyboard behavior, background
+wheel locking, reduced motion, short pages at photos 24/48 without
+IntersectionObserver, resizing in both directions, and inactive/unmounted
+gallery cleanup. A real pointer click on a partially visible phone thumbnail
+also preserves the original position. No JavaScript page errors or horizontal
+overflow were observed. These checks use actual layout and scrolling, without
+mocked geometry or timers.
+
+After the scrollbar correction, the final isolated source passes all **567
+frontend tests**, ESLint and the production build. Its JavaScript, CSS and gallery
+test hashes match the source used for the 34 browser cases. Desktop dialog and
+phone gallery-return screenshots were inspected. Browser evidence and source hashes are under ignored
+`logs/gallery-dialog.local/`. Owned browser/server resources are closed;
+temporary helpers, isolated sources, links and previews are removed after review,
+while compact baseline/final JSON and text evidence remain outside the app
+package. The earlier centering evidence does not verify these new dialog and
+return-position behaviors. Physical-device, hosted and assistive-technology
+acceptance remain separate.
