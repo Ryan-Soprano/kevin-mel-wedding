@@ -1680,3 +1680,129 @@ checks. Local fixture/HTTP/database evidence does not establish provider,
 hosted, physical-device, capacity or release acceptance. The next suggested
 backend boundary is retention, followed by operations/recovery, after fresh
 inventory and consumer tracing.
+
+## Backend retention decisions — October 19, 2026
+
+This batch covers all **seven production files**, **four existing test suites**
+and **one test fixture** under backend `retention/`: **12 tracked paths**. The
+checkout was clean at `de82e529`, and `feature/backend-retention-review` starts
+from that completed review head, preserving the landing text and prior commits.
+The entry inventory and frozen baseline retain all **211 backend paths**.
+
+All seven production files receive the established expanded formatting:
+multiline parameters and records, separate statements, explicit control blocks
+and readable JDBC/mapper/digest chains. Mechanical commit `6c468735` is separate
+from the reproduced concurrency fix. No dependency, migration, public API,
+storage policy or new tracked test file is introduced. No performance gain is
+claimed.
+
+| File in production `retention/` | Decision and reason |
+|---|---|
+| `DeletionRecord.java` | Simplify formatting; keep immutable content-free identities/times, the exact eight-field version/event schema, canonical UUIDs/digest, duplicate/trailing-token rejection, 2048-byte decoding bound and redacted errors/diagnostics. |
+| `DeletionStorage.java` | Simplify formatting; keep the server-only exact-object interface, immutable defensive-copy page and count-only page diagnostics. |
+| `RetentionAdministration.java` | Simplify formatting; keep console-only lifecycle, exact command/environment/typed confirmation, explicit nonlocal database target, private storage, logging suppression, safe partial-failure results and resource closure. It starts no HTTP server or migration. |
+| `RetentionConfiguration.java` | Simplify formatting; keep opt-in scheduling, private-R2 requirement, one-minute/day interval bounds, delayed 20-item batches and content-free failure warnings. Configuration does not prove hosted job health. |
+| `RetentionRepository.java` | Simplify formatting and fix concurrent sibling guest-name cleanup with a separate contribution row lock before the conditional scrub. Keep bounded verified expired-private claims, persisted immutable plan precision, ownership/key validation, version-gated recovery capabilities, ordered organization detachment, erased-key reservations, metadata scrubbing and idempotent completion. |
+| `RetentionService.java` | Simplify formatting; keep independent durable evidence before erasure, repeated ownership/staging-scope checks, retry-safe partial failures, transactional completion and fail-closed offline replay with bounded/cycle-checked pages. |
+| `SubmissionKeyDigest.java` | Simplify formatting; keep SHA-256, case-canonical UUID-v4 capabilities, exact legacy/non-UUID bytes, invalid stored-key rejection and sanitized algorithm errors. |
+
+| File in test `retention/` | Decision and reason |
+|---|---|
+| `DeletionRecordTest.java` | Keep unchanged: strict record round trips/schema/coercion/identity/time/byte bounds, canonical digest behavior and immutable/redacted pages. |
+| `InMemoryDeletionStorage.java` | Keep unchanged: provider-free immutable tombstones, lost-response/storage failure injection, operation ordering and ledger pagination. |
+| `RetentionAdministrationTest.java` | Keep unchanged: help/unsupported commands and explicit complete nonlocal database settings; missing/blank/default-only settings fail closed. |
+| `RetentionPostgresTest.java` | Extend the existing suite with a deterministic concurrent final-sibling regression. Keep real PostgreSQL migrations, expiry/precision, evidence/object/database retry failures, sibling preservation, replay/absent-envelope reservations, ownership and organization lock/detachment coverage. |
+| `RetentionServiceTest.java` | Keep unchanged: evidence/erase/scrub ordering, ownership and grant validation, isolated item failures, immutable retry plans, bounded replay/cycles/future evidence and batch bounds. |
+
+The reproduced defect requires a contribution with at least three memories: an
+earlier purge has already committed the shared erased-key reservation, and two
+final sibling purges overlap. Each transaction can see the other's uncommitted
+memory as unpurged, so both conditional envelope updates skip the guest name.
+The new PostgreSQL regression first purges one photo, then holds one sibling's
+purge transaction uncommitted after `finish` returns while the other completes
+or demonstrably waits on its database PID. Against unchanged production source,
+all three memories are purged but the final name assertion fails with
+`Synthetic Photo Guest` retained.
+
+The fix locks the contribution in a separate optional SELECT immediately before
+the existing conditional guest-name UPDATE. The UPDATE starts a fresh default
+READ COMMITTED statement after any wait and observes committed sibling purges.
+The lock follows the existing memory/album/timeline/tag/media work; callers do
+not acquire the same contribution lock before existing memory locks. A missing
+envelope remains valid for authority replay into a backup predating contribution
+creation. Operator recovery's exclusive archive-table/serializable transaction
+remains compatible. The first erased-key INSERT is not a general sibling fence:
+its unique-conflict wait only protects insertion of a previously absent key.
+
+Consumer tracing covers R2 conditional tombstone writes, exact bounded ledger
+reads and object deletion; contribution/photo erased-key and receipt guards;
+review/metadata/media expiry and purge fences; album/timeline/tag detachment;
+sharing/playback/export availability; operations counts; version-gated operator
+recovery, frozen authoritative-ledger replay and relevant migrations. The
+deletion/recovery and operations runbooks retain their existing policy. These
+boundary checks do not mark other directories fully reviewed.
+
+## Backend retention verification — October 19, 2026
+
+The isolated baseline runs **119 tests: 118 passed, one skipped**, across the
+four package suites and existing R2 deletion, operator recovery, readiness and
+inbox PostgreSQL suites:
+**eight suites**, zero failures/errors and one existing Windows-disabled Linux
+symlink check. An earlier baseline attempt lacked the existing local FFmpeg
+path and is retained separately; the passing rerun uses FFmpeg/ffprobe 9.0.2.
+An initial PowerShell Maven-argument error is also retained and excluded from
+test results.
+
+The mechanical commit passes **seven** Java 25 canonical AST/import comparisons,
+**eight** rejected negative controls and **12** exact compiled disassemblies.
+The final mechanical proof binds **21 source hashes** to baseline, frozen and
+compiled inputs. It preserves decoded literals/SQL, imports, annotations,
+declarations and order, with only narrow single terminal/expression control-body
+wrappers normalized. Parsing does not perform type attribution; the disassembly
+excludes annotations/bootstrap/debug metadata. The later intentional repository
+lock is verified separately and is not claimed behavior-equivalent.
+
+The added PostgreSQL regression fails against unchanged production source with
+**one failure, zero errors/skips**; the fixed snapshot passes **47 focused
+retention/storage tests**, zero failures/errors/skips. All **211 intended backend
+inputs exactly match visible bytes**; only the seven production files and the
+existing PostgreSQL test differ from entry. The other three suites and fixture
+remain unchanged. The final delta proof accepts the six untouched mechanical
+files and rejects exactly the repository containing the reviewed lock addition.
+
+The full intended backend runs **468 tests: 466 passed, two skipped**, with zero
+failures/errors and Maven exit 0. The count increases by one for the new
+concurrency regression. Packaging succeeds: all **248 production classes** match
+the frozen tested class bytes, all **111 compiled test/fixture classes** are
+excluded by identity and bytes, all **211 source hashes** remain valid, and the
+executable manifest names the expected launcher/application. Independent source
+review finds no remaining actionable issue.
+
+Read-only cleanup checks confirm all **38 containers observed across the five
+test attempts**, the **three explicitly observed test JVMs**, and the observed
+full-run Maven JVM are absent. Red/green fork PIDs were not independently
+captured; their Maven processes completed. Detailed evidence and a readback of
+the completed package/report/cleanup checks are retained locally.
+
+Runtime is Windows, Temurin 25.0.3+9-LTS, Maven wrapper 3.9.16, Spring Boot 4.1.1,
+PostgreSQL 17 and the existing FFmpeg/ffprobe 9.0.2. The local Surefire exit grace
+is 120 seconds rather than its default 30; tracked configuration is unchanged
+and the full run exits without a fork-shutdown timeout. The two unexecuted
+Windows-disabled cases are
+`OwnedExportDirectoryTest.symlinkedArtifactsAreNeverFollowedAndOutsideBytesRemainUntouched`
+and
+`OperatorRecoveryPostgresTest.symlinkedOriginalAndSymlinkedBundleRootAreRejectedBeforeAnyWrites`.
+Frontend source is unchanged and its suites are not rerun for this backend batch.
+
+The final fetch still has main at `37beb863`, already included in this branch;
+the preceding review head `de82e529` is not yet merged into main. Merge that
+review first so a main-based retention PR isolates this batch. Ryan creates and
+merges after exact-head CI/configured review and Linux-only checks. Provider,
+hosted scheduling, independent recovery-copy durability, device, capacity and
+release acceptance remain separate.
+
+The per-file decisions, red/green regression, baseline/full-suite/package logs,
+source/class hashes, proof limits, cleanup checks and ready PR description are
+under `logs/retention-directory-review.local/`. The focused Notion issue records
+delivery status. The next suggested boundary is operations/recovery after fresh
+inventory and consumer tracing.
