@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
@@ -207,6 +208,75 @@ class RetentionPostgresTest {
         assertThat(storage.originals).isEmpty();
         assertThat(storage.staging).isEmpty();
         assertThat(storage.records).hasSize(2);
+    }
+
+    @Test
+    void concurrentFinalSiblingsScrubGuestNameWhenAnEarlierPurgeAlreadyReservedTheSubmissionKey() throws Exception {
+        var batch = photos(3);
+        for (UUID memory : batch.memories()) {
+            softDelete(fixture, memory, NOW.minusSeconds(THIRTY_DAYS));
+        }
+        assertThat(service(fixture, NOW).purgeBatch(1)).isEqualTo(new RetentionService.Batch(1, 0));
+        assertThat(count(fixture, "erased_submission_key")).isEqualTo(1);
+        assertThat(string(fixture, "SELECT guest_name FROM contribution WHERE id = :id", batch.contribution()))
+                .isEqualTo("Synthetic Photo Guest");
+        var plans = fixture.retention().claim(2, NOW);
+        assertThat(plans).hasSize(2);
+        var firstFinished = new CountDownLatch(1);
+        var releaseFirst = new CountDownLatch(1);
+        var firstPid = new AtomicReference<Integer>();
+        var secondPid = new AtomicReference<Integer>();
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            var first = executor.submit(() -> fixture.tx().execute(ignored -> {
+                firstPid.set(fixture.db().sql("SELECT pg_backend_pid()").query(Integer.class).single());
+                boolean purged = fixture.retention().finish(plans.getFirst(), NOW);
+                firstFinished.countDown();
+                try {
+                    if (!releaseFirst.await(20, TimeUnit.SECONDS)) {
+                        throw new AssertionError("The first sibling purge was not released.");
+                    }
+                } catch (InterruptedException failure) {
+                    Thread.currentThread().interrupt();
+                    throw new AssertionError(failure);
+                }
+                return purged;
+            }));
+            Future<Boolean> second = null;
+            try {
+                assertThat(firstFinished.await(10, TimeUnit.SECONDS)).isTrue();
+                second = executor.submit(() -> fixture.tx().execute(ignored -> {
+                    secondPid.set(fixture.db().sql("SELECT pg_backend_pid()").query(Integer.class).single());
+                    return fixture.retention().finish(plans.getLast(), NOW);
+                }));
+                long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+                // Keep the first memory purge uncommitted until the other finishes or
+                // demonstrably waits for it. A committed erased key alone does not
+                // serialize later siblings' final guest-name cleanup.
+                while (!second.isDone()) {
+                    if (secondPid.get() != null && fixture.db().sql("SELECT :holder = ANY(pg_blocking_pids(:worker))")
+                            .param("holder", firstPid.get())
+                            .param("worker", secondPid.get())
+                            .query(Boolean.class)
+                            .single()) {
+                        break;
+                    }
+                    if (System.nanoTime() > deadline) {
+                        throw new AssertionError("The second sibling neither finished nor waited for the first.");
+                    }
+                    Thread.sleep(20);
+                }
+            } finally {
+                releaseFirst.countDown();
+            }
+            assertThat(first.get(10, TimeUnit.SECONDS)).isTrue();
+            assertThat(second).isNotNull();
+            assertThat(second.get(10, TimeUnit.SECONDS)).isTrue();
+        }
+        assertThat(fixture.db().sql("SELECT COUNT(*) FROM memory WHERE contribution_id = :id AND purged_at IS NOT NULL")
+                .param("id", batch.contribution())
+                .query(Long.class)
+                .single()).isEqualTo(3);
+        assertThat(string(fixture, "SELECT guest_name FROM contribution WHERE id = :id", batch.contribution())).isNull();
     }
 
     @Test void textPurgeRemovesBodyAndGuestNameButRetainsTheOriginalSafeRetryIdentity() {
