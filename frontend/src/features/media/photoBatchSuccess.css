@@ -1,0 +1,36 @@
+.photo-batch--success {
+  display: grid;
+  justify-items: start;
+  gap: 20px;
+}
+
+.photo-batch-success-mark {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  color: var(--color-primary);
+  background: #edf2e7;
+}
+
+/* The guest form normally hides its repeated title beneath the page heading. */
+.guest-page .photo-submission.photo-batch.photo-batch--success > h2 {
+  position: static;
+  width: auto;
+  height: auto;
+  margin: 0;
+  padding: 0;
+  overflow: visible;
+  clip-path: none;
+  white-space: normal;
+  line-height: 1.4;
+}
+
+.photo-batch--success > p {
+  margin: 0;
+}
+
+.photo-batch--success .photo-batch-actions {
+  width: 100%;
+}

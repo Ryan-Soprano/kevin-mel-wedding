@@ -1,12 +1,12 @@
 const STATUS_LABELS = {
   queued: "Queued", preparing: "Preparing original photo", uploading: "Uploading original photo",
-  finalizing: "Verifying original photo", saved: "Saved privately", rejected: "Photo rejected",
+  finalizing: "Verifying original photo", saved: "Sent", rejected: "Photo rejected",
 };
 const GUEST_COPY = {
   title: "Share photos",
   introduction: "A favorite moment, a candid smile, or a little glimpse of the day.",
   reviewTitle: "Ready to send your photos?",
-  reviewDescription: "Your photos go privately to Kevin and Melanie. Keep this page open until they’re saved.",
+  reviewDescription: "Your photos will be sent to Kevin and Melanie. They may choose to share them. Keep this page open until every photo is confirmed.",
   sendLabel: "Send photos", finishLabel: "Back to our photos",
 };
 const PRIVATE_COPY = {
@@ -22,8 +22,9 @@ export function getPhotoBatchCopy(privateArchive) {
   return GUEST_COPY;
 }
 
-export function getPhotoStatusText(item) {
+export function getPhotoStatusText(item, privateArchive = false) {
   if (!item) return "Queued";
+  if (item.status === "saved" && privateArchive) return "Saved privately";
   if (item.status === "failed") {
     if (item.error?.unknownOutcome) return "Not confirmed";
     return "Needs retry";
@@ -39,12 +40,12 @@ export function getPhotoBatchSafeError(error) {
   return "We could not confirm every photo. Keep this page open and retry the original photos that still need attention.";
 }
 
-export function getPhotoBatchSummary({ busy, activeItem, savedCount, totalCount, retained }) {
+export function getPhotoBatchSummary({ busy, activeItem, savedCount, totalCount, retained, privateArchive = false }) {
   if (busy) {
-    if (activeItem) return `${getPhotoStatusText(activeItem)}: ${activeItem.fileName}. ${savedCount} of ${totalCount} photos saved.`;
+    if (activeItem) return `${getPhotoStatusText(activeItem, privateArchive)}: ${activeItem.fileName}. ${savedCount} of ${totalCount} photos ${privateArchive ? "saved" : "sent"}.`;
     return "Preparing your photo batch…";
   }
-  if (retained) return `${savedCount} of ${totalCount} photos saved privately.`;
+  if (retained) return `${savedCount} of ${totalCount} photos ${privateArchive ? "saved privately" : "sent"}.`;
   return "";
 }
 
@@ -60,7 +61,7 @@ export function getPhotoBatchFailureFocus(editable, fields, photos) {
 }
 
 export function getPhotoSendLabel(busy, globalWait, privateArchive) {
-  if (busy) return "Saving photos…";
+  if (busy) return privateArchive ? "Saving photos…" : "Sending photos…";
   if (globalWait) return `Wait ${globalWait} seconds before sending`;
   return getPhotoBatchCopy(privateArchive).sendLabel;
 }
@@ -70,8 +71,8 @@ export function getPhotoReviewLabel(globalWait) {
   return "Review photos";
 }
 
-export function getPhotoRetryLabel(busy, globalWait) {
-  if (busy) return "Saving photos…";
+export function getPhotoRetryLabel(busy, globalWait, privateArchive = false) {
+  if (busy) return privateArchive ? "Saving photos…" : "Sending photos…";
   if (globalWait) return `Wait ${globalWait} seconds before retrying`;
   return "Retry selected photos";
 }
@@ -83,9 +84,14 @@ export function getPhotoRetryChoiceLabel(index, globalWait, itemWait) {
   return label;
 }
 
-export function getPhotoResultLabel(complete, savedCount, totalCount) {
-  if (complete) return "All your photos were saved privately.";
-  return `${savedCount} of ${totalCount} photos are confirmed saved.`;
+export function getPhotoResultLabel(complete, savedCount, totalCount, privateArchive = false) {
+  if (complete) {
+    if (privateArchive) return "All your photos were saved privately.";
+    if (totalCount === 1) return "Your photo has been sent to Kevin and Melanie!";
+    return `Your ${totalCount} photos have been sent to Kevin and Melanie!`;
+  }
+  if (privateArchive) return `${savedCount} of ${totalCount} photos are confirmed saved.`;
+  return `${savedCount} of ${totalCount} photos sent.`;
 }
 
 export function getPhotoResetLabel(complete) {
