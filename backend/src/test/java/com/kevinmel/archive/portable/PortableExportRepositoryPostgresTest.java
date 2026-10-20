@@ -92,6 +92,62 @@ class PortableExportRepositoryPostgresTest {
         assertThat(captured.originals()).allMatch(row->repository.originalStillCurrent(captured,row));
     }
 
+    @Test
+    void sharedAudiencesArePreservedWithoutLinkCapabilitiesAndAudienceChangesInvalidateCapture() {
+        UUID publicPhoto = memory(contribution(false), "PHOTO", "KEEP", null, 0);
+        asset(publicPhoto, "image/png", "UPLOADED");
+        UUID familyNote = memory(contribution(false), "TEXT", "KEEP", "Synthetic family audience note", null);
+        db.sql("UPDATE memory SET visibility='PUBLIC' WHERE id=:id")
+                .param("id", publicPhoto)
+                .update();
+        db.sql("UPDATE memory SET visibility='FRIENDS_FAMILY' WHERE id=:id")
+                .param("id", familyNote)
+                .update();
+        String linkDigest = "d".repeat(64);
+        db.sql("INSERT INTO memory_share_link(memory_id,token_digest,issued_at) VALUES(:id,:digest,:at)")
+                .param("id", familyNote)
+                .param("digest", linkDigest)
+                .param("at", time(NOW))
+                .update();
+
+        var captured = repository.capture();
+        var original = captured.originals().getFirst();
+        assertThat(captured.memories())
+                .extracting(PortableSnapshot.Memory::visibility)
+                .containsExactlyInAnyOrder("PUBLIC", "FRIENDS_FAMILY");
+        assertThat(captured.memories())
+                .filteredOn(row -> publicPhoto.equals(row.memoryId()))
+                .singleElement()
+                .satisfies(row -> assertThat(row.visibility()).isEqualTo("PUBLIC"));
+        assertThat(captured.memories())
+                .filteredOn(row -> familyNote.equals(row.memoryId()))
+                .singleElement()
+                .satisfies(row -> assertThat(row.visibility()).isEqualTo("FRIENDS_FAMILY"));
+        String json = new String(
+                PortableExportRepository.JSON.writeValueAsBytes(captured.archiveData()),
+                java.nio.charset.StandardCharsets.UTF_8);
+        assertThat(json)
+                .contains("\"visibility\":\"PUBLIC\"", "\"visibility\":\"FRIENDS_FAMILY\"")
+                .doesNotContain("memory_share_link", "token_digest", linkDigest);
+        assertThat(repository.stillCurrent(captured)).isTrue();
+        assertThat(repository.originalStillCurrent(captured, original)).isTrue();
+
+        db.sql("UPDATE memory SET visibility='COUPLE_ONLY' WHERE id=:id")
+                .param("id", publicPhoto)
+                .update();
+        assertThat(repository.stillCurrent(captured)).isFalse();
+        assertThat(repository.originalStillCurrent(captured, original)).isFalse();
+        db.sql("UPDATE memory SET visibility='PUBLIC' WHERE id=:id")
+                .param("id", publicPhoto)
+                .update();
+        assertThat(repository.stillCurrent(captured)).isTrue();
+        db.sql("UPDATE memory SET visibility='COUPLE_ONLY' WHERE id=:id")
+                .param("id", familyNote)
+                .update();
+        assertThat(repository.stillCurrent(captured)).isFalse();
+        assertThat(repository.originalStillCurrent(captured, original)).isTrue();
+    }
+
     @Test void capturedRowAndMembershipChangesInvalidateButNewUnrelatedMemoriesAndOrganizationDoNotChangeTheFrozenCut() {
         UUID contribution=contribution(false), note=memory(contribution,"TEXT","KEEP","Original note",null), photo=memory(contribution,"PHOTO","KEEP",null,0);
         UUID asset=asset(photo,"image/png","UPLOADED"), album=organization("album","Frozen organization");
