@@ -37,7 +37,9 @@ public class LibraryRepository {
      * Anchor, chosen-tag availability and all cards use the same PostgreSQL
      * statement snapshot.
      */
-    public List<Row> list(LibraryQuery query, Instant now) {
+    public List<Row> list(
+            LibraryQuery query,
+            Instant now) {
         String from = " FROM memory m " + InboxRepository.MEMORY_JOINS + " WHERE " + ELIGIBLE + FILTERS;
         String sql = "WITH anchor AS(SELECT m.created_at,m.id " + from + " AND m.id=:anchor), selected AS(SELECT "
                 + "(CAST(:tag AS UUID) IS NULL OR EXISTS(SELECT 1 FROM tag WHERE id=:tag AND deleted_at IS NULL)) AS tag_valid) "
@@ -45,14 +47,20 @@ public class LibraryRepository {
                 + "FROM selected LEFT JOIN LATERAL(SELECT " + InboxRepository.MEMORY_COLUMNS + from
                 + " AND (CAST(:anchor AS UUID) IS NULL OR (m.created_at,m.id)<(SELECT created_at,id FROM anchor)) "
                 + "ORDER BY m.created_at DESC,m.id DESC LIMIT :limit) page ON true ORDER BY page.created_at DESC,page.memory_id DESC";
-        return db.sql(sql).param("now", time(now)).param("type", query.memoryType())
+        return db.sql(sql)
+                .param("now", time(now))
+                .param("type", query.memoryType())
                 .param("status", query.reviewStatus())
-                .param("precision", query.datePrecision()).param("fromYear", query.fromYear())
+                .param("precision", query.datePrecision())
+                .param("fromYear", query.fromYear())
                 .param("toYear", query.toYear())
-                .param("tag", query.tagId()).param("q", query.q())
+                .param("tag", query.tagId())
+                .param("q", query.q())
                 .param("anchor", query.cursor() == null ? null : query.cursor().anchorId())
                 .param("limit", query.limit() + 1)
-                .query((rs, row) -> new Row(rs.getBoolean("tag_valid"), rs.getBoolean("anchor_valid"),
+                .query((rs, row) -> new Row(
+                        rs.getBoolean("tag_valid"),
+                        rs.getBoolean("anchor_valid"),
                         rs.getObject("memory_id") == null ? null : InboxRepository.map(rs, row)))
                 .list();
     }
@@ -61,6 +69,9 @@ public class LibraryRepository {
         return OffsetDateTime.ofInstant(at, ZoneOffset.UTC);
     }
 
-    public record Row(boolean tagValid, boolean anchorValid, MemoryDetail memory) {
+    public record Row(
+            boolean tagValid,
+            boolean anchorValid,
+            MemoryDetail memory) {
     }
 }
