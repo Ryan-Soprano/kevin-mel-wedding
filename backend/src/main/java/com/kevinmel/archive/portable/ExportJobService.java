@@ -423,6 +423,9 @@ public class ExportJobService implements AutoCloseable {
             }
             var snapshot = repository.capture();
             authority.require(job.actor);
+            if (snapshot.capturedAt().isBefore(job.created)) {
+                throw new PortableExportException();
+            }
             if (!repository.stillCurrent(snapshot)) {
                 synchronized (monitor) {
                     end(job, "STALE", "EXPORT_STALE");
@@ -631,7 +634,10 @@ public class ExportJobService implements AutoCloseable {
 
     private void touch(Job job) {
         if (job.active()) {
-            job.expires = min(clock.instant().plus(INACTIVITY), job.hardExpires);
+            Instant renewed = min(clock.instant().plus(INACTIVITY), job.hardExpires);
+            if (renewed.isAfter(job.expires)) {
+                job.expires = renewed;
+            }
         }
     }
 
