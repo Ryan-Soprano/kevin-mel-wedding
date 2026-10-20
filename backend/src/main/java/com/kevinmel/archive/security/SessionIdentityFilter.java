@@ -7,6 +7,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.dao.DataAccessException;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.transaction.TransactionException;
@@ -38,24 +39,15 @@ public class SessionIdentityFilter extends OncePerRequestFilter {
             throws ServletException, IOException {
         String path = path(request);
         var authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (privatePath(path) && authentication != null && authentication.isAuthenticated()
-                && !(authentication.getPrincipal() instanceof ArchivePrincipal)) {
+        if (foreignPrivateIdentity(path, authentication)) {
             errors.write(request, response, 403, "ARCHIVE_UNAVAILABLE", "Archive access is unavailable.");
             return;
         }
         if (authentication != null && authentication.getPrincipal() instanceof ArchivePrincipal principal) {
             try {
-                var current = accounts.findById(principal.getAccountId());
-                boolean valid = current.isPresent() && current.get().enabled()
-                        && current.get().credentialsVersion() == principal.getCredentialsVersion()
-                        && current.get().username().equals(principal.getUsername())
-                        && principal.getAuthorities().stream().anyMatch(authority ->
-                                authority.getAuthority().equals("ROLE_" + current.get().role()));
+                boolean valid = currentIdentity(principal);
                 if (!valid) {
-                    var session = request.getSession(false);
-                    if (session != null) session.invalidate();
-                    SecurityContextHolder.clearContext();
-                    contexts.saveContext(SecurityContextHolder.createEmptyContext(), request, response);
+                    invalidateSession(request, response);
                     if (!path.equals("/api/session")) {
                         errors.write(request, response, 401, "AUTH_REQUIRED", "Please sign in to access the archive.");
                         return;
@@ -70,6 +62,27 @@ public class SessionIdentityFilter extends OncePerRequestFilter {
             }
         }
         chain.doFilter(request, response);
+    }
+
+    private static boolean foreignPrivateIdentity(String path, Authentication authentication) {
+        return privatePath(path) && authentication != null && authentication.isAuthenticated()
+                && !(authentication.getPrincipal() instanceof ArchivePrincipal);
+    }
+
+    private boolean currentIdentity(ArchivePrincipal principal) {
+        var current = accounts.findById(principal.getAccountId());
+        return current.isPresent() && current.get().enabled()
+                && current.get().credentialsVersion() == principal.getCredentialsVersion()
+                && current.get().username().equals(principal.getUsername())
+                && principal.getAuthorities().stream().anyMatch(authority ->
+                        authority.getAuthority().equals("ROLE_" + current.get().role()));
+    }
+
+    private void invalidateSession(HttpServletRequest request, HttpServletResponse response) {
+        var session = request.getSession(false);
+        if (session != null) session.invalidate();
+        SecurityContextHolder.clearContext();
+        contexts.saveContext(SecurityContextHolder.createEmptyContext(), request, response);
     }
 
     private static String path(HttpServletRequest request) {

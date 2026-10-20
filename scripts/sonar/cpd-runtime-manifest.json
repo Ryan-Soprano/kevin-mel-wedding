@@ -1,0 +1,435 @@
+{
+  "schemaVersion": 1,
+  "release": "26.4.0.121862",
+  "commit": "ab253503cc54df4bdfefd11eb783997d402b5147",
+  "sourceRepository": "https://github.com/SonarSource/sonarqube",
+  "license": "LGPL-3.0-or-later; original source headers are retained",
+  "compileRelease": 17,
+  "javaStatementBlockSize": 10,
+  "bootstrap": [
+    "From the repository root, explicitly run: node scripts/prepare-backend-sonar-cpd.mjs logs/backend-sonar-review.local/runtime/cpd-26.4.0.121862",
+    "The bootstrap downloads only the 61 pinned official SonarSource source files and seven pinned Maven Central JARs listed below. It verifies SHA-256 before exclusive atomic publication, reuses matching existing files, and preserves mismatching existing files by failing.",
+    "Downloaded module sources and JARs stay in the caller-selected ignored logs runtime. The bootstrap starts no service and uploads no project source. Each invocation retains provenance, including cache reuse and partial failure.",
+    "Create an explicit local config using exampleConfig, then run: node scripts/check-backend-duplication.mjs <config.json>. All configured paths are relative to that config file. This separate checker never downloads anything.",
+    "The check inventories all backend/src/main/java Java files, compiles official code in a fresh ignored run directory, runs five threshold/normalization controls, and rejects input or inventory drift.",
+    "PASS means the check completed, not zero duplication; inspect both group counts and every endpoint in the report. No SonarQube-server quality gate or new-code metric is claimed."
+  ],
+  "exampleConfig": {
+    "repositoryDir": "../..",
+    "backendDir": "../../backend",
+    "outputDir": "./cpd-final",
+    "javaHome": "/absolute/path/to/jdk-25",
+    "runtimeDir": "./runtime/cpd-26.4.0.121862",
+    "controlsOnly": false
+  },
+  "scannerSourceEvidence": {
+    "url": "https://repo.maven.apache.org/maven2/org/sonarsource/sonarqube/sonar-scanner-engine/26.4.0.121862/sonar-scanner-engine-26.4.0.121862-sources.jar",
+    "sha256": "6e5c01ea5c34d8676cfdebad3c6e077d13f8fea474d3b8f8538d5232e7351bee",
+    "explains": "JavaCpdBlockIndexerSensor fixes BlockChunker(10); CpdExecutor invokes the same suffix-tree detector without the non-Java token filter. This reference JAR is not needed on the runtime classpath."
+  },
+  "artifacts": [
+    {
+      "path": "dependencies/sonar-channel-4.2.jar",
+      "url": "https://repo.maven.apache.org/maven2/org/codehaus/sonar/sonar-channel/4.2/sonar-channel-4.2.jar",
+      "sha256": "2d58d4e67b1a0368f43ff3d04456cd6d810ee2db99e71d80491910bf62240670"
+    },
+    {
+      "path": "dependencies/sonar-plugin-api-13.5.0.4319.jar",
+      "url": "https://repo.maven.apache.org/maven2/org/sonarsource/api/plugin/sonar-plugin-api/13.5.0.4319/sonar-plugin-api-13.5.0.4319.jar",
+      "sha256": "28d8f3922287c9e5840d3a272cbd1a1ea6dd1bf80662de6bcfbe587fac2790fb"
+    },
+    {
+      "path": "dependencies/jsr305-3.0.2.jar",
+      "url": "https://repo.maven.apache.org/maven2/com/google/code/findbugs/jsr305/3.0.2/jsr305-3.0.2.jar",
+      "sha256": "766ad2a0783f2687962c8ad74ceecc38a28b9f72a2d085ee438b7813e928d0c7"
+    },
+    {
+      "path": "dependencies/gson-2.13.2.jar",
+      "url": "https://repo.maven.apache.org/maven2/com/google/code/gson/gson/2.13.2/gson-2.13.2.jar",
+      "sha256": "dd0ce1b55a3ed2080cb70f9c655850cda86c206862310009dcb5e5c95265a5e0"
+    },
+    {
+      "path": "dependencies/slf4j-api-2.0.17.jar",
+      "url": "https://repo.maven.apache.org/maven2/org/slf4j/slf4j-api/2.0.17/slf4j-api-2.0.17.jar",
+      "sha256": "7b751d952061954d5abfed7181c1f645d336091b679891591d63329c622eb832"
+    },
+    {
+      "path": "dependencies/slf4j-nop-2.0.17.jar",
+      "url": "https://repo.maven.apache.org/maven2/org/slf4j/slf4j-nop/2.0.17/slf4j-nop-2.0.17.jar",
+      "sha256": "3716f83649ec66161a2edefd4f49df34d1dd1c51cdcf941996c6987260f0a829"
+    },
+    {
+      "path": "dependencies/commons-io-2.21.0.jar",
+      "url": "https://repo.maven.apache.org/maven2/commons-io/commons-io/2.21.0/commons-io-2.21.0.jar",
+      "sha256": "7d643a2afea8b058b762aa6fb90e5b256f6c729739f8b3784c3370ddc609e88d"
+    }
+  ],
+  "sources": [
+    {
+      "path": "org/sonar/duplications/DuplicationsException.java",
+      "url": "https://raw.githubusercontent.com/SonarSource/sonarqube/ab253503cc54df4bdfefd11eb783997d402b5147/sonar-duplications/src/main/java/org/sonar/duplications/DuplicationsException.java",
+      "gitBlob": "d2d9f7efbcbdb92655adb330c1ab92b87f94326b",
+      "sha256": "62e6b36b1de7ba390373bae68491829dbffb0ca6826efb475897186306f105bb"
+    },
+    {
+      "path": "org/sonar/duplications/block/Block.java",
+      "url": "https://raw.githubusercontent.com/SonarSource/sonarqube/ab253503cc54df4bdfefd11eb783997d402b5147/sonar-duplications/src/main/java/org/sonar/duplications/block/Block.java",
+      "gitBlob": "f7edc1aaf5a168182c327950374e1ff6a827ef7e",
+      "sha256": "7056b0cd298309e0b86b04bf793cf4dc90ae9c5135878228d6f1ea4a7fbcd1f7"
+    },
+    {
+      "path": "org/sonar/duplications/block/BlockChunker.java",
+      "url": "https://raw.githubusercontent.com/SonarSource/sonarqube/ab253503cc54df4bdfefd11eb783997d402b5147/sonar-duplications/src/main/java/org/sonar/duplications/block/BlockChunker.java",
+      "gitBlob": "2964d1b719154166d5d40502991d4f2908fac299",
+      "sha256": "2928ddc3600e334d58d818917240223761f53ecca79069fa7e4b275285423e33"
+    },
+    {
+      "path": "org/sonar/duplications/block/ByteArray.java",
+      "url": "https://raw.githubusercontent.com/SonarSource/sonarqube/ab253503cc54df4bdfefd11eb783997d402b5147/sonar-duplications/src/main/java/org/sonar/duplications/block/ByteArray.java",
+      "gitBlob": "ec3f714aed20c95f3d75af5952c49f3caa97cd89",
+      "sha256": "745506fad2bad93731440a9af0f6265a1973bdce8e5893b9648fa3c85487f026"
+    },
+    {
+      "path": "org/sonar/duplications/block/FileBlocks.java",
+      "url": "https://raw.githubusercontent.com/SonarSource/sonarqube/ab253503cc54df4bdfefd11eb783997d402b5147/sonar-duplications/src/main/java/org/sonar/duplications/block/FileBlocks.java",
+      "gitBlob": "d149a8a7ba1d0e3c22b2125fe4b66a039471343d",
+      "sha256": "d132bff159b9966ed0dcd04aadbeb71a285d41a4d1e20fd91520e6409d0b1377"
+    },
+    {
+      "path": "org/sonar/duplications/block/package-info.java",
+      "url": "https://raw.githubusercontent.com/SonarSource/sonarqube/ab253503cc54df4bdfefd11eb783997d402b5147/sonar-duplications/src/main/java/org/sonar/duplications/block/package-info.java",
+      "gitBlob": "6112232b5ed7aabeb8f5398bea60ec686fc6e2ad",
+      "sha256": "ed166b683f07fbb9ec94c638933eb9f05ebe2b90fb6b238fc0816be85c3dda7e"
+    },
+    {
+      "path": "org/sonar/duplications/detector/ContainsInComparator.java",
+      "url": "https://raw.githubusercontent.com/SonarSource/sonarqube/ab253503cc54df4bdfefd11eb783997d402b5147/sonar-duplications/src/main/java/org/sonar/duplications/detector/ContainsInComparator.java",
+      "gitBlob": "3f27d7b12d319602e0776104c5bce800238f619a",
+      "sha256": "df746b98fb2fb9609c9f2d8a706ac610ee2f0e95ca8c65089fb3ff6d82fd493c"
+    },
+    {
+      "path": "org/sonar/duplications/detector/original/BlocksGroup.java",
+      "url": "https://raw.githubusercontent.com/SonarSource/sonarqube/ab253503cc54df4bdfefd11eb783997d402b5147/sonar-duplications/src/main/java/org/sonar/duplications/detector/original/BlocksGroup.java",
+      "gitBlob": "15ad2a7ea73916c2fe05788927215501910e7234",
+      "sha256": "26927487a11543b2df5cce53df245b66e685b7a5372ba6600009f4b3a5a34fd7"
+    },
+    {
+      "path": "org/sonar/duplications/detector/original/Filter.java",
+      "url": "https://raw.githubusercontent.com/SonarSource/sonarqube/ab253503cc54df4bdfefd11eb783997d402b5147/sonar-duplications/src/main/java/org/sonar/duplications/detector/original/Filter.java",
+      "gitBlob": "fb68315c35f16f43661f0eb825edf3be001a4368",
+      "sha256": "6fcad86d78d266a0feb2365c534a37ced573187fd81d127fcdba3758a185b7d5"
+    },
+    {
+      "path": "org/sonar/duplications/detector/original/OriginalCloneDetectionAlgorithm.java",
+      "url": "https://raw.githubusercontent.com/SonarSource/sonarqube/ab253503cc54df4bdfefd11eb783997d402b5147/sonar-duplications/src/main/java/org/sonar/duplications/detector/original/OriginalCloneDetectionAlgorithm.java",
+      "gitBlob": "9f7b55d55009e23fda81c4352b4c8b5951370261",
+      "sha256": "d47cac288de5594605caf053e1bca844931ce97ae3a8af4f37c0a6c24bb3749d"
+    },
+    {
+      "path": "org/sonar/duplications/detector/original/package-info.java",
+      "url": "https://raw.githubusercontent.com/SonarSource/sonarqube/ab253503cc54df4bdfefd11eb783997d402b5147/sonar-duplications/src/main/java/org/sonar/duplications/detector/original/package-info.java",
+      "gitBlob": "c978f32bc632c8a5600829961a525ed9782f034c",
+      "sha256": "2c8fc85ca6452dacb1293b3e1f9ad433ca1dc3ec1179fced345cbd0ac74b8a73"
+    },
+    {
+      "path": "org/sonar/duplications/detector/package-info.java",
+      "url": "https://raw.githubusercontent.com/SonarSource/sonarqube/ab253503cc54df4bdfefd11eb783997d402b5147/sonar-duplications/src/main/java/org/sonar/duplications/detector/package-info.java",
+      "gitBlob": "bb9fc4dacaff48f00eaa267fe2b8dd0e6260ae68",
+      "sha256": "ae7ebd3b902dc1cb4cfe1bfea1fe34be3d822e4b5c3076ec084608337eb8754c"
+    },
+    {
+      "path": "org/sonar/duplications/detector/suffixtree/AbstractText.java",
+      "url": "https://raw.githubusercontent.com/SonarSource/sonarqube/ab253503cc54df4bdfefd11eb783997d402b5147/sonar-duplications/src/main/java/org/sonar/duplications/detector/suffixtree/AbstractText.java",
+      "gitBlob": "bedcaf1185663fd3ad453123be8c139aa5136d94",
+      "sha256": "5bd441a9990ad78da0f6a7edb30d5759304d5f1a8655049a4341a111708cc025"
+    },
+    {
+      "path": "org/sonar/duplications/detector/suffixtree/DuplicationsCollector.java",
+      "url": "https://raw.githubusercontent.com/SonarSource/sonarqube/ab253503cc54df4bdfefd11eb783997d402b5147/sonar-duplications/src/main/java/org/sonar/duplications/detector/suffixtree/DuplicationsCollector.java",
+      "gitBlob": "f655f92179a3708c50a0f845385f6c32cf02eac5",
+      "sha256": "c376db6fb7c6380255d0e0db5241c5e839c289ba3a6ffc86bd770f7111cbdc2a"
+    },
+    {
+      "path": "org/sonar/duplications/detector/suffixtree/Edge.java",
+      "url": "https://raw.githubusercontent.com/SonarSource/sonarqube/ab253503cc54df4bdfefd11eb783997d402b5147/sonar-duplications/src/main/java/org/sonar/duplications/detector/suffixtree/Edge.java",
+      "gitBlob": "7af80c28f6f3947aace68f7eefa3588af3deef14",
+      "sha256": "e38992a3ac6e1e89be4d2f5d81ccf2f068cb9af382c9aa48d7654885623199f5"
+    },
+    {
+      "path": "org/sonar/duplications/detector/suffixtree/Node.java",
+      "url": "https://raw.githubusercontent.com/SonarSource/sonarqube/ab253503cc54df4bdfefd11eb783997d402b5147/sonar-duplications/src/main/java/org/sonar/duplications/detector/suffixtree/Node.java",
+      "gitBlob": "0eb42848e17058f6eabc200c7a0ce7974e5a0f44",
+      "sha256": "6da06336616ba61e9adbd2306a25e348193445a214833e4f70960356817fb9e6"
+    },
+    {
+      "path": "org/sonar/duplications/detector/suffixtree/Search.java",
+      "url": "https://raw.githubusercontent.com/SonarSource/sonarqube/ab253503cc54df4bdfefd11eb783997d402b5147/sonar-duplications/src/main/java/org/sonar/duplications/detector/suffixtree/Search.java",
+      "gitBlob": "d2df8a3ae4326003e0987d6911e0cfaf6f6817ae",
+      "sha256": "61ba424349b32022e982cf15815cb4c6bd999d4993a2698558c811a04e662a84"
+    },
+    {
+      "path": "org/sonar/duplications/detector/suffixtree/Suffix.java",
+      "url": "https://raw.githubusercontent.com/SonarSource/sonarqube/ab253503cc54df4bdfefd11eb783997d402b5147/sonar-duplications/src/main/java/org/sonar/duplications/detector/suffixtree/Suffix.java",
+      "gitBlob": "e782e5a8b2aa9896259e8ee951338911bfb63adb",
+      "sha256": "d8394ce39ca3da43a998d6229aa23dba8ba4dd750d0ec7b241170ee355014b3d"
+    },
+    {
+      "path": "org/sonar/duplications/detector/suffixtree/SuffixTree.java",
+      "url": "https://raw.githubusercontent.com/SonarSource/sonarqube/ab253503cc54df4bdfefd11eb783997d402b5147/sonar-duplications/src/main/java/org/sonar/duplications/detector/suffixtree/SuffixTree.java",
+      "gitBlob": "ce6f4a262b2fe7f446759607730b8eeb314b88ab",
+      "sha256": "37a2bc1b80405c7c96fae5a9291be0acbff83585c9022e9ddb840e186ae3252d"
+    },
+    {
+      "path": "org/sonar/duplications/detector/suffixtree/SuffixTreeCloneDetectionAlgorithm.java",
+      "url": "https://raw.githubusercontent.com/SonarSource/sonarqube/ab253503cc54df4bdfefd11eb783997d402b5147/sonar-duplications/src/main/java/org/sonar/duplications/detector/suffixtree/SuffixTreeCloneDetectionAlgorithm.java",
+      "gitBlob": "aada9bfea15810511ffc931eb12d456fc325d21a",
+      "sha256": "4a82f10851d3621ee51c3de151223cdcb6cd82dc36cc0a3116caf59b8f258180"
+    },
+    {
+      "path": "org/sonar/duplications/detector/suffixtree/Text.java",
+      "url": "https://raw.githubusercontent.com/SonarSource/sonarqube/ab253503cc54df4bdfefd11eb783997d402b5147/sonar-duplications/src/main/java/org/sonar/duplications/detector/suffixtree/Text.java",
+      "gitBlob": "66b7b3b3da7fcc658deff64a8173a4e0f0ad1573",
+      "sha256": "e776efae1f830e722b6a2be217807cc9b27c3f30da7a9a1fdd638ccbdb8f80d2"
+    },
+    {
+      "path": "org/sonar/duplications/detector/suffixtree/TextSet.java",
+      "url": "https://raw.githubusercontent.com/SonarSource/sonarqube/ab253503cc54df4bdfefd11eb783997d402b5147/sonar-duplications/src/main/java/org/sonar/duplications/detector/suffixtree/TextSet.java",
+      "gitBlob": "311456d3c09d7a6c3703018dc2e4d832bb0a8a7c",
+      "sha256": "58126e706231b55bb13e2cee37a148238fddee5107d164293c3ffabac60c08f4"
+    },
+    {
+      "path": "org/sonar/duplications/detector/suffixtree/package-info.java",
+      "url": "https://raw.githubusercontent.com/SonarSource/sonarqube/ab253503cc54df4bdfefd11eb783997d402b5147/sonar-duplications/src/main/java/org/sonar/duplications/detector/suffixtree/package-info.java",
+      "gitBlob": "7165e741ce3f3223f3f9cd7ea070e99f4c7759bf",
+      "sha256": "4d55f15d0fc4dbb884fa413168bbed4186921399beb6daf9db34cdb435a45ded"
+    },
+    {
+      "path": "org/sonar/duplications/index/AbstractCloneIndex.java",
+      "url": "https://raw.githubusercontent.com/SonarSource/sonarqube/ab253503cc54df4bdfefd11eb783997d402b5147/sonar-duplications/src/main/java/org/sonar/duplications/index/AbstractCloneIndex.java",
+      "gitBlob": "ff3a12724d54ddc76570e47139a8fd5489cb3920",
+      "sha256": "5b0c6982d9c06b193e7ef6fd93253398dc2df2f0f06fbeeab437027a5c434e85"
+    },
+    {
+      "path": "org/sonar/duplications/index/CloneGroup.java",
+      "url": "https://raw.githubusercontent.com/SonarSource/sonarqube/ab253503cc54df4bdfefd11eb783997d402b5147/sonar-duplications/src/main/java/org/sonar/duplications/index/CloneGroup.java",
+      "gitBlob": "935018886364a53d3ad323a206dcbd12adae5435",
+      "sha256": "cb8cc06a86c2713e6bc47ba6fce081abd0a6fcf2475453af293dc9555a5e685d"
+    },
+    {
+      "path": "org/sonar/duplications/index/CloneIndex.java",
+      "url": "https://raw.githubusercontent.com/SonarSource/sonarqube/ab253503cc54df4bdfefd11eb783997d402b5147/sonar-duplications/src/main/java/org/sonar/duplications/index/CloneIndex.java",
+      "gitBlob": "439579e1d6025e2d7d6db9436bbb061717001d01",
+      "sha256": "e5495d113cdedf435b40e8641a6b568668789e4914d6792503b30c2ef67aba82"
+    },
+    {
+      "path": "org/sonar/duplications/index/ClonePart.java",
+      "url": "https://raw.githubusercontent.com/SonarSource/sonarqube/ab253503cc54df4bdfefd11eb783997d402b5147/sonar-duplications/src/main/java/org/sonar/duplications/index/ClonePart.java",
+      "gitBlob": "47aca05a1eebfc4b74f2636a6af19f9e73070b69",
+      "sha256": "9a11b51091ea3a98ef449c69862d91b5646f9539639ee76f7d380d23d096a2ea"
+    },
+    {
+      "path": "org/sonar/duplications/index/DataUtils.java",
+      "url": "https://raw.githubusercontent.com/SonarSource/sonarqube/ab253503cc54df4bdfefd11eb783997d402b5147/sonar-duplications/src/main/java/org/sonar/duplications/index/DataUtils.java",
+      "gitBlob": "42c267f28333f5339f4286a27f9a93c135e7acf5",
+      "sha256": "1ecac67410194ef7d038eee68deeb70c8b5b7761e568bb4917aded8edd96957e"
+    },
+    {
+      "path": "org/sonar/duplications/index/MemoryCloneIndex.java",
+      "url": "https://raw.githubusercontent.com/SonarSource/sonarqube/ab253503cc54df4bdfefd11eb783997d402b5147/sonar-duplications/src/main/java/org/sonar/duplications/index/MemoryCloneIndex.java",
+      "gitBlob": "a1ec3875093f4c54f60762699e6c72b12a924331",
+      "sha256": "c9eb68285bf60ca0be6fdc33620090b92c8b7bb3ab41fb8f324ee714705363a5"
+    },
+    {
+      "path": "org/sonar/duplications/index/PackedMemoryCloneIndex.java",
+      "url": "https://raw.githubusercontent.com/SonarSource/sonarqube/ab253503cc54df4bdfefd11eb783997d402b5147/sonar-duplications/src/main/java/org/sonar/duplications/index/PackedMemoryCloneIndex.java",
+      "gitBlob": "925ae84026d212b9e8a016f1d1ab9c7df40b3c8e",
+      "sha256": "f0f24b215d9f6e5222a486993058cb0437815d674620b2da353afa059e902624"
+    },
+    {
+      "path": "org/sonar/duplications/index/package-info.java",
+      "url": "https://raw.githubusercontent.com/SonarSource/sonarqube/ab253503cc54df4bdfefd11eb783997d402b5147/sonar-duplications/src/main/java/org/sonar/duplications/index/package-info.java",
+      "gitBlob": "39ceca44f02d0f9399e1e52c89af3b4bf929f839",
+      "sha256": "ba9e1db563ff9ab23b8f9619a4772cb9143287effc58723d44ecb7a9bbdae5aa"
+    },
+    {
+      "path": "org/sonar/duplications/internal/pmd/PmdBlockChunker.java",
+      "url": "https://raw.githubusercontent.com/SonarSource/sonarqube/ab253503cc54df4bdfefd11eb783997d402b5147/sonar-duplications/src/main/java/org/sonar/duplications/internal/pmd/PmdBlockChunker.java",
+      "gitBlob": "21b5ce0dc4e08b8729c9203a45622b8001908468",
+      "sha256": "d431870a46f0ac6523899c33f229d53618d1f5beac9caefafcd619e15279bd8f"
+    },
+    {
+      "path": "org/sonar/duplications/internal/pmd/package-info.java",
+      "url": "https://raw.githubusercontent.com/SonarSource/sonarqube/ab253503cc54df4bdfefd11eb783997d402b5147/sonar-duplications/src/main/java/org/sonar/duplications/internal/pmd/package-info.java",
+      "gitBlob": "6e0f31c57816798c98931d95541b73e529a92430",
+      "sha256": "24bba9be183b0f91b07ea712364e7421a698950a309efbb6e75b42f8fcc7f013"
+    },
+    {
+      "path": "org/sonar/duplications/java/BridgeWithExceptionTokenMatcher.java",
+      "url": "https://raw.githubusercontent.com/SonarSource/sonarqube/ab253503cc54df4bdfefd11eb783997d402b5147/sonar-duplications/src/main/java/org/sonar/duplications/java/BridgeWithExceptionTokenMatcher.java",
+      "gitBlob": "6c8d9bd5aa517002b2bb540a9d941cfa126ba0fa",
+      "sha256": "1401421f6dfcebf7a8e3baa3d69c152d52fbb557100cf96792a12d6fbc367d8d"
+    },
+    {
+      "path": "org/sonar/duplications/java/JavaStatementBuilder.java",
+      "url": "https://raw.githubusercontent.com/SonarSource/sonarqube/ab253503cc54df4bdfefd11eb783997d402b5147/sonar-duplications/src/main/java/org/sonar/duplications/java/JavaStatementBuilder.java",
+      "gitBlob": "ad41b1c987f780b3ed0b0518cbcbeaadc5fbd71d",
+      "sha256": "e322d2f44d5d7bc6f24fac05bf2595c1e09609faa5e2e14aedd423c6a0feb9ae"
+    },
+    {
+      "path": "org/sonar/duplications/java/JavaTokenProducer.java",
+      "url": "https://raw.githubusercontent.com/SonarSource/sonarqube/ab253503cc54df4bdfefd11eb783997d402b5147/sonar-duplications/src/main/java/org/sonar/duplications/java/JavaTokenProducer.java",
+      "gitBlob": "eee5ca713c515d7d10499ecd503428f6717d3bea",
+      "sha256": "d98c7a0d12cc78954440c0a02f12d506581203d657de636da39a246d91676d50"
+    },
+    {
+      "path": "org/sonar/duplications/java/package-info.java",
+      "url": "https://raw.githubusercontent.com/SonarSource/sonarqube/ab253503cc54df4bdfefd11eb783997d402b5147/sonar-duplications/src/main/java/org/sonar/duplications/java/package-info.java",
+      "gitBlob": "328185f986e26e827918d359808077051f04fb82",
+      "sha256": "0fe3ef79a789c7eb5b8a97113a02f607876f5ce19a8ee84724bf404b6cf171b9"
+    },
+    {
+      "path": "org/sonar/duplications/package-info.java",
+      "url": "https://raw.githubusercontent.com/SonarSource/sonarqube/ab253503cc54df4bdfefd11eb783997d402b5147/sonar-duplications/src/main/java/org/sonar/duplications/package-info.java",
+      "gitBlob": "088dac2e0a3a7247c0889810745e33b599fdbf6d",
+      "sha256": "0dcb60c8cab2b12ca41474415d7a65ea6b97a46152dea1af499be45f17104b44"
+    },
+    {
+      "path": "org/sonar/duplications/statement/Statement.java",
+      "url": "https://raw.githubusercontent.com/SonarSource/sonarqube/ab253503cc54df4bdfefd11eb783997d402b5147/sonar-duplications/src/main/java/org/sonar/duplications/statement/Statement.java",
+      "gitBlob": "844ba6175bb1e2f1d5da7a6b17577d7fc27dd92d",
+      "sha256": "a8c5f8db90c3af7a298a0d5f8e194f78a65afdc29af13f3d2c8e534294b04d23"
+    },
+    {
+      "path": "org/sonar/duplications/statement/StatementChannel.java",
+      "url": "https://raw.githubusercontent.com/SonarSource/sonarqube/ab253503cc54df4bdfefd11eb783997d402b5147/sonar-duplications/src/main/java/org/sonar/duplications/statement/StatementChannel.java",
+      "gitBlob": "59a54ceaf9ee6b04bf3f0d6fb827d230a1d1816d",
+      "sha256": "d17fb91e3293a698fed3f64bc392d1a80993045f93ba9425893d8f02dd787723"
+    },
+    {
+      "path": "org/sonar/duplications/statement/StatementChannelDisptacher.java",
+      "url": "https://raw.githubusercontent.com/SonarSource/sonarqube/ab253503cc54df4bdfefd11eb783997d402b5147/sonar-duplications/src/main/java/org/sonar/duplications/statement/StatementChannelDisptacher.java",
+      "gitBlob": "57bbb15ad0abde70004baad9d65adf580b7d3375",
+      "sha256": "6835ec96034e7c8015dc707883f2664579c7323fa1988abcaaccdef35924c8b8"
+    },
+    {
+      "path": "org/sonar/duplications/statement/StatementChunker.java",
+      "url": "https://raw.githubusercontent.com/SonarSource/sonarqube/ab253503cc54df4bdfefd11eb783997d402b5147/sonar-duplications/src/main/java/org/sonar/duplications/statement/StatementChunker.java",
+      "gitBlob": "c1fc21b0ae4a72fc9e0d3502ad7e4deee0b4fe68",
+      "sha256": "0262191a7fa0853df3cba0643b6d1494ff2eab623b97254ecb4e3b982783d787"
+    },
+    {
+      "path": "org/sonar/duplications/statement/TokenMatcherFactory.java",
+      "url": "https://raw.githubusercontent.com/SonarSource/sonarqube/ab253503cc54df4bdfefd11eb783997d402b5147/sonar-duplications/src/main/java/org/sonar/duplications/statement/TokenMatcherFactory.java",
+      "gitBlob": "3e13f4154d80205f772329a9cd02d00e0cda788f",
+      "sha256": "a35cdd8fa559e41e38eb4542caf5c49f5d0fb4d4f2b850a8a78b66bc32a523e1"
+    },
+    {
+      "path": "org/sonar/duplications/statement/matcher/AnyTokenMatcher.java",
+      "url": "https://raw.githubusercontent.com/SonarSource/sonarqube/ab253503cc54df4bdfefd11eb783997d402b5147/sonar-duplications/src/main/java/org/sonar/duplications/statement/matcher/AnyTokenMatcher.java",
+      "gitBlob": "b673afd516f9e9d63305c2b0cb7743947d57fd18",
+      "sha256": "ccb163701b854f7c8b91803b5d618d16190c1b09d4eba21f308026852667d415"
+    },
+    {
+      "path": "org/sonar/duplications/statement/matcher/BridgeTokenMatcher.java",
+      "url": "https://raw.githubusercontent.com/SonarSource/sonarqube/ab253503cc54df4bdfefd11eb783997d402b5147/sonar-duplications/src/main/java/org/sonar/duplications/statement/matcher/BridgeTokenMatcher.java",
+      "gitBlob": "80252f3c1db1e332776a19f73d5ea4f13d0b95db",
+      "sha256": "9f01300de2bc3239a571a39ef7a1579f3d4eb3c6afd072f460cc78d22bdd8010"
+    },
+    {
+      "path": "org/sonar/duplications/statement/matcher/ExactTokenMatcher.java",
+      "url": "https://raw.githubusercontent.com/SonarSource/sonarqube/ab253503cc54df4bdfefd11eb783997d402b5147/sonar-duplications/src/main/java/org/sonar/duplications/statement/matcher/ExactTokenMatcher.java",
+      "gitBlob": "9803ccc5df52126a58d5f1f32c8df235b1e45fbb",
+      "sha256": "b21b513d988c7fd738ea59c5c5fc6ce2db90e1d2bc45931f7ae5cf50840c9ddf"
+    },
+    {
+      "path": "org/sonar/duplications/statement/matcher/ForgetLastTokenMatcher.java",
+      "url": "https://raw.githubusercontent.com/SonarSource/sonarqube/ab253503cc54df4bdfefd11eb783997d402b5147/sonar-duplications/src/main/java/org/sonar/duplications/statement/matcher/ForgetLastTokenMatcher.java",
+      "gitBlob": "c2f833877cb2db43ee1bd00e24334c48c6fa8eff",
+      "sha256": "dd4856fe6f24f280836ca9b2b6ca9930636a9db741562dbd2c5aa4ec4d0ddc51"
+    },
+    {
+      "path": "org/sonar/duplications/statement/matcher/OptTokenMatcher.java",
+      "url": "https://raw.githubusercontent.com/SonarSource/sonarqube/ab253503cc54df4bdfefd11eb783997d402b5147/sonar-duplications/src/main/java/org/sonar/duplications/statement/matcher/OptTokenMatcher.java",
+      "gitBlob": "2f028a2ecea54284155734051dfad2d26a51c228",
+      "sha256": "3602325d9dc27af0662ec075ed02149c4e6babefffd2fc7eba31820b0665b143"
+    },
+    {
+      "path": "org/sonar/duplications/statement/matcher/TokenMatcher.java",
+      "url": "https://raw.githubusercontent.com/SonarSource/sonarqube/ab253503cc54df4bdfefd11eb783997d402b5147/sonar-duplications/src/main/java/org/sonar/duplications/statement/matcher/TokenMatcher.java",
+      "gitBlob": "471b183386e63212ee5c04e9b2f999d1cf0a99a6",
+      "sha256": "e373671ddac89b42ebfd443c0d7a98e478d134dbcc6094a5164af180a3b7a8da"
+    },
+    {
+      "path": "org/sonar/duplications/statement/matcher/UptoTokenMatcher.java",
+      "url": "https://raw.githubusercontent.com/SonarSource/sonarqube/ab253503cc54df4bdfefd11eb783997d402b5147/sonar-duplications/src/main/java/org/sonar/duplications/statement/matcher/UptoTokenMatcher.java",
+      "gitBlob": "6ad1b637b92e93a1c156374bec9795ed312167b6",
+      "sha256": "470377fffdbbb50b36a45a8952fc934271ce764ca5807887ed250095557521d5"
+    },
+    {
+      "path": "org/sonar/duplications/statement/matcher/package-info.java",
+      "url": "https://raw.githubusercontent.com/SonarSource/sonarqube/ab253503cc54df4bdfefd11eb783997d402b5147/sonar-duplications/src/main/java/org/sonar/duplications/statement/matcher/package-info.java",
+      "gitBlob": "2e01932d8073cf5edf121b3b0e9e5e35926211ae",
+      "sha256": "de1006738023b24390262abe64a741cc76f6c2d256c6531073ddaea6c8d37454"
+    },
+    {
+      "path": "org/sonar/duplications/statement/package-info.java",
+      "url": "https://raw.githubusercontent.com/SonarSource/sonarqube/ab253503cc54df4bdfefd11eb783997d402b5147/sonar-duplications/src/main/java/org/sonar/duplications/statement/package-info.java",
+      "gitBlob": "0c1554b3fcc99823d2d816956e5be7f862b2e74f",
+      "sha256": "06adeab3aaaea07fa8b6fc3257f4f7599e1bfef8a7a13cd04d23a0cce64efc7f"
+    },
+    {
+      "path": "org/sonar/duplications/token/BlackHoleTokenChannel.java",
+      "url": "https://raw.githubusercontent.com/SonarSource/sonarqube/ab253503cc54df4bdfefd11eb783997d402b5147/sonar-duplications/src/main/java/org/sonar/duplications/token/BlackHoleTokenChannel.java",
+      "gitBlob": "5cf5ee03d5ad309e2675d852e1c0e6c02773f65a",
+      "sha256": "602991669aecb3d3211ba5533e3be5f3791ede74db625a2b21fa5160c68e3aa5"
+    },
+    {
+      "path": "org/sonar/duplications/token/Token.java",
+      "url": "https://raw.githubusercontent.com/SonarSource/sonarqube/ab253503cc54df4bdfefd11eb783997d402b5147/sonar-duplications/src/main/java/org/sonar/duplications/token/Token.java",
+      "gitBlob": "7b5c377493709a82a6c745327d967b291d924a12",
+      "sha256": "a5575ad39a634ef694849c2222341c186b46b5ffbc8fc97663c03d31c3641a8d"
+    },
+    {
+      "path": "org/sonar/duplications/token/TokenChannel.java",
+      "url": "https://raw.githubusercontent.com/SonarSource/sonarqube/ab253503cc54df4bdfefd11eb783997d402b5147/sonar-duplications/src/main/java/org/sonar/duplications/token/TokenChannel.java",
+      "gitBlob": "fd73406f4b4974fb251dff8b09addb0f1e425f1c",
+      "sha256": "61d6b4e5f4cd741c44a6930808888a0af3251d9762349cafd49f2f55ec59d7ba"
+    },
+    {
+      "path": "org/sonar/duplications/token/TokenChunker.java",
+      "url": "https://raw.githubusercontent.com/SonarSource/sonarqube/ab253503cc54df4bdfefd11eb783997d402b5147/sonar-duplications/src/main/java/org/sonar/duplications/token/TokenChunker.java",
+      "gitBlob": "096e7149eb415afd74eae6608830d7725c5357c0",
+      "sha256": "7c94873311a256c6808c53754f0c00506a11fc2bdc86d9e27fa670508ab4e5d3"
+    },
+    {
+      "path": "org/sonar/duplications/token/TokenQueue.java",
+      "url": "https://raw.githubusercontent.com/SonarSource/sonarqube/ab253503cc54df4bdfefd11eb783997d402b5147/sonar-duplications/src/main/java/org/sonar/duplications/token/TokenQueue.java",
+      "gitBlob": "718e7c6a860fbb4520d05a3793e6c542e5247c75",
+      "sha256": "c9a3e26f693b62eef574806a29d84c26510ad40475d6c6289a4b4b50ce5f53f6"
+    },
+    {
+      "path": "org/sonar/duplications/token/package-info.java",
+      "url": "https://raw.githubusercontent.com/SonarSource/sonarqube/ab253503cc54df4bdfefd11eb783997d402b5147/sonar-duplications/src/main/java/org/sonar/duplications/token/package-info.java",
+      "gitBlob": "fc35b9fbc8c4c2cc5d68ee9909bd071fc690c512",
+      "sha256": "d7dd9005f4cf74ac353052780cab589b2b2a04eaabb2c7eaf2048653eb874452"
+    },
+    {
+      "path": "org/sonar/duplications/utils/FastStringComparator.java",
+      "url": "https://raw.githubusercontent.com/SonarSource/sonarqube/ab253503cc54df4bdfefd11eb783997d402b5147/sonar-duplications/src/main/java/org/sonar/duplications/utils/FastStringComparator.java",
+      "gitBlob": "78b8935dc2a33739ae176fbeb3c0f07aca56ed0b",
+      "sha256": "8de414cf3c80bc997e3e64b7a84bd88a80e390eae1b2cf4b056979c9eddac8f2"
+    },
+    {
+      "path": "org/sonar/duplications/utils/SortedListsUtils.java",
+      "url": "https://raw.githubusercontent.com/SonarSource/sonarqube/ab253503cc54df4bdfefd11eb783997d402b5147/sonar-duplications/src/main/java/org/sonar/duplications/utils/SortedListsUtils.java",
+      "gitBlob": "f9aeb51c6ea5a4225f5f49ef84bcbadcefebcf58",
+      "sha256": "918f8f4b5873e3f2a01a106c0c7737d0cb76dc5ae125ec5d8a1d2c8ae1fd588a"
+    },
+    {
+      "path": "org/sonar/duplications/utils/package-info.java",
+      "url": "https://raw.githubusercontent.com/SonarSource/sonarqube/ab253503cc54df4bdfefd11eb783997d402b5147/sonar-duplications/src/main/java/org/sonar/duplications/utils/package-info.java",
+      "gitBlob": "7a262e14d05d3eb9fe94cfd9c21c95c1077b5f6e",
+      "sha256": "fbe32bd192b635e2bf94b1bd43e32c66f5c81f879b77bc56e7405cc4d7da5c18"
+    }
+  ]
+}

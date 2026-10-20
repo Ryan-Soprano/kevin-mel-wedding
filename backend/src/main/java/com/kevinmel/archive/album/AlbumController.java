@@ -3,6 +3,7 @@ package com.kevinmel.archive.album;
 import java.util.Map;
 import java.util.UUID;
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import com.kevinmel.archive.security.ArchiveAccessPolicy;
@@ -11,6 +12,7 @@ import com.kevinmel.archive.security.SessionService;
 @RestController
 @RequestMapping("/api/albums")
 public class AlbumController {
+    private static final String NO_STORE = "no-store";
     private final AlbumService albums;
     private final ArchiveAccessPolicy policy;
 
@@ -28,7 +30,7 @@ public class AlbumController {
             @RequestParam(required = false) String cursor) {
         SessionService.requireContract(version);
         return ResponseEntity.ok()
-                .header("Cache-Control", "no-store")
+                .header(HttpHeaders.CACHE_CONTROL, NO_STORE)
                 .body(albums.list(limit, cursor));
     }
 
@@ -49,7 +51,7 @@ public class AlbumController {
         SessionService.requireContract(version);
         var page = albums.members(id, limit, cursor);
         return ResponseEntity.ok()
-                .header("Cache-Control", "no-store")
+                .header(HttpHeaders.CACHE_CONTROL, NO_STORE)
                 .eTag(page.album().revision().toString())
                 .body(page);
     }
@@ -131,7 +133,7 @@ public class AlbumController {
             AlbumDetail album,
             int status) {
         return ResponseEntity.status(status)
-                .header("Cache-Control", "no-store")
+                .header(HttpHeaders.CACHE_CONTROL, NO_STORE)
                 .eTag(album.revision().toString())
                 .body(album);
     }

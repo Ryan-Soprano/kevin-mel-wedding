@@ -32,6 +32,10 @@ import tools.jackson.databind.json.JsonMapper;
 /** Bounded full decoding of an original; decoded PCM is counted and discarded, never persisted. */
 @Component
 public class AudioVerifier {
+    private static final String THREADS_OPTION = "-threads";
+    private static final String MP4_TYPE = "audio/mp4";
+    private static final String OGG_TYPE = "audio/ogg";
+
     public static final long MAX_BYTES = 25_000_000;
     public static final long MAX_DURATION_MS = 120_000;
     private static final long MAX_PCM_BYTES = 120L * 48_000 * 2;
@@ -79,23 +83,7 @@ public class AudioVerifier {
     }
 
     public Verified verify(byte[] bytes, PhotoRepository.Asset expected) {
-        if (bytes == null
-                || bytes.length == 0
-                || bytes.length != expected.byteSize()
-                || bytes.length > MAX_BYTES
-                || !List.of("audio/webm", "audio/ogg", "audio/mp4").contains(expected.contentType())) {
-            throw invalid();
-        }
-        try {
-            String hash = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
-            if (!MessageDigest.isEqual(
-                    hash.getBytes(StandardCharsets.US_ASCII),
-                    expected.checksum().getBytes(StandardCharsets.US_ASCII))) {
-                throw invalid();
-            }
-        } catch (java.security.NoSuchAlgorithmException impossible) {
-            throw new IllegalStateException(impossible);
-        }
+        checkExpectedBytes(bytes, expected);
         checkContainerHeader(bytes, expected.contentType());
         requireAvailable();
         Path directory = null;
@@ -106,87 +94,9 @@ public class AudioVerifier {
             privateFile(original);
             Files.write(original, bytes);
             List<String> input = inputOptions(expected.contentType(), original);
-            var probe = new ArrayList<>(List.of(ffprobe, "-v", "warning", "-max_alloc", "67108864", "-threads", "1"));
-            probe.addAll(input.subList(0, input.size() - 2));
-            probe.addAll(List.of(
-                    "-show_entries",
-                    "format=format_name,duration:stream=codec_type,codec_name,sample_rate,channels,duration",
-                    "-of",
-                    "json",
-                    original.toString()));
-            Result inspected = run(probe, 65_536, true);
-            if (inspected.exit() != 0 || inspected.errors()) {
-                throw invalid();
-            }
-            JsonNode metadata;
-            try {
-                metadata = JSON.readTree(inspected.output());
-            } catch (tools.jackson.core.JacksonException malformed) {
-                throw invalid();
-            }
-            JsonNode streams = metadata.path("streams");
-            if (!streams.isArray() || streams.size() != 1) {
-                throw invalid();
-            }
-            JsonNode stream = streams.get(0);
-            String codec = stream.path("codec_name").asString();
-            if (!"audio".equals(stream.path("codec_type").asString())
-                    || stream.path("channels").asInt() < 1 || stream.path("channels").asInt() > 2
-                    || stream.path("sample_rate").asInt() < 8_000 || stream.path("sample_rate").asInt() > 96_000) {
-                throw invalid();
-            }
-            String container = switch (expected.contentType()) {
-                case "audio/webm" -> "webm";
-                case "audio/ogg" -> "ogg";
-                case "audio/mp4" -> "mp4";
-                default -> throw invalid();
-            };
-            if (!(container.equals("mp4") ? codec.equals("aac") : codec.equals("opus"))) {
-                throw invalid();
-            }
-            checkHeaderDuration(metadata.path("format").path("duration"));
-            checkHeaderDuration(stream.path("duration"));
-            var decode = new ArrayList<>(List.of(
-                    ffmpeg,
-                    "-nostdin",
-                    "-v",
-                    "warning",
-                    "-max_alloc",
-                    "67108864",
-                    "-xerror",
-                    "-err_detect",
-                    "explode",
-                    "-threads",
-                    "1"));
-            decode.addAll(input);
-            // Count playable samples and fill interior timestamp gaps. Pinning first_pts to zero would
-            // add demuxer/codec startup padding (not playable audio) on older WebM/Opus runtimes.
-            decode.addAll(List.of(
-                    "-map",
-                    "0:a:0",
-                    "-vn",
-                    "-sn",
-                    "-dn",
-                    "-ac",
-                    "1",
-                    "-ar",
-                    "48000",
-                    "-af",
-                    "aresample=async=1",
-                    "-threads",
-                    "1",
-                    "-f",
-                    "s16le",
-                    "pipe:1"));
-            Result decoded = run(decode, MAX_PCM_BYTES, false);
-            if (decoded.exit() != 0 || decoded.errors() || decoded.bytes() == 0 || decoded.bytes() % 2 != 0) {
-                throw invalid();
-            }
-            long durationMs = (decoded.bytes() / 2 * 1000 + 47_999) / 48_000;
-            if (durationMs < 1 || durationMs > MAX_DURATION_MS) {
-                throw invalid();
-            }
-            return new Verified(expected.contentType(), container, codec, durationMs);
+            StreamMetadata metadata = inspect(input, original, expected.contentType());
+            long durationMs = decodeDuration(input);
+            return new Verified(expected.contentType(), metadata.container(), metadata.codec(), durationMs);
         } catch (IOException storageFailure) {
             throw unavailable();
         } catch (IllegalArgumentException malformed) {
@@ -209,6 +119,126 @@ public class AudioVerifier {
         }
     }
 
+    private static void checkExpectedBytes(byte[] bytes, PhotoRepository.Asset expected) {
+        if (bytes == null
+                || bytes.length == 0
+                || bytes.length != expected.byteSize()
+                || bytes.length > MAX_BYTES
+                || !List.of("audio/webm", OGG_TYPE, MP4_TYPE).contains(expected.contentType())) {
+            throw invalid();
+        }
+        try {
+            String hash = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
+            if (!MessageDigest.isEqual(
+                    hash.getBytes(StandardCharsets.US_ASCII),
+                    expected.checksum().getBytes(StandardCharsets.US_ASCII))) {
+                throw invalid();
+            }
+        } catch (java.security.NoSuchAlgorithmException impossible) {
+            throw new IllegalStateException(impossible);
+        }
+    }
+
+    private StreamMetadata inspect(List<String> input, Path original, String contentType) {
+        var probe = new ArrayList<>(List.of(ffprobe, "-v", "warning", "-max_alloc", "67108864", THREADS_OPTION, "1"));
+        probe.addAll(input.subList(0, input.size() - 2));
+        probe.addAll(List.of(
+                "-show_entries",
+                "format=format_name,duration:stream=codec_type,codec_name,sample_rate,channels,duration",
+                "-of",
+                "json",
+                original.toString()));
+        Result inspected = run(probe, 65_536, true);
+        if (inspected.exit() != 0 || inspected.errors()) {
+            throw invalid();
+        }
+        JsonNode metadata;
+        try {
+            metadata = JSON.readTree(inspected.output());
+        } catch (tools.jackson.core.JacksonException malformed) {
+            throw invalid();
+        }
+        StreamMetadata stream = streamMetadata(metadata, contentType);
+        checkHeaderDuration(metadata.path("format").path("duration"));
+        checkHeaderDuration(metadata.path("streams").get(0).path("duration"));
+        return stream;
+    }
+
+    private static StreamMetadata streamMetadata(JsonNode metadata, String contentType) {
+        JsonNode streams = metadata.path("streams");
+        if (!streams.isArray() || streams.size() != 1) {
+            throw invalid();
+        }
+        JsonNode stream = streams.get(0);
+        String codec = stream.path("codec_name").asString();
+        if (!"audio".equals(stream.path("codec_type").asString())
+                || stream.path("channels").asInt() < 1 || stream.path("channels").asInt() > 2
+                || stream.path("sample_rate").asInt() < 8_000 || stream.path("sample_rate").asInt() > 96_000) {
+            throw invalid();
+        }
+        String container = container(contentType);
+        if (!(container.equals("mp4") ? codec.equals("aac") : codec.equals("opus"))) {
+            throw invalid();
+        }
+        return new StreamMetadata(container, codec);
+    }
+
+    private static String container(String contentType) {
+        return switch (contentType) {
+            case "audio/webm" -> "webm";
+            case OGG_TYPE -> "ogg";
+            case MP4_TYPE -> "mp4";
+            default -> throw invalid();
+        };
+    }
+
+    private long decodeDuration(List<String> input) {
+        var decode = new ArrayList<>(List.of(
+                ffmpeg,
+                "-nostdin",
+                "-v",
+                "warning",
+                "-max_alloc",
+                "67108864",
+                "-xerror",
+                "-err_detect",
+                "explode",
+                THREADS_OPTION,
+                "1"));
+        decode.addAll(input);
+        // Count playable samples and fill interior timestamp gaps. Pinning first_pts to zero would
+        // add demuxer/codec startup padding (not playable audio) on older WebM/Opus runtimes.
+        decode.addAll(List.of(
+                "-map",
+                "0:a:0",
+                "-vn",
+                "-sn",
+                "-dn",
+                "-ac",
+                "1",
+                "-ar",
+                "48000",
+                "-af",
+                "aresample=async=1",
+                THREADS_OPTION,
+                "1",
+                "-f",
+                "s16le",
+                "pipe:1"));
+        Result decoded = run(decode, MAX_PCM_BYTES, false);
+        if (decoded.exit() != 0 || decoded.errors() || decoded.bytes() == 0 || decoded.bytes() % 2 != 0) {
+            throw invalid();
+        }
+        long durationMs = (decoded.bytes() / 2 * 1000 + 47_999) / 48_000;
+        if (durationMs < 1 || durationMs > MAX_DURATION_MS) {
+            throw invalid();
+        }
+        return durationMs;
+    }
+
+    private record StreamMetadata(String container, String codec) {
+    }
+
     private static Process startDecoder(List<String> command) throws IOException {
         var builder = new ProcessBuilder(command);
         var environment = builder.environment();
@@ -225,52 +255,62 @@ public class AudioVerifier {
     }
 
     private static void checkContainerHeader(byte[] bytes, String type) {
-        if (type.equals("audio/ogg")) {
+        if (type.equals(OGG_TYPE)) {
             checkOggPages(bytes);
-        } else if (type.equals("audio/mp4")) {
-            if (bytes.length < 16 || !new String(bytes, 4, 4, StandardCharsets.US_ASCII).equals("ftyp")) {
-                throw invalid();
-            }
-            long length = java.nio.ByteBuffer.wrap(bytes, 0, 4).getInt() & 0xffffffffL;
-            if (length < 16 || length > bytes.length || length > 4096) {
-                throw invalid();
-            }
-            String brand = new String(bytes, 8, 4, StandardCharsets.US_ASCII);
-            if (!List.of(
-                    "isom", "iso2", "iso3", "iso4", "iso5", "iso6", "iso7", "iso8", "iso9",
-                    "mp41", "mp42", "M4A ", "dash", "cmfc").contains(brand)) {
-                throw invalid();
-            }
+        } else if (type.equals(MP4_TYPE)) {
+            checkMp4Header(bytes);
         } else {
-            if (bytes.length < 5 || java.nio.ByteBuffer.wrap(bytes, 0, 4).getInt() != 0x1a45dfa3) {
+            checkWebmHeader(bytes);
+        }
+    }
+
+    private static void checkMp4Header(byte[] bytes) {
+        if (bytes.length < 16 || !new String(bytes, 4, 4, StandardCharsets.US_ASCII).equals("ftyp")) {
+            throw invalid();
+        }
+        long length = java.nio.ByteBuffer.wrap(bytes, 0, 4).getInt() & 0xffffffffL;
+        if (length < 16 || length > bytes.length || length > 4096) {
+            throw invalid();
+        }
+        String brand = new String(bytes, 8, 4, StandardCharsets.US_ASCII);
+        if (!List.of(
+                "isom", "iso2", "iso3", "iso4", "iso5", "iso6", "iso7", "iso8", "iso9",
+                "mp41", "mp42", "M4A ", "dash", "cmfc").contains(brand)) {
+            throw invalid();
+        }
+    }
+
+    private static void checkWebmHeader(byte[] bytes) {
+        if (bytes.length < 5 || java.nio.ByteBuffer.wrap(bytes, 0, 4).getInt() != 0x1a45dfa3) {
+            throw invalid();
+        }
+        int[] position = {4};
+        long headerLength = vint(bytes, position, false);
+        if (headerLength > 4096 || headerLength > bytes.length - position[0]) {
+            throw invalid();
+        }
+        int end = position[0] + (int) headerLength;
+        boolean webm = false;
+        while (position[0] < end) {
+            long id = vint(bytes, position, true);
+            long size = vint(bytes, position, false);
+            if (size > end - position[0]) {
                 throw invalid();
             }
-            int[] position = {4};
-            long headerLength = vint(bytes, position, false);
-            if (headerLength > 4096 || headerLength > bytes.length - position[0]) {
-                throw invalid();
+            if (id == 0x4282) {
+                checkWebmDocType(bytes, position[0], size, webm);
+                webm = true;
             }
-            int end = position[0] + (int) headerLength;
-            boolean webm = false;
-            while (position[0] < end) {
-                long id = vint(bytes, position, true);
-                long size = vint(bytes, position, false);
-                if (size > end - position[0]) {
-                    throw invalid();
-                }
-                if (id == 0x4282) {
-                    if (webm
-                            || size != 4
-                            || !new String(bytes, position[0], 4, StandardCharsets.US_ASCII).equals("webm")) {
-                        throw invalid();
-                    }
-                    webm = true;
-                }
-                position[0] += (int) size;
-            }
-            if (!webm || position[0] != end) {
-                throw invalid();
-            }
+            position[0] += (int) size;
+        }
+        if (!webm || position[0] != end) {
+            throw invalid();
+        }
+    }
+
+    private static void checkWebmDocType(byte[] bytes, int offset, long size, boolean alreadyPresent) {
+        if (alreadyPresent || size != 4 || !new String(bytes, offset, 4, StandardCharsets.US_ASCII).equals("webm")) {
+            throw invalid();
         }
     }
 
@@ -281,54 +321,83 @@ public class AudioVerifier {
         boolean continued = false;
         boolean ended = false;
         while (offset < bytes.length) {
-            if (ended
-                    || bytes.length - offset < 27
-                    || !new String(bytes, offset, 4, StandardCharsets.US_ASCII).equals("OggS")
-                    || bytes[offset + 4] != 0) {
-                throw invalid();
-            }
-            int flags = bytes[offset + 5] & 255;
-            if ((flags & ~7) != 0 || ((flags & 1) != 0) != continued || ((flags & 2) != 0) != (sequence == 0)) {
-                throw invalid();
-            }
-            var header = java.nio.ByteBuffer.wrap(bytes, offset + 14, 12).order(java.nio.ByteOrder.LITTLE_ENDIAN);
-            long pageSerial = header.getInt() & 0xffffffffL;
-            if (serial < 0) {
-                serial = pageSerial;
-            }
-            if (pageSerial != serial || header.getInt() != sequence++) {
-                throw invalid();
-            }
-            int expectedCrc = header.getInt();
-            int segments = bytes[offset + 26] & 255;
-            if (segments == 0 || bytes.length - offset < 27 + segments) {
-                throw invalid();
-            }
-            int length = 27 + segments;
-            for (int i = 0; i < segments; i++) {
-                length += bytes[offset + 27 + i] & 255;
-            }
-            if (length > bytes.length - offset) {
-                throw invalid();
-            }
-            int crc = 0;
-            for (int i = 0; i < length; i++) {
-                int value = i >= 22 && i <= 25 ? 0 : bytes[offset + i] & 255;
-                crc = (crc << 8) ^ OGG_CRC[((crc >>> 24) ^ value) & 255];
-            }
-            if (crc != expectedCrc) {
-                throw invalid();
-            }
-            continued = (bytes[offset + 26 + segments] & 255) == 255;
-            ended = (flags & 4) != 0;
-            if (ended && continued) {
-                throw invalid();
-            }
-            offset += length;
+            OggPage page = oggPage(bytes, offset, sequence, serial, continued, ended);
+            serial = page.serial();
+            continued = page.continued();
+            ended = page.ended();
+            sequence++;
+            offset += page.length();
         }
         if (!ended || continued) {
             throw invalid();
         }
+    }
+
+    private static OggPage oggPage(byte[] bytes, int offset, int sequence, long serial, boolean continued, boolean ended) {
+        checkOggHeader(bytes, offset, ended);
+        int flags = bytes[offset + 5] & 255;
+        checkOggFlags(flags, sequence, continued);
+        var header = java.nio.ByteBuffer.wrap(bytes, offset + 14, 12).order(java.nio.ByteOrder.LITTLE_ENDIAN);
+        long pageSerial = header.getInt() & 0xffffffffL;
+        if (serial < 0) {
+            serial = pageSerial;
+        }
+        if (pageSerial != serial || header.getInt() != sequence) {
+            throw invalid();
+        }
+        int expectedCrc = header.getInt();
+        int segments = bytes[offset + 26] & 255;
+        int length = oggPageLength(bytes, offset, segments);
+        checkOggCrc(bytes, offset, length, expectedCrc);
+        continued = (bytes[offset + 26 + segments] & 255) == 255;
+        ended = (flags & 4) != 0;
+        if (ended && continued) {
+            throw invalid();
+        }
+        return new OggPage(length, serial, continued, ended);
+    }
+
+    private static void checkOggHeader(byte[] bytes, int offset, boolean ended) {
+        if (ended
+                || bytes.length - offset < 27
+                || !new String(bytes, offset, 4, StandardCharsets.US_ASCII).equals("OggS")
+                || bytes[offset + 4] != 0) {
+            throw invalid();
+        }
+    }
+
+    private static void checkOggFlags(int flags, int sequence, boolean continued) {
+        if ((flags & ~7) != 0 || ((flags & 1) != 0) != continued || ((flags & 2) != 0) != (sequence == 0)) {
+            throw invalid();
+        }
+    }
+
+    private static int oggPageLength(byte[] bytes, int offset, int segments) {
+        if (segments == 0 || bytes.length - offset < 27 + segments) {
+            throw invalid();
+        }
+        int length = 27 + segments;
+        for (int i = 0; i < segments; i++) {
+            length += bytes[offset + 27 + i] & 255;
+        }
+        if (length > bytes.length - offset) {
+            throw invalid();
+        }
+        return length;
+    }
+
+    private static void checkOggCrc(byte[] bytes, int offset, int length, int expectedCrc) {
+        int crc = 0;
+        for (int i = 0; i < length; i++) {
+            int value = i >= 22 && i <= 25 ? 0 : bytes[offset + i] & 255;
+            crc = (crc << 8) ^ OGG_CRC[((crc >>> 24) ^ value) & 255];
+        }
+        if (crc != expectedCrc) {
+            throw invalid();
+        }
+    }
+
+    private record OggPage(int length, long serial, boolean continued, boolean ended) {
     }
 
     private static int[] oggCrcTable() {
@@ -348,23 +417,31 @@ public class AudioVerifier {
             throw invalid();
         }
         int first = bytes[position[0]++] & 255;
-        int marker = 128;
-        int length = 1;
-        while (marker > 0 && (first & marker) == 0) {
-            marker >>= 1;
-            length++;
-        }
-        if (marker == 0 || length > (identifier ? 4 : 8) || position[0] + length - 1 > bytes.length) {
-            throw invalid();
-        }
-        long value = identifier ? first : first & (marker - 1);
-        for (int i = 1; i < length; i++) {
+        VintPrefix prefix = vintPrefix(first, identifier, position[0], bytes.length);
+        long value = identifier ? first : first & (prefix.marker() - 1);
+        for (int i = 1; i < prefix.length(); i++) {
             value = (value << 8) | (bytes[position[0]++] & 255);
         }
         if (value < 0) {
             throw invalid();
         }
         return value;
+    }
+
+    private static VintPrefix vintPrefix(int first, boolean identifier, int position, int bytesLength) {
+        int marker = 128;
+        int length = 1;
+        while (marker > 0 && (first & marker) == 0) {
+            marker >>= 1;
+            length++;
+        }
+        if (marker == 0 || length > (identifier ? 4 : 8) || position + length - 1 > bytesLength) {
+            throw invalid();
+        }
+        return new VintPrefix(marker, length);
+    }
+
+    private record VintPrefix(int marker, int length) {
     }
 
     private static List<String> inputOptions(String type, Path file) {
@@ -374,9 +451,9 @@ public class AudioVerifier {
                 "-format_whitelist",
                 "matroska,webm,ogg,mov",
                 "-f",
-                type.equals("audio/mp4") ? "mov" : type.equals("audio/ogg") ? "ogg" : "matroska"));
+                type.equals(MP4_TYPE) ? "mov" : type.equals(OGG_TYPE) ? "ogg" : "matroska"));
         // MOV external data references stay disabled; originals cannot name other local files.
-        if (type.equals("audio/mp4")) {
+        if (type.equals(MP4_TYPE)) {
             options.addAll(List.of("-enable_drefs", "0", "-use_absolute_path", "0"));
         }
         options.addAll(List.of("-i", file.toString()));

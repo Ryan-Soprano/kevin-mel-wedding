@@ -56,6 +56,37 @@ import tools.jackson.databind.json.JsonMapper;
  * deletes source objects.
  */
 public final class OperatorRecovery {
+    private static final String ASSET_ID_FIELD = "assetId";
+    private static final String AUDIO_CODEC_FIELD = "audioCodec";
+    private static final String AUDIO_CONTAINER_FIELD = "audioContainer";
+    private static final String AUDIO_DURATION_FIELD = "audioDurationMs";
+    private static final String AUTHORITY_IDENTITY_FIELD = "authorityIdentity";
+    private static final String AUTHORITY_LEDGER_FIELD = "authorityLedger";
+    private static final String AVAILABLE_FIELD = "available";
+    private static final String BYTE_SIZE_FIELD = "byteSize";
+    private static final String CONTENT_TYPE_FIELD = "contentType";
+    private static final String CONTRIBUTIONS_FIELD = "contributions";
+    private static final String COUNT_QUERY_PREFIX = "SELECT COUNT(*) FROM ";
+    private static final String COUNTS_FIELD = "counts";
+    private static final String CREATED_AT_FIELD = "createdAt";
+    private static final String EVENT_KEY_FIELD = "eventKey";
+    private static final String INVALID_BUNDLE = "INVALID_BUNDLE";
+    private static final String INVALID_LEDGER = "INVALID_LEDGER";
+    private static final String INVALID_PATH = "INVALID_PATH";
+    private static final String MANIFEST_FILE = "manifest.json";
+    private static final String MEMORIES_FIELD = "memories";
+    private static final String MEMORY_ID_COLUMN = "memory_id";
+    private static final String MEMORY_ID_FIELD = "memoryId";
+    private static final String METADATA_FIELD = "metadata";
+    private static final String METADATA_FILE = "metadata.json";
+    private static final String ORIGINALS_FIELD = "originals";
+    private static final String ORIGINALS_PREFIX = "originals/";
+    private static final String READY_FIELD = "ready";
+    private static final String SCHEMA_FINGERPRINT_FIELD = "schemaFingerprint";
+    private static final String SHA256_FIELD = "sha256";
+    private static final String TABLES_FIELD = "tables";
+    private static final String UNAVAILABLE_ORIGINALS_FIELD = "unavailableOriginals";
+    private static final String VERSION_FIELD = "version";
     public static final int MAX_METADATA_BYTES = 16_777_216;
     public static final int MAX_MANIFEST_BYTES = 4_194_304;
     public static final int MAX_ORIGINALS = 10_000;
@@ -125,18 +156,18 @@ public final class OperatorRecovery {
                 throw failure("ORIGINAL_LIMIT");
             }
             Path root = newDirectory(destination);
-            Path originals = createPrivateDirectory(root.resolve("originals"));
+            Path originals = createPrivateDirectory(root.resolve(ORIGINALS_FIELD));
             var jsonTables = new LinkedHashMap<String, Object>();
             snapshot.tables().forEach((name, rows) -> jsonTables.put(
                     name,
                     rows.stream().map(RecoverySchema::jsonRow).toList()));
             byte[] metadata = JSON.writeValueAsBytes(Map.of(
-                    "tables", jsonTables,
-                    "authorityLedger", ledgerJson(ledger)));
+                    TABLES_FIELD, jsonTables,
+                    AUTHORITY_LEDGER_FIELD, ledgerJson(ledger)));
             if (metadata.length > MAX_METADATA_BYTES) {
                 throw failure("METADATA_LIMIT");
             }
-            writePrivate(root.resolve("metadata.json"), metadata);
+            writePrivate(root.resolve(METADATA_FILE), metadata);
             var erasedAssets = erasedAssets(ledger);
             var objects = new ArrayList<Original>();
             int unavailable = 0, stored = 0;
@@ -148,16 +179,10 @@ public final class OperatorRecovery {
                 }
                 boolean available = false;
                 if (!erasedAssets.contains(original.assetId())) {
-                    try {
-                        byte[] bytes = storage.read("originals/" + original.assetId(), MAX_MEDIA_BYTES)
-                                .orElseThrow(() -> failure("ORIGINAL_UNAVAILABLE"));
-                        verify(bytes, original);
-                        writePrivate(originals.resolve(original.assetId().toString()), bytes);
-                        available = true;
+                    available = copyExportOriginal(originals, original);
+                    if (available) {
                         stored++;
-                    } catch (RecoveryException failure) {
-                        unavailable++;
-                    } catch (RuntimeException failure) {
+                    } else {
                         unavailable++;
                     }
                 }
@@ -172,27 +197,41 @@ public final class OperatorRecovery {
                     graph.stateCount("FAILED"),
                     unavailable);
             var manifest = new LinkedHashMap<String, Object>();
-            manifest.put("version", version);
-            manifest.put("eventKey", "kevin-mel-wedding");
-            manifest.put("createdAt", at.toString());
-            manifest.put("schemaFingerprint", snapshot.schema().fingerprint());
-            manifest.put("authorityIdentity", authorityIdentity);
-            manifest.put("metadata", Map.of(
-                    "byteSize", metadata.length,
-                    "sha256", sha256(metadata)));
-            manifest.put("ready", report.ready());
-            manifest.put("counts", counts(report, version));
-            manifest.put("originals", objects.stream().map(object -> object.json(version)).toList());
+            manifest.put(VERSION_FIELD, version);
+            manifest.put(EVENT_KEY_FIELD, "kevin-mel-wedding");
+            manifest.put(CREATED_AT_FIELD, at.toString());
+            manifest.put(SCHEMA_FINGERPRINT_FIELD, snapshot.schema().fingerprint());
+            manifest.put(AUTHORITY_IDENTITY_FIELD, authorityIdentity);
+            manifest.put(METADATA_FIELD, Map.of(
+                    BYTE_SIZE_FIELD, metadata.length,
+                    SHA256_FIELD, sha256(metadata)));
+            manifest.put(READY_FIELD, report.ready());
+            manifest.put(COUNTS_FIELD, counts(report, version));
+            manifest.put(ORIGINALS_FIELD, objects.stream().map(object -> object.json(version)).toList());
             byte[] encoded = JSON.writeValueAsBytes(manifest);
             if (encoded.length > MAX_MANIFEST_BYTES) {
                 throw failure("MANIFEST_LIMIT");
             }
-            writePrivate(root.resolve("manifest.json"), encoded);
+            writePrivate(root.resolve(MANIFEST_FILE), encoded);
             return report;
         } catch (RecoveryException failure) {
             throw failure;
         } catch (IOException | RuntimeException failure) {
             throw failure("EXPORT_UNCONFIRMED");
+        }
+    }
+
+    private boolean copyExportOriginal(Path originals, Original original) throws IOException {
+        try {
+            byte[] bytes = storage.read(ORIGINALS_PREFIX + original.assetId(), MAX_MEDIA_BYTES)
+                    .orElseThrow(() -> failure("ORIGINAL_UNAVAILABLE"));
+            verify(bytes, original);
+            writePrivate(originals.resolve(original.assetId().toString()), bytes);
+            return true;
+        } catch (RecoveryException failure) {
+            return false;
+        } catch (RuntimeException failure) {
+            return false;
         }
     }
 
@@ -217,69 +256,11 @@ public final class OperatorRecovery {
             var transaction = new TransactionTemplate(manager);
             transaction.setIsolationLevel(TransactionDefinition.ISOLATION_SERIALIZABLE);
             return Objects.requireNonNull(transaction.execute(ignored -> {
-                // Lock every archive table together. Accounts are deliberately not replaced or
-                // exported.
-                var targetTables = RecoverySchema.tables(schema.bundleVersion());
-                db.sql("LOCK TABLE " + String.join(",", targetTables.stream().map(RecoverySchema.Table::name).toList())
-                        + " IN ACCESS EXCLUSIVE MODE")
-                        .update();
-                for (var table : targetTables) {
-                    if (db.sql("SELECT COUNT(*) FROM " + table.name()).query(Long.class).single() != 0) {
-                        throw failure("TARGET_NOT_EMPTY");
-                    }
-                }
-                // Link capabilities never travel in backups and must be freshly issued after
-                // recovery.
-                if (schema.bundleVersion() >= 7) {
-                    db.sql("LOCK TABLE memory_share_link IN ACCESS EXCLUSIVE MODE").update();
-                    if (db.sql("SELECT COUNT(*) FROM memory_share_link").query(Long.class).single() != 0) {
-                        throw failure("TARGET_NOT_EMPTY");
-                    }
-                }
+                requireEmptyTarget(schema);
                 RecoverySchema.insert(db, prepared.tables(), schema.bundleVersion());
                 verifyImportedCounts(prepared.tables(), schema.bundleVersion());
-                var retention = new RetentionRepository(
-                        db,
-                        manager,
-                        schema.bundleVersion() >= 3,
-                        schema.bundleVersion() >= 4,
-                        schema.bundleVersion() >= 5,
-                        schema.bundleVersion() >= 6);
-                // All identities and staging paths must pass before the first external
-                // mutation.
-                for (var plan : ledger) {
-                    retention.validate(plan);
-                    retention.grants(plan);
-                }
-                int published = 0;
-                for (var original : prepared.originals()) {
-                    if (erased.contains(original.assetId())) {
-                        continue;
-                    }
-                    byte[] bytes = readAgain(
-                            prepared.root().resolve("originals").resolve(original.assetId().toString()),
-                            MAX_MEDIA_BYTES);
-                    verify(bytes, original);
-                    var existing = storage.read("originals/" + original.assetId(), MAX_MEDIA_BYTES);
-                    if (existing.isPresent()) {
-                        if (!MessageDigest.isEqual(existing.get(), bytes)) {
-                            throw failure("TARGET_OBJECT_CONFLICT");
-                        }
-                    }
-                    // Production performs a conditional create and verifies exact bytes/type on a
-                    // conflict.
-                    // This also revalidates MIME when a matching object predated the current
-                    // attempt.
-                    if (storage instanceof R2ObjectStorage r2) {
-                        r2.publishRecovered("originals/" + original.assetId(), bytes, original.contentType());
-                    } else if (existing.isEmpty()) {
-                        storage.publish("originals/" + original.assetId(), bytes, original.contentType());
-                    }
-                    byte[] confirmed = storage.read("originals/" + original.assetId(), MAX_MEDIA_BYTES)
-                            .orElseThrow(() -> failure("TARGET_OBJECT_UNCONFIRMED"));
-                    verify(confirmed, original);
-                    published++;
-                }
+                var retention = validatedRetention(schema, ledger);
+                int published = publishOriginals(prepared, erased);
                 for (var plan : ledger) {
                     target.record(plan);
                 }
@@ -311,49 +292,24 @@ public final class OperatorRecovery {
             Instant now) throws IOException {
         Path root = checkedPath(bundle);
         if (!Files.isDirectory(root, LinkOption.NOFOLLOW_LINKS)) {
-            throw failure("INVALID_BUNDLE");
+            throw failure(INVALID_BUNDLE);
         }
-        requireEntries(root, Set.of("manifest.json", "metadata.json", "originals"));
-        JsonNode manifest = JSON.readTree(readPrivate(root.resolve("manifest.json"), MAX_MANIFEST_BYTES));
-        fields(
-                manifest,
-                "version",
-                "eventKey",
-                "createdAt",
-                "schemaFingerprint",
-                "authorityIdentity",
-                "metadata",
-                "ready",
-                "counts",
-                "originals");
-        int version = manifest.path("version").isInt() ? manifest.path("version").intValue() : 0;
-        if (!schema.accepts(version, RecoverySchema.string(manifest.get("schemaFingerprint")))
-                || !"kevin-mel-wedding".equals(RecoverySchema.string(manifest.get("eventKey")))
-                || !authorityIdentity.equals(RecoverySchema.string(manifest.get("authorityIdentity")))
-                || !manifest.get("ready").isBoolean()) {
-            throw failure("INVALID_BUNDLE");
-        }
-        Instant created = Instant.parse(RecoverySchema.string(manifest.get("createdAt")));
+        requireEntries(root, Set.of(MANIFEST_FILE, METADATA_FILE, ORIGINALS_FIELD));
+        JsonNode manifest = JSON.readTree(readPrivate(root.resolve(MANIFEST_FILE), MAX_MANIFEST_BYTES));
+        int version = manifestVersion(manifest, schema);
+        Instant created = Instant.parse(RecoverySchema.string(manifest.get(CREATED_AT_FIELD)));
         if (created.isAfter(now)) {
             throw failure("FUTURE_BUNDLE");
         }
-        fields(manifest.get("metadata"), "byteSize", "sha256");
-        byte[] encoded = readPrivate(root.resolve("metadata.json"), MAX_METADATA_BYTES);
-        if (integer(manifest.get("metadata").get("byteSize")) != encoded.length
-                || !sha256(encoded).equals(RecoverySchema.string(manifest.get("metadata").get("sha256")))) {
-            throw failure("BUNDLE_INTEGRITY");
-        }
+        byte[] encoded = readMetadata(root, manifest);
         JsonNode metadata = JSON.readTree(encoded);
-        fields(metadata, "tables", "authorityLedger");
-        var tables = RecoverySchema.decode(metadata.get("tables"), version);
+        fields(metadata, TABLES_FIELD, AUTHORITY_LEDGER_FIELD);
+        var tables = RecoverySchema.decode(metadata.get(TABLES_FIELD), version);
         var graph = new RecoveryMetadata(tables, created, version);
-        List<DeletionRecord> packaged = decodeLedger(metadata.get("authorityLedger"), created);
+        List<DeletionRecord> packaged = decodeLedger(metadata.get(AUTHORITY_LEDGER_FIELD), created);
         graph.validatePlans(packaged, created);
         requireSuperset(packaged, graph.packagedPlans());
-        JsonNode list = manifest.get("originals");
-        if (!list.isArray() || list.size() > MAX_ORIGINALS || list.size() != graph.uploaded().size()) {
-            throw failure("INVALID_BUNDLE");
-        }
+        JsonNode list = manifestOriginals(manifest, graph);
         var expected = new HashMap<UUID, Original>();
         for (var asset : graph.uploaded()) {
             expected.put(uuid(asset, "id"), original(asset, false));
@@ -365,70 +321,21 @@ public final class OperatorRecovery {
         long bytes = 0;
         var packagedErased = erasedAssets(packaged);
         for (JsonNode entry : list) {
-            if (version == 1) {
-                fields(entry, "assetId", "memoryId", "byteSize", "sha256", "contentType", "available");
-            } else {
-                fields(
-                        entry,
-                        "assetId",
-                        "memoryId",
-                        "byteSize",
-                        "sha256",
-                        "contentType",
-                        "available",
-                        "audioDurationMs",
-                        "audioCodec",
-                        "audioContainer");
+            Original object = decodeOriginal(entry, expected, version, ids);
+            if ((bytes += object.byteSize()) > MAX_ORIGINAL_BYTES) {
+                throw failure(INVALID_BUNDLE);
             }
-            String idText = RecoverySchema.string(entry.get("assetId"));
-            UUID id = UUID.fromString(idText);
-            if (!id.toString().equals(idText) || !entry.get("available").isBoolean() || !ids.add(id)) {
-                throw failure("INVALID_BUNDLE");
-            }
-            String memoryText = RecoverySchema.string(entry.get("memoryId"));
-            UUID memory = UUID.fromString(memoryText);
-            if (!memory.toString().equals(memoryText)) {
-                throw failure("INVALID_BUNDLE");
-            }
-            Original want = expected.get(id);
-            if (want == null) {
-                throw failure("INVALID_BUNDLE");
-            }
-            Original object = new Original(
-                    id,
-                    memory,
-                    integer(entry.get("byteSize")),
-                    RecoverySchema.string(entry.get("sha256")),
-                    RecoverySchema.string(entry.get("contentType")),
-                    entry.get("available").booleanValue(),
-                    version == 1 ? null : nullableInteger(entry.get("audioDurationMs")),
-                    version == 1 ? null : nullableString(entry.get("audioCodec")),
-                    version == 1 ? null : nullableString(entry.get("audioContainer")),
-                    want.expectedDurationMs());
-            if (!want.memoryId().equals(object.memoryId())
-                    || want.byteSize() != object.byteSize()
-                    || !want.sha256().equals(object.sha256())
-                    || !want.contentType().equals(object.contentType())
-                    || !Objects.equals(want.audioDurationMs(), object.audioDurationMs())
-                    || !Objects.equals(want.audioCodec(), object.audioCodec())
-                    || !Objects.equals(want.audioContainer(), object.audioContainer())
-                    || (bytes += object.byteSize()) > MAX_ORIGINAL_BYTES) {
-                throw failure("INVALID_BUNDLE");
-            }
+            String idText = object.assetId().toString();
             if (object.available()) {
                 names.add(idText);
                 available++;
-                verify(readPrivate(root.resolve("originals").resolve(idText), MAX_MEDIA_BYTES), object);
-            } else if (!packagedErased.contains(id)) {
+                verify(readPrivate(root.resolve(ORIGINALS_FIELD).resolve(idText), MAX_MEDIA_BYTES), object);
+            } else if (!packagedErased.contains(object.assetId())) {
                 unavailable++;
             }
             objects.add(object);
         }
-        Path originals = checkedPath(root.resolve("originals"));
-        if (!Files.isDirectory(originals, LinkOption.NOFOLLOW_LINKS)) {
-            throw failure("INVALID_BUNDLE");
-        }
-        requireEntries(originals, names);
+        requireOriginalDirectory(root, names);
         var report = new ExportResult(
                 unavailable == 0,
                 graph.contributions(),
@@ -437,35 +344,254 @@ public final class OperatorRecovery {
                 graph.stateCount("PENDING"),
                 graph.stateCount("FAILED"),
                 unavailable);
-        if (manifest.get("ready").booleanValue() != report.ready()) {
-            throw failure("INVALID_BUNDLE");
+        verifyManifestReport(manifest, report, version);
+        return new Prepared(root, tables, graph, List.copyOf(objects), packaged);
+    }
+
+    private void requireEmptyTarget(RecoverySchema.Reviewed schema) {
+        // Lock every archive table together. Accounts are deliberately not replaced or
+        // exported.
+        var targetTables = RecoverySchema.tables(schema.bundleVersion());
+        db.sql("LOCK TABLE " + String.join(",", targetTables.stream().map(RecoverySchema.Table::name).toList())
+                + " IN ACCESS EXCLUSIVE MODE")
+                .update();
+        for (var table : targetTables) {
+            if (db.sql(COUNT_QUERY_PREFIX + table.name()).query(Long.class).single() != 0) {
+                throw failure("TARGET_NOT_EMPTY");
+            }
         }
-        JsonNode counts = manifest.get("counts");
+        // Link capabilities never travel in backups and must be freshly issued after
+        // recovery.
+        if (schema.bundleVersion() >= 7) {
+            db.sql("LOCK TABLE memory_share_link IN ACCESS EXCLUSIVE MODE").update();
+            if (db.sql("SELECT COUNT(*) FROM memory_share_link").query(Long.class).single() != 0) {
+                throw failure("TARGET_NOT_EMPTY");
+            }
+        }
+    }
+
+    private RetentionRepository validatedRetention(RecoverySchema.Reviewed schema, List<DeletionRecord> ledger) {
+        var retention = new RetentionRepository(
+                db,
+                manager,
+                schema.bundleVersion() >= 3,
+                schema.bundleVersion() >= 4,
+                schema.bundleVersion() >= 5,
+                schema.bundleVersion() >= 6);
+        // All identities and staging paths must pass before the first external
+        // mutation.
+        for (var plan : ledger) {
+            retention.validate(plan);
+            retention.grants(plan);
+        }
+        return retention;
+    }
+
+    private int publishOriginals(Prepared prepared, Set<UUID> erased) {
+        int published = 0;
+        for (var original : prepared.originals()) {
+            if (erased.contains(original.assetId())) {
+                continue;
+            }
+            publishOriginal(prepared.root(), original);
+            published++;
+        }
+        return published;
+    }
+
+    private void publishOriginal(Path root, Original original) {
+        byte[] bytes = readAgain(
+                root.resolve(ORIGINALS_FIELD).resolve(original.assetId().toString()),
+                MAX_MEDIA_BYTES);
+        verify(bytes, original);
+        var existing = storage.read(ORIGINALS_PREFIX + original.assetId(), MAX_MEDIA_BYTES);
+        if (existing.isPresent()) {
+            if (!MessageDigest.isEqual(existing.get(), bytes)) {
+                throw failure("TARGET_OBJECT_CONFLICT");
+            }
+        }
+        // Production performs a conditional create and verifies exact bytes/type on a
+        // conflict.
+        // This also revalidates MIME when a matching object predated the current
+        // attempt.
+        if (storage instanceof R2ObjectStorage r2) {
+            r2.publishRecovered(ORIGINALS_PREFIX + original.assetId(), bytes, original.contentType());
+        } else if (existing.isEmpty()) {
+            storage.publish(ORIGINALS_PREFIX + original.assetId(), bytes, original.contentType());
+        }
+        byte[] confirmed = storage.read(ORIGINALS_PREFIX + original.assetId(), MAX_MEDIA_BYTES)
+                .orElseThrow(() -> failure("TARGET_OBJECT_UNCONFIRMED"));
+        verify(confirmed, original);
+    }
+
+    private int manifestVersion(JsonNode manifest, RecoverySchema.Reviewed schema) {
+        fields(
+                manifest,
+                VERSION_FIELD,
+                EVENT_KEY_FIELD,
+                CREATED_AT_FIELD,
+                SCHEMA_FINGERPRINT_FIELD,
+                AUTHORITY_IDENTITY_FIELD,
+                METADATA_FIELD,
+                READY_FIELD,
+                COUNTS_FIELD,
+                ORIGINALS_FIELD);
+        int version = manifest.path(VERSION_FIELD).isInt() ? manifest.path(VERSION_FIELD).intValue() : 0;
+        if (!schema.accepts(version, RecoverySchema.string(manifest.get(SCHEMA_FINGERPRINT_FIELD)))
+                || !"kevin-mel-wedding".equals(RecoverySchema.string(manifest.get(EVENT_KEY_FIELD)))
+                || !authorityIdentity.equals(RecoverySchema.string(manifest.get(AUTHORITY_IDENTITY_FIELD)))
+                || !manifest.get(READY_FIELD).isBoolean()) {
+            throw failure(INVALID_BUNDLE);
+        }
+        return version;
+    }
+
+    private static byte[] readMetadata(Path root, JsonNode manifest) throws IOException {
+        fields(manifest.get(METADATA_FIELD), BYTE_SIZE_FIELD, SHA256_FIELD);
+        byte[] encoded = readPrivate(root.resolve(METADATA_FILE), MAX_METADATA_BYTES);
+        if (integer(manifest.get(METADATA_FIELD).get(BYTE_SIZE_FIELD)) != encoded.length
+                || !sha256(encoded).equals(RecoverySchema.string(manifest.get(METADATA_FIELD).get(SHA256_FIELD)))) {
+            throw failure("BUNDLE_INTEGRITY");
+        }
+        return encoded;
+    }
+
+    private static JsonNode manifestOriginals(JsonNode manifest, RecoveryMetadata graph) {
+        JsonNode list = manifest.get(ORIGINALS_FIELD);
+        if (!list.isArray() || list.size() > MAX_ORIGINALS || list.size() != graph.uploaded().size()) {
+            throw failure(INVALID_BUNDLE);
+        }
+        return list;
+    }
+
+    private static void requireOriginalFields(JsonNode entry, int version) {
+        if (version == 1) {
+            fields(entry, ASSET_ID_FIELD, MEMORY_ID_FIELD, BYTE_SIZE_FIELD, SHA256_FIELD, CONTENT_TYPE_FIELD, AVAILABLE_FIELD);
+        } else {
+            fields(
+                    entry,
+                    ASSET_ID_FIELD,
+                    MEMORY_ID_FIELD,
+                    BYTE_SIZE_FIELD,
+                    SHA256_FIELD,
+                    CONTENT_TYPE_FIELD,
+                    AVAILABLE_FIELD,
+                    AUDIO_DURATION_FIELD,
+                    AUDIO_CODEC_FIELD,
+                    AUDIO_CONTAINER_FIELD);
+        }
+    }
+
+    private static Original decodeOriginal(JsonNode entry, Map<UUID, Original> expected, int version, Set<UUID> ids) {
+        requireOriginalFields(entry, version);
+        String idText = RecoverySchema.string(entry.get(ASSET_ID_FIELD));
+        UUID id = UUID.fromString(idText);
+        if (!id.toString().equals(idText) || !entry.get(AVAILABLE_FIELD).isBoolean() || !ids.add(id)) {
+            throw failure(INVALID_BUNDLE);
+        }
+        String memoryText = RecoverySchema.string(entry.get(MEMORY_ID_FIELD));
+        UUID memory = UUID.fromString(memoryText);
+        if (!memory.toString().equals(memoryText)) {
+            throw failure(INVALID_BUNDLE);
+        }
+        Original want = expected.get(id);
+        if (want == null) {
+            throw failure(INVALID_BUNDLE);
+        }
+        Original object = new Original(
+                id,
+                memory,
+                integer(entry.get(BYTE_SIZE_FIELD)),
+                RecoverySchema.string(entry.get(SHA256_FIELD)),
+                RecoverySchema.string(entry.get(CONTENT_TYPE_FIELD)),
+                entry.get(AVAILABLE_FIELD).booleanValue(),
+                version == 1 ? null : nullableInteger(entry.get(AUDIO_DURATION_FIELD)),
+                version == 1 ? null : nullableString(entry.get(AUDIO_CODEC_FIELD)),
+                version == 1 ? null : nullableString(entry.get(AUDIO_CONTAINER_FIELD)),
+                want.expectedDurationMs());
+        requireOriginalMatch(want, object);
+        return object;
+    }
+
+    private static void requireOriginalMatch(Original want, Original object) {
+        if (!want.memoryId().equals(object.memoryId())
+                || want.byteSize() != object.byteSize()
+                || !want.sha256().equals(object.sha256())
+                || !want.contentType().equals(object.contentType())
+                || !Objects.equals(want.audioDurationMs(), object.audioDurationMs())
+                || !Objects.equals(want.audioCodec(), object.audioCodec())
+                || !Objects.equals(want.audioContainer(), object.audioContainer())) {
+            throw failure(INVALID_BUNDLE);
+        }
+    }
+
+    private static void requireOriginalDirectory(Path root, Set<String> names) throws IOException {
+        Path originals = checkedPath(root.resolve(ORIGINALS_FIELD));
+        if (!Files.isDirectory(originals, LinkOption.NOFOLLOW_LINKS)) {
+            throw failure(INVALID_BUNDLE);
+        }
+        requireEntries(originals, names);
+    }
+
+    private static void verifyManifestReport(JsonNode manifest, ExportResult report, int version) {
+        if (manifest.get(READY_FIELD).booleanValue() != report.ready()) {
+            throw failure(INVALID_BUNDLE);
+        }
+        JsonNode counts = manifest.get(COUNTS_FIELD);
         if (version == 1) {
             fields(
                     counts,
-                    "contributions",
-                    "memories",
-                    "originals",
+                    CONTRIBUTIONS_FIELD,
+                    MEMORIES_FIELD,
+                    ORIGINALS_FIELD,
                     "pendingPhotos",
                     "failedPhotos",
-                    "unavailableOriginals");
+                    UNAVAILABLE_ORIGINALS_FIELD);
         } else {
             fields(
                     counts,
-                    "contributions",
-                    "memories",
-                    "originals",
+                    CONTRIBUTIONS_FIELD,
+                    MEMORIES_FIELD,
+                    ORIGINALS_FIELD,
                     "pendingMedia",
                     "failedMedia",
-                    "unavailableOriginals");
+                    UNAVAILABLE_ORIGINALS_FIELD);
         }
         for (var count : counts(report, version).entrySet()) {
             if (integer(counts.get(count.getKey())) != count.getValue()) {
-                throw failure("INVALID_BUNDLE");
+                throw failure(INVALID_BUNDLE);
             }
         }
-        return new Prepared(root, tables, graph, List.copyOf(objects), packaged);
+    }
+
+    private static void requireLedgerPage(DeletionStorage.Page page, int recordCount) {
+        if (page == null
+                || page.records().size() > 100
+                || recordCount + page.records().size() > RecoverySchema.MAX_ROWS) {
+            throw failure(INVALID_LEDGER);
+        }
+    }
+
+    private static void requireLedgerCursor(String cursor, Set<String> seen) {
+        if (cursor != null
+                && (cursor.isBlank() || cursor.length() > 4096 || !seen.add(cursor) || seen.size() > 1000)) {
+            throw failure(INVALID_LEDGER);
+        }
+    }
+
+    private static void expectedOrganizationCounts(Map<String, Long> expected, Map<String, List<Map<String, Object>>> tables, Set<UUID> erasedMemories, int version) {
+        if (version >= 4) {
+            expected.put("album_membership", tables.get("album_membership").stream()
+                    .filter(row -> !erasedMemories.contains(uuid(row, MEMORY_ID_COLUMN))).count());
+        }
+        if (version >= 5) {
+            expected.put("timeline_event_memory", tables.get("timeline_event_memory").stream()
+                    .filter(row -> !erasedMemories.contains(uuid(row, MEMORY_ID_COLUMN))).count());
+        }
+        if (version >= 6) {
+            expected.put("memory_tag", tables.get("memory_tag").stream()
+                    .filter(row -> !erasedMemories.contains(uuid(row, MEMORY_ID_COLUMN))).count());
+        }
     }
 
     private static List<DeletionRecord> readLedger(
@@ -477,14 +603,10 @@ public final class OperatorRecovery {
         long bytes = 0;
         do {
             var page = storage.ledger(cursor, 100);
-            if (page == null
-                    || page.records().size() > 100
-                    || records.size() + page.records().size() > RecoverySchema.MAX_ROWS) {
-                throw failure("INVALID_LEDGER");
-            }
+            requireLedgerPage(page, records.size());
             for (var record : page.records()) {
                 if (record == null || now.isBefore(record.recordedAt())) {
-                    throw failure("INVALID_LEDGER");
+                    throw failure(INVALID_LEDGER);
                 }
                 if ((bytes += record.encode().length + 1L) > MAX_METADATA_BYTES) {
                     throw failure("LEDGER_LIMIT");
@@ -492,10 +614,7 @@ public final class OperatorRecovery {
                 records.add(record);
             }
             cursor = page.nextCursor();
-            if (cursor != null
-                    && (cursor.isBlank() || cursor.length() > 4096 || !seen.add(cursor) || seen.size() > 1000)) {
-                throw failure("INVALID_LEDGER");
-            }
+            requireLedgerCursor(cursor, seen);
         } while (cursor != null);
         uniquePlans(records);
         return List.copyOf(records);
@@ -505,13 +624,13 @@ public final class OperatorRecovery {
             JsonNode node,
             Instant now) {
         if (node == null || !node.isArray() || node.size() > RecoverySchema.MAX_ROWS) {
-            throw failure("INVALID_LEDGER");
+            throw failure(INVALID_LEDGER);
         }
         var records = new ArrayList<DeletionRecord>();
         for (var item : node) {
             DeletionRecord record = DeletionRecord.decode(JSON.writeValueAsBytes(item));
             if (now.isBefore(record.recordedAt())) {
-                throw failure("INVALID_LEDGER");
+                throw failure(INVALID_LEDGER);
             }
             records.add(record);
         }
@@ -523,7 +642,7 @@ public final class OperatorRecovery {
         var ids = new HashSet<UUID>();
         for (var plan : plans) {
             if (!ids.add(plan.memoryId())) {
-                throw failure("INVALID_LEDGER");
+                throw failure(INVALID_LEDGER);
             }
         }
     }
@@ -560,7 +679,7 @@ public final class OperatorRecovery {
             Map<String, List<Map<String, Object>>> tables,
             int version) {
         for (var table : RecoverySchema.tables(version)) {
-            if (db.sql("SELECT COUNT(*) FROM " + table.name()).query(Long.class).single() != tables.get(table.name())
+            if (db.sql(COUNT_QUERY_PREFIX + table.name()).query(Long.class).single() != tables.get(table.name())
                     .size()) {
                 throw failure("IMPORT_COUNT_MISMATCH");
             }
@@ -578,7 +697,7 @@ public final class OperatorRecovery {
         }
         var ledgerIds = new HashSet<UUID>();
         for (var row : tables.get("deletion_ledger")) {
-            ledgerIds.add(uuid(row, "memory_id"));
+            ledgerIds.add(uuid(row, MEMORY_ID_COLUMN));
         }
         var keyDigests = new HashSet<String>();
         for (var row : tables.get("erased_submission_key")) {
@@ -598,20 +717,9 @@ public final class OperatorRecovery {
                 .filter(g -> !erased.contains(uuid(g, "media_asset_id"))).count());
         expected.put("deletion_ledger", (long) ledgerIds.size());
         expected.put("erased_submission_key", (long) keyDigests.size());
-        if (version >= 4) {
-            expected.put("album_membership", tables.get("album_membership").stream()
-                    .filter(row -> !erasedMemories.contains(uuid(row, "memory_id"))).count());
-        }
-        if (version >= 5) {
-            expected.put("timeline_event_memory", tables.get("timeline_event_memory").stream()
-                    .filter(row -> !erasedMemories.contains(uuid(row, "memory_id"))).count());
-        }
-        if (version >= 6) {
-            expected.put("memory_tag", tables.get("memory_tag").stream()
-                    .filter(row -> !erasedMemories.contains(uuid(row, "memory_id"))).count());
-        }
+        expectedOrganizationCounts(expected, tables, erasedMemories, version);
         for (var count : expected.entrySet()) {
-            if (db.sql("SELECT COUNT(*) FROM " + count.getKey()).query(Long.class).single().longValue() != count
+            if (db.sql(COUNT_QUERY_PREFIX + count.getKey()).query(Long.class).single().longValue() != count
                     .getValue().longValue()) {
                 throw failure("REPLAY_COUNT_MISMATCH");
             }
@@ -624,7 +732,7 @@ public final class OperatorRecovery {
             boolean available) {
         return new Original(
                 uuid(row, "id"),
-                uuid(row, "memory_id"),
+                uuid(row, MEMORY_ID_COLUMN),
                 number(row, "byte_size"),
                 text(row, "checksum_sha256"),
                 text(row, "detected_format"),
@@ -641,7 +749,7 @@ public final class OperatorRecovery {
         try {
             var expected = new PhotoRepository.Asset(
                     original.assetId(),
-                    "originals/" + original.assetId(),
+                    ORIGINALS_PREFIX + original.assetId(),
                     original.contentType(),
                     original.byteSize(),
                     original.sha256(),
@@ -668,31 +776,31 @@ public final class OperatorRecovery {
             ExportResult report,
             int version) {
         return Map.of(
-                "contributions", report.contributions(),
-                "memories", report.memories(),
-                "originals", report.originals(),
+                CONTRIBUTIONS_FIELD, report.contributions(),
+                MEMORIES_FIELD, report.memories(),
+                ORIGINALS_FIELD, report.originals(),
                 version == 1 ? "pendingPhotos" : "pendingMedia", report.pendingMedia(),
                 version == 1 ? "failedPhotos" : "failedMedia", report.failedMedia(),
-                "unavailableOriginals", report.unavailableOriginals());
+                UNAVAILABLE_ORIGINALS_FIELD, report.unavailableOriginals());
     }
 
     private static Long nullableInteger(JsonNode node) {
         if (node == null) {
-            throw failure("INVALID_BUNDLE");
+            throw failure(INVALID_BUNDLE);
         }
         return node.isNull() ? null : integer(node);
     }
 
     private static String nullableString(JsonNode node) {
         if (node == null) {
-            throw failure("INVALID_BUNDLE");
+            throw failure(INVALID_BUNDLE);
         }
         return node.isNull() ? null : RecoverySchema.string(node);
     }
 
     private static long integer(JsonNode node) {
         if (node == null || !node.isIntegralNumber() || !node.canConvertToLong() || node.longValue() < 0) {
-            throw failure("INVALID_BUNDLE");
+            throw failure(INVALID_BUNDLE);
         }
         return node.longValue();
     }
@@ -701,11 +809,11 @@ public final class OperatorRecovery {
             JsonNode node,
             String... names) {
         if (node == null || !node.isObject() || node.size() != names.length) {
-            throw failure("INVALID_BUNDLE");
+            throw failure(INVALID_BUNDLE);
         }
         for (String name : names) {
             if (!node.has(name)) {
-                throw failure("INVALID_BUNDLE");
+                throw failure(INVALID_BUNDLE);
             }
         }
     }
@@ -720,18 +828,18 @@ public final class OperatorRecovery {
 
     private static Path checkedPath(Path path) throws IOException {
         if (path == null) {
-            throw failure("INVALID_PATH");
+            throw failure(INVALID_PATH);
         }
         Path absolute = path.toAbsolutePath().normalize();
         Path current = absolute.getRoot();
         for (Path component : absolute) {
             current = current.resolve(component);
             if (Files.isSymbolicLink(current)) {
-                throw failure("INVALID_PATH");
+                throw failure(INVALID_PATH);
             }
             if (Files.exists(current, LinkOption.NOFOLLOW_LINKS)
                     && !current.toRealPath(LinkOption.NOFOLLOW_LINKS).equals(current.toRealPath())) {
-                throw failure("INVALID_PATH");
+                throw failure(INVALID_PATH);
             }
         }
         return absolute;
@@ -835,12 +943,12 @@ public final class OperatorRecovery {
             for (var entry : stream) {
                 checkedPath(entry);
                 if (!names.add(entry.getFileName().toString()) || names.size() > MAX_ORIGINALS + 3) {
-                    throw failure("INVALID_BUNDLE");
+                    throw failure(INVALID_BUNDLE);
                 }
             }
         }
         if (!names.equals(expected)) {
-            throw failure("INVALID_BUNDLE");
+            throw failure(INVALID_BUNDLE);
         }
     }
 
@@ -913,16 +1021,16 @@ public final class OperatorRecovery {
 
         Map<String, Object> json(int version) {
             var result = new LinkedHashMap<String, Object>(Map.of(
-                    "assetId", assetId.toString(),
-                    "memoryId", memoryId.toString(),
-                    "byteSize", byteSize,
-                    "sha256", sha256,
-                    "contentType", contentType,
-                    "available", available));
+                    ASSET_ID_FIELD, assetId.toString(),
+                    MEMORY_ID_FIELD, memoryId.toString(),
+                    BYTE_SIZE_FIELD, byteSize,
+                    SHA256_FIELD, sha256,
+                    CONTENT_TYPE_FIELD, contentType,
+                    AVAILABLE_FIELD, available));
             if (version >= 2) {
-                result.put("audioDurationMs", audioDurationMs);
-                result.put("audioCodec", audioCodec);
-                result.put("audioContainer", audioContainer);
+                result.put(AUDIO_DURATION_FIELD, audioDurationMs);
+                result.put(AUDIO_CODEC_FIELD, audioCodec);
+                result.put(AUDIO_CONTAINER_FIELD, audioContainer);
             }
             return result;
         }

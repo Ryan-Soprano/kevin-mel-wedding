@@ -15,6 +15,8 @@ import com.kevinmel.archive.web.RequestOrigin;
 /** Couples own archive access; infrastructure and development roles do not. */
 @Component
 public class ArchiveAccessPolicy {
+    private static final String PRODUCTION_PROFILE = "production";
+
     private final boolean production;
     private final boolean revealed;
     private final boolean secureCookie;
@@ -26,26 +28,31 @@ public class ArchiveAccessPolicy {
             @Value("${server.servlet.session.cookie.secure:false}") boolean secureCookie,
             @Value("${archive.public-origin:}") String publicOrigin,
             Environment springEnvironment) {
-        if (!Set.of("local", "staging", "production").contains(environment)) {
+        if (!Set.of("local", "staging", PRODUCTION_PROFILE).contains(environment)) {
             throw new IllegalArgumentException("Use a documented archive environment.");
         }
-        this.production = "production".equals(environment);
-        if (production != springEnvironment.acceptsProfiles(Profiles.of("production"))) {
+        this.production = PRODUCTION_PROFILE.equals(environment);
+        if (production != springEnvironment.acceptsProfiles(Profiles.of(PRODUCTION_PROFILE))) {
             throw new IllegalArgumentException("Production profile and archive environment must agree.");
         }
         this.revealed = revealed;
         this.secureCookie = secureCookie;
         this.publicOrigin = publicOrigin;
-        if (!publicOrigin.isEmpty()) {
-            URI origin = URI.create(publicOrigin);
-            if (!"https".equals(origin.getScheme()) || origin.getHost() == null
-                    || origin.getRawUserInfo() != null || origin.getRawQuery() != null
-                    || origin.getRawFragment() != null || !origin.getRawPath().isEmpty()) {
-                throw new IllegalArgumentException("Archive public origin must be an HTTPS origin without a path.");
-            }
-        }
+        requirePublicOrigin(publicOrigin);
         if (production && (!secureCookie || publicOrigin.isEmpty())) {
             throw new IllegalArgumentException("Production requires secure cookies and an explicit HTTPS public origin.");
+        }
+    }
+
+    private static void requirePublicOrigin(String publicOrigin) {
+        if (publicOrigin.isEmpty()) {
+            return;
+        }
+        URI origin = URI.create(publicOrigin);
+        if (!"https".equals(origin.getScheme()) || origin.getHost() == null
+                || origin.getRawUserInfo() != null || origin.getRawQuery() != null
+                || origin.getRawFragment() != null || !origin.getRawPath().isEmpty()) {
+            throw new IllegalArgumentException("Archive public origin must be an HTTPS origin without a path.");
         }
     }
 

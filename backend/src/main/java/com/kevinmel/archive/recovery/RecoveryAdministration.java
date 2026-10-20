@@ -28,6 +28,7 @@ import com.kevinmel.archive.retention.DeletionStorage;
  * raw exception details must never enter the output.
  */
 public final class RecoveryAdministration {
+    private static final String LOCAL_ENVIRONMENT = "local";
     private RecoveryAdministration() {
     }
 
@@ -106,17 +107,7 @@ public final class RecoveryAdministration {
                             ledger(storage, true),
                             Clock.systemUTC(),
                             storageIdentity(endpoint, bucket));
-                    var result = service.exportTo(directory);
-                    console.printf(
-                            "Export: %d contributions, %d memories, %d originals; %d pending media, %d failed media, %d unavailable originals. Restore-ready: %s.%n",
-                            result.contributions(),
-                            result.memories(),
-                            result.originals(),
-                            result.pendingMedia(),
-                            result.failedMedia(),
-                            result.unavailableOriginals(),
-                            result.ready());
-                    return result.ready() ? 0 : 1;
+                    return reportExport(console, service.exportTo(directory));
                 }
                 try (var authority = R2ObjectStorage.openPrivate(
                         authorityEndpoint,
@@ -147,6 +138,19 @@ public final class RecoveryAdministration {
         }
     }
 
+    private static int reportExport(java.io.Console console, OperatorRecovery.ExportResult result) {
+        console.printf(
+                "Export: %d contributions, %d memories, %d originals; %d pending media, %d failed media, %d unavailable originals. Restore-ready: %s.%n",
+                result.contributions(),
+                result.memories(),
+                result.originals(),
+                result.pendingMedia(),
+                result.failedMedia(),
+                result.unavailableOriginals(),
+                result.ready());
+        return result.ready() ? 0 : 1;
+    }
+
     private static boolean isHelpRequest(String[] args) {
         return args.length == 1 && "--help".equals(args[0]);
     }
@@ -154,7 +158,7 @@ public final class RecoveryAdministration {
     private static boolean isRecoveryRequest(String[] args) {
         return args.length == 4
                 && "--expect-environment".equals(args[0])
-                && Set.of("local", "staging", "production").contains(args[1])
+                && Set.of(LOCAL_ENVIRONMENT, "staging", "production").contains(args[1])
                 && Set.of("export", "restore").contains(args[2])
                 && !args[3].isBlank();
     }
@@ -163,10 +167,10 @@ public final class RecoveryAdministration {
             StandardEnvironment settings,
             String environment,
             boolean restore) {
-        return environment.equals(settings.getProperty("archive.environment", "local"))
+        return environment.equals(settings.getProperty("archive.environment", LOCAL_ENVIRONMENT))
                 && "true".equals(settings.getProperty("archive.storage.enabled", "false"))
                 && "true".equals(settings.getProperty("MEMORY_ARCHIVE_RECOVERY_QUIESCED", "false"))
-                && hasExplicitDatabaseTarget(settings, restore || !"local".equals(environment));
+                && hasExplicitDatabaseTarget(settings, restore || !LOCAL_ENVIRONMENT.equals(environment));
     }
 
     private static boolean isValidRestoreTarget(
@@ -275,22 +279,27 @@ public final class RecoveryAdministration {
                 { "MEMORY_ARCHIVE_DB_URL", "spring.datasource.url" },
                 { "MEMORY_ARCHIVE_DB_USERNAME", "spring.datasource.username" },
                 { "MEMORY_ARCHIVE_DB_PASSWORD", "spring.datasource.password" } }) {
-            boolean present = false;
-            for (var source : settings.getPropertySources()) {
-                if ("recoveryDefaults".equals(source.getName())) {
-                    continue;
-                }
-                for (String name : names) {
-                    Object value = source.getProperty(name);
-                    if (value instanceof String text && !text.isBlank()) {
-                        present = true;
-                    }
-                }
-            }
+            boolean present = hasExplicitProperty(settings, names);
             if (!present) {
                 return false;
             }
         }
         return true;
+    }
+
+    private static boolean hasExplicitProperty(StandardEnvironment settings, String[] names) {
+        boolean present = false;
+        for (var source : settings.getPropertySources()) {
+            if ("recoveryDefaults".equals(source.getName())) {
+                continue;
+            }
+            for (String name : names) {
+                Object value = source.getProperty(name);
+                if (value instanceof String text && !text.isBlank()) {
+                    present = true;
+                }
+            }
+        }
+        return present;
     }
 }

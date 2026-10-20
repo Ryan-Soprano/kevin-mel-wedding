@@ -16,19 +16,22 @@ public record ContributionScope(
         String source,
         UUID authorId,
         String key) {
+    private static final String COUPLE_SOURCE = "COUPLE";
+
     public ContributionScope {
-        if (!("GUEST".equals(source)
-                && authorId == null
-                && key != null
-                && !key.isBlank()
-                && key.length() <= 100
-                && !key.startsWith("couple:")
-                || "COUPLE".equals(source)
-                && authorId != null
-                && key != null
-                && key.matches("couple:[0-9a-f]{64}"))) {
+        if (!validGuest(source, authorId, key) && !validCouple(source, authorId, key)) {
             throw new IllegalArgumentException("Use a server-validated contribution scope.");
         }
+    }
+
+    private static boolean validGuest(String source, UUID authorId, String key) {
+        return "GUEST".equals(source) && authorId == null && key != null && !key.isBlank()
+                && key.length() <= 100 && !key.startsWith("couple:");
+    }
+
+    private static boolean validCouple(String source, UUID authorId, String key) {
+        return COUPLE_SOURCE.equals(source) && authorId != null && key != null
+                && key.matches("couple:[0-9a-f]{64}");
     }
 
     public static ContributionScope guest(String key) {
@@ -47,13 +50,13 @@ public record ContributionScope(
                 .getPrincipal();
         UUID author = principal.getAccountId();
         return new ContributionScope(
-                "COUPLE",
+                COUPLE_SOURCE,
                 author,
                 "couple:" + SubmissionKeyDigest.sha256(author + ":" + key));
     }
 
     public void recheck(ArchiveAuthorization authorization) {
-        if (!"COUPLE".equals(source)) {
+        if (!COUPLE_SOURCE.equals(source)) {
             return;
         }
         authorization.requireCoupleAccess();
@@ -66,7 +69,7 @@ public record ContributionScope(
     }
 
     public String initialReview() {
-        return "COUPLE".equals(source) ? "KEEP" : "PENDING";
+        return COUPLE_SOURCE.equals(source) ? "KEEP" : "PENDING";
     }
 
     @Override

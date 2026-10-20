@@ -18,6 +18,10 @@ import com.kevinmel.archive.web.ApiException;
 
 @Repository
 public class InboxRepository {
+    private static final String REVISION_FIELD = "revision";
+    private static final String MEMORY_ID_PARAM = "memoryId";
+    private static final String ACTED_AT_PARAM = "acted";
+
     public static final String MEMORY_COLUMNS = """
             m.id AS memory_id, c.id AS contribution_id, c.guest_name, m.memory_type,
                 m.text_content, m.caption, m.review_status, m.visibility, m.revision,
@@ -74,7 +78,7 @@ public class InboxRepository {
         if (query.cursor() != null) {
             statement = statement
                     .param("createdAt", timestamp(query.cursor().createdAt()))
-                    .param("memoryId", query.cursor().memoryId());
+                    .param(MEMORY_ID_PARAM, query.cursor().memoryId());
         }
         return statement.query(InboxRepository::map)
                 .list();
@@ -83,7 +87,7 @@ public class InboxRepository {
     @Transactional(readOnly = true)
     public Optional<MemoryDetail> detail(UUID memoryId) {
         return db.sql(SELECT + " AND m.id = :memoryId")
-                .param("memoryId", memoryId)
+                .param(MEMORY_ID_PARAM, memoryId)
                 .param("now", timestamp(clock.instant()))
                 .query(InboxRepository::map)
                 .optional();
@@ -92,7 +96,7 @@ public class InboxRepository {
     /** Caller holds one transaction through revision update and audit. Lock memory before any asset lock. */
     public Optional<MemoryDetail> lockDetail(UUID memoryId) {
         return db.sql(SELECT + " AND m.id = :memoryId FOR UPDATE OF m")
-                .param("memoryId", memoryId)
+                .param(MEMORY_ID_PARAM, memoryId)
                 .param("now", timestamp(clock.instant()))
                 .query(InboxRepository::map)
                 .optional();
@@ -125,9 +129,9 @@ public class InboxRepository {
                 .param("status", status)
                 .param("visibility", visibility)
                 .param("deadline", timestamp(deleteAfter))
-                .param("acted", timestamp(actedAt))
+                .param(ACTED_AT_PARAM, timestamp(actedAt))
                 .param("id", current.memoryId())
-                .param("revision", current.revision())
+                .param(REVISION_FIELD, current.revision())
                 .update();
         if (changed != 1) {
             throw new ApiException(
@@ -176,9 +180,9 @@ public class InboxRepository {
                 .param("description", request.description())
                 .param("date", request.memoryDate())
                 .param("precision", request.datePrecision())
-                .param("acted", timestamp(actedAt))
+                .param(ACTED_AT_PARAM, timestamp(actedAt))
                 .param("id", current.memoryId())
-                .param("revision", current.revision())
+                .param(REVISION_FIELD, current.revision())
                 .update();
         if (changed != 1) {
             throw MemoryMetadataService.conflict();
@@ -219,10 +223,10 @@ public class InboxRepository {
                 .param("before", before.reviewStatus())
                 .param("after", after.reviewStatus())
                 .param("oldRevision", before.revision())
-                .param("revision", after.revision())
+                .param(REVISION_FIELD, after.revision())
                 .param("beforeVisibility", before.visibility())
                 .param("afterVisibility", after.visibility())
-                .param("acted", timestamp(actedAt))
+                .param(ACTED_AT_PARAM, timestamp(actedAt))
                 .update();
     }
 
@@ -254,7 +258,7 @@ public class InboxRepository {
                 "TEXT".equals(type) ? null : rs.getString("caption"),
                 rs.getString("review_status"),
                 rs.getString("visibility"),
-                rs.getInt("revision"),
+                rs.getInt(REVISION_FIELD),
                 rs.getObject("created_at", OffsetDateTime.class).toInstant(),
                 rs.getObject("updated_at", OffsetDateTime.class).toInstant(),
                 deleteAfter == null ? null : deleteAfter.toInstant(),

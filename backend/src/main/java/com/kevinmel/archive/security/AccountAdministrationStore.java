@@ -17,6 +17,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 /** Console administration only; this class is deliberately not a Spring web bean. */
 public final class AccountAdministrationStore {
+    private static final String USERNAME_COLUMN = "username";
+
 
     private static final Pattern USERNAME = Pattern.compile("[a-z0-9][a-z0-9._-]{2,99}");
 
@@ -88,7 +90,7 @@ public final class AccountAdministrationStore {
                     VALUES (:username, :displayName, :passwordHash, :role, FALSE)
                     ON CONFLICT (username) DO NOTHING
                     """)
-                .param("username", username)
+                .param(USERNAME_COLUMN, username)
                 .param("displayName", displayName)
                 .param("passwordHash", passwordHash)
                 .param("role", role.name())
@@ -178,9 +180,9 @@ public final class AccountAdministrationStore {
         return jdbc.sql("""
                 SELECT id, username, role FROM archive_account WHERE username = :username FOR UPDATE
                 """)
-            .param("username", username)
+            .param(USERNAME_COLUMN, username)
             .query((rs, rowNumber) -> new ManagedAccount(
-                rs.getObject("id", UUID.class), rs.getString("username"), Role.parse(rs.getString("role"))))
+                rs.getObject("id", UUID.class), rs.getString(USERNAME_COLUMN), Role.parse(rs.getString("role"))))
             .optional()
             .orElseThrow(() -> new RejectedOperation("Account does not exist."));
     }

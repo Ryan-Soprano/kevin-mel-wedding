@@ -20,6 +20,9 @@ public record DeletionRecord(
         String submissionKeyDigest,
         Instant deleteAfter,
         Instant recordedAt) {
+    private static final String VERSION_FIELD = "version";
+    private static final String ASSET_ID_FIELD = "assetId";
+
     private static final JsonMapper JSON = JsonMapper.builder()
             .enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
             .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
@@ -40,11 +43,11 @@ public record DeletionRecord(
 
     public byte[] encode() {
         Map<String, Object> data = new LinkedHashMap<>();
-        data.put("version", 1);
+        data.put(VERSION_FIELD, 1);
         data.put("eventKey", "kevin-mel-wedding");
         data.put("memoryId", memoryId.toString());
         data.put("contributionId", contributionId.toString());
-        data.put("assetId", assetId == null ? null : assetId.toString());
+        data.put(ASSET_ID_FIELD, assetId == null ? null : assetId.toString());
         data.put("submissionKeyDigest", submissionKeyDigest);
         data.put("deleteAfter", deleteAfter.toString());
         data.put("recordedAt", recordedAt.toString());
@@ -59,15 +62,8 @@ public record DeletionRecord(
         }
         try {
             var data = JSON.readTree(bytes);
-            if (!data.isObject()
-                    || data.size() != 8
-                    || !data.has("assetId")
-                    || !data.path("version").isInt()
-                    || data.path("version").intValue() != 1
-                    || !"kevin-mel-wedding".equals(data.path("eventKey").asString())) {
-                throw invalid();
-            }
-            String asset = data.get("assetId").isNull() ? null : text(data.get("assetId"));
+            requireEnvelope(data);
+            String asset = data.get(ASSET_ID_FIELD).isNull() ? null : text(data.get(ASSET_ID_FIELD));
             return new DeletionRecord(
                     uuid(text(data.get("memoryId"))),
                     uuid(text(data.get("contributionId"))),
@@ -76,6 +72,17 @@ public record DeletionRecord(
                     Instant.parse(text(data.get("deleteAfter"))),
                     Instant.parse(text(data.get("recordedAt"))));
         } catch (RuntimeException failure) {
+            throw invalid();
+        }
+    }
+
+    private static void requireEnvelope(tools.jackson.databind.JsonNode data) {
+        if (!data.isObject()
+                || data.size() != 8
+                || !data.has(ASSET_ID_FIELD)
+                || !data.path(VERSION_FIELD).isInt()
+                || data.path(VERSION_FIELD).intValue() != 1
+                || !"kevin-mel-wedding".equals(data.path("eventKey").asString())) {
             throw invalid();
         }
     }

@@ -275,11 +275,11 @@ export default function App({
             </p>
           </div>
           {unfinished && (
-            <p className="guest-draft-notice" role="status">
+            <output className="guest-draft-notice">
               You have an unfinished memory here. Choose its memory type below
               to continue. Refreshing or closing this page can clear unsent
               drafts.
-            </p>
+            </output>
           )}
           <div
             className={`memory-choices${flow.audioEnabled ? " memory-choices--three" : ""}`}

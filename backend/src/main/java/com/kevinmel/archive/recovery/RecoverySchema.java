@@ -25,6 +25,13 @@ import tools.jackson.databind.JsonNode;
  * material.
  */
 final class RecoverySchema {
+    private static final String TABLE_ALBUM_MEMBERSHIP = "album_membership";
+    private static final String TABLE_CONTRIBUTION = "contribution";
+    private static final String TABLE_MEDIA_ASSET = "media_asset";
+    private static final String TABLE_MEMORY = "memory";
+    private static final String TABLE_MEMORY_TAG = "memory_tag";
+    private static final String TABLE_REVIEW_AUDIT = "review_audit";
+    private static final String TABLE_TIMELINE_EVENT_MEMORY = "timeline_event_memory";
     static final int MAX_ROWS = 100_000;
     private static final String ASSET_COLUMNS = "id:u memory_id:u object_key:s original_filename:s detected_format:s byte_size:l checksum_sha256:s upload_state:s created_at:t updated_at:t declared_content_type:s? expected_byte_size:l? expected_checksum_sha256:s?";
     private static final List<String> AUDIO_COLUMNS = List.of(
@@ -33,29 +40,29 @@ final class RecoverySchema {
             "audio_codec",
             "audio_container");
     private static final List<Table> LEGACY_TABLES = List.of(
-            table("contribution",
+            table(TABLE_CONTRIBUTION,
                     "id:u event_key:s guest_name:s? idempotency_key:s created_at:t request_fingerprint:s?"),
-            table("memory",
+            table(TABLE_MEMORY,
                     "id:u contribution_id:u memory_type:s text_content:s? review_status:s visibility:s created_at:t updated_at:t client_item_id:u? caption:s? item_position:i? revision:i delete_after:t? purge_started_at:t? purged_at:t?"),
-            table("media_asset", ASSET_COLUMNS),
+            table(TABLE_MEDIA_ASSET, ASSET_COLUMNS),
             table("upload_grant", "id:u media_asset_id:u object_key:s created_at:t expires_at:t"),
-            table("review_audit",
+            table(TABLE_REVIEW_AUDIT,
                     "memory_id:u actor_account_id:u from_status:s to_status:s before_revision:i after_revision:i acted_at:t"),
             table("deletion_ledger",
                     "memory_id:u contribution_id:u asset_id:u? submission_key_digest:s delete_after:t recorded_at:t purged_at:t?"),
             table("erased_submission_key", "key_digest:s erased_at:t"));
     private static final List<Table> AUDIO_TABLES = LEGACY_TABLES.stream()
-            .map(table -> table.name().equals("media_asset")
-                    ? table("media_asset",
+            .map(table -> table.name().equals(TABLE_MEDIA_ASSET)
+                    ? table(TABLE_MEDIA_ASSET,
                             ASSET_COLUMNS
                                     + " expected_duration_ms:l? audio_duration_ms:l? audio_codec:s? audio_container:s?")
                     : table)
             .toList();
     private static final List<Table> ARCHIVE_TABLES = AUDIO_TABLES.stream()
             .map(table -> switch (table.name()) {
-                case "contribution" -> table("contribution", table.definition() + " source:s author_account_id:u?");
-                case "memory" ->
-                    table("memory", table.definition() + " title:s? description:s? memory_date:s? date_precision:s");
+                case TABLE_CONTRIBUTION -> table(TABLE_CONTRIBUTION, table.definition() + " source:s author_account_id:u?");
+                case TABLE_MEMORY ->
+                    table(TABLE_MEMORY, table.definition() + " title:s? description:s? memory_date:s? date_precision:s");
                 default -> table;
             })
             .toList();
@@ -66,19 +73,19 @@ final class RecoverySchema {
     static {
         var tables = new ArrayList<>(ARCHIVE_TABLES);
         tables.add(table("album", "id:u name:s? visibility:s revision:u created_at:t updated_at:t deleted_at:t?"));
-        tables.add(table("album_membership", "album_id:u memory_id:u position:l"));
+        tables.add(table(TABLE_ALBUM_MEMBERSHIP, "album_id:u memory_id:u position:l"));
         ALBUM_TABLES = List.copyOf(tables);
         tables.add(table("timeline_state", "id:i revision:u updated_at:t"));
         tables.add(table("timeline_event",
                 "id:u title:s? description:s? event_date:s? date_precision:s visibility:s revision:u created_at:t updated_at:t deleted_at:t?"));
-        tables.add(table("timeline_event_memory", "event_id:u memory_id:u"));
+        tables.add(table(TABLE_TIMELINE_EVENT_MEMORY, "event_id:u memory_id:u"));
         TIMELINE_TABLES = List.copyOf(tables);
         tables.add(table("tag", "id:u name:s? visibility:s revision:u created_at:t updated_at:t deleted_at:t?"));
-        tables.add(table("memory_tag", "tag_id:u memory_id:u"));
+        tables.add(table(TABLE_MEMORY_TAG, "tag_id:u memory_id:u"));
         TABLES = List.copyOf(tables);
         SHARING_TABLES = TABLES.stream()
-                .map(table -> table.name().equals("review_audit")
-                        ? table("review_audit", table.definition() + " before_visibility:s after_visibility:s")
+                .map(table -> table.name().equals(TABLE_REVIEW_AUDIT)
+                        ? table(TABLE_REVIEW_AUDIT, table.definition() + " before_visibility:s after_visibility:s")
                         : table)
                 .toList();
     }
@@ -103,29 +110,7 @@ final class RecoverySchema {
         try {
             // Resource names are obtained from actual reviewed migration history below;
             // never from bundle paths.
-            var allHistory = db.sql(
-                    "SELECT version, script, checksum, type, success FROM flyway_schema_history ORDER BY installed_rank")
-                    .query((rs, row) -> new Migration(
-                            rs.getString("version"),
-                            rs.getString("script"),
-                            rs.getInt("checksum"),
-                            rs.getString("type"),
-                            rs.getBoolean("success")))
-                    .list();
-            // Flyway may record creation of a named isolated schema before its SQL
-            // migrations.
-            var history = new ArrayList<Migration>();
-            boolean schemaMarker = false;
-            for (var migration : allHistory) {
-                if ("SCHEMA".equals(migration.type())) {
-                    if (schemaMarker || !history.isEmpty() || migration.version() != null || !migration.success()) {
-                        throw invalid();
-                    }
-                    schemaMarker = true;
-                } else {
-                    history.add(migration);
-                }
-            }
+            var history = reviewedHistory(db);
             if (history.size() < 8 || history.size() > MIGRATIONS.size()) {
                 throw invalid();
             }
@@ -137,37 +122,10 @@ final class RecoverySchema {
                         || !"SQL".equals(migration.type()) || !migration.script().equals(MIGRATIONS.get(i))) {
                     throw invalid();
                 }
-                byte[] bytes;
-                try (var input = RecoverySchema.class.getResourceAsStream("/db/migration/" + migration.script())) {
-                    if (input == null) {
-                        throw invalid();
-                    }
-                    bytes = input.readNBytes(100_001);
-                }
-                if (bytes.length > 100_000) {
-                    throw invalid();
-                }
-                CRC32 crc = new CRC32();
-                StringBuilder canonical = new StringBuilder();
-                try (var reader = new BufferedReader(new InputStreamReader(
-                        new java.io.ByteArrayInputStream(bytes), StandardCharsets.UTF_8))) {
-                    String line;
-                    boolean first = true;
-                    while ((line = reader.readLine()) != null) {
-                        if (first && line.startsWith("\uFEFF")) {
-                            line = line.substring(1);
-                        }
-                        first = false;
-                        crc.update(line.getBytes(StandardCharsets.UTF_8));
-                        canonical.append(line).append('\n');
-                    }
-                }
-                if ((int) crc.getValue() != migration.checksum()) {
-                    throw invalid();
-                }
+                String canonical = canonicalMigration(migration);
                 digest.update(migration.script().getBytes(StandardCharsets.UTF_8));
                 digest.update((byte) 0);
-                digest.update(canonical.toString().getBytes(StandardCharsets.UTF_8));
+                digest.update(canonical.getBytes(StandardCharsets.UTF_8));
                 digest.update((byte) 0);
                 if (i >= 7) {
                     fingerprints.put(i - 6, HexFormat.of().formatHex(((MessageDigest) digest.clone()).digest()));
@@ -184,6 +142,65 @@ final class RecoverySchema {
         } catch (Exception failure) {
             throw invalid();
         }
+    }
+
+    private static List<Migration> reviewedHistory(JdbcClient db) {
+        var allHistory = db.sql(
+                "SELECT version, script, checksum, type, success FROM flyway_schema_history ORDER BY installed_rank")
+                .query((rs, row) -> new Migration(
+                        rs.getString("version"),
+                        rs.getString("script"),
+                        rs.getInt("checksum"),
+                        rs.getString("type"),
+                        rs.getBoolean("success")))
+                .list();
+        // Flyway may record creation of a named isolated schema before its SQL
+        // migrations.
+        var history = new ArrayList<Migration>();
+        boolean schemaMarker = false;
+        for (var migration : allHistory) {
+            if ("SCHEMA".equals(migration.type())) {
+                if (schemaMarker || !history.isEmpty() || migration.version() != null || !migration.success()) {
+                    throw invalid();
+                }
+                schemaMarker = true;
+            } else {
+                history.add(migration);
+            }
+        }
+        return history;
+    }
+
+    private static String canonicalMigration(Migration migration) throws java.io.IOException {
+        byte[] bytes;
+        try (var input = RecoverySchema.class.getResourceAsStream("/db/migration/" + migration.script())) {
+            if (input == null) {
+                throw invalid();
+            }
+            bytes = input.readNBytes(100_001);
+        }
+        if (bytes.length > 100_000) {
+            throw invalid();
+        }
+        CRC32 crc = new CRC32();
+        StringBuilder canonical = new StringBuilder();
+        try (var reader = new BufferedReader(new InputStreamReader(
+                new java.io.ByteArrayInputStream(bytes), StandardCharsets.UTF_8))) {
+            String line;
+            boolean first = true;
+            while ((line = reader.readLine()) != null) {
+                if (first && line.startsWith("\uFEFF")) {
+                    line = line.substring(1);
+                }
+                first = false;
+                crc.update(line.getBytes(StandardCharsets.UTF_8));
+                canonical.append(line).append('\n');
+            }
+        }
+        if ((int) crc.getValue() != migration.checksum()) {
+            throw invalid();
+        }
+        return canonical.toString();
     }
 
     private static void requireColumns(JdbcClient db, List<Table> definitions) {
@@ -233,10 +250,10 @@ final class RecoverySchema {
                 throw new RecoveryException("METADATA_LIMIT");
             }
             String order = switch (table.name()) {
-                case "review_audit" -> "memory_id, after_revision";
-                case "album_membership" -> "album_id, position, memory_id";
-                case "timeline_event_memory" -> "event_id, memory_id";
-                case "memory_tag" -> "tag_id, memory_id";
+                case TABLE_REVIEW_AUDIT -> "memory_id, after_revision";
+                case TABLE_ALBUM_MEMBERSHIP -> "album_id, position, memory_id";
+                case TABLE_TIMELINE_EVENT_MEMORY -> "event_id, memory_id";
+                case TABLE_MEMORY_TAG -> "tag_id, memory_id";
                 default -> table.columns().getFirst().name();
             };
             result.put(
@@ -266,44 +283,57 @@ final class RecoverySchema {
             if (rows == null || !rows.isArray() || (total += rows.size()) > MAX_ROWS) {
                 throw invalid();
             }
-            var decoded = new ArrayList<Map<String, Object>>();
-            for (JsonNode row : rows) {
-                var value = table.decode(row);
-                if (version == 1 && table.name().equals("media_asset")) {
-                    AUDIO_COLUMNS.forEach(name -> value.put(name, null));
-                }
-                if (version < 3 && table.name().equals("contribution")) {
-                    value.put("source", "GUEST");
-                    value.put("author_account_id", null);
-                }
-                if (version < 3 && table.name().equals("memory")) {
-                    value.put("title", null);
-                    value.put("description", null);
-                    value.put("memory_date", null);
-                    value.put("date_precision", "UNKNOWN");
-                }
-                if (version < 7 && table.name().equals("review_audit")) {
-                    value.put("before_visibility", "COUPLE_ONLY");
-                    value.put("after_visibility", "COUPLE_ONLY");
-                }
-                decoded.add(value);
-            }
+            var decoded = decodeRows(rows, table, version);
             result.put(table.name(), List.copyOf(decoded));
         }
+        addAbsentOrganizationTables(result, version);
+        return result;
+    }
+
+    private static List<Map<String, Object>> decodeRows(JsonNode rows, Table table, int version) {
+        var decoded = new ArrayList<Map<String, Object>>();
+        for (JsonNode row : rows) {
+            var value = table.decode(row);
+            applyLegacyDefaults(value, table.name(), version);
+            decoded.add(value);
+        }
+        return decoded;
+    }
+
+    private static void applyLegacyDefaults(Map<String, Object> value, String tableName, int version) {
+        if (version == 1 && tableName.equals(TABLE_MEDIA_ASSET)) {
+            AUDIO_COLUMNS.forEach(name -> value.put(name, null));
+        }
+        if (version < 3 && tableName.equals(TABLE_CONTRIBUTION)) {
+            value.put("source", "GUEST");
+            value.put("author_account_id", null);
+        }
+        if (version < 3 && tableName.equals(TABLE_MEMORY)) {
+            value.put("title", null);
+            value.put("description", null);
+            value.put("memory_date", null);
+            value.put("date_precision", "UNKNOWN");
+        }
+        if (version < 7 && tableName.equals(TABLE_REVIEW_AUDIT)) {
+            value.put("before_visibility", "COUPLE_ONLY");
+            value.put("after_visibility", "COUPLE_ONLY");
+        }
+    }
+
+    private static void addAbsentOrganizationTables(Map<String, List<Map<String, Object>>> result, int version) {
         if (version < 4) {
             result.put("album", List.of());
-            result.put("album_membership", List.of());
+            result.put(TABLE_ALBUM_MEMBERSHIP, List.of());
         }
         if (version < 5) {
             result.put("timeline_state", List.of());
             result.put("timeline_event", List.of());
-            result.put("timeline_event_memory", List.of());
+            result.put(TABLE_TIMELINE_EVENT_MEMORY, List.of());
         }
         if (version < 6) {
             result.put("tag", List.of());
-            result.put("memory_tag", List.of());
+            result.put(TABLE_MEMORY_TAG, List.of());
         }
-        return result;
     }
 
     static void insert(
@@ -442,40 +472,48 @@ final class RecoverySchema {
             }
             try {
                 return switch (type) {
-                    case 'u' -> {
-                        String text = string(node);
-                        UUID id = UUID.fromString(text);
-                        if (!id.toString().equals(text)) {
-                            throw invalid();
-                        }
-                        yield id;
-                    }
-                    case 't' -> {
-                        String text = string(node);
-                        Instant instant = Instant.parse(text);
-                        if (!instant.toString().equals(text)) {
-                            throw invalid();
-                        }
-                        yield instant;
-                    }
-                    case 'i' -> {
-                        if (!node.isIntegralNumber() || !node.canConvertToInt()) {
-                            throw invalid();
-                        }
-                        yield node.intValue();
-                    }
-                    case 'l' -> {
-                        if (!node.isIntegralNumber() || !node.canConvertToLong()) {
-                            throw invalid();
-                        }
-                        yield node.longValue();
-                    }
+                    case 'u' -> canonicalUuid(node);
+                    case 't' -> canonicalInstant(node);
+                    case 'i' -> integerValue(node);
+                    case 'l' -> longValue(node);
                     default -> string(node);
                 };
             } catch (RuntimeException failure) {
                 throw invalid();
             }
         }
+    }
+
+    private static UUID canonicalUuid(JsonNode node) {
+        String text = string(node);
+        UUID id = UUID.fromString(text);
+        if (!id.toString().equals(text)) {
+            throw invalid();
+        }
+        return id;
+    }
+
+    private static Instant canonicalInstant(JsonNode node) {
+        String text = string(node);
+        Instant instant = Instant.parse(text);
+        if (!instant.toString().equals(text)) {
+            throw invalid();
+        }
+        return instant;
+    }
+
+    private static int integerValue(JsonNode node) {
+        if (!node.isIntegralNumber() || !node.canConvertToInt()) {
+            throw invalid();
+        }
+        return node.intValue();
+    }
+
+    private static long longValue(JsonNode node) {
+        if (!node.isIntegralNumber() || !node.canConvertToLong()) {
+            throw invalid();
+        }
+        return node.longValue();
     }
 
     static String string(JsonNode node) {

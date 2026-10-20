@@ -26,28 +26,46 @@ final class StagingAccessFilter extends OncePerRequestFilter {
             SecurityErrorWriter errors) {
         this.basicAuthenticationEnabled = basicAuthenticationEnabled;
         this.errors = errors;
-        if (basicAuthenticationEnabled) {
-            if (username == null || username.isBlank() || username.length() > 64
-                    || username.contains(":") || username.chars().anyMatch(Character::isISOControl)
-                    || password == null || password.isBlank() || password.length() < 24 || password.length() > 256
-                    || password.chars().anyMatch(Character::isISOControl)) {
-                throw new IllegalStateException("Staging requires a username and a password of 24–256 characters.");
-            }
-            credentialDigest = digest((username + ":" + password).getBytes(StandardCharsets.UTF_8));
-        } else {
-            credentialDigest = new byte[0];
+        credentialDigest = credentialDigest(basicAuthenticationEnabled, username, password);
+        expectedOrigin = validatedOrigin(origin);
+    }
+
+    private static byte[] credentialDigest(boolean enabled, String username, String password) {
+        if (!enabled) {
+            return new byte[0];
         }
+        if (!validUsername(username) || !validPassword(password)) {
+            throw new IllegalStateException("Staging requires a username and a password of 24–256 characters.");
+        }
+        return digest((username + ":" + password).getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static boolean validUsername(String username) {
+        return username != null && !username.isBlank() && username.length() <= 64
+                && !username.contains(":") && username.chars().noneMatch(Character::isISOControl);
+    }
+
+    private static boolean validPassword(String password) {
+        return password != null && !password.isBlank() && password.length() >= 24 && password.length() <= 256
+                && password.chars().noneMatch(Character::isISOControl);
+    }
+
+    private static String validatedOrigin(String origin) {
         try {
             URI parsed = URI.create(origin);
-            if (!"https".equals(parsed.getScheme()) || parsed.getHost() == null || parsed.getUserInfo() != null
-                    || parsed.getPort() != -1 || parsed.getQuery() != null || parsed.getFragment() != null
-                    || (parsed.getPath() != null && !parsed.getPath().isEmpty())) {
+            if (!originOnly(parsed)) {
                 throw new IllegalArgumentException();
             }
-            expectedOrigin = origin;
+            return origin;
         } catch (IllegalArgumentException | NullPointerException invalid) {
             throw new IllegalStateException("Staging requires its exact HTTPS origin, without a path or credentials.");
         }
+    }
+
+    private static boolean originOnly(URI parsed) {
+        return "https".equals(parsed.getScheme()) && parsed.getHost() != null && parsed.getUserInfo() == null
+                && parsed.getPort() == -1 && parsed.getQuery() == null && parsed.getFragment() == null
+                && (parsed.getPath() == null || parsed.getPath().isEmpty());
     }
 
     @Override

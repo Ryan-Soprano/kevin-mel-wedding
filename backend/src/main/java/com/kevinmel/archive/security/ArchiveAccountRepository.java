@@ -9,6 +9,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Repository
 public class ArchiveAccountRepository {
+    private static final String USERNAME_COLUMN = "username";
+
 
     private final JdbcClient jdbcClient;
 
@@ -23,10 +25,10 @@ public class ArchiveAccountRepository {
                 FROM archive_account
                 WHERE username = :username
                 """)
-            .param("username", username)
+            .param(USERNAME_COLUMN, username)
             .query((rs, rowNumber) -> new ArchiveAccount(
                 rs.getObject("id", UUID.class),
-                rs.getString("username"),
+                rs.getString(USERNAME_COLUMN),
                 rs.getString("display_name"),
                 rs.getString("password_hash"),
                 rs.getString("role"),
@@ -42,7 +44,7 @@ public class ArchiveAccountRepository {
                 FROM archive_account WHERE id = :id
                 """).param("id", id)
                 .query((rs, rowNumber) -> new ArchiveAccount(
-                        rs.getObject("id", UUID.class), rs.getString("username"),
+                        rs.getObject("id", UUID.class), rs.getString(USERNAME_COLUMN),
                         rs.getString("display_name"), rs.getString("password_hash"),
                         rs.getString("role"), rs.getBoolean("enabled"), rs.getLong("credentials_version")))
                 .optional();

@@ -18,6 +18,11 @@ import org.springframework.web.util.UrlPathHelper;
 
 /** Bounds session and private JSON before MVC; guest admission quotas do not apply here. */
 public final class CoupleRequestBodyFilter extends OncePerRequestFilter {
+    private static final String GET = "GET";
+    private static final String POST = "POST";
+    private static final String PUT = "PUT";
+    private static final String PATCH = "PATCH";
+    private static final String DELETE = "DELETE";
     private final SecurityErrorWriter errors;
 
     public CoupleRequestBodyFilter(SecurityErrorWriter errors) {
@@ -53,76 +58,90 @@ public final class CoupleRequestBodyFilter extends OncePerRequestFilter {
     }
 
     static int bodyLimit(String method, String path) {
-        if ("POST".equals(method) && "/api/session".equals(path)) {
+        if (POST.equals(method) && "/api/session".equals(path)) {
             return 4_096;
         }
-        if ("GET".equals(method) && (path.equals("/api/shared-memories") || path.startsWith("/api/shared-memories/"))) {
+        if (emptySharedBody(method, path)) {
             return 0;
         }
-        if ("POST".equals(method) && path.matches("/api/memories/[^/]+/share-link")) {
-            return 0;
-        }
-        if ("PATCH".equals(method) && path.matches("/api/memories/[^/]+/review")) {
+        if (PATCH.equals(method) && path.matches("/api/memories/[^/]+/review")) {
             return 1_024;
         }
-        if (path.equals("/api/exports") || path.startsWith("/api/exports/")) {
+        int organizationLimit = organizationBodyLimit(method, path);
+        return organizationLimit >= 0 ? organizationLimit : memoryBodyLimit(method, path);
+    }
+
+    private static boolean emptySharedBody(String method, String path) {
+        return GET.equals(method) && within(path, "/api/shared-memories")
+                || POST.equals(method) && path.matches("/api/memories/[^/]+/share-link");
+    }
+
+    private static boolean within(String path, String root) {
+        return path.equals(root) || path.startsWith(root + "/");
+    }
+
+    private static int organizationBodyLimit(String method, String path) {
+        if (within(path, "/api/exports")) {
             return 0;
         }
-        if (path.equals("/api/library") || path.startsWith("/api/library/")) {
-            if ("GET".equals(method)) {
-                return 0;
-            }
+        if (within(path, "/api/library")) {
+            return GET.equals(method) ? 0 : -1;
         }
-        if (path.equals("/api/tags") || path.startsWith("/api/tags/")) {
-            if ("GET".equals(method) || "DELETE".equals(method)) {
-                return 0;
-            }
-            if ("PUT".equals(method) && path.matches("/api/tags/[^/]+/members/[^/]+")) {
-                return 0;
-            }
-            if (("PUT".equals(method) || "PATCH".equals(method)) && path.matches("/api/tags/[^/]+")) {
-                return 16_384;
-            }
+        if (within(path, "/api/tags")) {
+            return collectionBodyLimit(method, path, "/api/tags/[^/]+/members/[^/]+", "/api/tags/[^/]+");
         }
-        if (path.equals("/api/timeline") || path.startsWith("/api/timeline/")) {
-            if ("GET".equals(method) || "DELETE".equals(method)) {
-                return 0;
-            }
-            if ("PUT".equals(method) && path.matches("/api/timeline/events/[^/]+/memories/[^/]+")) {
-                return 0;
-            }
-            if (("PUT".equals(method) || "PATCH".equals(method)) && path.matches("/api/timeline/events/[^/]+")) {
-                return 16_384;
-            }
+        if (within(path, "/api/timeline")) {
+            return collectionBodyLimit(method, path,
+                    "/api/timeline/events/[^/]+/memories/[^/]+", "/api/timeline/events/[^/]+");
         }
-        if (path.equals("/api/albums") || path.startsWith("/api/albums/")) {
-            if ("GET".equals(method) || "DELETE".equals(method)) {
-                return 0;
-            }
-            if ("PUT".equals(method) && path.matches("/api/albums/[^/]+/members/[^/]+")) {
-                return 0;
-            }
-            if ("POST".equals(method) && path.matches("/api/albums/[^/]+/members/[^/]+/move")) {
-                return 1_024;
-            }
-            if (("PUT".equals(method) || "PATCH".equals(method)) && path.matches("/api/albums/[^/]+")) {
-                return 16_384;
-            }
+        if (within(path, "/api/albums")) {
+            return albumBodyLimit(method, path);
         }
-        if ("POST".equals(method) && "/api/memories/contributions".equals(path)) {
+        return -1;
+    }
+
+    private static int collectionBodyLimit(String method, String path, String memberPath, String detailPath) {
+        if (GET.equals(method) || DELETE.equals(method)) {
+            return 0;
+        }
+        if (PUT.equals(method) && path.matches(memberPath)) {
+            return 0;
+        }
+        if ((PUT.equals(method) || PATCH.equals(method)) && path.matches(detailPath)) {
+            return 16_384;
+        }
+        return -1;
+    }
+
+    private static int albumBodyLimit(String method, String path) {
+        if (POST.equals(method) && path.matches("/api/albums/[^/]+/members/[^/]+/move")) {
+            return 1_024;
+        }
+        return collectionBodyLimit(method, path, "/api/albums/[^/]+/members/[^/]+", "/api/albums/[^/]+");
+    }
+
+    private static int memoryBodyLimit(String method, String path) {
+        if (POST.equals(method)) {
+            return contributionBodyLimit(path);
+        }
+        if (GET.equals(method) && path.matches("/api/memories/contributions/[^/]+/receipt")) {
+            return 0;
+        }
+        if (PATCH.equals(method) && path.matches("/api/memories/[^/]+/metadata")) {
+            return 16_384;
+        }
+        return -1;
+    }
+
+    private static int contributionBodyLimit(String path) {
+        if ("/api/memories/contributions".equals(path)) {
             return 65_536;
         }
-        if ("GET".equals(method) && path.matches("/api/memories/contributions/[^/]+/receipt")) {
+        if (path.matches("/api/memories/contributions/[^/]+/memories/[^/]+/upload-grants")) {
             return 0;
         }
-        if ("POST".equals(method) && path.matches("/api/memories/contributions/[^/]+/memories/[^/]+/upload-grants")) {
-            return 0;
-        }
-        if ("POST".equals(method) && path.matches("/api/memories/contributions/[^/]+/memories/[^/]+/finalize")) {
+        if (path.matches("/api/memories/contributions/[^/]+/memories/[^/]+/finalize")) {
             return 1_024;
-        }
-        if ("PATCH".equals(method) && path.matches("/api/memories/[^/]+/metadata")) {
-            return 16_384;
         }
         return -1;
     }

@@ -44,25 +44,9 @@ public record AlbumCursor(
         try {
             String[] values = new String(Base64.getUrlDecoder().decode(encoded), StandardCharsets.UTF_8).split("\\|",
                     -1);
-            AlbumCursor cursor;
-            if (expectedAlbum == null) {
-                if (values.length != 4 || !"1".equals(values[0]) || !"ALBUMS".equals(values[1])) {
-                    throw invalid();
-                }
-                Instant at = Instant.parse(values[2]);
-                int year = at.atOffset(ZoneOffset.UTC).getYear();
-                if (year < 1 || year > 9999 || at.getNano() % 1000 != 0) {
-                    throw invalid();
-                }
-                cursor = listing(at, uuid(values[3]));
-            } else {
-                if (values.length != 5 || !"1".equals(values[0]) || !"MEMBERS".equals(values[1])
-                        || !expectedAlbum.equals(uuid(values[2])) || !values[4].matches("[1-9][0-9]{0,18}")) {
-                    throw invalid();
-                }
-                long position = Long.parseLong(values[4]);
-                cursor = members(expectedAlbum, uuid(values[3]), position);
-            }
+            AlbumCursor cursor = expectedAlbum == null
+                    ? listing(values)
+                    : members(values, expectedAlbum);
             if (!cursor.encode().equals(encoded)) {
                 throw invalid();
             }
@@ -70,6 +54,27 @@ public record AlbumCursor(
         } catch (IllegalArgumentException | java.time.DateTimeException malformed) {
             throw invalid();
         }
+    }
+
+    private static AlbumCursor listing(String[] values) {
+        if (values.length != 4 || !"1".equals(values[0]) || !"ALBUMS".equals(values[1])) {
+            throw invalid();
+        }
+        Instant at = Instant.parse(values[2]);
+        int year = at.atOffset(ZoneOffset.UTC).getYear();
+        if (year < 1 || year > 9999 || at.getNano() % 1000 != 0) {
+            throw invalid();
+        }
+        return listing(at, uuid(values[3]));
+    }
+
+    private static AlbumCursor members(String[] values, UUID expectedAlbum) {
+        if (values.length != 5 || !"1".equals(values[0]) || !"MEMBERS".equals(values[1])
+                || !expectedAlbum.equals(uuid(values[2])) || !values[4].matches("[1-9][0-9]{0,18}")) {
+            throw invalid();
+        }
+        long position = Long.parseLong(values[4]);
+        return members(expectedAlbum, uuid(values[3]), position);
     }
 
     private static UUID uuid(String raw) {

@@ -21,6 +21,12 @@ public class ArchiveAuthorization {
         if (authentication == null || !authentication.isAuthenticated()
                 || authentication instanceof AnonymousAuthenticationToken) throw authenticationRequired();
         if (!(authentication.getPrincipal() instanceof ArchivePrincipal principal)) throw unavailable();
+        requireCurrentAccount(principal);
+        if (!policy.allows(principal) || authentication.getAuthorities().stream()
+                .noneMatch(authority -> "ROLE_COUPLE".equals(authority.getAuthority()))) throw unavailable();
+    }
+
+    private void requireCurrentAccount(ArchivePrincipal principal) {
         var account = accounts.findById(principal.getAccountId());
         if (account.isEmpty() || !account.get().enabled()
                 || account.get().credentialsVersion() != principal.getCredentialsVersion()
@@ -29,8 +35,6 @@ public class ArchiveAuthorization {
                         authority.getAuthority().equals("ROLE_" + account.get().role()))) {
             throw authenticationRequired();
         }
-        if (!policy.allows(principal) || authentication.getAuthorities().stream()
-                .noneMatch(authority -> "ROLE_COUPLE".equals(authority.getAuthority()))) throw unavailable();
     }
 
     private static ApiException authenticationRequired() {

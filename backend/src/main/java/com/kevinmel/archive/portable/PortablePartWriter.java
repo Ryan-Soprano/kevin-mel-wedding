@@ -42,6 +42,9 @@ import com.kevinmel.archive.media.ObjectStorage;
 /** One bounded, owner-only ZIP. Verified immutable bytes are copied unchanged; no URLs or provider calls in the reader. */
 @Component
 public class PortablePartWriter {
+    private static final String ARTICLE_START = "<article><h3>";
+    private static final String DESCRIPTION_LABEL = "Description";
+
     public static final long MAX_PART_ORIGINAL_BYTES = 67_108_864L;
     public static final int MAX_PART_ORIGINALS = 50;
     public static final long MAX_ARTIFACT_BYTES = 83_886_080L;
@@ -110,42 +113,7 @@ public class PortablePartWriter {
         return write(destination, alive, zip -> {
             var outcomes = new ArrayList<OriginalOutcome>();
             for (var original : part.originals()) {
-                check(alive);
-                if (!originalCurrent.test(original)) {
-                    throw new CancellationException("Portable original changed.");
-                }
-                byte[] content = null;
-                Status status;
-                try {
-                    var read = storage.read("originals/" + original.assetId(), MediaTypes.maxBytesForMemoryType(
-                            MediaTypes.PHOTO_TYPES.contains(original.contentType()) ? "PHOTO" : "AUDIO"));
-                    if (read.isEmpty()) {
-                        status = Status.MISSING;
-                    } else {
-                        content = read.get();
-                        status = content.length == original.byteSize()
-                                && PortableExportRepository.sha256(content).equals(original.sha256())
-                                ? Status.INCLUDED : Status.INTEGRITY_MISMATCH;
-                    }
-                } catch (CancellationException exception) {
-                    throw exception;
-                } catch (RuntimeException exception) {
-                    status = Status.READ_FAILED;
-                }
-                check(alive); // callback failures are never converted into an original warning
-                if (!originalCurrent.test(original)) {
-                    throw new CancellationException("Portable original changed.");
-                }
-                if (status == Status.INCLUDED) {
-                    entry(zip, original.path(), content, alive);
-                }
-                outcomes.add(new OriginalOutcome(
-                        original.memoryId(),
-                        original.assetId(),
-                        status,
-                        original.path(),
-                        status == Status.INCLUDED ? original.byteSize() : 0,
-                        status == Status.INCLUDED ? original.sha256() : null));
+                outcomes.add(writeOriginal(zip, original, alive, originalCurrent));
             }
             entry(zip, "parts/part-" + (part.index() + 1) + ".json", json(Map.of(
                     "format", "portable-original-part",
@@ -157,6 +125,46 @@ public class PortablePartWriter {
             return outcomes;
         });
     }
+
+    private OriginalOutcome writeOriginal(ZipOutputStream zip, PortableSnapshot.Original original,
+            BooleanSupplier alive, Predicate<PortableSnapshot.Original> originalCurrent) throws IOException {
+        check(alive);
+        if (!originalCurrent.test(original)) {
+            throw new CancellationException("Portable original changed.");
+        }
+        OriginalRead read = readOriginal(original);
+        check(alive); // callback failures are never converted into an original warning
+        if (!originalCurrent.test(original)) {
+            throw new CancellationException("Portable original changed.");
+        }
+        if (read.status() == Status.INCLUDED) {
+            entry(zip, original.path(), read.content(), alive);
+        }
+        return new OriginalOutcome(original.memoryId(), original.assetId(), read.status(), original.path(),
+                read.status() == Status.INCLUDED ? original.byteSize() : 0,
+                read.status() == Status.INCLUDED ? original.sha256() : null);
+    }
+
+    private OriginalRead readOriginal(PortableSnapshot.Original original) {
+        try {
+            var read = storage.read("originals/" + original.assetId(), MediaTypes.maxBytesForMemoryType(
+                    MediaTypes.PHOTO_TYPES.contains(original.contentType()) ? "PHOTO" : "AUDIO"));
+            if (read.isEmpty()) {
+                return new OriginalRead(null, Status.MISSING);
+            }
+            byte[] content = read.get();
+            Status status = content.length == original.byteSize()
+                    && PortableExportRepository.sha256(content).equals(original.sha256())
+                    ? Status.INCLUDED : Status.INTEGRITY_MISMATCH;
+            return new OriginalRead(content, status);
+        } catch (CancellationException exception) {
+            throw exception;
+        } catch (RuntimeException exception) {
+            return new OriginalRead(null, Status.READ_FAILED);
+        }
+    }
+
+    private record OriginalRead(byte[] content, Status status) { }
 
     public PreparedPart writeIndexPart(
             PortableSnapshot snapshot,
@@ -197,16 +205,8 @@ public class PortablePartWriter {
         check(alive);
         boolean created = false, complete = false;
         try {
-            Path path = destination.toAbsolutePath().normalize();
+            Path path = checkedDestination(destination);
             Path parent = path.getParent();
-            if (parent == null
-                    || !Files.isDirectory(parent, LinkOption.NOFOLLOW_LINKS)
-                    || Files.isSymbolicLink(parent)
-                    || Files.exists(path, LinkOption.NOFOLLOW_LINKS)
-                    || Files.getFileStore(parent).getUsableSpace() < MAX_ARTIFACT_BYTES + MediaTypes.AUDIO_MAX_BYTES) {
-                throw new PortableExportException();
-            }
-            confirmPrivate(parent, true, false);
             if (Files.getFileAttributeView(parent, PosixFileAttributeView.class) != null) {
                 Files.createFile(path, PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------")));
             } else {
@@ -251,6 +251,20 @@ public class PortablePartWriter {
         }
     }
 
+    private static Path checkedDestination(Path destination) throws IOException {
+        Path path = destination.toAbsolutePath().normalize();
+        Path parent = path.getParent();
+        if (parent == null
+                || !Files.isDirectory(parent, LinkOption.NOFOLLOW_LINKS)
+                || Files.isSymbolicLink(parent)
+                || Files.exists(path, LinkOption.NOFOLLOW_LINKS)
+                || Files.getFileStore(parent).getUsableSpace() < MAX_ARTIFACT_BYTES + MediaTypes.AUDIO_MAX_BYTES) {
+            throw new PortableExportException();
+        }
+        confirmPrivate(parent, true, false);
+        return path;
+    }
+
     private static void entry(
             ZipOutputStream zip,
             String name,
@@ -285,6 +299,10 @@ public class PortablePartWriter {
                 || !PortableExportRepository.originalPath(row.assetId(), row.contentType()).equals(row.path())) {
             throw new PortableExportException();
         }
+        validateAudioMetadata(row);
+    }
+
+    private static void validateAudioMetadata(PortableSnapshot.Original row) {
         boolean audio = MediaTypes.AUDIO_TYPES.contains(row.contentType());
         if (audio ? row.durationMs() == null
                 || !MediaTypes.audioMetadataMatches(row.contentType(), row.audioContainer(), row.audioCodec(), row.durationMs())
@@ -306,17 +324,20 @@ public class PortablePartWriter {
             throw new PortableExportException();
         }
         for (var original : snapshot.originals()) {
-            var outcome = byAsset.get(original.assetId());
-            if (outcome == null
-                    || !original.memoryId().equals(outcome.memoryId())
-                    || !original.path().equals(outcome.path())
-                    || (outcome.status() == Status.INCLUDED ? outcome.byteSize() != original.byteSize()
-                    || !original.sha256().equals(outcome.sha256())
-                    : outcome.byteSize() != 0 || outcome.sha256() != null)) {
-                throw new PortableExportException();
-            }
+            validateOutcome(original, byAsset.get(original.assetId()));
         }
         return byAsset;
+    }
+
+    private static void validateOutcome(PortableSnapshot.Original original, OriginalOutcome outcome) {
+        if (outcome == null
+                || !original.memoryId().equals(outcome.memoryId())
+                || !original.path().equals(outcome.path())
+                || (outcome.status() == Status.INCLUDED ? outcome.byteSize() != original.byteSize()
+                || !original.sha256().equals(outcome.sha256())
+                : outcome.byteSize() != 0 || outcome.sha256() != null)) {
+            throw new PortableExportException();
+        }
     }
 
     private static String text(
@@ -331,7 +352,7 @@ public class PortablePartWriter {
                     .append("\nFrom: ").append(attribution(memory)).append("\nContribution: ").append(memory.contributionId()).append("; item position: ").append(memory.itemPosition())
                     .append("\nProvided date: ").append(date(memory.memoryDate(), memory.datePrecision())).append("\nSaved on: ").append(displayTime(memory.createdAt())).append('\n');
             labeled(text, "Title", memory.title());
-            labeled(text, "Description", memory.description());
+            labeled(text, DESCRIPTION_LABEL, memory.description());
             labeled(text, "Note", memory.text());
             labeled(text, "Caption", memory.caption());
             if (memory.assetId() != null) {
@@ -350,7 +371,7 @@ public class PortablePartWriter {
         for (var event : snapshot.events()) {
             text.append('\n').append(event.title()).append(" [").append(event.id()).append("]\nProvided date: ")
                     .append(date(event.eventDate(), event.datePrecision())).append('\n');
-            labeled(text, "Description", event.description());
+            labeled(text, DESCRIPTION_LABEL, event.description());
             text.append("Memories: ").append(event.memoryIds()).append('\n');
         }
         text.append("\nTAGS\n");
@@ -381,7 +402,7 @@ public class PortablePartWriter {
                     .append("</h3><p>").append(escape(attribution(memory))).append(" · ").append(escape(memory.reviewStatus())).append("</p><p>Provided date: ")
                     .append(escape(date(memory.memoryDate(), memory.datePrecision()))).append("<br>Saved on: <time datetime=\"").append(memory.createdAt())
                     .append("\">").append(escape(displayTime(memory.createdAt()))).append("</time></p>");
-            paragraph(html, "Description", memory.description());
+            paragraph(html, DESCRIPTION_LABEL, memory.description());
             paragraph(html, "Note", memory.text());
             paragraph(html, "Caption", memory.caption());
             if (memory.assetId() != null) {
@@ -396,7 +417,7 @@ public class PortablePartWriter {
         }
         html.append("<h2 id=\"albums\">Albums</h2>");
         for (var album : snapshot.albums().stream().limit(READER_ROWS).toList()) {
-            html.append("<article><h3>").append(escape(excerpt(album.name()))).append("</h3><ol>");
+            html.append(ARTICLE_START).append(escape(excerpt(album.name()))).append("</h3><ol>");
             for (var member : album.members().stream().limit(READER_ROWS).toList()) {
                 html.append("<li>Position ").append(member.position()).append(": ").append(memoryLink(member.memoryId(), visible)).append("</li>");
             }
@@ -404,14 +425,14 @@ public class PortablePartWriter {
         }
         html.append("<h2 id=\"timeline\">Life timeline</h2>");
         for (var event : snapshot.events().stream().limit(READER_ROWS).toList()) {
-            html.append("<article><h3>").append(escape(excerpt(event.title()))).append("</h3><p>").append(escape(date(event.eventDate(), event.datePrecision()))).append("</p>");
-            paragraph(html, "Description", event.description());
+            html.append(ARTICLE_START).append(escape(excerpt(event.title()))).append("</h3><p>").append(escape(date(event.eventDate(), event.datePrecision()))).append("</p>");
+            paragraph(html, DESCRIPTION_LABEL, event.description());
             members(html, event.memoryIds(), visible);
             html.append("</article>");
         }
         html.append("<h2 id=\"tags\">Tags</h2>");
         for (var tag : snapshot.tags().stream().limit(READER_ROWS).toList()) {
-            html.append("<article><h3>").append(escape(excerpt(tag.name()))).append("</h3>");
+            html.append(ARTICLE_START).append(escape(excerpt(tag.name()))).append("</h3>");
             members(html, tag.memoryIds(), visible);
             html.append("</article>");
         }

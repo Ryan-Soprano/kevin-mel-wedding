@@ -12,7 +12,8 @@ database. This guide records the review method and technical decisions.
    cancellation, resource cleanup and error contracts. For UI files, also check
    labels, keyboard focus, disabled controls and retained drafts.
 3. Check maintainability: cohesive responsibilities, useful names, readable control
-   flow, duplication and compatibility with surrounding modules.
+   flow, duplication and compatibility with surrounding modules. Backend batches
+   also require the explicit SonarQube checks below.
 4. Check efficiency against actual work: repeated requests, copies, hashing,
    decoding, timers, renders and retained resources. Measure suspected expensive
    paths before introducing caching or additional abstractions.
@@ -23,6 +24,42 @@ Keep increments small enough to review independently. Separate a mechanical
 extraction from a behavior fix in the commit history. Reproduce bugs before
 patching them, extend existing test files where practical, and test observable
 outcomes rather than internal function layout. Preserve unrelated working edits.
+
+## SonarQube complexity and duplication
+
+Run actual SonarJava analysis for backend reviews, including existing findings
+in the reviewed files. At minimum, check cognitive complexity (`java:S3776`),
+cyclomatic complexity (`java:S1541`) and duplicated string literals
+(`java:S1192`). Use the project's configured profile where available. Record the
+actual analyzer/runtime versions, active rules and effective parameters, source
+and test scope, exclusions, Java version/classpath and exact input hashes. A local
+SonarQube for IDE engine can establish those rule results; it does not establish
+a server quality gate or checks that engine does not provide.
+
+Analyze the full backend so cross-package findings remain visible, with tests
+classified separately. Inspect duplicated-block groups and all their file/range
+endpoints when the analysis provides them; record duplication measures and
+detector settings. If block detection or another required check is unavailable,
+state the limitation and keep that check open. An empty rule-issue list does not
+establish the absence of duplicated blocks. Distinguish per-method complexity
+thresholds from aggregate project complexity measures.
+
+Give every in-scope finding a disposition: **fix**, **justified retain**, or
+**false positive**, with its rule, file/symbol/range, measured value and threshold
+where available, concrete reason and verification evidence. Prefer cohesive
+helpers and simpler control flow while preserving contracts. Do not merely move
+complexity between arbitrary helpers, weaken thresholds, widen exclusions or
+add unexplained suppressions. Intentional duplication is a justified retain,
+not a false positive. Keep unresolved findings visible.
+
+Reanalyze the final source using the same rules/settings and compare baseline
+and final findings. Record changed or retained findings at their final locations,
+the source revision/hashes, analysis completion and any analyzer warnings. Keep
+server analysis identifiers, profile/gate and new-code results when available;
+state unavailable values explicitly. Passing tests, formatting/AST comparisons
+and a new-code-only quality gate do not replace this review. Retain the finding
+exports and dispositions with the existing test and independent-review evidence.
+Later source edits require the affected analysis and verification again.
 
 ## Verification
 
@@ -2380,3 +2417,234 @@ Ryan creates/merges the PR after exact-current-head CI/configured review and
 Linux-only checks. The focused Notion issue records review delivery without
 closing operational acceptance. The next suggested formal package is backend
 `timeline/`, after a fresh inventory and consumer review.
+
+## Backend Sonar follow-up decisions — October 20, 2026
+
+Ryan requested explicit complexity/duplication checks in this process and a
+retrospective of all ten formally reviewed backend packages. The baseline at
+`6cac548` preserves his authorized OperatorRecovery edit; a later IDE save is
+separately preserved at `7c1fa94` and included in the final refactor. Neither is
+discarded to recreate an older working copy. The frozen baseline has 211 backend
+inputs, 127 production Java files and 62 test Java files. The formal package
+scope contains 99 production files plus 53 test suites and two fixtures, with
+the existing migration test traced as an additional consumer.
+
+The actual installed SonarJava engine reports 241 selected MAIN-source findings
+over the full baseline: **227 in the formal scope** and 14 in library/timeline.
+Those 227 findings all receive explicit fix dispositions; none is suppressed,
+excluded, marked false positive or retained by changing a threshold. The
+follow-up preserves exact contracts through cohesive helper extraction and
+owner-scoped constants; no additional backend behavior defect is claimed.
+
+| Reviewed package | Baseline cognitive / cyclomatic / literal findings |
+|---|---|
+| `security/` | 2 / 6 / 6 |
+| `web/` | 0 / 1 / 0 |
+| `contribution/` | 0 / 3 / 7 |
+| `media/` | 6 / 12 / 16 |
+| `review/` | 2 / 4 / 6 |
+| `retention/` | 2 / 3 / 4 |
+| `operations/` | 4 / 6 / 4 |
+| `recovery/` | 11 / 13 / 75 |
+| `portable/` | 4 / 11 / 12 |
+| `album/` | 0 / 1 / 6 |
+| **Reviewed total** | **31 / 60 / 136 = 227** |
+
+The installed official VS Code extension is **6.1.1**, analysis engine
+**12.1.1.87771** and SonarJava **8.44.0.48651**, on Java 25 with the exact fresh
+compiled production/test classes and 158 dependency JAR inputs. Actual defaults
+are S3776 `Threshold=15`, S1541 `Threshold=10`, and S1192 `threshold=3`,
+`minimalLength=5`, empty `excludePatterns`. All three rules are MAIN scoped;
+TEST indexing does not evaluate those rules on tests. Positive score/secondary
+location controls, exact parameter boundaries, TEST classification and malformed
+source failure are exercised. The exact known `No workDir in SonarLint` warning
+is retained. This is local selected-rule evidence, not the full hosted quality
+profile, coverage, new-code measures or a server quality gate.
+
+The IDE engine's no-op CPD hooks cannot establish block duplication. A separate
+adapter uses all 61 unmodified duplication-module sources from official
+SonarQube **26.4.0.121862**, pinned commit
+`ab253503cc54df4bdfefd11eb783997d402b5147`, with seven pinned official Maven
+dependencies. It uses the official Java tokenizer, statement builder,
+ten-statement block chunker and suffix-tree algorithm. Five actual controls
+check nine/ten statements, literal normalization, identifier changes and
+whitespace/comments. Baseline detection yields **three raw per-origin groups,
+two unique complete endpoint sets**: AudioRequest/PhotoRequest fingerprint
+framing and overlapping CoupleRequestBodyFilter organization routing. Only
+identical complete endpoint sets are deduplicated; overlapping fragments are
+not merged. No block threshold or source exclusion is weakened.
+
+All unchanged reviewed production files retain their existing **keep** decisions
+and exact baseline bytes. The following per-file **simplify** decisions cover
+the 42 modified files and one new production helper:
+
+| Production file, relative to `com/kevinmel/archive/` | Decision and preserved boundary |
+|---|---|
+| `security/AccountAdministration.java` | Name the repeated create command and separate confirmed dispatch; retain validation, console confirmation and safe exit behavior. |
+| `security/AccountAdministrationStore.java` | Name the repeated username column; retain SQL and row mapping. |
+| `security/ArchiveAccessPolicy.java` | Name the production profile and extract public-origin validation; retain exact policy/error order. |
+| `security/ArchiveAccountRepository.java` | Name the repeated username column without changing queries or account identity. |
+| `security/ArchiveAuthorization.java` | Extract fresh-account validation; retain authentication → account → policy ordering. |
+| `security/CoupleRequestBodyFilter.java` | Separate route families and shared organization collection limits; retain exact method/path precedence, status and byte limits. |
+| `security/SessionIdentityFilter.java` | Separate current/foreign identity and invalidation; clear/save context before rejection and retain catch boundaries. |
+| `security/SessionService.java` | Extract raw credential validation/normalization before throttle and authentication work. |
+| `web/StagingAccessFilter.java` | Separate credential/origin predicates; retain digest comparison and complete correlated safe errors. |
+| `contribution/ContributionRepository.java` | Name row-field literals without changing SQL values or mapping. |
+| `contribution/ContributionRequest.java` | Separate raw field predicates and express exact ECMAScript whitespace ranges; retain all UTF-16 trimming/length and ordered errors. |
+| `contribution/ContributionScope.java` | Separate guest/couple authority predicates with the same short-circuit checks. |
+| `media/AudioRequest.java` | Separate raw/item/file/duration validation; retain first error, duration and audio fingerprint field order. |
+| `media/AudioVerifier.java` | Extract byte bounds, probe/decode and MP4/WebM/Ogg/VINT phases; retain arguments, limits, CRC/paging and temporary cleanup. |
+| `media/MediaRequestFingerprint.java` | Add one shared length-prefixed UTF-8 framing helper; callers retain media markers, field order and distinct validation. |
+| `media/MediaService.java` | Separate admission/metadata predicates; retain lifecycle, authority and ownership behavior. |
+| `media/PhotoRepository.java` | Name repeated row/column literals; all eleven SQL text blocks remain identical. |
+| `media/PhotoRequest.java` | Separate raw bounds/type predicates; preserve ordered errors and exact photo fingerprint framing. |
+| `media/PhotoVerifier.java` | Separate image checks with unchanged bounded decoding and stream ownership. |
+| `media/PlaybackService.java` | Separate request/grant predicates and repeated identities; retain authority and safe response boundaries. |
+| `media/R2ObjectStorage.java` | Separate ledger, presign scope and grant metadata checks; preserve provider error translation and exact storage conditions. |
+| `review/InboxCursor.java` | Separate cursor decoding/field validation; preserve opaque encoding, identities and safe invalid-cursor failure. |
+| `review/InboxRepository.java` | Name repeated row literals without changing SQL, paging or snapshot behavior. |
+| `review/MemoryMetadataRequest.java` | Separate body/text/partial-date validation; retain bounds, field order and date semantics. |
+| `review/ReviewRequest.java` | Extract validation phases and constants with unchanged accepted body/error order. |
+| `review/ReviewService.java` | Separate state predicates; retain authority, locks and mutation/replay behavior. |
+| `retention/DeletionRecord.java` | Separate durable record validation while retaining exact identity/outcome requirements. |
+| `retention/RetentionAdministration.java` | Separate console dispatch/validation and repeated commands; retain confirmed actions and safe diagnostics. |
+| `retention/RetentionRepository.java` | Name repeated mapping literals; retain scrub serialization, SQL and deletion evidence. |
+| `operations/OperationsReadiness.java` | Separate readiness evidence phases and repeated values; retain capability/compatibility requirements. |
+| `operations/OperationsSchema.java` | Separate schema validation and constants without changing the physical schema contract. |
+| `operations/ReadinessAdministration.java` | Separate console/prior-JAR phases with the same no-op/confirmation/error behavior. |
+| `recovery/OperatorRecovery.java` | Extract preflight/export/restore phases and repeated literals; retain latest accepted catches, SERIALIZABLE transaction, lock/empty checks, all-plan validation, re-read/publish confirmation, deletion ledger, frozen replay, constraints and commit ordering. |
+| `recovery/RecoveryAdministration.java` | Separate console validation/dispatch with exact confirmation, safe error codes and private diagnostic boundaries. |
+| `recovery/RecoveryMetadata.java` | Extract per-row contribution/memory/asset/grant/audit/deletion/organization phases sharing the same validation sets; retain cross-row graph constraints and first-error order. |
+| `recovery/RecoverySchema.java` | Separate version/schema checks and constants; retain compatibility and table/column requirements. |
+| `portable/ExportJobService.java` | Extract admission, part/cache projection, lease opening and untransferred cleanup; retain monitor regions, fresh authority, replay-before-admission, cleanup-before-attempt, one pending-count decrement and transfer ownership only on success. |
+| `portable/OwnedExportDirectory.java` | Separate private marker/inventory/permission checks and deletion phases; hold the reaper claim through ZIP deletion and retain retryable failed cleanup. |
+| `portable/PortableExportRepository.java` | Separate organization capture/membership phases; retain connection, budget, SQL/order and all-links versus eligible-links distinctions. |
+| `portable/PortablePartWriter.java` | Extract original read/write, metadata/outcome and destination checks; retain ZIP bytes, callback/catch boundaries, provider cancellation and created/complete cleanup flags. |
+| `album/AlbumController.java` | Use named response-header identities/policy with unchanged private caching and API behavior. |
+| `album/AlbumCursor.java` | Separate cursor validation and safe failure without changing tokens/identity/order. |
+| `album/AlbumRepository.java` | Name repeated mapping literals; retain exact SQL, locking and member order. |
+
+Independent cross-reviews cover the final security/domain, media, recovery and
+portable changes. The original 227 finding records retain primary/secondary
+locations, dispositions and final source hashes. Additional helper findings
+introduced during refactoring are resolved before final analysis too. No new
+tracked test file is added. All resources, migrations, dependency/build settings
+and existing tests remain unchanged.
+
+The new tracked local launchers/adapters and pinned CPD bootstrap manifest make
+the process reproducible on another machine. See
+[the analyzer setup and evidence instructions](backend-sonar.md). Explicit
+bootstrap downloads only pinned official artifacts; analysis commands use local
+inputs and do not upload private code or start a server. The existing
+[home handoff](../../HANDOFF-2026-10-19.md) now records current progress and
+remaining packages. Raw ignored evidence stays under
+`logs/backend-sonar-review.local/` and is not transferred by Git.
+
+## Backend Sonar follow-up verification — October 20, 2026
+
+The frozen baseline completes full backend `package` with exit 0 and explicit
+`BUILD SUCCESS`: **474 total, 472 passed, zero failures/errors and two expected
+Windows skips**. The final fresh frozen source at code commit
+`673e37da35bc140654e9033394e428208719b603` completes the same full `package`
+run with the same counts, exit 0 and successful-build marker. Runtime is
+Microsoft Java **25.0.4+7**, Maven **3.9.16**, Spring Boot **4.1.1**, Docker
+**29.8.0**, disposable PostgreSQL **17.11**, and checksum-verified local
+FFmpeg/ffprobe **9.0.2**. Both runs use the existing tests and local CLI settings
+`surefire.exitTimeout=120`, `forkCount=1`, `reuseForks=false`,
+`argLine=-Xmx1024m`. The final run exits normally without the earlier historical
+shutdown-timeout diagnostic; tracked build configuration remains unchanged.
+
+All **212 tracked final backend inputs** retain their frozen hashes in both the
+visible and tested trees. Exactly 42 existing production files differ from the
+211-input baseline and one production helper is new. All existing tests and
+fixtures remain unchanged. The packaged JAR contains all **256 tested production
+classes** with identical bytes; direct class entries exclude identities and
+digests of all **111 compiled test/fixture classes**. The executable manifest
+names the correct Boot launcher/application. This check does not audit nested
+dependency JARs or non-class resources. Packaged recovery help exits 0;
+noninteractive export exits 2 with the expected refusal before recovery starts.
+
+All **81 decoded Java text-block values and multiplicities** match baseline,
+including SQL. This parser proof does not establish statement execution order
+or equivalence of ordinary string expressions. A separate ignored differential
+probe uses one JVM and isolated baseline/current class loaders with the same
+158 dependency JARs, shared JDK collection salt, synthetic fixed identities,
+bytes and timestamps. It passes **69,417 assertions**: 3,360 route/method
+comparisons, 65,546 Unicode trimming comparisons, 156 contribution-scope cases,
+and 19 complete byte-identical original/index ZIP pairs spanning 79 entries.
+Archive cases include more than 1,000 memories, escaped/large text, partial dates,
+BIGINT maximum album position, mixed media outcomes and Eastern DST boundaries.
+An altered-ZIP negative control is rejected. The compared partial classes precede
+only the separately reviewed final layout normalization; the final Maven run
+provides fresh final-source compilation/execution. No baseline/final whole-class
+bytecode equality is claimed after helper extraction.
+
+The media owner's additional **2,597 comparisons** cover request normalization,
+fingerprint bytes, complete ordered errors and synthetic container/VINT bounds.
+Independent source review complements these probes, including transaction/lock
+ordering, validation-set sharing, provider error boundaries and private-file
+claims. These checks do not exhaust all concurrency schedules or real-provider,
+hosted, microphone/device or operational acceptance.
+
+At Ryan's explicit request, this delivery also includes the existing frontend
+edits in `spikes/audio/recorder.js` and `src/app/App.jsx`. The recorder's expanded
+layout initially mislabeled non-Safari `Version/` user agents; two synthetic red
+cases reproduce it, and restoring the Safari-token requirement fixes both.
+Green evidence covers seven user-agent cases, 44 rendered-field comparisons,
+twelve event registrations and the complete 32,044-byte generated WAV. The app
+notice changes from a paragraph with status role to an output element, preserving
+its condition, copy, class and status semantics. Paragraph-specific appearance
+rules no longer target it; no identical-appearance claim is made.
+
+The exact final frontend files pass **571 tests**, lint and production build;
+all **14 existing operational helper tests** pass too, on installed Node
+**24.16.0** (the package permits 24.x; `.nvmrc` names 24.21.0 for CI/home).
+Four initial loopback redirect tests fail under sandbox network denial; a native
+fetch probe reports `connect EACCES 127.0.0.1`, and the same full suite passes
+with authorized local network access. Initial failures remain retained rather
+than counted as passes. No API test/runtime source was changed for this limit.
+Synthetic recorder evidence does not establish physical microphone, browser,
+screen-reader or visual acceptance. The audio-spike directory remains a future
+formal supporting pass.
+
+Final actual selected-rule analysis recognizes all **190 Java inputs: 128 MAIN
+and 62 TEST**, with zero failed inputs and no unexpected analyzer warnings or
+errors. **All 227 original reviewed-scope findings are resolved**, with zero
+selected findings in those ten packages. The full backend retains exactly the
+same **14 findings outside that scope**: library six (one cognitive, two
+cyclomatic, three literals) and timeline eight (one cyclomatic, seven literals).
+Those files remain unchanged and their findings stay open for the next formal
+reviews. The installed result API exposes recognized identities and failed
+files, not a separate completed-file rule count; sensor diagnostics/progress
+and actual rule controls are retained with that limitation. The three rules
+remain MAIN scoped, so this is not a test-complexity clean claim.
+
+Final actual CPD analyzes all **128 production files**, runs its five controls,
+and reports **zero raw groups and zero unique complete endpoint groups**. The
+raw report and each analyzed source hash are bound to the tested frozen inputs.
+This establishes the selected standalone official Java detector result, without
+claiming hosted duplication density, new-code metrics or a server quality gate.
+The tracked bootstrap/checker also receive refusal and integrity controls for
+path/host/commit/hash mismatches, linked paths, preserved existing files and
+fresh output. The actual bootstrap cache run reuses all 68 verified official
+inputs, with no additional download required on this machine. The documented
+Maven compile/classpath recipe is executed successfully and resolves the same
+158 canonical library inputs as the analysis.
+
+Read-only cleanup inspects the retained task text logs and confirms all **92
+observed container IDs** and **53 observed Spring-test JVM PIDs** are absent;
+no Java process with the review path remains. This covers observed logs and
+review-path JVMs, not every unlogged process or native child. All final source,
+compiled-class, analyzer/runtime, finding/disposition and raw CPD manifests are
+checked for exact inventories, uniqueness and unchanged hashes. The checkers'
+negative controls reject incomplete/changed input inventories and stale reports.
+The Java launcher's junction-creation control is host-limited by `EPERM`; that
+fixture is not represented as executed. Existing Linux-only symlink tests remain
+the two expected Windows skips named above.
+
+Ryan specifically authorizes creating and merging **this all-files PR** after
+exact-current-head CI and configured review clear. That delivery-specific request
+supersedes the normal user-created-PR boundary for this follow-up. The focused
+Notion issue records the published head, actual checks and merge result after
+this documentation commit. Backend timeline is next after the merge; broader
+operational/release acceptance remains separate.
