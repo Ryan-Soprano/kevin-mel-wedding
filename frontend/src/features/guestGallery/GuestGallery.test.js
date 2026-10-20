@@ -279,6 +279,8 @@ test("real public gallery immediately renders one accessible slide with navigati
     assert.match(markup, /aria-roledescription="slide"/);
     assert.match(markup, /aria-label="Previous photo"/);
     assert.match(markup, /aria-label="Next photo"/);
+    assert.match(markup, /aria-label="Enlarge photo 1 of 300: [^"]+" aria-haspopup="dialog"/);
+    assert.match(markup, /<dialog[^>]*aria-label="Enlarged gallery photo"/);
     assert.match(markup, /Play slideshow/);
     assert.match(markup, /aria-live="polite"/);
     assert.ok(markup.includes(`Browse all ${couplePhotos.length} photos`));
@@ -346,6 +348,11 @@ test("real public gallery immediately renders one accessible slide with navigati
     );
     assert.ok(
       overview.includes(`aria-label="View photo 24 of ${couplePhotos.length}:`),
+    );
+    assert.equal(
+      (overview.match(/aria-haspopup="dialog"/g) ?? []).length,
+      24,
+      "each thumbnail opens an enlarged photo dialog",
     );
     assert.ok(
       !overview.includes(

@@ -44,13 +44,29 @@ results for all groups; validating only the original 218 does not pass this gate
 | Later couple photos | 2 | 299: brick archway; 300: sunny globe selfie. |
 | Total | 300 | Verify slideshow advancement from 218 to 219 and wraparound from 300 to 1, plus thumbnail access to every addition. |
 
-Verify that **Browse all 300 photos**, **Back to thumbnails** and viewer Escape
-return to the currently displayed photo's marked thumbnail, centered on screen
-when the page has room. Include
-opening photo 86, advancing to 124 and returning to thumbnail 124, plus reverse
-navigation and a target beyond the previously loaded thumbnail batches.
-Include photos 24/48 with little content after the gallery; subsequent batch
-loading must preserve the centered return.
+Verify that **Browse all 300 photos** opens the currently displayed photo's marked
+thumbnail, centered on screen when the page has room. Include photos 24/48 with
+little content after the gallery; subsequent batch loading must preserve that
+centered entry.
+
+From the thumbnail gallery, note the page's scroll position, open photo 86 and
+advance to photo 124. **Back to gallery**, the top-right close button and Escape
+must restore that original scroll position and focus photo 86, without moving
+the gallery to photo 124 or dropping already loaded thumbnails. Repeat with
+reverse navigation and across a thumbnail batch boundary. The last viewed photo
+remains current, but closing the enlarged photo preserves the gallery's place.
+
+Clicking the main-page slideshow photo must also enlarge it directly. Closing
+with **Back to slideshow**, the close button or Escape restores the original
+page position and photo-button focus, while retaining the last viewed slide.
+Include keyboard opening, contained dialog focus, reduced motion and resizing;
+after a resize, restore the previous place as far as the new layout permits.
+
+The [local gallery verification](guest-gallery-verification.md#october-19-2026---enlarged-photo-return-position)
+records 34 passing mounted Edge cases at desktop and narrow widths, including
+exact scroll restoration and a corrected mobile scroll-lock drift. This local
+evidence does not close the physical-phone, assistive-technology or hosted release
+gates above.
 
 ## Guest-copy drafts
 
