@@ -1495,7 +1495,8 @@ and recovery, with inventory/consumer tracing before choosing each batch.
 This batch covers all **12 production files**, **nine existing package tests**
 and **one placeholder** under backend `review/`: **22 tracked paths**. It starts
 from completed media head `ec6093d` on `feature/backend-review-directory`. The
-`.gitkeep` deletion predates the task and remains excluded. Entry-source and
+`.gitkeep` deletion predates the task and is excluded from the review edits and
+isolated validation. Entry-source and
 committed backend snapshots preserve the selected files and **212 unrelated
 dirty/untracked paths**; concurrent album/library/health, gallery/supporting work
 and other placeholder deletions stay outside this review.
@@ -1592,6 +1593,64 @@ production source differences**. All **21 existing visible scope files** match
 that copy, and the nine test files match their entry hashes. At the preservation
 checkpoint, all **212 unrelated paths** match entry hashes/existence; subsequent
 concurrent edits remain excluded rather than being restored or staged. The
-pre-existing review placeholder deletion stays outside delivery. Refreshed main
+pre-existing review placeholder deletion stays outside that isolated snapshot. Refreshed main
 `ff3d274` includes media PR **84** and has the same backend as this batch's
 baseline, so the review branch can target main directly.
+
+The focused intended-source full suite passes **467 tests: 465 passed, zero
+failures/errors and two skipped**, with Maven exit zero and no test-fork shutdown
+timeout under the disclosed local grace. The existing skips are Windows-disabled
+Linux symlink checks in `OwnedExportDirectoryTest` and
+`OperatorRecoveryPostgresTest`. Packaging passes; all **14 packaged review
+classes** match tested bytes, all **11 compiled package test/fixture classes**
+are absent, and the launcher/application manifest is checked. All **28 observed
+containers** and both baseline/final test JVMs are confirmed absent afterward.
+Independent source/documentation review is clear for the recorded scope.
+
+### Landing copy follow-up and the combined commit
+
+During validation, Ryan committed and pushed `bddb680` ("Small changes"). That
+commit includes the completed review formatting and draft review notes, landing
+copy, existing gallery work, other pending formatting and placeholder deletions.
+Preserve that commit and its original changes. The 12-file formal production
+review remains the scope described above; the additional directories are not
+marked fully reviewed here. The focused backend evidence excludes their changes;
+the combined branch therefore receives separate full verification.
+
+Ryan's landing text renders `Lot's of love for` and
+`Help kickstart their next chapter.`. The existing gallery test still expected
+the old eyebrow and invitation. Its focused run reproduced **four passes and one
+failure**. Update only those two existing assertions, accounting for React's
+escaped apostrophe in static HTML; retain the page text and `App.jsx` byte for
+byte. The focused suite then passes **all five tests**.
+
+The complete frontend passes **567 tests**, zero failures/skips, ESLint and the
+production build on Node **24.21.0**. The full run needs loopback HTTP for its
+existing redirect/privacy tests; the sandbox-restricted attempt is retained
+separately and is not the final validation result. No application wording or
+runtime behavior changes are made to satisfy the tests.
+
+The separate exact **211-file backend** from preserved commit `bddb680` also
+passes the full **467-test** suite: **465 passed, zero failures/errors and the
+same two Linux-only Windows skips**. Maven exits zero without a shutdown timeout;
+the combined backend packages successfully. All **248 production classes** in
+that JAR match the tested bytes, all **111 compiled test/fixture classes** are
+excluded, and launcher/application metadata is checked. Its committed source
+hashes match the tested copy; the single visible CRLF-only difference is recorded
+separately. This broader verification does not extend the formal per-file review
+to the other packages.
+
+All **52 containers** observed across the baseline, focused full and combined
+runs and all three test JVMs are absent after completion. Source/AST/bytecode
+proofs, both backend runs/packages, exact landing red/green diff and App hash
+preservation, frontend checks and independent source/documentation reviews are
+recorded under `logs/backend-review-directory.local/`, together with the ready PR
+description. The original user commit stays intact; the follow-up commit adds
+the two existing test assertion changes and these review notes. Concurrent
+gallery/tester/release documentation edits remain unstaged and are preserved.
+
+Ryan creates/merges the PR after exact-head CI/configured review and Linux-only
+checks. Local fixture/HTTP/database evidence does not establish provider,
+hosted, physical-device, capacity or release acceptance. The next suggested
+backend boundary is retention, followed by operations/recovery, after fresh
+inventory and consumer tracing.

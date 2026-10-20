@@ -488,7 +488,7 @@ test("real public gallery immediately renders one accessible slide with navigati
     const invitation = landing.slice(invitationStart, choicesStart);
     assert.match(
       invitation,
-      /A favorite photo\. A good story\.<br\/>Lots of love for their next chapter\./,
+      /A favorite photo\. A good story\.<br\/>Help kickstart their next chapter\./,
     );
     const choices = landing.slice(choicesStart, galleryStart);
     assert.match(
@@ -509,7 +509,7 @@ test("real public gallery immediately renders one accessible slide with navigati
     assert.match(choices, /Tell us a story\./);
     assert.match(choices, /Write a message/);
     assert.doesNotMatch(choices, /Record a message|Back to welcome/);
-    assert.match(landing, /A little love for/);
+    assert.match(landing, /Lot&#x27;s of love for/);
     assert.equal((landing.match(/<h1\b/g) ?? []).length, 1);
     assert.doesNotMatch(
       landing,
