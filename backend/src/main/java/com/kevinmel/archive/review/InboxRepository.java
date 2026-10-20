@@ -48,11 +48,14 @@ public class InboxRepository {
                     AND a.declared_content_type = a.detected_format
                     AND a.object_key = 'originals/' || a.id::text))
             """;
-    private static final String SELECT = "SELECT " + MEMORY_COLUMNS + " FROM memory m " + MEMORY_JOINS + " WHERE " + AVAILABLE;
+    private static final String SELECT = "SELECT " + MEMORY_COLUMNS + " FROM memory m "
+            + MEMORY_JOINS + " WHERE " + AVAILABLE;
     private final JdbcClient db;
     private final Clock clock;
 
-    public InboxRepository(JdbcClient db, Clock clock) {
+    public InboxRepository(
+            JdbcClient db,
+            Clock clock) {
         this.db = db;
         this.clock = clock;
     }
@@ -60,96 +63,206 @@ public class InboxRepository {
     @Transactional(readOnly = true)
     public List<MemoryDetail> list(InboxQuery query) {
         String sql = SELECT + " AND m.review_status = :status";
-        if (query.cursor() != null) sql += " AND (m.created_at, m.id) < (:createdAt, :memoryId)";
+        if (query.cursor() != null) {
+            sql += " AND (m.created_at, m.id) < (:createdAt, :memoryId)";
+        }
         sql += " ORDER BY m.created_at DESC, m.id DESC LIMIT :fetchLimit";
-        var statement = db.sql(sql).param("status", query.reviewStatus()).param("fetchLimit", query.limit() + 1)
+        var statement = db.sql(sql)
+                .param("status", query.reviewStatus())
+                .param("fetchLimit", query.limit() + 1)
                 .param("now", timestamp(clock.instant()));
         if (query.cursor() != null) {
-            statement = statement.param("createdAt", timestamp(query.cursor().createdAt()))
+            statement = statement
+                    .param("createdAt", timestamp(query.cursor().createdAt()))
                     .param("memoryId", query.cursor().memoryId());
         }
-        return statement.query(InboxRepository::map).list();
+        return statement.query(InboxRepository::map)
+                .list();
     }
 
     @Transactional(readOnly = true)
     public Optional<MemoryDetail> detail(UUID memoryId) {
-        return db.sql(SELECT + " AND m.id = :memoryId").param("memoryId", memoryId)
-                .param("now", timestamp(clock.instant())).query(InboxRepository::map).optional();
+        return db.sql(SELECT + " AND m.id = :memoryId")
+                .param("memoryId", memoryId)
+                .param("now", timestamp(clock.instant()))
+                .query(InboxRepository::map)
+                .optional();
     }
 
     /** Caller holds one transaction through revision update and audit. Lock memory before any asset lock. */
     public Optional<MemoryDetail> lockDetail(UUID memoryId) {
-        return db.sql(SELECT + " AND m.id = :memoryId FOR UPDATE OF m").param("memoryId", memoryId)
-                .param("now", timestamp(clock.instant())).query(InboxRepository::map).optional();
+        return db.sql(SELECT + " AND m.id = :memoryId FOR UPDATE OF m")
+                .param("memoryId", memoryId)
+                .param("now", timestamp(clock.instant()))
+                .query(InboxRepository::map)
+                .optional();
     }
 
-    public MemoryDetail changeReview(MemoryDetail current, String status, Instant deleteAfter, Instant actedAt) {
-        return changeReviewAndVisibility(current, status, current.visibility(), deleteAfter, actedAt);
+    public MemoryDetail changeReview(
+            MemoryDetail current,
+            String status,
+            Instant deleteAfter,
+            Instant actedAt) {
+        return changeReviewAndVisibility(
+                current,
+                status,
+                current.visibility(),
+                deleteAfter,
+                actedAt);
     }
 
-    public MemoryDetail changeReviewAndVisibility(MemoryDetail current, String status, String visibility, Instant deleteAfter, Instant actedAt) {
+    public MemoryDetail changeReviewAndVisibility(
+            MemoryDetail current,
+            String status,
+            String visibility,
+            Instant deleteAfter,
+            Instant actedAt) {
         int changed = db.sql("""
                 UPDATE memory SET review_status = :status, visibility = :visibility, delete_after = :deadline,
                     revision = revision + 1, updated_at = :acted
                 WHERE id = :id AND revision = :revision AND purge_started_at IS NULL AND purged_at IS NULL
-                """).param("status", status).param("visibility", visibility).param("deadline", timestamp(deleteAfter)).param("acted", timestamp(actedAt))
-                .param("id", current.memoryId()).param("revision", current.revision()).update();
-        if (changed != 1) throw new ApiException(412, "REVIEW_CONFLICT", "This memory changed. Reload it before reviewing it again.");
-        return new MemoryDetail(current.memoryId(), current.contributionId(), current.guestName(), current.memoryType(),
-                current.textContent(), current.caption(), status, visibility, current.revision() + 1,
-                current.createdAt(), actedAt, deleteAfter, current.media(), current.source(), current.title(),
-                current.description(), current.memoryDate(), current.datePrecision());
+                """)
+                .param("status", status)
+                .param("visibility", visibility)
+                .param("deadline", timestamp(deleteAfter))
+                .param("acted", timestamp(actedAt))
+                .param("id", current.memoryId())
+                .param("revision", current.revision())
+                .update();
+        if (changed != 1) {
+            throw new ApiException(
+                    412,
+                    "REVIEW_CONFLICT",
+                    "This memory changed. Reload it before reviewing it again.");
+        }
+        return new MemoryDetail(
+                current.memoryId(),
+                current.contributionId(),
+                current.guestName(),
+                current.memoryType(),
+                current.textContent(),
+                current.caption(),
+                status,
+                visibility,
+                current.revision() + 1,
+                current.createdAt(),
+                actedAt,
+                deleteAfter,
+                current.media(),
+                current.source(),
+                current.title(),
+                current.description(),
+                current.memoryDate(),
+                current.datePrecision());
     }
 
     public void revokeShareLink(UUID memoryId) {
-        db.sql("DELETE FROM memory_share_link WHERE memory_id = :id").param("id", memoryId).update();
+        db.sql("DELETE FROM memory_share_link WHERE memory_id = :id")
+                .param("id", memoryId)
+                .update();
     }
 
-    public MemoryDetail changeMetadata(MemoryDetail current, MemoryMetadataRequest request, Instant actedAt) {
+    public MemoryDetail changeMetadata(
+            MemoryDetail current,
+            MemoryMetadataRequest request,
+            Instant actedAt) {
         int changed = db.sql("""
                 UPDATE memory SET title = :title, description = :description, memory_date = :date,
                     date_precision = :precision, revision = revision + 1, updated_at = :acted
                 WHERE id = :id AND revision = :revision AND review_status <> 'DELETE'
                     AND purge_started_at IS NULL AND purged_at IS NULL
-                """).param("title", request.title()).param("description", request.description()).param("date", request.memoryDate())
-                .param("precision", request.datePrecision()).param("acted", timestamp(actedAt))
-                .param("id", current.memoryId()).param("revision", current.revision()).update();
-        if (changed != 1) throw MemoryMetadataService.conflict();
-        return new MemoryDetail(current.memoryId(), current.contributionId(), current.guestName(), current.memoryType(),
-                current.textContent(), current.caption(), current.reviewStatus(), current.visibility(), current.revision() + 1,
-                current.createdAt(), actedAt, current.deleteAfter(), current.media(), current.source(), request.title(),
-                request.description(), request.memoryDate(), request.datePrecision());
+                """)
+                .param("title", request.title())
+                .param("description", request.description())
+                .param("date", request.memoryDate())
+                .param("precision", request.datePrecision())
+                .param("acted", timestamp(actedAt))
+                .param("id", current.memoryId())
+                .param("revision", current.revision())
+                .update();
+        if (changed != 1) {
+            throw MemoryMetadataService.conflict();
+        }
+        return new MemoryDetail(
+                current.memoryId(),
+                current.contributionId(),
+                current.guestName(),
+                current.memoryType(),
+                current.textContent(),
+                current.caption(),
+                current.reviewStatus(),
+                current.visibility(),
+                current.revision() + 1,
+                current.createdAt(),
+                actedAt,
+                current.deleteAfter(),
+                current.media(),
+                current.source(),
+                request.title(),
+                request.description(),
+                request.memoryDate(),
+                request.datePrecision());
     }
 
-    public void auditReview(MemoryDetail before, MemoryDetail after, UUID actorId, Instant actedAt) {
+    public void auditReview(
+            MemoryDetail before,
+            MemoryDetail after,
+            UUID actorId,
+            Instant actedAt) {
         db.sql("""
                 INSERT INTO review_audit(memory_id, actor_account_id, from_status, to_status,
                     before_revision, after_revision, acted_at, before_visibility, after_visibility)
                 VALUES (:memory, :actor, :before, :after, :oldRevision, :revision, :acted, :beforeVisibility, :afterVisibility)
-                """).param("memory", before.memoryId()).param("actor", actorId)
-                .param("before", before.reviewStatus()).param("after", after.reviewStatus())
-                .param("oldRevision", before.revision()).param("revision", after.revision())
-                .param("beforeVisibility", before.visibility()).param("afterVisibility", after.visibility())
-                .param("acted", timestamp(actedAt)).update();
+                """)
+                .param("memory", before.memoryId())
+                .param("actor", actorId)
+                .param("before", before.reviewStatus())
+                .param("after", after.reviewStatus())
+                .param("oldRevision", before.revision())
+                .param("revision", after.revision())
+                .param("beforeVisibility", before.visibility())
+                .param("afterVisibility", after.visibility())
+                .param("acted", timestamp(actedAt))
+                .update();
     }
 
     private static OffsetDateTime timestamp(Instant instant) {
         return instant == null ? null : OffsetDateTime.ofInstant(instant, ZoneOffset.UTC);
     }
 
-    public static MemoryDetail map(ResultSet rs, int row) throws SQLException {
+    public static MemoryDetail map(
+            ResultSet rs,
+            int row) throws SQLException {
         String type = rs.getString("memory_type");
         var durationMs = rs.getObject("audio_duration_ms", Long.class);
-        var media = "PHOTO".equals(type) || "AUDIO".equals(type) ? new MemoryDetail.PhotoMedia(
-                rs.getString("original_filename"), rs.getString("detected_format"), rs.getLong("byte_size"),
-                rs.getString("checksum_sha256"), durationMs == null ? null : durationMs / 1000d, rs.getString("upload_state")) : null;
+        var media = "PHOTO".equals(type) || "AUDIO".equals(type)
+                ? new MemoryDetail.PhotoMedia(
+                        rs.getString("original_filename"),
+                        rs.getString("detected_format"),
+                        rs.getLong("byte_size"),
+                        rs.getString("checksum_sha256"),
+                        durationMs == null ? null : durationMs / 1000d,
+                        rs.getString("upload_state"))
+                : null;
         var deleteAfter = rs.getObject("delete_after", OffsetDateTime.class);
-        return new MemoryDetail(rs.getObject("memory_id", UUID.class), rs.getObject("contribution_id", UUID.class),
-                rs.getString("guest_name"), type, rs.getString("text_content"), "TEXT".equals(type) ? null : rs.getString("caption"),
-                rs.getString("review_status"), rs.getString("visibility"), rs.getInt("revision"),
+        return new MemoryDetail(
+                rs.getObject("memory_id", UUID.class),
+                rs.getObject("contribution_id", UUID.class),
+                rs.getString("guest_name"),
+                type,
+                rs.getString("text_content"),
+                "TEXT".equals(type) ? null : rs.getString("caption"),
+                rs.getString("review_status"),
+                rs.getString("visibility"),
+                rs.getInt("revision"),
                 rs.getObject("created_at", OffsetDateTime.class).toInstant(),
                 rs.getObject("updated_at", OffsetDateTime.class).toInstant(),
-                deleteAfter == null ? null : deleteAfter.toInstant(), media, rs.getString("source"), rs.getString("title"),
-                rs.getString("description"), rs.getString("memory_date"), rs.getString("date_precision"));
+                deleteAfter == null ? null : deleteAfter.toInstant(),
+                media,
+                rs.getString("source"),
+                rs.getString("title"),
+                rs.getString("description"),
+                rs.getString("memory_date"),
+                rs.getString("date_precision"));
     }
 }

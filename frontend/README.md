@@ -16,6 +16,7 @@ For prerequisites, install/run/check commands, the development proxy, and curren
 | [src/features/library/components/MemoryTags.jsx](src/features/library/components/MemoryTags.jsx) | Memory-owned tag attachment boundary with a keyed picker editor; preserves attachment-only recovery and suppresses delayed focus inside closed memory details |
 | [src/features/library/hooks/useLibraryReadFocus.js](src/features/library/hooks/useLibraryReadFocus.js) | Shared deliberate read-focus owner for Library, Tags and MemoryTags; survives inner editor resets and cancels delayed focus after blur, traversal, hiding or focus movement |
 | [src/features/inbox/components/Inbox.jsx](src/features/inbox/components/Inbox.jsx) | Shared private archive page layout; InboxScreens.jsx selects small screen adapters, each owning its feature props and reset key |
+| [src/features/inbox/components/InboxAccess.jsx](src/features/inbox/components/InboxAccess.jsx) | Couple sign-in and access-recovery views; the inbox controller owns the session lifecycle through the shared session API |
 | [src/features/inbox/components/ArchiveLayout.jsx](src/features/inbox/components/ArchiveLayout.jsx) | Shared cards, action rows, empty states and pagination for archive features |
 | [src/features/library/components/Library.jsx](src/features/library/components/Library.jsx) | Persistent Library boundary and keyed filters/results/tag chooser/recovery/paging editor; its hook owns editable fields, scoped validation and action wiring while the library coordinator owns applied filters, requests and return context |
 | [src/features/timeline/components/Timeline.jsx](src/features/timeline/components/Timeline.jsx) | Timeline shell and focused list/editor/detail/selector/recovery views; its hook owns local fields, filters, validation and focus while the existing timeline coordinator owns requests and recovery |
@@ -31,8 +32,6 @@ For prerequisites, install/run/check commands, the development proxy, and curren
 | [src/features/inbox/api/inboxState.js](src/features/inbox/api/inboxState.js) | Shared immutable state helpers and safe session copies |
 | [src/features/inbox/hooks/](src/features/inbox/hooks/) | Single controller lifetime, privacy clearing, focus/pagination state and stable action adapters |
 | [src/features/inbox/inboxDisplay.js](src/features/inbox/inboxDisplay.js) / [memoryDisplay.js](src/features/inbox/memoryDisplay.js) | Private view labels/guards and Eastern display times; API timestamps remain UTC |
-| [src/features/archive/](src/features/archive/) | Reserved for the private archive and review experience |
-| [src/features/auth/](src/features/auth/) | Reserved for couple authentication |
 | [src/shared/](src/shared/) | Reusable API and UI code shared by multiple features |
 | [src/shared/api/archiveApi.js](src/shared/api/archiveApi.js) | Stable archive API facade; composes the feature adapters and preserves the shared exports |
 | [src/shared/api/archiveContracts.js](src/shared/api/archiveContracts.js) | Shared v1 validation, normalization and response decoders |

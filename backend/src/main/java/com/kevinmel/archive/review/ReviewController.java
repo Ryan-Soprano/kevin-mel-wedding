@@ -19,13 +19,18 @@ public class ReviewController {
     private final ReviewService reviews;
     private final ArchiveAccessPolicy policy;
 
-    public ReviewController(ReviewService reviews, ArchiveAccessPolicy policy) {
+    public ReviewController(
+            ReviewService reviews,
+            ArchiveAccessPolicy policy) {
         this.reviews = reviews;
         this.policy = policy;
     }
 
-    @PatchMapping(value = "/api/memories/{memoryId}/review", produces = "application/json")
-    public ResponseEntity<MemoryDetail> review(@PathVariable UUID memoryId,
+    @PatchMapping(
+            value = "/api/memories/{memoryId}/review",
+            produces = "application/json")
+    public ResponseEntity<MemoryDetail> review(
+            @PathVariable UUID memoryId,
             @RequestBody(required = false) Map<String, Object> body,
             @RequestHeader(value = "X-Api-Contract", required = false) String version,
             @RequestHeader(value = "If-Match", required = false) String ifMatch,
@@ -33,7 +38,9 @@ public class ReviewController {
         SessionService.requireContract(version);
         policy.requireSameOrigin(request);
         var changed = reviews.review(memoryId, body, ifMatch);
-        return ResponseEntity.ok().header("Cache-Control", "no-store")
-                .eTag(Integer.toString(changed.revision())).body(changed);
+        return ResponseEntity.ok()
+                .header("Cache-Control", "no-store")
+                .eTag(Integer.toString(changed.revision()))
+                .body(changed);
     }
 }

@@ -1489,3 +1489,194 @@ checks and the ready PR description are under
 and review status. Ryan creates/merges the PR after exact-head CI/configured
 review; the next suggested backend boundary is review/retention, then operations
 and recovery, with inventory/consumer tracing before choosing each batch.
+
+## Backend review decisions — October 19, 2026
+
+This batch covers all **12 production files**, **nine existing package tests**
+and **one placeholder** under backend `review/`: **22 tracked paths**. It starts
+from completed media head `ec6093d` on `feature/backend-review-directory`. The
+`.gitkeep` deletion predates the task and is excluded from the review edits and
+isolated validation. Entry-source and
+committed backend snapshots preserve the selected files and **212 unrelated
+dirty/untracked paths**; concurrent album/library/health, gallery/supporting work
+and other placeholder deletions stay outside this review.
+
+No concrete correctness, security or efficiency defect justified a behavior
+change. All 12 production files receive expanded formatting: explicit control
+blocks, multiline records/signatures/constructor arguments, readable response/
+JDBC chains and grouped imports. Only the metadata controller's wildcard import
+becomes five explicit annotation imports. Existing test files stay unchanged;
+no new helper, abstraction, dependency, migration or tracked test is introduced.
+No runtime performance gain is claimed.
+
+| File in production `review/` | Decision and reason |
+|---|---|
+| `InboxController.java` | Simplify formatting; keep version validation, narrow list/detail delegation, private no-store responses and the persisted revision ETag. |
+| `InboxCursor.java` | Simplify formatting; keep bounded unpadded URL-safe canonical encoding, version/filter binding, UTC year/microsecond checks, exact UUID representation and redacted diagnostics. A cursor is a position, not an access capability. |
+| `InboxQuery.java` | Simplify formatting; keep the four review states, default PENDING/page size 20, explicit 1–100 bounds and cursor-to-filter validation. |
+| `InboxRepository.java` | Simplify signatures, JDBC/call/DTO arguments and guards; keep exact SQL values, complete event/visibility/review/purge/deadline and verified media predicates, limit-plus-one keyset reads and UTC parameters. Preserve caller-owned memory locking, conditional shared revisions, metadata updates, share-link deletion and actor audit. |
+| `InboxService.java` | Simplify formatting; keep authority checks before parsing/private queries, bounded immutable result lists, next cursor anchored to the last returned item and safe unavailable detail errors. |
+| `MemoryDetail.java` | Simplify multiline records, delegation and diagnostics; keep the wire projection without storage keys/capabilities/URLs, original metadata, backward-compatible GUEST defaults and redacted `toString()` output. |
+| `MemoryMetadataController.java` | Simplify formatting and replace the wildcard with five explicit imports; keep contract-before-origin validation, exact PATCH body delegation, no-store and the returned persisted revision ETag. |
+| `MemoryMetadataRequest.java` | Simplify record/guards/date branches; keep exact four-field bodies, strict positive bounded strong revision preconditions, raw UTF-16/scalar limits, normalized nullable text and canonical Gregorian unknown/year/month/day dates without inventing precision. Timeline validation reuses this contract. |
+| `MemoryMetadataService.java` | Simplify formatting; keep access before parsing, lock/current-authority checks, deleted-item exclusion, stale conflict before no-op, revision overflow protection, monotonic microsecond timestamps and final authority check inside the write transaction. Original content/media/review remain preserved. |
+| `ReviewController.java` | Simplify formatting; keep contract/origin checks, service validation, private response headers and exact revision ETag. |
+| `ReviewRequest.java` | Simplify record/constructor/guards; keep closed field/status/audience sets and strict strong positive integer conditions. A shared audience requires KEEP. |
+| `ReviewService.java` | Simplify imports, overloads, guards and calls; keep memory locking and post-wait authority/deadline checks, stale-state conflicts, current no-op semantics, first-delete 30-day deadline, monotonic action time, forced-private restoration, link revocation, ordered organization detachment, actor audit and final authority check in one transaction. |
+
+| File in test `review/` | Decision and reason |
+|---|---|
+| `InboxHttpSecurityTest.java` | Keep unchanged: session/role/reveal/contract gates, safe private responses, no-store, malformed IDs and narrow DTO/ETag contracts. |
+| `InboxPostgresHttpTest.java` | Keep unchanged: real session/PostgreSQL reads, tied-time pagination/new arrivals, verified eligibility, sharing/rotation, one-winner review/audit races, reversible deletion and purge/erased-retry boundaries. |
+| `InboxQueryTest.java` | Keep unchanged: filter/page bounds and strict canonical filter-bound cursor round trips, malformed encodings, timestamps and identities. |
+| `InboxServiceTest.java` | Keep unchanged: direct service authorization, immutable pages, exact next anchors, private errors and content-free diagnostics. |
+| `MemoryMetadataRequestTest.java` | Keep unchanged: exact fields, raw Unicode/text limits, canonical partial dates/leap years and strict bounded revision conditions. |
+| `MemoryMetadataServiceTest.java` | Keep unchanged: authority revoked during a metadata write suppresses the private result. Real rollback/current-state behavior is also covered by the existing couple-authoring HTTP suite. |
+| `ReviewHttpSecurityTest.java` | Keep unchanged: current session/role/reveal, CSRF, origin, contract and malformed request/error behavior. |
+| `ReviewRequestTest.java` | Keep unchanged: exact strong revision conditions, closed request/status/audience validation and explicit shared-audience rules. |
+| `ReviewServiceTest.java` | Keep unchanged: actor/revision audit, stale matching-state conflicts, exact no-op/deadline preservation, private restoration, post-lock expiry/revocation, validation-before-write and wall-clock rollback behavior. |
+
+Consumer tracing covers frontend shared detail/inbox decoding, metadata
+normalization, review/metadata coordinators and deleted-item controls; private
+album/timeline/library/tag projections; media eligibility/playback and guest
+retry receipts; sharing issuance/read/rotation; portable export; retention and
+operator recovery; and V6–V14 revision, lifecycle and audience constraints. These
+are boundary checks, not additional completed directory reviews.
+
+The current API contracts retain authorization already in flight for private
+reads; sharing deliberately applies stronger locking/capability checks. No
+speculative duplicate read checks or locks are added. DELETE restoration always
+forces COUPLE_ONLY and does not resurrect a secret link or organization
+membership. The actual inbox UI restores deleted items to PENDING, so the generic
+adapter's explicit shared-audience expectation does not establish a reachable
+UI defect or justify changing that deliberate private-restore policy. Metadata
+and review share one persisted revision; stale requests conflict even when their
+requested values happen to match current state.
+
+## Backend review verification — October 19, 2026
+
+The isolated baseline passes **105 tests** across the nine package suites and
+existing couple-authoring, timeline, sharing service/security and retention
+service consumers: **14 suites**, zero failures/errors/skips. These include real
+HTTP/PostgreSQL and native audio use through couple authoring. All **nine test
+files** retain their entry hashes.
+
+Java **25** parser comparisons match all **12 production files** from committed
+baseline to saved entry to final formatted sources. Exact processed string/SQL
+values, annotations, modifiers, names and member/argument/statement order remain
+checked. Layout/comments/import order are excluded; only the metadata
+controller's exact five annotation imports may replace its wildcard. Harmless
+single terminal/expression control-body wrappers may normalize; declaration,
+resource and meaningful block scopes remain checked. No media-specific try-body
+normalization is needed or retained for this batch.
+
+All **eight negative controls** are rejected: changed page bound, SQL event, SQL
+whitespace, metadata authorization order, unexpected import, declaration scope,
+extra wildcard-expansion import and route annotation. All **36 stage/source
+hashes** and frozen final sources are saved. This is parse-level evidence, not
+type attribution or runtime proof. After compilation, all **14 review
+top-level/nested classes** separately have identical
+`javap -c -p -constants -s` output before/after formatting, without normalizing
+instruction operands or constant-pool indices. This compares printed constants,
+descriptors and instructions; annotation/bootstrap/debug metadata and raw
+class-byte equality are outside that disassembly comparison.
+
+Verification uses Windows, Temurin **25.0.3+9-LTS**, Maven **3.9.16**, Spring Boot
+**4.1.1**, Docker **29.7.2**, disposable PostgreSQL **17** and the existing local
+FFmpeg/ffprobe **9.0.2**. Local `-Dsurefire.exitTimeout=120` extends the plugin's
+30-second test-fork shutdown grace while cached Spring/Hikari contexts close;
+tracked build/runtime configuration remains unchanged. Integration tests run
+with the required Docker/Java attach access.
+
+The isolated backend verifies all **217 baseline paths** with exactly **12
+production source differences**. All **21 existing visible scope files** match
+that copy, and the nine test files match their entry hashes. At the preservation
+checkpoint, all **212 unrelated paths** match entry hashes/existence; subsequent
+concurrent edits remain excluded rather than being restored or staged. The
+pre-existing review placeholder deletion stays outside that isolated snapshot. Refreshed main
+`ff3d274` includes media PR **84** and has the same backend as this batch's
+baseline, so the review branch can target main directly.
+
+The focused intended-source full suite passes **467 tests: 465 passed, zero
+failures/errors and two skipped**, with Maven exit zero and no test-fork shutdown
+timeout under the disclosed local grace. The existing skips are Windows-disabled
+Linux symlink checks in `OwnedExportDirectoryTest` and
+`OperatorRecoveryPostgresTest`. Packaging passes; all **14 packaged review
+classes** match tested bytes, all **11 compiled package test/fixture classes**
+are absent, and the launcher/application manifest is checked. All **28 observed
+containers** and both baseline/final test JVMs are confirmed absent afterward.
+Independent source/documentation review is clear for the recorded scope.
+
+### Landing copy follow-up and the combined commit
+
+During validation, Ryan committed and pushed `bddb680` ("Small changes"). That
+commit includes the completed review formatting and draft review notes, landing
+copy, existing gallery work, other pending formatting and placeholder deletions.
+Preserve that commit and its original changes. The 12-file formal production
+review remains the scope described above; the additional directories are not
+marked fully reviewed here. The focused backend evidence excludes their changes;
+the combined branch therefore receives separate full verification.
+
+Ryan's landing text renders `Lot's of love for` and
+`Help kickstart their next chapter.`. The existing gallery test still expected
+the old eyebrow and invitation. Its focused run reproduced **four passes and one
+failure**. Update only those two existing assertions, accounting for React's
+escaped apostrophe in static HTML; retain the page text and `App.jsx` byte for
+byte. The focused suite then passes **all five tests**.
+
+The complete frontend passes **567 tests**, zero failures/skips, ESLint and the
+production build on Node **24.21.0**. The full run needs loopback HTTP for its
+existing redirect/privacy tests; the sandbox-restricted attempt is retained
+separately and is not the final validation result. No application wording or
+runtime behavior changes are made to satisfy the tests.
+
+The separate exact **211-file backend** from preserved commit `bddb680` also
+passes the full **467-test** suite: **465 passed, zero failures/errors and the
+same two Linux-only Windows skips**. Maven exits zero without a shutdown timeout;
+the combined backend packages successfully. All **248 production classes** in
+that JAR match the tested bytes, all **111 compiled test/fixture classes** are
+excluded, and launcher/application metadata is checked. Its committed source
+hashes match the tested copy; the single visible CRLF-only difference is recorded
+separately. This broader verification does not extend the formal per-file review
+to the other packages.
+
+All **52 containers** observed across the baseline, focused full and combined
+runs and all three test JVMs are absent after completion. Source/AST/bytecode
+proofs, both backend runs/packages, exact landing red/green diff and App hash
+preservation, frontend checks and independent source/documentation reviews are
+recorded under `logs/backend-review-directory.local/`, together with the ready PR
+description. The original user commit stays intact; the follow-up commit adds
+the two existing test assertion changes and these review notes. At that checkpoint,
+concurrent gallery/tester/release documentation edits remained unstaged and were
+preserved for the subsequent main reconciliation below.
+
+### Main reconciliation after the landing fix
+
+Main advanced to `37beb863` with gallery PR **85** before delivery. A merge
+preflight found overlapping edits in the gallery test and three gallery/tester/
+release documents. The working versions and a named three-document stash were
+saved before merging main without rewriting `bddb680` or the two-file follow-up
+`2e3d6e0`.
+The three saved documents already contain the exact combined content, matching
+main after CRLF normalization while retaining every prior branch line. Those
+saved bytes supply their resolution.
+
+An Espree AST comparison confirms the two gallery test versions have identical
+declarations, calls, arguments and coverage except for the two deliberate copy
+regexes. Keep the expanded branch version with Ryan's invitation/eyebrow checks;
+no upstream gallery assertions are discarded. All five saved App/test/document
+files retain their exact working hashes. Conflict markers are absent after
+resolution, and incoming CI configuration matches main.
+
+After resolution, all **567 frontend tests** pass again with zero skips, along
+with lint/build and **14 operational script helper tests** required by main's
+workflow. All **211 backend source hashes** remain unchanged from the separately
+verified combined backend, so that completed full suite/package remains applicable.
+Merge-resolution proofs, backups, stash identity and post-merge check logs are
+saved with the batch evidence. The original landing text is unchanged.
+
+Ryan creates/merges the PR after exact-head CI/configured review and Linux-only
+checks. Local fixture/HTTP/database evidence does not establish provider,
+hosted, physical-device, capacity or release acceptance. The next suggested
+backend boundary is retention, followed by operations/recovery, after fresh
+inventory and consumer tracing.
