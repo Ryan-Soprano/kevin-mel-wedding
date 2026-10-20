@@ -14,6 +14,7 @@ import com.kevinmel.archive.review.MemoryDetail;
 
 @Repository
 public class TagRepository {
+    private static final String MEMORY_PARAMETER = "memory";
     private static final String MEMBER_FROM = " FROM memory_tag mt JOIN memory m ON m.id=mt.memory_id "
             + InboxRepository.MEMORY_JOINS;
     private static final String COLUMNS = """
@@ -49,7 +50,7 @@ public class TagRepository {
         return db.sql(sql)
                 .param("now", LibraryRepository.time(now))
                 .param("q", query.q())
-                .param("memory", query.memoryId())
+                .param(MEMORY_PARAMETER, query.memoryId())
                 .param("anchor", query.cursor() == null ? null : query.cursor().anchorId())
                 .param("limit", query.limit() + 1)
                 .query((rs, row) -> new ListRow(
@@ -143,7 +144,7 @@ public class TagRepository {
             UUID memory) {
         return db.sql("SELECT EXISTS(SELECT 1 FROM memory_tag WHERE tag_id=:tag AND memory_id=:memory)")
                 .param("tag", tag)
-                .param("memory", memory)
+                .param(MEMORY_PARAMETER, memory)
                 .query(Boolean.class)
                 .single();
     }
@@ -153,7 +154,7 @@ public class TagRepository {
             UUID memory) {
         db.sql("INSERT INTO memory_tag(tag_id,memory_id) VALUES(:tag,:memory)")
                 .param("tag", tag)
-                .param("memory", memory)
+                .param(MEMORY_PARAMETER, memory)
                 .update();
     }
 
@@ -162,7 +163,7 @@ public class TagRepository {
             UUID memory) {
         return db.sql("DELETE FROM memory_tag WHERE tag_id=:tag AND memory_id=:memory")
                 .param("tag", tag)
-                .param("memory", memory)
+                .param(MEMORY_PARAMETER, memory)
                 .update() > 0;
     }
 

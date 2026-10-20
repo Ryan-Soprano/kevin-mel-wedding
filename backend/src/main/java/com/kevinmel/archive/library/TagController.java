@@ -4,6 +4,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import com.kevinmel.archive.security.ArchiveAccessPolicy;
@@ -12,6 +13,7 @@ import com.kevinmel.archive.security.SessionService;
 @RestController
 @RequestMapping("/api/tags")
 public class TagController {
+    private static final String NO_STORE = "no-store";
     private final TagService tags;
     private final ArchiveAccessPolicy policy;
 
@@ -32,7 +34,7 @@ public class TagController {
         SessionService.requireContract(version);
         LibraryRequest.parameters(request.getParameterMap(), Set.of("q", "limit", "cursor"));
         return ResponseEntity.ok()
-                .header("Cache-Control", "no-store")
+                .header(HttpHeaders.CACHE_CONTROL, NO_STORE)
                 .body(tags.list(limit, cursor, q));
     }
 
@@ -55,7 +57,7 @@ public class TagController {
         LibraryRequest.parameters(request.getParameterMap(), Set.of("limit", "cursor"));
         var page = tags.members(tagId, limit, cursor);
         return ResponseEntity.ok()
-                .header("Cache-Control", "no-store")
+                .header(HttpHeaders.CACHE_CONTROL, NO_STORE)
                 .eTag(page.tag().revision().toString())
                 .body(page);
     }
@@ -125,7 +127,7 @@ public class TagController {
             TagDetail tag,
             int status) {
         return ResponseEntity.status(status)
-                .header("Cache-Control", "no-store")
+                .header(HttpHeaders.CACHE_CONTROL, NO_STORE)
                 .eTag(tag.revision().toString())
                 .body(tag);
     }

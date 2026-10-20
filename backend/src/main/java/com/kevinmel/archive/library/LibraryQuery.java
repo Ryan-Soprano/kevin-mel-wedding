@@ -30,24 +30,8 @@ public record LibraryQuery(
         String date = precision == null ? "ALL" : precision;
         Integer lower = year(from);
         Integer upper = year(to);
-        UUID tagId = null;
-        if (!Set.of("ALL", "TEXT", "PHOTO", "AUDIO").contains(kind)
-                || !Set.of("ALL", "PENDING", "KEEP", "ARCHIVED").contains(review)
-                || !Set.of("ALL", "UNKNOWN", "YEAR", "MONTH", "DAY").contains(date)
-                || lower != null && upper != null && lower > upper
-                || "UNKNOWN".equals(date) && (lower != null || upper != null)) {
-            throw LibraryRequest.invalid();
-        }
-        if (tag != null) {
-            try {
-                tagId = LibraryRequest.tagId(UUID.fromString(tag));
-                if (!tagId.toString().equals(tag)) {
-                    throw LibraryRequest.invalid();
-                }
-            } catch (IllegalArgumentException invalid) {
-                throw LibraryRequest.invalid();
-            }
-        }
+        requireFilters(kind, review, date, lower, upper);
+        UUID tagId = tag(tag);
         String binding = LibraryCursor.fingerprint(
                 query,
                 kind,
@@ -67,6 +51,38 @@ public record LibraryQuery(
                 tagId,
                 binding,
                 cursor == null ? null : LibraryCursor.decode(cursor, "LIBRARY", binding, null));
+    }
+
+    private static void requireFilters(
+            String kind,
+            String review,
+            String date,
+            Integer lower,
+            Integer upper) {
+        if (!Set.of("ALL", "TEXT", "PHOTO", "AUDIO").contains(kind)
+                || !Set.of("ALL", "PENDING", "KEEP", "ARCHIVED").contains(review)
+                || !Set.of("ALL", "UNKNOWN", "YEAR", "MONTH", "DAY").contains(date)) {
+            throw LibraryRequest.invalid();
+        }
+        if (lower != null && upper != null && lower > upper
+                || "UNKNOWN".equals(date) && (lower != null || upper != null)) {
+            throw LibraryRequest.invalid();
+        }
+    }
+
+    private static UUID tag(String supplied) {
+        if (supplied == null) {
+            return null;
+        }
+        try {
+            UUID tagId = LibraryRequest.tagId(UUID.fromString(supplied));
+            if (!tagId.toString().equals(supplied)) {
+                throw LibraryRequest.invalid();
+            }
+            return tagId;
+        } catch (IllegalArgumentException invalid) {
+            throw LibraryRequest.invalid();
+        }
     }
 
     private static Integer year(String supplied) {

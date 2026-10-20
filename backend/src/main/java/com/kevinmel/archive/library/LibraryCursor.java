@@ -54,30 +54,9 @@ public record LibraryCursor(
                 throw LibraryRequest.cursor();
             }
             String[] parts = new String(Base64.getUrlDecoder().decode(raw), StandardCharsets.UTF_8).split("\\|", -1);
-            LibraryCursor result;
-            if ("MEMBERS".equals(scope)) {
-                if (parts.length != 5 || !parts[0].equals("1") || !parts[1].equals(scope)) {
-                    throw LibraryRequest.cursor();
-                }
-                UUID id = canonical(parts[2], true);
-                UUID revision = canonical(parts[3], true);
-                UUID anchor = canonical(parts[4], false);
-                if (!id.equals(tag)) {
-                    throw LibraryRequest.cursor();
-                }
-                result = new LibraryCursor(scope, null, anchor, id, revision);
-            } else {
-                if (parts.length != 4 || !parts[0].equals("1") || !parts[1].equals(scope)
-                        || !parts[2].equals(fingerprint)) {
-                    throw LibraryRequest.cursor();
-                }
-                result = new LibraryCursor(
-                        scope,
-                        fingerprint,
-                        canonical(parts[3], !"LIBRARY".equals(scope)),
-                        null,
-                        null);
-            }
+            LibraryCursor result = "MEMBERS".equals(scope)
+                    ? decodeMembers(parts, scope, tag)
+                    : decodeListing(parts, scope, fingerprint);
             if (!raw.equals(result.encode())) {
                 throw LibraryRequest.cursor();
             }
@@ -85,6 +64,38 @@ public record LibraryCursor(
         } catch (IllegalArgumentException invalid) {
             throw LibraryRequest.cursor();
         }
+    }
+
+    private static LibraryCursor decodeMembers(
+            String[] parts,
+            String scope,
+            UUID tag) {
+        if (parts.length != 5 || !parts[0].equals("1") || !parts[1].equals(scope)) {
+            throw LibraryRequest.cursor();
+        }
+        UUID id = canonical(parts[2], true);
+        UUID revision = canonical(parts[3], true);
+        UUID anchor = canonical(parts[4], false);
+        if (!id.equals(tag)) {
+            throw LibraryRequest.cursor();
+        }
+        return new LibraryCursor(scope, null, anchor, id, revision);
+    }
+
+    private static LibraryCursor decodeListing(
+            String[] parts,
+            String scope,
+            String fingerprint) {
+        if (parts.length != 4 || !parts[0].equals("1") || !parts[1].equals(scope)
+                || !parts[2].equals(fingerprint)) {
+            throw LibraryRequest.cursor();
+        }
+        return new LibraryCursor(
+                scope,
+                fingerprint,
+                canonical(parts[3], !"LIBRARY".equals(scope)),
+                null,
+                null);
     }
 
     private static UUID canonical(
