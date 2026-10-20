@@ -46,20 +46,20 @@ public class PlaybackService {
         if (asset.assetId() == null
                 || !("originals/" + asset.assetId()).equals(asset.objectKey())
                 || !MediaTypes.validTypeAndSize(asset.contentType(), asset.byteSize())
-                || !("PHOTO".equals(asset.memoryType())
-                    && MediaTypes.PHOTO_TYPES.contains(asset.contentType())
-                    && asset.durationMs() == null
-                    && asset.container() == null
-                    && asset.codec() == null
-                    || "AUDIO".equals(asset.memoryType())
-                        && asset.durationMs() != null
-                        && MediaTypes.audioMetadataMatches(
-                                asset.contentType(),
-                                asset.container(),
-                                asset.codec(),
-                                asset.durationMs()))) {
+                || !(verifiedPhoto(asset) || verifiedAudio(asset))) {
             throw notFound();
         }
+    }
+
+    private static boolean verifiedPhoto(PlaybackRepository.PlayableMedia asset) {
+        return "PHOTO".equals(asset.memoryType())
+                && MediaTypes.PHOTO_TYPES.contains(asset.contentType())
+                && asset.durationMs() == null && asset.container() == null && asset.codec() == null;
+    }
+
+    private static boolean verifiedAudio(PlaybackRepository.PlayableMedia asset) {
+        return "AUDIO".equals(asset.memoryType()) && asset.durationMs() != null
+                && MediaTypes.audioMetadataMatches(asset.contentType(), asset.container(), asset.codec(), asset.durationMs());
     }
 
     private static ApiException notFound() {

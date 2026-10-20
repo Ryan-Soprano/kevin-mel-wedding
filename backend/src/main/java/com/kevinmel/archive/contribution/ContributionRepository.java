@@ -15,6 +15,11 @@ import com.kevinmel.archive.web.ApiException;
 
 @Repository
 public class ContributionRepository {
+    private static final String ROW_SOURCE = "source";
+    private static final String ROW_AUTHOR = "author";
+    private static final String ROW_IDEMPOTENCY_KEY = "idempotencyKey";
+    private static final String ROW_MESSAGE = "message";
+
     private final JdbcClient jdbcClient;
 
     // JSONB provides deterministic object-key ordering and unambiguous field
@@ -77,10 +82,10 @@ public class ContributionRepository {
                                 """)
                 .param("eventKey", eventKey)
                 .param("guestName", guestName)
-                .param("message", message)
-                .param("idempotencyKey", idempotencyKey)
-                .param("source", scope.source())
-                .param("author", scope.authorId())
+                .param(ROW_MESSAGE, message)
+                .param(ROW_IDEMPOTENCY_KEY, idempotencyKey)
+                .param(ROW_SOURCE, scope.source())
+                .param(ROW_AUTHOR, scope.authorId())
                 .param("digest", SubmissionKeyDigest.sha256(idempotencyKey))
                 .query(UUID.class)
                 .optional();
@@ -93,7 +98,7 @@ public class ContributionRepository {
                             VALUES (:contributionId, 'TEXT', :message, :review)
                             """)
                     .param("contributionId", contributionId)
-                    .param("message", message)
+                    .param(ROW_MESSAGE, message)
                     .param("review", scope.initialReview())
                     .update();
         } else {
@@ -104,10 +109,10 @@ public class ContributionRepository {
                             """)
                     .param("eventKey", eventKey)
                     .param("guestName", guestName)
-                    .param("message", message)
-                    .param("idempotencyKey", idempotencyKey)
-                    .param("source", scope.source())
-                    .param("author", scope.authorId())
+                    .param(ROW_MESSAGE, message)
+                    .param(ROW_IDEMPOTENCY_KEY, idempotencyKey)
+                    .param(ROW_SOURCE, scope.source())
+                    .param(ROW_AUTHOR, scope.authorId())
                     .query((rs, row) -> new Existing(
                             rs.getObject("id", UUID.class),
                             rs.getBoolean("equivalent")))
@@ -143,8 +148,8 @@ public class ContributionRepository {
                         """)
                 .param("id", id)
                 .param("key", scope.key())
-                .param("source", scope.source())
-                .param("author", scope.authorId())
+                .param(ROW_SOURCE, scope.source())
+                .param(ROW_AUTHOR, scope.authorId())
                 .query(Boolean.class)
                 .single();
         if (!present) {
@@ -210,7 +215,7 @@ public class ContributionRepository {
         return jdbcClient
                 .sql(RECEIPT_QUERY)
                 .param("contributionId", contributionId)
-                .param("idempotencyKey", key)
+                .param(ROW_IDEMPOTENCY_KEY, key)
                 .query((rs, row) -> new SavedTextContribution(
                         rs.getObject("contribution_id", UUID.class),
                         rs.getObject("memory_id", UUID.class),

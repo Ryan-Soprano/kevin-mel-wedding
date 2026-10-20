@@ -3,7 +3,6 @@ package com.kevinmel.archive.media;
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
@@ -21,28 +20,43 @@ import com.kevinmel.archive.web.ApiException.FieldError;
 public record PhotoRequest(
         String guestName,
         List<Item> items) {
+    private static final String ORIGINAL_FILENAME = "originalFilename";
+    private static final String DECLARED_CONTENT_TYPE = "declaredContentType";
+
     public static final int MAX_BYTES = 10_000_000;
     public static final Set<String> TYPES = Set.of("image/jpeg", "image/png", "image/webp");
+    private static final String GUEST_NAME = "guestName";
     private static final Set<String> ITEM_FIELDS = Set.of(
             "clientItemId",
-            "originalFilename",
-            "declaredContentType",
+            ORIGINAL_FILENAME,
+            DECLARED_CONTENT_TYPE,
             "byteSize",
             "checksumSha256",
             "caption");
 
     public static PhotoRequest from(Map<String, Object> body) {
         var errors = new ArrayList<FieldError>();
-        if (!Set.of("guestName", "memoryType", "items").containsAll(body.keySet())
+        if (!Set.of(GUEST_NAME, "memoryType", "items").containsAll(body.keySet())
                 || !"PHOTO".equals(body.get("memoryType"))) {
             throw invalid("Only photo metadata is supported by this media endpoint.");
         }
-        Object name = body.get("guestName");
-        if (name != null && (!(name instanceof String text) || text.length() > 100
-                || !ContributionRequest.storable(text))) {
-            errors.add(new FieldError("guestName", "SIZE", "Your name must be 100 characters or fewer."));
+        Object name = body.get(GUEST_NAME);
+        if (!validGuestName(name)) {
+            errors.add(new FieldError(GUEST_NAME, "SIZE", "Your name must be 100 characters or fewer."));
         }
-        if (!(body.get("items") instanceof List<?> values) || values.isEmpty() || values.size() > 5) {
+        List<Item> items = items(body.get("items"), errors);
+        if (!errors.isEmpty()) {
+            throw new ApiException(
+                    400,
+                    "VALIDATION_FAILED",
+                    "Please check the photo details.",
+                    errors);
+        }
+        return new PhotoRequest(normalizedText(name), List.copyOf(items));
+    }
+
+    private static List<Item> items(Object supplied, List<FieldError> errors) {
+        if (!(supplied instanceof List<?> values) || values.isEmpty() || values.size() > 5) {
             throw invalid("Supply one to five photos.");
         }
         var ids = new HashSet<UUID>();
@@ -52,66 +66,86 @@ public record PhotoRequest(
             if (!(values.get(index) instanceof Map<?, ?> item) || !ITEM_FIELDS.containsAll(item.keySet())) {
                 throw invalid("Each photo must contain only supported metadata fields.");
             }
-            UUID id = null;
-            Object rawId = item.get("clientItemId");
-            if (rawId instanceof String text
-                    && text.matches("(?i)[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}")) {
-                id = UUID.fromString(text);
-            }
-            if (id == null || !ids.add(id)) {
-                add(errors, field + ".clientItemId", "Each photo needs a unique UUID.");
-            }
-            Object filename = item.get("originalFilename");
-            if (!(filename instanceof String text)
-                    || text.length() > 255
-                    || ContributionRequest.trim(text).isEmpty()
-                    || !ContributionRequest.storable(text)
-                    || text.chars().anyMatch(c -> c < 32 || c == 127 || c == '/' || c == '\\')) {
-                add(errors, field + ".originalFilename", "Use a filename of 1–255 characters without paths or controls.");
-            }
-            Object type = item.get("declaredContentType");
-            if (!(type instanceof String) || !TYPES.contains(type)) {
-                add(errors, field + ".declaredContentType", "Choose a JPEG, PNG, or WebP photo.");
-            }
-            Object size = item.get("byteSize");
-            long bytes = size instanceof Integer n ? n.longValue() : size instanceof Long n ? n : -1;
-            if (bytes < 1 || bytes > MAX_BYTES) {
-                add(errors, field + ".byteSize", "Photos must be non-empty and at most 10 MB.");
-            }
-            Object checksum = item.get("checksumSha256");
-            if (!(checksum instanceof String text) || !text.matches("[0-9a-f]{64}")) {
-                add(errors, field + ".checksumSha256", "Supply the original photo's SHA-256 checksum.");
-            }
-            Object caption = item.get("caption");
-            if (caption != null
-                    && (!(caption instanceof String text)
-                            || text.length() > 500
-                            || !ContributionRequest.storable(text))) {
-                add(errors, field + ".caption", "Captions must be 500 characters or fewer.");
-            }
-            // Construct only after validating the entire request: casts never coerce JSON types.
-            if (errors.isEmpty()) {
-                String normalizedCaption = caption == null ? "" : ContributionRequest.trim((String) caption);
-                items.add(new Item(
-                        id,
-                        (String) filename,
-                        (String) type,
-                        bytes,
-                        (String) checksum,
-                        normalizedCaption.isEmpty() ? null : normalizedCaption));
+            Item validated = item(item, field, ids, errors);
+            if (validated != null) {
+                items.add(validated);
             }
         }
+        return items;
+    }
+
+    private static Item item(Map<?, ?> item, String field, Set<UUID> ids, List<FieldError> errors) {
+        UUID id = clientItemId(item.get("clientItemId"));
+        if (id == null || !ids.add(id)) {
+            add(errors, field + ".clientItemId", "Each photo needs a unique UUID.");
+        }
+        FileMetadata file = validateFile(item, field, errors);
+        Object checksum = item.get("checksumSha256");
+        if (!validChecksum(checksum)) {
+            add(errors, field + ".checksumSha256", "Supply the original photo's SHA-256 checksum.");
+        }
+        Object caption = item.get("caption");
+        if (!validCaption(caption)) {
+            add(errors, field + ".caption", "Captions must be 500 characters or fewer.");
+        }
+        // Construct only after validating the entire request: casts never coerce JSON types.
         if (!errors.isEmpty()) {
-            throw new ApiException(
-                    400,
-                    "VALIDATION_FAILED",
-                    "Please check the photo details.",
-                    errors);
+            return null;
         }
-        String normalizedName = name == null ? "" : ContributionRequest.trim((String) name);
-        return new PhotoRequest(
-                normalizedName.isEmpty() ? null : normalizedName,
-                List.copyOf(items));
+        return new Item(id, (String) file.filename(), (String) file.contentType(),
+                file.byteSize(), (String) checksum, normalizedText(caption));
+    }
+
+    private static FileMetadata validateFile(Map<?, ?> item, String field, List<FieldError> errors) {
+        Object filename = item.get(ORIGINAL_FILENAME);
+        if (!validFilename(filename)) {
+            add(errors, field + ".originalFilename", "Use a filename of 1–255 characters without paths or controls.");
+        }
+        Object type = item.get(DECLARED_CONTENT_TYPE);
+        if (!(type instanceof String) || !TYPES.contains(type)) {
+            add(errors, field + ".declaredContentType", "Choose a JPEG, PNG, or WebP photo.");
+        }
+        long bytes = byteSize(item.get("byteSize"));
+        if (bytes < 1 || bytes > MAX_BYTES) {
+            add(errors, field + ".byteSize", "Photos must be non-empty and at most 10 MB.");
+        }
+        return new FileMetadata(filename, type, bytes);
+    }
+
+    record FileMetadata(Object filename, Object contentType, long byteSize) {
+    }
+
+    static boolean validGuestName(Object value) {
+        return value == null || value instanceof String text && text.length() <= 100 && ContributionRequest.storable(text);
+    }
+
+    static UUID clientItemId(Object value) {
+        return value instanceof String text
+                && text.matches("(?i)[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}")
+                ? UUID.fromString(text) : null;
+    }
+
+    static boolean validFilename(Object value) {
+        return value instanceof String text && text.length() <= 255 && !ContributionRequest.trim(text).isEmpty()
+                && ContributionRequest.storable(text)
+                && text.chars().noneMatch(c -> c < 32 || c == 127 || c == '/' || c == '\\');
+    }
+
+    static long byteSize(Object value) {
+        return value instanceof Integer number ? number.longValue() : value instanceof Long number ? number : -1;
+    }
+
+    static boolean validChecksum(Object value) {
+        return value instanceof String text && text.matches("[0-9a-f]{64}");
+    }
+
+    static boolean validCaption(Object value) {
+        return value == null || value instanceof String text && text.length() <= 500 && ContributionRequest.storable(text);
+    }
+
+    static String normalizedText(Object value) {
+        String normalized = value == null ? "" : ContributionRequest.trim((String) value);
+        return normalized.isEmpty() ? null : normalized;
     }
 
     /** Length-prefixed fields and ordered items avoid ambiguous concatenation. */
@@ -138,13 +172,7 @@ public record PhotoRequest(
     }
 
     private static void write(DataOutputStream data, String value) throws IOException {
-        if (value == null) {
-            data.writeInt(-1);
-            return;
-        }
-        byte[] bytes = value.getBytes(StandardCharsets.UTF_8);
-        data.writeInt(bytes.length);
-        data.write(bytes);
+        MediaRequestFingerprint.write(data, value);
     }
 
     private static void add(List<FieldError> errors, String field, String message) {

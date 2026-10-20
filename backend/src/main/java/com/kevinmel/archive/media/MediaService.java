@@ -17,6 +17,8 @@ import com.kevinmel.archive.web.ApiException;
 
 @Service
 public class MediaService {
+    private static final String AUDIO_MEMORY_TYPE = "AUDIO";
+
     private final PhotoRepository photos;
     private final PhotoFinalizer finalizer;
     private final ObjectStorage storage;
@@ -73,7 +75,7 @@ public class MediaService {
     }
 
     public PhotoRepository.Saved create(Map<String, Object> body, String key) {
-        if ("AUDIO".equals(body.get("memoryType"))) {
+        if (AUDIO_MEMORY_TYPE.equals(body.get("memoryType"))) {
             var normalized = AudioRequest.from(body);
             // Repository permits equivalent committed retries before checking new-admission gates.
             if (audioEnabled) {
@@ -88,7 +90,7 @@ public class MediaService {
 
     public PhotoRepository.Saved create(Map<String, Object> body, ContributionScope scope) {
         scope.recheck(authorization);
-        if ("AUDIO".equals(body.get("memoryType"))) {
+        if (AUDIO_MEMORY_TYPE.equals(body.get("memoryType"))) {
             var normalized = AudioRequest.from(body);
             if (audioEnabled) {
                 storage.requireAvailable();
@@ -140,7 +142,7 @@ public class MediaService {
             recheck(scope);
             return result;
         }
-        if ("AUDIO".equals(asset.memoryType()) && !audioEnabled) {
+        if (AUDIO_MEMORY_TYPE.equals(asset.memoryType()) && !audioEnabled) {
             throw PhotoRepository.audioUnavailable();
         }
         photos.requireNewUpload();

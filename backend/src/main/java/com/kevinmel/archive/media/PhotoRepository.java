@@ -19,6 +19,14 @@ import com.kevinmel.archive.web.ApiException;
 
 @Repository
 public class PhotoRepository {
+    private static final String CONTRIBUTION_SOURCE_PARAM = "source";
+    private static final String AUDIO_MEMORY_TYPE = "AUDIO";
+    private static final String PHOTO_MEMORY_TYPE = "PHOTO";
+    private static final String CONTRIBUTION_AUTHOR_PARAM = "author";
+    private static final String MEMORY_ID_PARAM = "memory";
+    private static final String OBJECT_KEY_COLUMN = "object_key";
+    private static final String ASSET_ID_PARAM = "asset";
+
     private final JdbcClient db;
     private final ContributionRepository contributions;
     private final Clock clock;
@@ -40,7 +48,7 @@ public class PhotoRepository {
             PhotoRequest request,
             String key) {
         return create(
-                "PHOTO",
+                PHOTO_MEMORY_TYPE,
                 request.guestName(),
                 request.items(),
                 request.fingerprint(),
@@ -55,7 +63,7 @@ public class PhotoRepository {
             String key,
             boolean audioEnabled) {
         return create(
-                "AUDIO",
+                AUDIO_MEMORY_TYPE,
                 request.guestName(),
                 List.of(request.item()),
                 request.fingerprint(),
@@ -69,7 +77,7 @@ public class PhotoRepository {
             PhotoRequest request,
             ContributionScope scope) {
         return create(
-                "PHOTO",
+                PHOTO_MEMORY_TYPE,
                 request.guestName(),
                 request.items(),
                 request.fingerprint(),
@@ -84,7 +92,7 @@ public class PhotoRepository {
             ContributionScope scope,
             boolean enabled) {
         return create(
-                "AUDIO",
+                AUDIO_MEMORY_TYPE,
                 request.guestName(),
                 List.of(request.item()),
                 request.fingerprint(),
@@ -111,8 +119,8 @@ public class PhotoRepository {
         var replay = db
                 .sql("SELECT id, request_fingerprint FROM contribution WHERE idempotency_key = :key AND source = :source AND author_account_id IS NOT DISTINCT FROM :author")
                 .param("key", key)
-                .param("source", scope.source())
-                .param("author", scope.authorId())
+                .param(CONTRIBUTION_SOURCE_PARAM, scope.source())
+                .param(CONTRIBUTION_AUTHOR_PARAM, scope.authorId())
                 .query((rs, row) -> new Existing(
                         rs.getObject("id", UUID.class),
                         rs.getString("request_fingerprint")))
@@ -149,8 +157,8 @@ public class PhotoRepository {
                 .param("name", guestName)
                 .param("key", key)
                 .param("fingerprint", fingerprint)
-                .param("source", scope.source())
-                .param("author", scope.authorId())
+                .param(CONTRIBUTION_SOURCE_PARAM, scope.source())
+                .param(CONTRIBUTION_AUTHOR_PARAM, scope.authorId())
                 .param("digest", SubmissionKeyDigest.sha256(key))
                 .query(UUID.class)
                 .optional();
@@ -181,8 +189,8 @@ public class PhotoRepository {
                                 VALUES (:asset, :memory, :object, :filename, 'unverified',
                                     :size, :checksum, :type, :size, :checksum, :duration)
                                 """)
-                        .param("asset", assetId)
-                        .param("memory", memoryId)
+                        .param(ASSET_ID_PARAM, assetId)
+                        .param(MEMORY_ID_PARAM, memoryId)
                         .param("object", "originals/" + assetId)
                         .param("filename", item.originalFilename())
                         .param("size", item.byteSize())
@@ -195,8 +203,8 @@ public class PhotoRepository {
             var existing = db
                     .sql("SELECT id, request_fingerprint FROM contribution WHERE idempotency_key = :key AND source = :source AND author_account_id IS NOT DISTINCT FROM :author")
                     .param("key", key)
-                    .param("source", scope.source())
-                    .param("author", scope.authorId())
+                    .param(CONTRIBUTION_SOURCE_PARAM, scope.source())
+                    .param(CONTRIBUTION_AUTHOR_PARAM, scope.authorId())
                     .query((rs, row) -> new Existing(
                             rs.getObject("id", UUID.class),
                             rs.getString("request_fingerprint")))
@@ -231,11 +239,11 @@ public class PhotoRepository {
                         WHERE media_asset_id = :asset AND expires_at > :now
                         ORDER BY created_at DESC, id DESC LIMIT 1
                         """)
-                .param("asset", assetId)
+                .param(ASSET_ID_PARAM, assetId)
                 .param("now", OffsetDateTime.ofInstant(now, java.time.ZoneOffset.UTC))
                 .query((rs, row) -> new ActiveGrant(
                         rs.getObject("id", UUID.class),
-                        rs.getString("object_key"),
+                        rs.getString(OBJECT_KEY_COLUMN),
                         rs.getObject("expires_at", OffsetDateTime.class).toInstant()))
                 .optional();
     }
@@ -282,10 +290,10 @@ public class PhotoRepository {
                         FOR UPDATE OF m
                         """)
                 .param("contribution", contributionId)
-                .param("memory", memoryId)
+                .param(MEMORY_ID_PARAM, memoryId)
                 .param("key", key)
-                .param("source", scope.source())
-                .param("author", scope.authorId())
+                .param(CONTRIBUTION_SOURCE_PARAM, scope.source())
+                .param(CONTRIBUTION_AUTHOR_PARAM, scope.authorId())
                 .query((rs, row) -> new GuestMemory(
                         rs.getString("review_status"),
                         rs.getObject("delete_after", OffsetDateTime.class)))
@@ -306,11 +314,11 @@ public class PhotoRepository {
                         FOR UPDATE OF a
                         """)
                 .param("contribution", contributionId)
-                .param("memory", memoryId)
+                .param(MEMORY_ID_PARAM, memoryId)
                 .param("key", key)
                 .query((rs, row) -> new Asset(
                         rs.getObject("id", UUID.class),
-                        rs.getString("object_key"),
+                        rs.getString(OBJECT_KEY_COLUMN),
                         rs.getString("declared_content_type"),
                         rs.getLong("expected_byte_size"),
                         rs.getString("expected_checksum_sha256"),
@@ -320,17 +328,21 @@ public class PhotoRepository {
                 .optional()
                 .orElseThrow(ApiException::notFound);
         if (!MediaTypes.validTypeAndSize(asset.contentType(), asset.byteSize())
-                || !("PHOTO".equals(asset.memoryType())
-                        && MediaTypes.PHOTO_TYPES.contains(asset.contentType())
-                        && asset.expectedDurationMs() == null
-                        || "AUDIO".equals(asset.memoryType())
-                        && MediaTypes.AUDIO_TYPES.contains(asset.contentType())
-                        && asset.expectedDurationMs() != null
-                        && asset.expectedDurationMs() >= 1
-                        && asset.expectedDurationMs() <= MediaTypes.AUDIO_MAX_DURATION_MS)) {
+                || !(expectedPhoto(asset) || expectedAudio(asset))) {
             throw ApiException.notFound();
         }
         return asset;
+    }
+
+    private static boolean expectedPhoto(Asset asset) {
+        return PHOTO_MEMORY_TYPE.equals(asset.memoryType()) && MediaTypes.PHOTO_TYPES.contains(asset.contentType())
+                && asset.expectedDurationMs() == null;
+    }
+
+    private static boolean expectedAudio(Asset asset) {
+        return AUDIO_MEMORY_TYPE.equals(asset.memoryType()) && MediaTypes.AUDIO_TYPES.contains(asset.contentType())
+                && asset.expectedDurationMs() != null && asset.expectedDurationMs() >= 1
+                && asset.expectedDurationMs() <= MediaTypes.AUDIO_MAX_DURATION_MS;
     }
 
     public void addGrant(
@@ -345,7 +357,7 @@ public class PhotoRepository {
                         VALUES (:id, :asset, :key, :created, :expires)
                         """)
                 .param("id", id)
-                .param("asset", asset.id())
+                .param(ASSET_ID_PARAM, asset.id())
                 .param("key", stagingKey)
                 .param("created", OffsetDateTime.ofInstant(createdAt, java.time.ZoneOffset.UTC))
                 .param("expires", OffsetDateTime.ofInstant(expiresAt, java.time.ZoneOffset.UTC))
@@ -358,9 +370,9 @@ public class PhotoRepository {
         return db
                 .sql("SELECT object_key, expires_at FROM upload_grant WHERE id = :id AND media_asset_id = :asset")
                 .param("id", grantId)
-                .param("asset", assetId)
+                .param(ASSET_ID_PARAM, assetId)
                 .query((rs, row) -> new Grant(
-                        rs.getString("object_key"),
+                        rs.getString(OBJECT_KEY_COLUMN),
                         rs.getObject("expires_at", OffsetDateTime.class).toInstant()))
                 .optional()
                 .orElseThrow(ApiException::notFound);
@@ -382,7 +394,7 @@ public class PhotoRepository {
     public void uploaded(
             Asset asset,
             AudioVerifier.Verified verified) {
-        if (!"AUDIO".equals(asset.memoryType())
+        if (!AUDIO_MEMORY_TYPE.equals(asset.memoryType())
                 || !MediaTypes.audioMetadataMatches(
                         verified.contentType(),
                         verified.container(),
@@ -439,7 +451,7 @@ public class PhotoRepository {
                     byteSize,
                     checksum,
                     state,
-                    "PHOTO",
+                    PHOTO_MEMORY_TYPE,
                     null);
         }
     }

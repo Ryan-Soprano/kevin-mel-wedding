@@ -21,6 +21,8 @@ import com.kevinmel.archive.security.AccountAdministrationStore.Role;
 
 /** A deliberately separate, console-only entry point; no server, component scan, or storage clients. */
 public final class AccountAdministration {
+    private static final String CREATE_COMMAND = "create";
+
 
     private record Command(EnvironmentMode expectedEnvironment, String action, String username,
             String displayName, Role role) { }
@@ -72,7 +74,7 @@ public final class AccountAdministration {
             String confirmation = command.action() + " " + command.username() + " in "
                 + actualEnvironment.name().toLowerCase(java.util.Locale.ROOT);
             console.printf("Account command: %s%n", confirmation);
-            if (command.action().equals("create")) {
+            if (command.action().equals(CREATE_COMMAND)) {
                 console.printf("Role: %s. New accounts are disabled until a separate enable command.%n", command.role());
             }
             String answer = console.readLine("Type '%s' to continue: ", confirmation);
@@ -80,12 +82,7 @@ public final class AccountAdministration {
                 throw new RejectedOperation("Confirmation did not match. No account was changed.");
             }
 
-            switch (command.action()) {
-                case "create", "reset-password" -> writePassword(console, store, command);
-                case "enable" -> store.setEnabled(command.username(), true);
-                case "disable" -> store.setEnabled(command.username(), false);
-                default -> throw new RejectedOperation("Unsupported account command.");
-            }
+            applyCommand(console, store, command);
             console.printf("Account command committed.%n");
             return 0;
         } catch (RejectedOperation rejection) {
@@ -98,6 +95,15 @@ public final class AccountAdministration {
         }
     }
 
+    private static void applyCommand(Console console, AccountAdministrationStore store, Command command) {
+        switch (command.action()) {
+            case CREATE_COMMAND, "reset-password" -> writePassword(console, store, command);
+            case "enable" -> store.setEnabled(command.username(), true);
+            case "disable" -> store.setEnabled(command.username(), false);
+            default -> throw new RejectedOperation("Unsupported account command.");
+        }
+    }
+
     private static void writePassword(Console console, AccountAdministrationStore store, Command command) {
         char[] password = null;
         char[] repeated = null;
@@ -107,7 +113,7 @@ public final class AccountAdministration {
             if (password == null || repeated == null || !Arrays.equals(password, repeated)) {
                 throw new RejectedOperation("Passwords did not match. No account was changed.");
             }
-            if (command.action().equals("create")) {
+            if (command.action().equals(CREATE_COMMAND)) {
                 store.create(command.username(), command.displayName(), command.role(), password);
             } else {
                 store.resetPassword(command.username(), password);
@@ -131,7 +137,7 @@ public final class AccountAdministration {
         String username = args[3];
         AccountAdministrationStore.validateUsername(username);
         return switch (action) {
-            case "create" -> {
+            case CREATE_COMMAND -> {
                 if (args.length != 6) {
                     throw new RejectedOperation("create requires username, display name, and role; passwords are read only from the console.");
                 }

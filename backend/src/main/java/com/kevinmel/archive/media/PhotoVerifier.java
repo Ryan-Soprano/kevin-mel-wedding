@@ -10,6 +10,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import javax.imageio.ImageIO;
 import javax.imageio.ImageReadParam;
+import javax.imageio.ImageReader;
 import javax.imageio.stream.MemoryCacheImageInputStream;
 
 import org.springframework.stereotype.Component;
@@ -39,22 +40,10 @@ public class PhotoVerifier {
                 var reader = readers.next();
                 try {
                     reader.setInput(input);
-                    String format = reader.getFormatName().toLowerCase(Locale.ROOT);
-                    String type = switch (format) {
-                        case "jpeg", "jpg" -> "image/jpeg";
-                        case "png" -> "image/png";
-                        case "webp" -> "image/webp";
-                        default -> throw invalid();
-                    };
-                    if (!type.equals(expected.contentType())) {
-                        throw invalid();
-                    }
+                    String type = verifiedType(reader, expected.contentType());
                     int width = reader.getWidth(0);
                     int height = reader.getHeight(0);
-                    if (width < 1 || height < 1 || width > 20_000 || height > 20_000
-                            || (long) width * height > MAX_PIXELS) {
-                        throw invalid();
-                    }
+                    checkDimensions(width, height);
                     var warning = new AtomicBoolean();
                     reader.addIIOReadWarningListener((source, message) -> warning.set(true));
                     ImageReadParam options = reader.getDefaultReadParam();
@@ -69,6 +58,26 @@ public class PhotoVerifier {
                 }
             }
         } catch (IOException | NoSuchAlgorithmException | IllegalArgumentException failure) {
+            throw invalid();
+        }
+    }
+
+    private static String verifiedType(ImageReader reader, String expected) throws IOException {
+        String format = reader.getFormatName().toLowerCase(Locale.ROOT);
+        String type = switch (format) {
+            case "jpeg", "jpg" -> "image/jpeg";
+            case "png" -> "image/png";
+            case "webp" -> "image/webp";
+            default -> throw invalid();
+        };
+        if (!type.equals(expected)) {
+            throw invalid();
+        }
+        return type;
+    }
+
+    private static void checkDimensions(int width, int height) {
+        if (width < 1 || height < 1 || width > 20_000 || height > 20_000 || (long) width * height > MAX_PIXELS) {
             throw invalid();
         }
     }

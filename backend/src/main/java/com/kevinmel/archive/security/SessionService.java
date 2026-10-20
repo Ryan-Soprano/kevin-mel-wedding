@@ -60,13 +60,7 @@ public class SessionService {
                 || !(body.get("password") instanceof String suppliedPassword)) {
             throw new ApiException(400, "VALIDATION_FAILED", "Supply a username and password.");
         }
-        if (suppliedUsername.length() > 100 || suppliedPassword.length() > 72) throw invalidCredentials();
-        String username = suppliedUsername.strip().toLowerCase(Locale.ROOT);
-        if (username.length() > 100 || !username.matches("^[a-z0-9][a-z0-9._-]{2,99}$")
-                || suppliedPassword.isEmpty() || !StandardCharsets.UTF_8.newEncoder().canEncode(suppliedPassword)
-                || suppliedPassword.getBytes(StandardCharsets.UTF_8).length > 72) {
-            throw invalidCredentials();
-        }
+        String username = normalizedUsername(suppliedUsername, suppliedPassword);
         throttle.reserve(username, request, response);
         var input = UsernamePasswordAuthenticationToken.unauthenticated(username, suppliedPassword);
         try {
@@ -87,6 +81,17 @@ public class SessionService {
         } finally {
             input.eraseCredentials();
         }
+    }
+
+    private static String normalizedUsername(String suppliedUsername, String suppliedPassword) {
+        if (suppliedUsername.length() > 100 || suppliedPassword.length() > 72) throw invalidCredentials();
+        String username = suppliedUsername.strip().toLowerCase(Locale.ROOT);
+        if (username.length() > 100 || !username.matches("^[a-z0-9][a-z0-9._-]{2,99}$")
+                || suppliedPassword.isEmpty() || !StandardCharsets.UTF_8.newEncoder().canEncode(suppliedPassword)
+                || suppliedPassword.getBytes(StandardCharsets.UTF_8).length > 72) {
+            throw invalidCredentials();
+        }
+        return username;
     }
 
     public void logout(HttpServletRequest request, HttpServletResponse response) {

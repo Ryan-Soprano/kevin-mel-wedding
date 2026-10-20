@@ -24,17 +24,24 @@ import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
 import software.amazon.awssdk.services.s3.model.ListObjectsV2Request;
+import software.amazon.awssdk.services.s3.model.ListObjectsV2Response;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
+import software.amazon.awssdk.services.s3.presigner.model.PresignedGetObjectRequest;
+import software.amazon.awssdk.services.s3.presigner.model.PresignedPutObjectRequest;
 
 import com.kevinmel.archive.retention.DeletionRecord;
 import com.kevinmel.archive.retention.DeletionStorage;
 
 /** Privileged credentials stay in the server; grants authorize one exact staging PUT or verified original GET. */
 public final class R2ObjectStorage implements ObjectStorage, AutoCloseable {
+    private static final String ORIGINAL_PREFIX = "originals/";
+    private static final String NO_STORE = "no-store";
+    private static final String DELETION_PREFIX = "deletions/v1/";
+
     private final String bucket;
     private final S3Client s3;
     private final S3Presigner signer;
@@ -107,7 +114,7 @@ public final class R2ObjectStorage implements ObjectStorage, AutoCloseable {
     /** Write ahead of erasure. Never overwrite an independent tombstone after database rollback. */
     public void recordDeletion(DeletionRecord record) {
         Objects.requireNonNull(record);
-        String key = "deletions/v1/" + record.memoryId() + ".json";
+        String key = DELETION_PREFIX + record.memoryId() + ".json";
         try {
             byte[] bytes = record.encode();
             s3.putObject(PutObjectRequest.builder()
@@ -116,7 +123,7 @@ public final class R2ObjectStorage implements ObjectStorage, AutoCloseable {
                     .ifNoneMatch("*")
                     .contentType("application/json")
                     .contentLength((long) bytes.length)
-                    .cacheControl("no-store")
+                    .cacheControl(NO_STORE)
                     .build(),
                     RequestBody.fromBytes(bytes));
         } catch (S3Exception failure) {
@@ -139,7 +146,7 @@ public final class R2ObjectStorage implements ObjectStorage, AutoCloseable {
         try {
             var page = s3.listObjectsV2(ListObjectsV2Request.builder()
                     .bucket(bucket)
-                    .prefix("deletions/v1/")
+                    .prefix(DELETION_PREFIX)
                     .maxKeys(limit)
                     .continuationToken(cursor)
                     .build());
@@ -148,29 +155,36 @@ public final class R2ObjectStorage implements ObjectStorage, AutoCloseable {
             }
             var records = new ArrayList<DeletionRecord>();
             for (var entry : page.contents()) {
-                String key = entry.key();
-                if (key == null
-                        || !key.matches("deletions/v1/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.json")) {
-                    throw retentionUnavailable();
-                }
-                var record = readDeletion(key);
-                if (!key.equals("deletions/v1/" + record.memoryId() + ".json")) {
-                    throw retentionUnavailable();
-                }
-                records.add(record);
+                records.add(readLedgerEntry(entry.key()));
             }
-            String next = Boolean.TRUE.equals(page.isTruncated()) ? page.nextContinuationToken() : null;
-            if (Boolean.TRUE.equals(page.isTruncated())
-                    && (next == null
-                        || next.isBlank()
-                        || next.length() > 4096
-                        || next.equals(cursor))) {
-                throw retentionUnavailable();
-            }
-            return new DeletionStorage.Page(records, next);
+            return new DeletionStorage.Page(records, nextLedgerCursor(page, cursor));
         } catch (SdkException failure) {
             throw retentionUnavailable();
         }
+    }
+
+    private DeletionRecord readLedgerEntry(String key) {
+        if (key == null
+                || !key.matches("deletions/v1/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.json")) {
+            throw retentionUnavailable();
+        }
+        var record = readDeletion(key);
+        if (!key.equals(DELETION_PREFIX + record.memoryId() + ".json")) {
+            throw retentionUnavailable();
+        }
+        return record;
+    }
+
+    private static String nextLedgerCursor(ListObjectsV2Response page, String cursor) {
+        String next = Boolean.TRUE.equals(page.isTruncated()) ? page.nextContinuationToken() : null;
+        if (Boolean.TRUE.equals(page.isTruncated())
+                && (next == null
+                    || next.isBlank()
+                    || next.length() > 4096
+                    || next.equals(cursor))) {
+            throw retentionUnavailable();
+        }
+        return next;
     }
 
     private DeletionRecord readDeletion(String key) {
@@ -190,7 +204,7 @@ public final class R2ObjectStorage implements ObjectStorage, AutoCloseable {
     }
 
     public void deleteRetainedOriginal(UUID assetId) {
-        deleteRetained("originals/", assetId);
+        deleteRetained(ORIGINAL_PREFIX, assetId);
     }
 
     public void deleteRetainedStaging(UUID grantId) {
@@ -252,28 +266,27 @@ public final class R2ObjectStorage implements ObjectStorage, AutoCloseable {
                             .contentLength(byteSize)
                             .build())
                     .build());
-            Instant checkedAt = Instant.now();
-            if (signed == null
-                    || signed.url() == null
-                    || signed.expiration() == null
-                    || !signed.expiration().isAfter(checkedAt)
-                    || signed.expiration().isAfter(expires)
-                    || signed.expiration().isAfter(checkedAt.plusSeconds(300))) {
-                throw StorageConfiguration.unavailable();
-            }
-            // Content-Length is signed, but browsers derive this forbidden header from the original File.
-            // Reject an SDK result that omits the boundary rather than issue an unbounded permission.
-            if (!signed.signedHeaders().containsKey("content-length")
-                    || !signed.signedHeaders().get("content-length").equals(java.util.List.of(Long.toString(byteSize)))) {
-                throw StorageConfiguration.unavailable();
-            }
-            return new UploadGrant(
-                    id,
-                    "PUT",
-                    signed.url().toString(),
-                    signed.expiration(),
-                    Map.of("Content-Type", type));
+            checkUploadGrant(signed, expires, byteSize);
+            return new UploadGrant(id, "PUT", signed.url().toString(), signed.expiration(), Map.of("Content-Type", type));
         } catch (SdkException failure) {
+            throw StorageConfiguration.unavailable();
+        }
+    }
+
+    private static void checkUploadGrant(PresignedPutObjectRequest signed, Instant expires, long byteSize) {
+        Instant checkedAt = Instant.now();
+        if (signed == null
+                || signed.url() == null
+                || signed.expiration() == null
+                || !signed.expiration().isAfter(checkedAt)
+                || signed.expiration().isAfter(expires)
+                || signed.expiration().isAfter(checkedAt.plusSeconds(300))) {
+            throw StorageConfiguration.unavailable();
+        }
+        // Content-Length is signed, but browsers derive this forbidden header from the original File.
+        // Reject an SDK result that omits the boundary rather than issue an unbounded permission.
+        if (!signed.signedHeaders().containsKey("content-length")
+                || !signed.signedHeaders().get("content-length").equals(java.util.List.of(Long.toString(byteSize)))) {
             throw StorageConfiguration.unavailable();
         }
     }
@@ -283,6 +296,30 @@ public final class R2ObjectStorage implements ObjectStorage, AutoCloseable {
             String type,
             long byteSize,
             Instant expires) {
+        checkReadScope(key, type, byteSize, expires);
+        try {
+            var metadata = s3.headObject(HeadObjectRequest.builder().bucket(bucket).key(key).build());
+            checkReadMetadata(metadata, type, byteSize);
+            long seconds = signatureSeconds(Instant.now(), expires);
+            if (seconds < 1) {
+                throw StorageConfiguration.privateMediaUnavailable();
+            }
+            String extension = readExtension(type);
+            String disposition = "inline; filename=\"" + (MediaTypes.AUDIO_TYPES.contains(type) ? "voice-" : "photo-")
+                    + key.substring(ORIGINAL_PREFIX.length()) + "." + extension + "\"";
+            var signed = signer.presignGetObject(GetObjectPresignRequest.builder()
+                    .signatureDuration(Duration.ofSeconds(seconds))
+                    .getObjectRequest(GetObjectRequest.builder().bucket(bucket).key(key)
+                            .responseCacheControl(NO_STORE).responseContentType(type)
+                            .responseContentDisposition(disposition).build())
+                    .build());
+            return checkedReadGrant(signed, expires);
+        } catch (SdkException | IllegalArgumentException failure) {
+            throw StorageConfiguration.privateMediaUnavailable();
+        }
+    }
+
+    private static void checkReadScope(String key, String type, long byteSize, Instant expires) {
         if (key == null
                 || !key.matches("originals/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}")
                 || !MediaTypes.validTypeAndSize(type, byteSize)
@@ -290,62 +327,48 @@ public final class R2ObjectStorage implements ObjectStorage, AutoCloseable {
                 || Duration.between(Instant.now(), expires).getSeconds() < 1) {
             throw StorageConfiguration.privateMediaUnavailable();
         }
-        try {
-            var metadata = s3.headObject(HeadObjectRequest.builder()
-                    .bucket(bucket)
-                    .key(key)
-                    .build());
-            if (metadata == null
-                    || !Objects.equals(metadata.contentLength(), byteSize)
-                    || !type.equals(metadata.contentType())) {
-                throw StorageConfiguration.privateMediaUnavailable();
-            }
-            long seconds = signatureSeconds(Instant.now(), expires);
-            if (seconds < 1) {
-                throw StorageConfiguration.privateMediaUnavailable();
-            }
-            String extension = switch (type) {
-                case "image/jpeg" -> "jpg";
-                case "image/png" -> "png";
-                case "image/webp" -> "webp";
-                case "audio/webm" -> "webm";
-                case "audio/ogg" -> "ogg";
-                case "audio/mp4" -> "m4a";
-                default -> throw StorageConfiguration.privateMediaUnavailable();
-            };
-            String disposition = "inline; filename=\"" + (MediaTypes.AUDIO_TYPES.contains(type) ? "voice-" : "photo-")
-                    + key.substring("originals/".length()) + "." + extension + "\"";
-            var signed = signer.presignGetObject(GetObjectPresignRequest.builder()
-                    .signatureDuration(Duration.ofSeconds(seconds))
-                    .getObjectRequest(GetObjectRequest.builder()
-                            .bucket(bucket)
-                            .key(key)
-                            .responseCacheControl("no-store")
-                            .responseContentType(type)
-                            .responseContentDisposition(disposition)
-                            .build())
-                    .build());
-            if (signed == null
-                    || signed.url() == null
-                    || signed.expiration() == null) {
-                throw StorageConfiguration.privateMediaUnavailable();
-            }
-            Instant checkedAt = Instant.now();
-            if (!signed.expiration().isAfter(checkedAt)
-                    || signed.expiration().isAfter(expires)
-                    || signed.expiration().isAfter(checkedAt.plusSeconds(300))) {
-                throw StorageConfiguration.privateMediaUnavailable();
-            }
-            URI uri = URI.create(signed.url().toString());
-            if (!"https".equals(uri.getScheme())
-                    || uri.getHost() == null
-                    || uri.getRawUserInfo() != null) {
-                throw StorageConfiguration.privateMediaUnavailable();
-            }
-            return new ReadGrant(uri.toString(), signed.expiration());
-        } catch (SdkException | IllegalArgumentException failure) {
+    }
+
+    private static void checkReadMetadata(software.amazon.awssdk.services.s3.model.HeadObjectResponse metadata,
+            String type, long byteSize) {
+        if (metadata == null
+                || !Objects.equals(metadata.contentLength(), byteSize)
+                || !type.equals(metadata.contentType())) {
             throw StorageConfiguration.privateMediaUnavailable();
         }
+    }
+
+    private static String readExtension(String type) {
+        return switch (type) {
+            case "image/jpeg" -> "jpg";
+            case "image/png" -> "png";
+            case "image/webp" -> "webp";
+            case "audio/webm" -> "webm";
+            case "audio/ogg" -> "ogg";
+            case "audio/mp4" -> "m4a";
+            default -> throw StorageConfiguration.privateMediaUnavailable();
+        };
+    }
+
+    private static ReadGrant checkedReadGrant(PresignedGetObjectRequest signed, Instant expires) {
+        if (signed == null
+                || signed.url() == null
+                || signed.expiration() == null) {
+            throw StorageConfiguration.privateMediaUnavailable();
+        }
+        Instant checkedAt = Instant.now();
+        if (!signed.expiration().isAfter(checkedAt)
+                || signed.expiration().isAfter(expires)
+                || signed.expiration().isAfter(checkedAt.plusSeconds(300))) {
+            throw StorageConfiguration.privateMediaUnavailable();
+        }
+        URI uri = URI.create(signed.url().toString());
+        if (!"https".equals(uri.getScheme())
+                || uri.getHost() == null
+                || uri.getRawUserInfo() != null) {
+            throw StorageConfiguration.privateMediaUnavailable();
+        }
+        return new ReadGrant(uri.toString(), signed.expiration());
     }
 
     public Optional<byte[]> read(
@@ -376,7 +399,7 @@ public final class R2ObjectStorage implements ObjectStorage, AutoCloseable {
             byte[] bytes,
             String type) {
         checkKey(key);
-        if (!key.startsWith("originals/")
+        if (!key.startsWith(ORIGINAL_PREFIX)
                 || bytes == null
                 || !MediaTypes.validTypeAndSize(type, bytes.length)) {
             throw new IllegalArgumentException("Invalid original scope.");
@@ -387,7 +410,7 @@ public final class R2ObjectStorage implements ObjectStorage, AutoCloseable {
                     .key(key)
                     .contentType(type)
                     .contentLength((long) bytes.length)
-                    .cacheControl("no-store")
+                    .cacheControl(NO_STORE)
                     .build(), RequestBody.fromBytes(bytes));
         } catch (SdkException failure) {
             throw StorageConfiguration.unavailable();
@@ -400,7 +423,7 @@ public final class R2ObjectStorage implements ObjectStorage, AutoCloseable {
             byte[] bytes,
             String type) {
         checkKey(key);
-        if (!key.startsWith("originals/")
+        if (!key.startsWith(ORIGINAL_PREFIX)
                 || bytes == null
                 || !MediaTypes.validTypeAndSize(type, bytes.length)) {
             throw new IllegalArgumentException("Invalid recovery original scope.");
@@ -412,7 +435,7 @@ public final class R2ObjectStorage implements ObjectStorage, AutoCloseable {
                     .ifNoneMatch("*")
                     .contentType(type)
                     .contentLength((long) bytes.length)
-                    .cacheControl("no-store")
+                    .cacheControl(NO_STORE)
                     .build(),
                     RequestBody.fromBytes(bytes));
         } catch (S3Exception failure) {
