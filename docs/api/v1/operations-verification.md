@@ -17,7 +17,7 @@ node --test scripts/rollback-helpers.test.mjs
 - Expected-environment and explicit nonlocal database configuration guards.
 - A PostgreSQL read-only consistent transaction with bounded connection/query timeouts; no mutation, migration, scheduler or provider IO.
 - Bundled immutable migration history validation before aggregate queries, including missing/failed/unknown/changed history.
-- Exact current column names/types/nullability for the ten known application tables, without claiming every index/constraint/default is verified.
+- Exact current column names/PostgreSQL type names/nullability for the eighteen known application tables. Type modifiers such as VARCHAR length, unrelated tables, indexes, constraints and defaults are outside this check.
 - Conservative original/staging reservation limits, unfinished media/grants and overdue deletion work using synthetic data.
 - Content-free reports and safe failure/exit behavior; configured switches remain separate from unchecked provider/job/backup health.
 
