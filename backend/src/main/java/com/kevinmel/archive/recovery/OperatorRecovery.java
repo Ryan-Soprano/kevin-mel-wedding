@@ -155,9 +155,7 @@ public final class OperatorRecovery {
                         writePrivate(originals.resolve(original.assetId().toString()), bytes);
                         available = true;
                         stored++;
-                    } catch (RecoveryException failure) {
-                        unavailable++;
-                    } catch (RuntimeException failure) {
+                    } catch (RuntimeException _) {
                         unavailable++;
                     }
                 }
