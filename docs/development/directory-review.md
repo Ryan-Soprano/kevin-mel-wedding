@@ -1922,3 +1922,172 @@ is included in this branch. Ryan creates/merges the PR after exact-head
 CI/configured review and Linux-only checks. The focused Notion issue records
 delivery status. The next suggested directory is backend `recovery/`, with a
 fresh inventory and consumer review.
+
+## Backend recovery decisions — October 20, 2026
+
+This batch covers all **five production files** and **two existing suites** under
+backend `recovery/`: **seven tracked paths**. It starts on
+`feature/backend-recovery-review` from clean main `1ef3583`, including operations
+PR 89 and gallery/handoff PR 90. The work-computer visible checkout is used;
+all **211 backend inputs** are frozen before edits. There are no unrelated
+working changes at entry.
+
+The entry source has no reproduced runtime correctness, privacy or efficiency
+defect. Expand the five production files' formatting while preserving imports,
+declarations, literal/SQL values, scopes, operation order and public interfaces.
+The separate mechanical commit is `301d4fb`. A later user-supplied console
+helper/logging refactor is explicitly included at Ryan's request, with its
+reproduced diagnostic regressions corrected in separate commit `3319cf4` below.
+Keep the existing recovery boundaries without a new dependency or migration.
+
+| File in production `recovery/` | Decision and reason |
+|---|---|
+| `OperatorRecovery.java` | Simplify formatting; keep bounded private packages, consistent source snapshot, strict complete preflight before destination mutation, exact original verification, schema-selected exclusive locks, current-authority supersets, frozen deletion replay, retry-safe conditional publication and post-replay validation. |
+| `RecoveryAdministration.java` | Simplify formatting and retain the user's four extracted validation helpers; correct the concurrent logging regression with stable sanitized process-stream diagnostics. Keep console-only offline startup, exact syntax/environment/confirmation, explicit restore/nonlocal database settings, validated private-storage configuration and distinct storage identities, mechanically read-only source authority and resource ownership. |
+| `RecoveryException.java` | Simplify accessor spacing/layout; keep the safe code-only diagnostic without paths, content, SQL or provider errors. |
+| `RecoverySchema.java` | Simplify formatting; keep ordered reviewed V1–V14 history/checksums, canonical migration fingerprints, known-column type/nullability checks, hard-coded versioned table/column identifiers, deterministic bounded rows, strict decoding, explicit legacy defaults and parameterized inserts. |
+| `RecoveryMetadata.java` | Simplify formatting; keep complete identity/ownership/lifecycle graph checks, unchanged retry/original identities, media/audio/grant bounds, review/audience rules, historical authors, dates, private organization, scrubbed tombstones and current deletion-plan consistency. |
+
+| File in test `recovery/` | Decision and reason |
+|---|---|
+| `OperatorRecoveryPostgresTest.java` | Extend existing coverage: all legacy package versions 1–6 now exercise supported destinations through V14 in 27 source/target pairs, with original bytes, organization, historical audit actors/statuses, private defaults and empty links. Add V7-to-V13 refusal and seven rehashed invalid memory/audit audience-state cases, asserting empty persisted targets and no external writes. Preserve the later user formatting and consolidated assertions; correct the audience cardinality and boxed count expectations rather than claiming those assertion edits are layout-only. |
+| `RecoveryAdministrationTest.java` | Keep unchanged: syntax/noninteractive refusal, supported environment names, storage-identity separation and explicit database-target checks retain their current coverage. Actual interactive console confirmation and live provider IO remain separate acceptance. |
+
+Consumer tracing includes the direct classpath and packaged offline console,
+`ObjectStorage`/R2 conditional writes and original validators, all reviewed
+migrations, contribution retry/date/text contracts, review/audience and private
+link lifecycle, `DeletionRecord`/submission-key digest, retention ownership and
+staging checks, and albums/timeline/tags before and after erasure. Organization,
+media, retention, resources, scripts and documentation traced here are not
+thereby marked fully reviewed.
+
+Correct stale operator instructions that stopped at V13/package v6. The runbook
+and API verification now describe V14/package v7 audience preservation, private
+link exclusion, legacy private audit defaults, the V14 empty-link-table gate and
+the existing limits of physical schema checks. Historical dated verification
+records remain historical; no provider, recovery-timing or release pass is
+inferred from a version or documentation update.
+
+### Concurrent console refactor and reproduced diagnostics
+
+The concurrent edit extracts `isHelpRequest`, `isRecoveryRequest`,
+`hasRequiredRecoveryContext` and `isValidRestoreTarget`; retain these equivalent
+guards and the unused algorithm catch's unnamed parameter. Its replacement of
+process-stream diagnostics with SLF4J is incompatible with this offline console's
+deliberate root-logging suppression. With inherited logging off, required
+refusal/failure guidance disappears. When the class logger is explicitly enabled,
+passing the raw caught exception to it exposes private paths and stack traces.
+
+Reproduce before correction using an isolated compiled copy and the unchanged
+console test: captured stderr is empty, so its required supported-command
+guidance assertion fails. A real interactive ConPTY probe uses only synthetic
+settings and an invalid synthetic private path, confirms the normal prompt,
+and reaches `Path.of` failure before database connection or storage opening.
+The logger version prints that path and exception stack. It creates no package
+or provider resource.
+
+Restore the original static stdout/stderr diagnostics, remove the logger and raw
+throwable argument, and retain the user's four helpers. An unnamed outer catch
+and source comment make the deliberate diagnostic boundary explicit. The same
+isolated three-test console run now passes; root-off refusal guidance is visible,
+and the same interactive failure returns 1 with the expected safe message, no
+private-path text and zero throwable log events. The production refactor/fix is
+separate from the mechanical commit; do not describe the final administration
+class as AST- or instruction-identical to the entry source.
+
+### Consolidated assertion correction
+
+The later integration-suite edit also groups assertions into `Object[]`; it is
+not exclusively formatting. A complete backend run reproduces its one-entry
+audience-list expectation against the fixture's two restored private memories.
+Grouped organization counts also need `Long` expectations (`0L`/`1L`) because
+`count` returns `long`; the former standalone numeric assertions accepted integer
+arguments without the grouped object comparison's boxing mismatch. Retain the
+grouping, assert both private audience entries, and use the exact count types.
+
+An earlier pair comparison used a snapshot that already contained these edits;
+its formatting-only interpretation is withdrawn. The true first-pass test source
+is separately preserved with hash `FD24A74E…`. Independent review of the complete
+delta identifies the nine grouped assertions only in the compatibility matrix;
+the corrected exact audience count strengthens its earlier `containsOnly`
+check. Final verification uses executed focused/full suites and the corrected
+final source, not an assertion of whole-file AST equality for this test delta.
+
+## Backend recovery verification — October 20, 2026
+
+The frozen entry baseline runs **56 tests: 55 passed, one Linux-only symlink
+case skipped**, zero failures/errors. The corrected compatibility matrix and
+the three unchanged console cases then pass a separate **four-test focused
+run**, zero failures/errors/skips; its single matrix test executes all **27
+source/target combinations**. No new tracked test file is added.
+
+All **five canonical Java 25 AST/import comparisons** at mechanical commit
+`301d4fb` pass, with **28 rejected negative controls** covering declaration,
+package, literal/bound, condition and scope changes. Besides single terminal or
+expression control bodies, normalization permits fourteen specifically pinned
+enhanced-for wrappers enclosing exactly the existing IF subtree; it does not
+flatten arbitrary blocks, declarations or loop/conditional scopes. Parsing does
+not perform type attribution. The final administration helper refactor is
+separately reviewed and exercised rather than included in that equality claim.
+
+The isolated console red/green tests and actual synthetic interactive failure
+probe are recorded above. Independent source, test and documentation reviews
+have no remaining actionable findings after the diagnostic and assertion
+corrections. The first full snapshot passed **470 tests: 468 passed, two
+skipped** and packaged successfully. An intermediate exact-format run was stopped
+after the authorized console scope change and is not a pass; the later full run
+with incorrect consolidated assertions failed one of 470 tests and is retained
+as red evidence. Those historical results do not replace final-source validation.
+
+Runtime is Windows, Microsoft OpenJDK **25.0.4+7**, Maven wrapper **3.9.16**,
+Spring Boot **4.1.1**, disposable PostgreSQL **17.11**, Docker **29.8.0** and
+checksum-verified portable FFmpeg/ffprobe **9.0.2**. The wrapper uses an ignored
+local `MAVEN_USER_HOME` because this machine's hidden `.m2` directory prevents
+its ordinary PowerShell `Get-Item` probe; the tracked wrapper/configuration is
+unchanged. Surefire's local exit grace remains 120 seconds. Frontend source and
+operational scripts are unchanged and their suites are not rerun for this batch.
+
+The **final intended snapshot**, bound to code head `9785ef8`, passes the full
+backend suite: **470 total, 468 passed, two skipped**, zero failures/errors,
+Maven exit 0 and an explicit successful-build marker. Its recovery suites run
+**58 tests: 57 passed, one skipped**; all four existing SDK conditional-copy
+tests pass within the full run. All **211 final backend input hashes** match
+both the frozen compile inputs and visible checkout. Historical test counts
+above are separate snapshots, not additive totals.
+
+There are **16 exact compiled recovery disassemblies** for printed
+instructions/descriptors/constants, plus unchanged raw bytes for non-recovery
+production classes. The intentionally refactored outer administration class is
+excluded from baseline instruction equality. `javap -c -p -constants -s` omits
+annotation/bootstrap/debug metadata; its equality complements the mechanical
+AST checks, independent review and execution evidence.
+
+Packaging succeeds: all **248 production classes** in the executable JAR match
+the final tested bytes; all **111 compiled test/fixture classes** are excluded
+by identity and byte digest. The executable launcher/application manifest is
+correct. The actual packaged PropertiesLauncher console exits 0 for `--help`
+with the expected recovery instructions and exits 2 with its safe diagnostic
+for noninteractive export, before recovery is started.
+
+Read-only cleanup confirms all **94 observed containers** across baseline,
+historical, interrupted, failed, focused and final runs are absent. The final
+review Maven/test JVMs have exited; the two synthetic interactive probe sessions
+also completed. No fork-shutdown timeout is present in the successful final run.
+Source/proof hashes, original and corrected test snapshots, red/green console
+and matrix evidence, full execution/package logs, class checks, cleanup and the
+ready PR description remain under `logs/recovery-directory-review.local/`.
+
+The two Windows-disabled scenarios remain
+`OwnedExportDirectoryTest.symlinkedArtifactsAreNeverFollowedAndOutsideBytesRemainUntouched`
+and
+`OperatorRecoveryPostgresTest.symlinkedOriginalAndSymlinkedBundleRootAreRejectedBeforeAnyWrites`.
+These local checks establish no Linux symlink execution, provider recovery IO,
+independent-copy durability, actual hosted jobs, representative recovery timing,
+physical-device acceptance or release readiness. The V7 positive fixture still
+does not separately round-trip shared-audience audit rows; legacy audit defaults
+and malformed V7 audit rejection are covered without claiming that extra case.
+
+Ryan creates/merges the PR after exact-current-head CI/configured review and
+Linux-only checks. The focused Notion issue tracks delivery without closing
+operational acceptance. The next suggested formal package is backend
+`portable/`, after fresh inventory and consumer tracing.
