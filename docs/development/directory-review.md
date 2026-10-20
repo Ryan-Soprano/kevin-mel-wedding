@@ -2091,3 +2091,165 @@ Ryan creates/merges the PR after exact-current-head CI/configured review and
 Linux-only checks. The focused Notion issue tracks delivery without closing
 operational acceptance. The next suggested formal package is backend
 `portable/`, after fresh inventory and consumer tracing.
+
+## Backend portable decisions — October 20, 2026
+
+This batch inventories all **ten production files** and **five existing test
+suites** under backend `portable/`: **15 tracked paths**, with no placeholder.
+It starts on `feature/backend-portable-review` from the clean completed recovery
+head `3db0407`. At entry, fetched main remains `1ef3583`; the recovery branch is
+not yet merged. The later delivery refresh finds recovery merged as PR 91 on
+main `bf08adb`, so the portable PR now isolates this batch.
+All **211 tracked backend inputs** are frozen before edits in the work-computer
+checkout. There are no unrelated working changes at entry.
+
+The mechanical commit `9d55f95` expands the ten production files while preserving
+their interfaces, declarations, imports, literal/SQL values and operation order.
+Parser comparison against the frozen entry source passes all ten files, with
+**50 rejected negative controls**. It normalizes simple single-statement control
+bodies plus **11 exact, individually reviewed compound-body wrappers**; it does
+not discard arbitrary blocks/scopes. This parse-only check does not perform type
+attribution. No dependency, migration, cache or speculative abstraction is added.
+
+| File in production `portable/` | Decision and reason |
+|---|---|
+| `ExportAuthority.java` | Simplify layout; keep request-side couple/reveal checks and detached account UUID/credential-version authority, revalidated against current account state without retaining session credentials. |
+| `ExportController.java` | Simplify layout; keep contract/query checks, bodyless CSRF/origin boundary, no-store responses and generated ZIP headers, bounded transfer length and cancellation/expiry checks around each read. |
+| `ExportJobService.java` | Simplify layout and fix reproduced clock rollback separately. Keep bounded account/global admission and attempts, explicit idempotency/generation identities, one worker/cache/download lease, current authority/source checkpoints, index refresh rules and cleanup quarantine. |
+| `ExportRequest.java` | Simplify layout; keep V4/variant identity checks, strict attempt header, exact creation precondition, singleton query allowlists, page bounds and canonical cursor envelopes scoped to job/list/version. |
+| `ExportStatus.java` | Simplify record layout; preserve the existing content-free progress/attempt/page shape, component order, counts and opaque identities consumed by the frontend decoder. |
+| `OwnedExportDirectory.java` | Simplify layout; keep private permissions, exact owner/UUID marker, exclusive lifetime lock, bounded orphan scan, rejection of unexpected/symlinked artifacts and retained cleanup ownership for explicit retry. |
+| `PortableExportException.java` | Simplify constructor layout; keep the safe content-free failure without paths/provider details. |
+| `PortableExportRepository.java` | Simplify layout; keep read-only REQUIRES_NEW repeatable capture, fresh read-committed content/organization fingerprints, eligible completed records, filtered graph links, deterministic order and bounded combined metadata/row/original budgets. |
+| `PortablePartWriter.java` | Simplify layout; keep bounded STORED ZIP parts, exact original bytes/hash checks, generated relative paths, exact outcome identity, private no-overwrite output and escaped static offline reader with bounded previews and complete text/JSON. |
+| `PortableSnapshot.java` | Simplify layout; keep immutable collection copies, explicit portable allowlist, audiences and legacy private default, decimal BIGINT positions, redacted diagnostics and private validation tokens excluded from archiveData. |
+
+| File in test `portable/` | Decision and reason |
+|---|---|
+| `ExportHttpSecurityTest.java` | Keep unchanged: actual filter chain rejects operator/developer, disabled/rotated accounts and pre-reveal sessions before reaching mocked job work. |
+| `ExportJobServiceTest.java` | Keep the eleven existing lifecycle/race cases and extend this existing suite for rollback. Real private ZIP/files with independent synthetic authority/source gates cover exact attempts/generations, credential rotation, warning/retry/index refresh, cleanup fencing, shutdown and reserved cancellation capacity. |
+| `OwnedExportDirectoryTest.java` | Keep unchanged: seven cases cover live/orphan locks, private permissions, suspicious paths/markers, explicit cleanup failure/retry and Linux-only symlink refusal. |
+| `PortableExportRepositoryPostgresTest.java` | Keep the six existing migrated PostgreSQL capture/currentness/bounds cases; extend audience coverage in this existing suite. No new tracked test file is needed. |
+| `PortablePartWriterTest.java` | Keep unchanged: six cases cover exact mixed originals/organization, escaped reader, Eastern/DST presentation with UTC JSON, explicit integrity/read failures, bounds, cancellation/currentness and no-overwrite outcomes. |
+
+Consumer tracing includes the real-session HTTP suite `media/ExportHttpTest`,
+security/session/reveal/origin/CSRF/body filters, current account versions,
+frontend export decoding/reconciliation and native-save lifecycle, original
+storage reads, review/retention eligibility, sharing audiences, private
+albums/timeline/tags and the separate recovery contract. These traced consumers
+are not thereby marked as new formal directory reviews.
+
+Capture freezes eligible content and all-link validation tokens; later unrelated
+rows do not join it. Original reads and publication use fresh checkpoints without
+holding database locks across provider IO. Admitted transfer races cannot recall
+already released bytes. The single cache/lease, pending worker counter and failed
+deletions preserve their existing explicit retry/fail-closed boundaries. The
+trusted process-owned temporary root and permissions remain the boundary for
+ancestor or same-owner replacement races; this review does not claim arbitrary
+hostile-filesystem atomicity.
+
+Two rollback regressions were added only to an ignored frozen baseline copy
+first. Both fail for the intended assertions: an existing 12:40 deadline becomes
+11:40 after a one-hour rollback, and capture publishes READY with a timestamp
+before creation. The actual frontend `decodeExportStatus` rejects both serialized
+Java records. The behavioral correction is separate from the mechanical commit:
+retain an established expiry when the clock moves backwards, still cap extension
+at immutable hard expiry, and fail a capture earlier than admission without
+publishing content or inventing timestamps. This does not promise elapsed-time
+expiry during wall-clock changes.
+
+The fix and two existing-suite rollback regressions are committed separately in
+`7f4b255`; the previous eleven service tests are preserved byte-for-byte outside
+the additions. Access through repeated 29-minute activity intervals still reaches
+the original hard deadline, remains readable immediately before it and returns
+404 at exact hard expiry. Capture rollback ends with content-free
+`FAILED`/`EXPORT_FAILED`, skips source planning/publication and permits a deliberate
+replacement job.
+
+Coverage commit `ca0530d` adds one existing repository-suite case for `PUBLIC`
+and `FRIENDS_FAMILY` serialization, share-link capability exclusion and later
+audience-change invalidation, plus one existing real-session `media/ExportHttpTest`
+case for normalized uppercase job/generation identities and strict attempt
+headers. Both probes pass first against frozen baseline production. All prior
+bytes in those suites are preserved outside the additions. The API documentation
+now describes normalized URL identities, canonical response/header forms,
+preserved visibility, rollback failure and the separate recovery v7/V14 contract;
+the portable archive format remains version 1.
+
+## Backend portable verification — October 20, 2026
+
+The frozen baseline focused run passes **38 tests: 37 passed, one skipped**,
+including the five formal portable suites and actual HTTP consumer suite. The
+isolated rollback red run has **two intended assertion failures**, not a pass.
+The corrected service suite passes **13 of 13**, and the actual frontend decoder
+accepts both corrected serialized Java DTOs after rejecting both baseline DTOs.
+The separate baseline audience/HTTP probes pass **two of two**. These results
+describe separate snapshots and are not additive totals.
+
+Runtime is Windows, Microsoft OpenJDK **25.0.4+7**, wrapper Maven **3.9.16**,
+Spring Boot **4.1.1**, disposable PostgreSQL **17.11**, Docker **29.8.0** and
+previously checksum-verified FFmpeg/ffprobe **9.0.2**. The ignored wrapper
+`MAVEN_USER_HOME` workaround for this machine's hidden `.m2` directory is reused;
+tracked build configuration is unchanged. The local Surefire exit grace remains
+120 seconds. Frontend source and operational scripts are unchanged; their full
+suites are not rerun for this backend batch.
+
+Two full runs lose Docker Desktop's local daemon, first during HTTP tests and
+then during recovery compatibility tests. Database-connection errors and the
+unsuccessful runs are preserved separately under `interrupted-docker-loss/` and
+`interrupted-docker-loss-2/`, including original inputs, classes, reports and
+logs. Neither is a pass. Each blocked test fork is stopped only after its exact
+Maven parent chain is verified. Docker is restarted locally; remaining containers
+are removed only after their exact logged identities and Testcontainers labels
+are verified. The shutdown cause is not established by the local logs.
+
+The final run uses a fresh output directory, one fresh JVM per top-level test
+class and a 1 GiB test heap (`forkCount=1`, `reuseForks=false`, `argLine=-Xmx1024m`) to bound
+test-process accumulation. These are ignored local verification settings; the
+same source head and all 211 hashes are retained, with no tracked build change.
+Unrelated JVMs and application data are not cleanup targets.
+
+The final intended backend snapshot at code head `ca0530d` passes **474 tests:
+472 passed, two skipped**, zero failures/errors, Maven exit 0 and explicit
+successful-build marker; packaging succeeds. Its formal portable suites contain
+**36 tests: 35 passed, one skipped**, and all **six actual HTTP consumer tests**
+pass. All **211 unique tracked backend inputs** match the frozen compile inputs
+and visible checkout. The full run has no fork-shutdown timeout. This final run
+supersedes the unsuccessful infrastructure attempts without relabeling them.
+
+There are **41 exact portable compiled disassemblies** for printed
+instructions/descriptors/constants. Only the intentionally changed outer
+`ExportJobService` class is excluded from baseline instruction equality; its
+nested classes remain compared. Non-portable production classes retain exact
+baseline bytes. `javap -c -p -constants -s` excludes annotation/bootstrap/debug
+metadata, so these checks complement the AST checks, source review and execution.
+
+All **248 production classes** in the executable JAR match the final tested bytes;
+all **111 compiled test/fixture classes** are excluded by direct class identity
+and byte digest. This is not a nested dependency-JAR or non-class resource audit.
+The executable launcher/application manifest is correct. Packaged console help
+exits 0, and noninteractive recovery export exits 2 with its safe diagnostic
+before recovery starts. The actual frontend decoder also accepts both status
+records emitted by the final full test run.
+
+Read-only cleanup confirms all **89 observed test containers** across retained
+baseline, probe, failed/interrupted and final logs are absent. All **31 logged
+Spring-test JVM PIDs** are absent from Java processes, and no JVM with the review
+path remains. This does not claim discovery of every unlogged process or native
+child. Source/proof hashes, exact retained snapshots, red/green decoder evidence,
+class/package checks, cleanup and the ready PR description remain under
+`logs/portable-directory-review.local/`.
+
+The exact Windows-disabled cases are
+`OwnedExportDirectoryTest.symlinkedArtifactsAreNeverFollowedAndOutsideBytesRemainUntouched`
+and
+`OperatorRecoveryPostgresTest.symlinkedOriginalAndSymlinkedBundleRootAreRejectedBeforeAnyWrites`.
+Linux execution, live-provider IO, browser/device save and extraction, hosted
+capacity, operational durability and release acceptance remain separate checks.
+The bounded local fixtures do not establish those outcomes or every possible
+worker/download/cleanup interleaving.
+
+Ryan creates/merges the PR after exact-current-head CI/configured review and
+Linux-only checks. The focused Notion issue records review delivery without
+closing operational acceptance. The next suggested formal package is backend
+`album/`, after a fresh inventory and consumer review.
