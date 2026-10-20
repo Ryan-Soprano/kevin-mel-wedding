@@ -4,6 +4,48 @@ Prepared and locally verified October 5, 2026 for [OPS-01 — Staging deployment
 
 The October 5 Render inspection found only `kevinandmel-coming-soon`, a deployed static site. Keep that service, its `kevinandmel.com` / `www` domains and current DNS intact. Test the full application on a separate provider HTTPS address first. The [coming-soon deployment record](coming-soon.md) owns the existing public site's configuration.
 
+## Existing staging target — October 20, 2026
+
+The October 5 provisioning drafts and cost quotations below are historical.
+The existing `kevinandmel-staging` service was created on October 14 and serves
+`https://kevinandmel-staging.onrender.com` from this repository's `main` branch
+through the root Dockerfile. Read-only Render discovery on October 20 confirms
+Ohio, one 1-CPU/2-GB instance, health path `/api/health`, automatic deployment off,
+and an available same-region PostgreSQL 17 database with external access disabled.
+No new resource, scaling or cost change is part of this documentation update.
+
+Initial inspection found PR 87 deployed. The subsequent authorized manual
+deploy `dep-dbbu350m7kps73d8tnog` became live on October 20 at 21:49:18 UTC,
+running commit `a4ad947cb2ba76b311a9c20ef0f35cdc348a443b`. The bounded checks
+below are repeated on that build. Further source changes require a deliberate
+deployment after current-head CI and configured AI review clear. Refresh the
+identity and repeat affected checks; a merge does not deploy this service.
+Ryan's [October 15 standing authority](../project-plan.md#standing-project-authorization)
+covers routine operation/deployment of existing services. Earlier approval text
+below records the historical first-provisioning boundary; budget commitments,
+private data and destructive-operation protections still apply.
+
+The October 20 bounded HTTPS check passes public HTML/JS/CSS/health and sampled
+first/last gallery-image requests, anonymous private/source/configuration denial,
+and disabled recorder-spike denial. No Basic challenge is emitted by those
+observed requests. Public responses use `no-store`, and the served frontend
+compiles its audio option on. Effective server audio/storage settings and the
+complete synthetic save/playback/original flow remain separate verification.
+Pre-deployment idle memory observations around 250.5 MB of 2 GiB do not accept
+this build's full-limit or mixed-media capacity. See the [Thursday readiness supplement](../product/wedding-release-checklist.md#october-20-readiness-check--thursday-october-22-target)
+for exact scope and remaining acceptance. Keep the intentional coming-soon
+custom-domain site intact until the deliberate release/cutover step.
+
+A subsequent October 20 check runs the existing `ReadinessAdministration`
+through the authenticated Dashboard shell of this deployed service. It exits 0
+with the bounded database and reviewed-schema checks passing. The console uses
+base properties/environment plus an explicit staging finalization limit of one;
+it does not load profile properties automatically. Aggregate output remains
+private operator evidence. R2 IO/integrity, all running profile/session settings,
+retention-job health, backups and release readiness remain outside that result.
+The home SSH key and external MCP SQL route were refused; the successful check
+uses existing Dashboard access without changing keys or database network access.
+
 ## Provider and cost checkpoint
 
 Ryan declined purchases on October 5, 2026. Leave the prepared Render forms unsubmitted; no paid provisioning or hosted deployment is authorized. Continue disposable local/emulator checks while retaining hosted HTTPS, memory/proxy/session and physical-phone acceptance as pending. The quoted plan below is a future candidate, not approved spending.
@@ -19,7 +61,7 @@ These are candidate monthly costs checked October 5; confirm the dashboard quota
 
 The prepared October 5 Render database form explicitly quotes **$6 compute + $0.30 for 1 GB storage = $6.30/month**. The prepared 2 GB/one-CPU web-service form quotes **$25/month**, making the current combined candidate **$31.30/month**. Both draft forms use Ohio; database storage autoscaling and web automatic deployment are disabled. Neither create/deploy button has been submitted. Confirm the quotation at creation if it changes. [Compute/storage are prorated by the second](https://render.com/docs/faq); usage/taxes and other services are additional.
 
-The contract still permits 10,000,000 bytes, 50 million pixels and dimensions up to 20,000 per photo. Compressed file size does not bound decoder/JVM memory. Staging admits one finalization at a time before storage read, decode, publish and database commit; a concurrent request gets safe `503 MEDIA_UNAVAILABLE` and can retry the same item without becoming `FAILED`. Local development retains the default unlimited admission setting. This limits overlapping work, not the memory cost of one extreme image.
+The contract still permits 10,000,000 bytes, 50 million pixels and dimensions up to 20,000 per photo. Compressed file size does not bound decoder/JVM memory. Staging admits one finalization at a time before storage read, decode, publish and database commit; a concurrent request gets safe `503 MEDIA_UNAVAILABLE` and can retry the same item without becoming `FAILED`. Local development defaults to two finalizations; the staging profile sets one. This limits overlapping work, not the memory cost of one extreme image.
 
 The [October 5 local full-limit capacity check](#local-full-limit-capacity--2026-10-05) measures successful boundary JPEG, PNG and WebP verification, overlapping finalization, recovery and process restart in a **2 GB container with a 1536 MiB heap**. The measured candidate setting is `JAVA_TOOL_OPTIONS=-Xms64m -Xmx1536m -XX:+ExitOnOutOfMemoryError`. The earlier smoke's 1 GB heap subsequently failed with an actual JVM out-of-memory error on a valid 50 MP lossy WebP; do not use that earlier heap setting for the full photo contract. The successful suite peaked at **1.680 GiB**, leaving about **327.6 MiB / 16%** of container headroom.
 
@@ -178,7 +220,7 @@ Both default to `false` when omitted. Ryan's October 14 instruction enables audi
 on the existing service; see the [voice-memory runbook](voice-memories.md) for
 formats, recording/upload behavior and the remaining device/storage checks.
 
-The staging DB settings are mandatory; there is no localhost fallback in that profile. A Render `postgresql://user:password@…` connection string is not a JDBC URL and must not be pasted into `MEMORY_ARCHIVE_DB_URL`. Render's internal TLS supports `sslmode=require`; do not claim certificate verification from that setting. Put no secret in `VITE_*`, Git, Notion, screenshots, commands with literal passwords, build arguments or copied logs. `.env` is not automatically loaded. Flyway applies the reviewed V1–V5 migrations to this separate test database at startup; never rewrite applied migrations or run a database reset against retained evidence.
+The staging DB settings are mandatory; there is no localhost fallback in that profile. A Render `postgresql://user:password@…` connection string is not a JDBC URL and must not be pasted into `MEMORY_ARCHIVE_DB_URL`. Render's internal TLS supports `sslmode=require`; do not claim certificate verification from that setting. Put no secret in `VITE_*`, Git, Notion, screenshots, commands with literal passwords, build arguments or copied logs. `.env` is not automatically loaded. Flyway applies the reviewed bundled migrations through V14 to this separate test database at startup; never rewrite applied migrations or run a database reset against retained evidence.
 
 ## Hosted verification and phone acceptance
 

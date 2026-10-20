@@ -4,6 +4,11 @@ Review production files together with their tests, callers and contracts. Record
 task ownership, progress, blockers and PR evidence in the existing Notion issue
 database. This guide records the review method and technical decisions.
 
+Current delivery follows the [standing project authorization](../project-plan.md#standing-project-authorization),
+reaffirmed October 20: create and merge focused PRs after exact-current-head CI
+and requested/configured reviews pass without unresolved actionable findings.
+Earlier dated batch notes retain the delivery boundaries in effect when written.
+
 ## Review each file
 
 1. Identify its responsibility, public interface and consumers. Trace the normal
@@ -3212,3 +3217,240 @@ merges the PR unless he authorizes another specific exception. Exact-current-
 head CI/configured review remains required before merging. The next formal
 backend package is **`health/`**; resources/build/configuration and broader
 provider/device/assistive-technology/hosted/release acceptance remain separate.
+
+## Backend health decisions — October 20, 2026
+
+This formal batch reviews the **one production file** in
+`backend/src/main/java/com/kevinmel/archive/health/` and its **one existing
+package test**. There is no placeholder or package-local resource. It starts
+from sharing delivery `ddcfca8305a611bbe22f9e8bb10a0eac6aeab89a`; library PR 96
+and sharing PR 97 subsequently merge after their exact-head checks. The health
+source commit is `d434e2d51a31a0680fcffb1da9ee162c755bcfd2`. No tracked test
+file, dependency, route, build setting or behavior change is introduced.
+
+| File in `health/` | Decision and preserved boundary |
+|---|---|
+| `HealthController.java` | Keep behavior; expand the existing immutable response record component. Preserve exact GET `/api/health`, the one-field `{"status":"ok"}` response and dependency-free implementation. A helper, cache, actuator dependency or public readiness query is not justified. |
+| Existing `HealthControllerTest.java` | Keep all assertions; expand only the ordered `@Import` annotation array. Preserve the real MVC/security configuration, mocked account repository, public request without an API-contract header, HTTP status, JSON-compatible MIME type and status-value assertion order. |
+
+Consumer tracing covers `SecurityConfiguration` and `SessionHttpTest`, the
+exact GET admission bypass in `StagingAccessFilter` and its trailing-slash/POST
+tests, and exclusion from anonymous-submission throttling. Non-GET and other
+paths retain existing authentication, origin and CSRF handling. No production
+caller directly constructs the response or invokes the controller method;
+there is no frontend health API consumer.
+
+The five local startup consumers (`smoke-packaged-app`, `smoke-container`,
+`smoke-reception`, `smoke-rollback` and `local-review`) poll the same exact GET
+route within their existing bounded/cancellable lifecycle; the container smoke
+also asserts anonymous 200. Docker starts the application JAR without a separate
+HEALTHCHECK or actuator dependency. The staging runbook configures Render's
+health path, while CI executes tests rather than hosted health/deploy checks.
+Health source edits require no provider setting; separate readiness deployment
+is recorded in the staging runbook and release checklist.
+
+Public health deliberately reports **liveness only**. The separately reviewed
+`ReadinessAdministration`/`OperationsReadiness` console observes the database
+with read-only, timeout, schema and privacy guards and explicit unchecked
+provider/backup/retention/release boundaries. Health must not expose those
+private diagnostics or acquire their dependencies. README/API/runbook guidance
+already describes this distinction consistently. No concrete runtime defect or
+measured efficiency problem is found; extra extraction or runtime work would
+add complexity without addressing an observed issue. Incidental consumer
+tracing does not complete the outstanding supporting directories or release
+acceptance.
+
+Strict mechanical comparison passes **two source ASTs**, exact ordered imports,
+**18 controls (six positive/twelve negative)** and malformed-source rejection.
+Comparison preserves annotation values, statement/expression order, declarations,
+meaningful scopes and literals. It permits layout/comments and only inert
+singleton return/throw/continue/break/expression-statement wrappers directly at
+if/loop bodies, with no package-specific allowance. Public JDK 25 parsing has no
+type resolution and is not a general semantic-equivalence proof.
+
+Exact `javap -c -p -constants -s` comparison passes **three emitted classes:
+two production and one test**. Unmodified stdout/stderr, including instructions,
+private members, descriptors and constant-pool references, match baseline and
+final snapshots. This does not compare every classfile attribute/debug field or
+claim equality of raw class bytes.
+
+## Backend health verification — October 20, 2026
+
+Fresh immutable baseline execution exits **0** with `BUILD SUCCESS`: **65
+existing tests, zero failures/errors/skips**, in **42.712 seconds**. It selects
+`HealthControllerTest`, `SessionHttpTest` (including its nested cases),
+`AnonymousSubmissionFilterTest` and `StagingAccessFilterTest`. These focused
+counts are separate from the final full suite. Fresh final compilation and
+classpath export exit **0** with `BUILD SUCCESS`, compiling all **128 production
+and 62 test Java inputs** in **16.307 seconds**.
+
+Both snapshots contain all **212 tracked backend inputs**. The Git archive
+baseline records archived and visible hashes separately, preserving the CRLF/LF
+distinction. Final source copies visible bytes and substitutes only the two
+proven candidates. All 212 final raw hashes match the applied source at
+`d434e2d`; **367 compiled inputs (256 production/111 test-fixture)** are frozen
+before package execution. Post-package integrity is a separate check below.
+
+Official runtime artifacts are freshly checked before offline reuse: seven
+extension/provenance artifact hashes, the extracted identity/analyzer entries
+against the retained official VSIX, and all **61 pinned CPD sources plus seven
+dependencies** match. The Marketplace bundle is **6.1.1**, analysis engine
+**12.1.1.87771**, SonarJava **8.44.0.48651**, on Java **25.0.3+9-LTS**. There are
+zero downloads, no IDE/global-setting change and no application-source upload.
+This binds retained official HTTPS acquisition/package identity; no independent
+vendor checksum or IDE signature validation is claimed.
+
+Actual baseline and final SonarJava both exit **0/PASS** with **zero selected
+findings across the entire backend**, recognizing **190 inputs: 128 MAIN and
+62 TEST**, with zero failed files. Parameters remain S3776 `Threshold=15`, S1541
+`Threshold=10`, and S1192 `threshold=3`, `minimalLength=5`, empty
+`excludePatterns`. Actual score, parameter-boundary, MAIN/TEST-classification
+and malformed-input controls rerun and pass for each snapshot. There are no
+findings requiring a fix/retain/false-positive disposition. These rules apply
+to MAIN only; TEST indexing is not test-method analysis. The API exposes
+recognition and failures rather than a separate completed-file rule count.
+Both runs retain the known exact `No workDir in SonarLint` warning. Raw results
+are `logs/health-directory-review.local/baseline-rules/run-oHXRma/` and
+`final-rules/run-hLCEul/`.
+
+Actual baseline and final official Java CPD both exit **0/PASS**: **zero raw
+per-origin and zero unique complete endpoint groups** across **128 production
+files**, with all **five controls** rerun for each. The unmodified ten-statement
+algorithm comes from SonarQube **26.4.0.121862**, commit
+`ab253503cc54df4bdfefd11eb783997d402b5147`; no production exclusion or threshold
+override is used. Evidence is `baseline-cpd/run-cd29hf/` and
+`final-cpd/run-x3tzOn/` under the health evidence directory. These three rules
+and standalone CPD results do not establish the full profile, coverage,
+duplication density, new-code metrics or a hosted quality gate. Reproduction
+remains in [the analyzer guide](backend-sonar.md).
+
+Independent final source review finds no actionable issue across both files and
+their consumers, with candidate/visible/frozen hashes agreeing. Its report is
+`independent-final-source-review.json`, binding 32 evidence files and 20 consumer
+files under the ignored health evidence directory. Source review is separate
+from execution and final documentation review.
+
+The first full package run encounters **three setup errors**, all in
+`MediaServiceAdmissionTest`, before its assertions: Mockito's inline Byte Buddy
+mock maker cannot self-attach through its external helper process. A separate
+212-input exact-source snapshot reproduces the same three errors with default
+attachment (**exit 1**), then passes all **three cases with exit 0** after
+explicitly preloading the existing Mockito **5.23.0** JAR as a JVM agent. It
+requires no recompilation or source/config/dependency change. The classpath JAR
+declares `org.mockito.internal.PremainAttach` and has SHA-256
+`ae295bebd5d11fab97ab297815dc7617188b86003cbce3dfd5c0d5c3a6cc4a0c`.
+The attacher dump records attempted subprocess arguments without identifying a
+deeper OS cause; this is not labeled a transient or an application regression.
+
+The first complete run exits **1/BUILD FAILURE** in **13:34**: **474 total,
+zero assertion failures, three setup errors and two Windows skips**. All first
+run Surefire reports and its actual exit receipt are retained. This is not
+relabeled as a passing package. Before retry, all **367** originally frozen
+class hashes still match; read-only cleanup confirms all **46** observed
+containers and **26** logged Spring JVM PIDs across baseline/first full run are
+absent, with no review-path Java process. The focused default-attachment and
+explicit-agent receipts remain separate red/green evidence.
+
+The first explicit-agent full retry exits **1/BUILD FAILURE** in **5:33** after
+**183 completed passing tests**, including the three formerly failing setup
+cases. Later JVM forks cannot start: native memory commit fails with the
+reported paging-file-too-small error **1455**. The observed host has less than
+one GiB of available virtual commit; this is a host resource failure and does
+not establish an application assertion failure. The incomplete run is not a
+full-suite pass. Logs, actual exit receipt and report directory are retained;
+the latter can contain older reports for suites not reached, so its aggregate
+is taken from the actual run log. Cleanup across baseline and both attempts
+passes for all **80 observed containers and 41 logged Spring JVM PIDs**, with
+no review-path Java process. All source/class hashes remain unchanged.
+
+A further complete retry starts with the verified existing Mockito agent and
+process-only Maven parent options `-Xms64m -Xmx512m` with fork options
+`-Xms64m -Xmx1024m`, `surefire.exitTimeout=120`, `forkCount=1` and
+`reuseForks=false`. Ryan then explicitly selects **"Use Linux CI and artifact
+checks"**, superseding further local full reruns. Only that owned retry is
+canceled with Ctrl-C (tool exit 1); its receipt records the user strategy
+change, with no full-suite pass claim. Maven options are process-scoped;
+unrelated processes, global settings and host pagefile configuration remain
+untouched. The two failed attempts and canceled third attempt remain distinct
+from the passing focused tests. Full execution is now an **exact-current-head
+Linux CI requirement**, including the two symlink cases below; local artifact
+success does not replace that requirement.
+
+The separately requested **artifact-only** Maven package exits **0** with
+`BUILD SUCCESS` in **3.936 seconds**. It explicitly uses `-DskipTests`; both
+production and test compilation report all classes up to date, so neither is
+recompiled. Parent JVM options are process-only `-Xms64m -Xmx256m`, with prior
+Maven options confirmed restored. A fresh read-only guard observes **1.70 GiB
+of free virtual commit**, above its **512 MiB** minimum; before/after memory
+snapshots are retained. This is packaging verification, not a local full-test
+pass. Runtime is Temurin
+**25.0.3+9-LTS**, Maven **3.9.16**, Spring Boot **4.1.1**, Docker **29.7.2**,
+PostgreSQL **17.11**, with FFmpeg/ffprobe **9.0.2** hashes and actual version
+invocations rechecked. No frontend source or health consumer changes; unrelated
+local frontend reruns and historical mounted-browser evidence are not relabeled.
+Exact-head CI remains a separate merge requirement.
+
+The original full-suite integrity verifier remains unchanged. A separate
+artifact-only adapter requires explicit skipped tests, no application-test
+execution and no source recompilation; its result explicitly sets
+`fullTestPassClaim=false` and leaves exact-head Linux execution to CI. It keeps
+the same source/class/JAR checks. Actual artifact verification passes for all
+**212 tracked backend inputs** against visible and frozen raw hashes and all
+**367 compiled inputs** against their original pre-test hashes. All **256
+production classes** are packaged as identical bytes, and all **111 compiled
+test/fixture identities and digests** are excluded. Duplicate direct JAR
+entries are refused and the executable manifest names the expected Boot
+launcher/application. This audits direct classes and the manifest, not nested
+dependency JARs or non-class resources. The JAR SHA-256 is
+`85e7d015b490ab17c507522875597d2a5985076f3dd6454c8ba1e7c5e74929f7`.
+Actual reports are `artifact-package-process.json` and
+`final-artifact-verification.json` under the ignored health evidence directory.
+
+Final read-only cleanup confirms all **88 exact created-container IDs** and
+**44 logged Spring-test JVM PIDs** observed across focused baseline and all
+local attempts are absent, with no Java command line containing the review
+path. The artifact-only command creates no test containers. This covers logged
+identities/path, not every unlogged JVM, native child or system resource;
+unrelated resources are untouched. The exact target PID recorded in the
+Mockito diagnostic also has a separate successful read-only absence check.
+An initial denied supplemental query is explicitly marked invalid; it is not
+used as absence evidence. The main cleanup report is `final-resource-audit.json`.
+
+The independent helper audit confirms byte-identical canonical AST comparison
+code, an unchanged mechanical runner apart from explicit package/inventory/path
+substitutions, and the same executable Python ASTs for the copied runtime,
+delivery-integrity and resource helpers. Syntax checks pass. Earlier **26
+isolated delivery-helper controls** remain historical evidence; they are not
+rerun or counted as new application tests. Current hashes/executable identity
+are checked, with direct-JAR and observed-resource limits retained.
+
+The separate artifact adapter receives independent source/AST review. Reversing
+only its declared test-execution gates/result labels reconstructs the original
+full-suite verifier; source/class/JAR/manifest fences remain intact. **Ten fresh
+lightweight controls** pass (one positive/nine negative), including refusal of
+missing skip markers, test execution, recompilation, extra build stages, bad
+exit/failure/missing success and the actual failed full logs. These validate the
+artifact helper, not application behavior. The report is
+`independent-artifact-verifier-review.json`. Independent final source and
+documentation reviews find no actionable issue; local links/anchors resolve.
+The focused Notion issue records the chosen execution strategy and delivery,
+with readback. Final-head Linux CI/configured review remains required before
+merge; its actual receipt belongs in the live issue/PR, rather than predicting
+the final commit identity in this document.
+
+The two existing Windows-disabled symlink cases remain explicit Linux CI
+checks:
+
+```text
+OwnedExportDirectoryTest.symlinkedArtifactsAreNeverFollowedAndOutsideBytesRemainUntouched
+OperatorRecoveryPostgresTest.symlinkedOriginalAndSymlinkedBundleRootAreRejectedBeforeAnyWrites
+```
+
+The branch is `feature/backend-health-review`; ignored snapshot/analyzer/proof/
+package/resource evidence remains under `logs/health-directory-review.local/`.
+Ryan's October 20 standing authorization now includes PR creation and merging
+after exact-current-head CI and configured/requested review clear, superseding
+the older Ryan-only delivery boundary. Retain a useful PR title/description and
+focused Notion readback. Resources/build/configuration/supporting reviews and
+actual provider/device/assistive-technology/hosted/release acceptance remain
+separate; passing public liveness does not establish those outcomes.
