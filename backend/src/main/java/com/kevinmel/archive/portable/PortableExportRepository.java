@@ -31,6 +31,10 @@ import tools.jackson.databind.json.JsonMapper;
 /** Short repeatable-read capture; no storage calls, locks, or account/capability columns. */
 @Repository
 public class PortableExportRepository {
+    private static final String TIMELINE_EVENT_TABLE = "timeline_event";
+    private static final String MEMORY_TABLE = "memory";
+    private static final String ALBUM_TABLE = "album";
+
     static final JsonMapper JSON = JsonMapper.builder().build();
     private static final String ELIGIBLE = InboxRepository.AVAILABLE.replace(":now", "CURRENT_TIMESTAMP")
             + " AND m.review_status <> 'DELETE'";
@@ -74,13 +78,13 @@ public class PortableExportRepository {
                     }
                     memoryTokens.put(row.memory().memoryId(), fingerprint(row));
                 });
-                validation.put("memory", memoryTokens);
+                validation.put(MEMORY_TABLE, memoryTokens);
                 Set<UUID> eligibleIds = Set.copyOf(memoryTokens.keySet());
-                var albums = organizations(connection, "album", eligibleIds, null, budget);
-                var events = organizations(connection, "timeline_event", eligibleIds, null, budget);
+                var albums = organizations(connection, ALBUM_TABLE, eligibleIds, null, budget);
+                var events = organizations(connection, TIMELINE_EVENT_TABLE, eligibleIds, null, budget);
                 var tags = organizations(connection, "tag", eligibleIds, null, budget);
-                validation.put("album", tokens(albums));
-                validation.put("timeline_event", tokens(events));
+                validation.put(ALBUM_TABLE, tokens(albums));
+                validation.put(TIMELINE_EVENT_TABLE, tokens(events));
                 validation.put("tag", tokens(tags));
                 var snapshot = new PortableSnapshot(
                         clock.instant(),
@@ -107,7 +111,7 @@ public class PortableExportRepository {
             try (var lease = new ConnectionLease(data)) {
                 Connection connection = lease.connection;
                 var current = new HashMap<UUID, String>();
-                Set<UUID> ids = snapshot.validation().get("memory").keySet();
+                Set<UUID> ids = snapshot.validation().get(MEMORY_TABLE).keySet();
                 if (!ids.isEmpty()) {
                     read(
                             connection,
@@ -118,10 +122,10 @@ public class PortableExportRepository {
                                 current.put(row.memory().memoryId(), fingerprint(row));
                             });
                 }
-                if (!current.equals(snapshot.validation().get("memory"))) {
+                if (!current.equals(snapshot.validation().get(MEMORY_TABLE))) {
                     return false;
                 }
-                for (String table : List.of("album", "timeline_event", "tag")) {
+                for (String table : List.of(ALBUM_TABLE, TIMELINE_EVENT_TABLE, "tag")) {
                     var expected = snapshot.validation().get(table);
                     var records = organizations(connection, table, ids, expected.keySet(), new Budget());
                     if (!tokens(records).equals(expected)) {
@@ -139,7 +143,7 @@ public class PortableExportRepository {
     public boolean originalStillCurrent(
             PortableSnapshot snapshot,
             PortableSnapshot.Original original) {
-        String expected = snapshot.validation().get("memory").get(original.memoryId());
+        String expected = snapshot.validation().get(MEMORY_TABLE).get(original.memoryId());
         if (expected == null) {
             return false;
         }
@@ -247,7 +251,21 @@ public class PortableExportRepository {
         if (selected != null && selected.isEmpty()) {
             return records;
         }
-        boolean timeline = table.equals("timeline_event");
+        captureOrganizationRows(connection, table, selected, budget, records);
+        if (records.isEmpty()) {
+            return records;
+        }
+        captureOrganizationLinks(connection, table, eligible, budget, records);
+        return records;
+    }
+
+    private static void captureOrganizationRows(
+            Connection connection,
+            String table,
+            Set<UUID> selected,
+            Budget budget,
+            Map<UUID, Organization> records) throws SQLException {
+        boolean timeline = table.equals(TIMELINE_EVENT_TABLE);
         String fields = timeline ? "title, description, event_date, date_precision" : "name";
         read(
                 connection,
@@ -269,27 +287,32 @@ public class PortableExportRepository {
                     budget.row(record.fields());
                     records.put(id, record);
                 });
-        if (records.isEmpty()) {
-            return records;
-        }
+    }
+
+    private static void captureOrganizationLinks(
+            Connection connection,
+            String table,
+            Set<UUID> eligible,
+            Budget budget,
+            Map<UUID, Organization> records) throws SQLException {
         String links = switch (table) {
-            case "album" -> "album_membership";
-            case "timeline_event" -> "timeline_event_memory";
+            case ALBUM_TABLE -> "album_membership";
+            case TIMELINE_EVENT_TABLE -> "timeline_event_memory";
             default -> "memory_tag";
         };
         String parent = switch (table) {
-            case "album" -> "album_id";
-            case "timeline_event" -> "event_id";
+            case ALBUM_TABLE -> "album_id";
+            case TIMELINE_EVENT_TABLE -> "event_id";
             default -> "tag_id";
         };
         read(
                 connection,
-                "SELECT " + parent + ", memory_id" + (table.equals("album") ? ", position" : "") + " FROM " + links
-                        + " WHERE " + parent + "=ANY(?) ORDER BY " + parent + (table.equals("album") ? ", position, memory_id" : ", memory_id"),
+                "SELECT " + parent + ", memory_id" + (table.equals(ALBUM_TABLE) ? ", position" : "") + " FROM " + links
+                        + " WHERE " + parent + "=ANY(?) ORDER BY " + parent + (table.equals(ALBUM_TABLE) ? ", position, memory_id" : ", memory_id"),
                 records.keySet(),
                 rs -> {
                     UUID id = rs.getObject(parent, UUID.class), memory = rs.getObject("memory_id", UUID.class);
-                    String position = table.equals("album") ? Long.toString(rs.getLong("position")) : null;
+                    String position = table.equals(ALBUM_TABLE) ? Long.toString(rs.getLong("position")) : null;
                     var link = new Link(memory, position);
                     budget.row(link);
                     records.get(id).allLinks.add(link);
@@ -297,7 +320,6 @@ public class PortableExportRepository {
                         records.get(id).links.add(link);
                     }
                 });
-        return records;
     }
 
     private static Map<UUID, String> tokens(Map<UUID, Organization> records) {
@@ -317,14 +339,14 @@ public class PortableExportRepository {
                     result.put("deletedOrPurgingMemories", rs.getLong("deleted"));
                     result.put("unfinishedOrUnavailableMemories", rs.getLong("unfinished"));
                 });
-        for (String table : List.of("album", "timeline_event", "tag")) {
+        for (String table : List.of(ALBUM_TABLE, TIMELINE_EVENT_TABLE, "tag")) {
             read(
                     connection,
                     "SELECT count(*) AS total FROM " + table + " WHERE deleted_at IS NOT NULL",
                     null,
                     rs -> result.put(switch (table) {
-                        case "album" -> "deletedAlbums";
-                        case "timeline_event" -> "deletedTimelineEvents";
+                        case ALBUM_TABLE -> "deletedAlbums";
+                        case TIMELINE_EVENT_TABLE -> "deletedTimelineEvents";
                         default -> "deletedTags";
                     }, rs.getLong("total")));
         }

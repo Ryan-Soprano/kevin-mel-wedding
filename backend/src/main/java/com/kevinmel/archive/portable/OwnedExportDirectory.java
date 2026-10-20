@@ -166,17 +166,7 @@ public final class OwnedExportDirectory implements AutoCloseable {
                             channel = null;
                         }
                     }
-                    try {
-                        for (Path file : files) {
-                            cleaner.delete(file);
-                        }
-                    } catch (IOException cleanupFailure) {
-                        throw new PortableExportException();
-                    } finally {
-                        release(lock, channel);
-                    }
-                    cleaner.delete(path.resolve(MARKER));
-                    cleaner.delete(path);
+                    deleteReviewedDirectory(path, files, lock, channel, cleaner);
                     reaped++;
                 }
             }
@@ -184,6 +174,25 @@ public final class OwnedExportDirectory implements AutoCloseable {
         } catch (IOException exception) {
             throw new PortableExportException();
         }
+    }
+
+    private static void deleteReviewedDirectory(
+            Path path,
+            List<Path> files,
+            FileLock lock,
+            FileChannel channel,
+            Deleter cleaner) throws IOException {
+        try {
+            for (Path file : files) {
+                cleaner.delete(file);
+            }
+        } catch (IOException cleanupFailure) {
+            throw new PortableExportException();
+        } finally {
+            release(lock, channel);
+        }
+        cleaner.delete(path.resolve(MARKER));
+        cleaner.delete(path);
     }
 
     /** Retains the exclusive lock on deletion failure so current cleanup can be retried safely. */
@@ -256,6 +265,11 @@ public final class OwnedExportDirectory implements AutoCloseable {
         privatePath(path, owner, true, false);
         Path marker = path.resolve(MARKER);
         privatePath(marker, owner, false, false);
+        reviewMarker(path, channel);
+        return reviewFiles(path, owner);
+    }
+
+    private static void reviewMarker(Path path, FileChannel channel) throws IOException {
         String id = path.getFileName().toString().substring(PREFIX.length());
         if (channel.size() < 1 || channel.size() > MAX_MARKER_BYTES) {
             throw new IOException();
@@ -268,6 +282,9 @@ public final class OwnedExportDirectory implements AutoCloseable {
         if (!contents.equals(MAGIC + id + "\n")) {
             throw new IOException();
         }
+    }
+
+    private static List<Path> reviewFiles(Path path, UserPrincipal owner) throws IOException {
         var files = new java.util.ArrayList<Path>();
         int count = 0;
         try (var entries = Files.newDirectoryStream(path)) {
@@ -343,6 +360,14 @@ public final class OwnedExportDirectory implements AutoCloseable {
         if (!Files.getOwner(path, LinkOption.NOFOLLOW_LINKS).equals(owner)) {
             throw new IOException();
         }
+        privatePermissions(path, owner, directory, establish);
+    }
+
+    private static void privatePermissions(
+            Path path,
+            UserPrincipal owner,
+            boolean directory,
+            boolean establish) throws IOException {
         var posix = Files.getFileAttributeView(path, PosixFileAttributeView.class, LinkOption.NOFOLLOW_LINKS);
         if (posix != null) {
             var permissions = PosixFilePermissions.fromString(directory ? "rwx------" : "rw-------");

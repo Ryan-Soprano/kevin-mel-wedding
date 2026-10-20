@@ -29,6 +29,14 @@ import com.kevinmel.archive.web.ApiException;
 /** Ephemeral, bounded jobs. Restart deliberately loses identities; this is not a backup scheduler. */
 @Service
 public class ExportJobService implements AutoCloseable {
+    private static final String FAILED_STATE = "FAILED";
+    private static final String READY_STATE = "READY";
+    private static final String RUNNING_STATE = "RUNNING";
+    private static final String STALE_STATE = "STALE";
+    private static final String EXPORT_TEMP_UNAVAILABLE = "EXPORT_TEMP_UNAVAILABLE";
+    private static final String EXPORT_STALE = "EXPORT_STALE";
+    private static final String EXPORT_FAILED = "EXPORT_FAILED";
+
     public static final long MAX_ZIP_BYTES = PortablePartWriter.MAX_ARTIFACT_BYTES;
     private static final Duration INACTIVITY = Duration.ofMinutes(30),
             HARD_LIFETIME = Duration.ofHours(24);
@@ -125,7 +133,7 @@ public class ExportJobService implements AutoCloseable {
                 worker.execute(() -> capture(job));
             } catch (RuntimeException failure) {
                 pendingTasks--;
-                end(job, "FAILED", "EXPORT_FAILED");
+                end(job, FAILED_STATE, EXPORT_FAILED);
             }
             return status(job);
         }
@@ -172,7 +180,7 @@ public class ExportJobService implements AutoCloseable {
     private void retireOldCredentials(ExportAuthority.Actor actor) {
         for (var job : jobs.values()) {
             if (job.active() && job.actor.accountId().equals(actor.accountId()) && !job.actor.equals(actor)) {
-                end(job, "FAILED", "ACCESS_REVOKED");
+                end(job, FAILED_STATE, "ACCESS_REVOKED");
             }
         }
     }
@@ -215,33 +223,13 @@ public class ExportJobService implements AutoCloseable {
             var previous = job.attempts.get(attemptId);
             if (previous != null) {
                 requireSame(previous, "PREPARE", partNumber);
-                return new Mutation(status(job), "RUNNING".equals(previous.state) ? 202 : 200);
+                return new Mutation(status(job), RUNNING_STATE.equals(previous.state) ? 202 : 200);
             }
-            if (!job.active()) {
-                throw ExportRequest.unavailable();
-            }
-            if (job.snapshot == null || pendingTasks != 0 || leased) {
-                throw ExportRequest.busy();
-            }
-            if (partNumber < 1 || partNumber > job.parts.size() + 1) {
-                throw ExportRequest.invalid();
-            }
-            if (partNumber == job.parts.size() + 1
-                    && job.results.keySet().stream().filter(number -> number <= job.parts.size()).count() != job.parts.size()) {
-                throw new ApiException(409, "EXPORT_PARTS_PENDING", "Prepare every original part before preparing the final index.");
-            }
-            // Reserve one identity for explicit cancellation so a full retry history cannot strand an active job.
-            if (job.attempts.size() >= MAX_ATTEMPTS - 1) {
-                throw new ApiException(
-                        429,
-                        "EXPORT_LIMIT",
-                        "This export has reached its retry limit. Cancel it before starting a new export deliberately.",
-                        60);
-            }
+            requirePreparation(job, partNumber);
             reapOrphans();
             retryCleanup();
             if (orphanCleanupBlocked || !pendingCleanup.isEmpty()) {
-                throw new ApiException(503, "EXPORT_TEMP_UNAVAILABLE", "Temporary export cleanup could not be confirmed. Try later.");
+                throw new ApiException(503, EXPORT_TEMP_UNAVAILABLE, "Temporary export cleanup could not be confirmed. Try later.");
             }
             deleteCached();
             var attempt = new Attempt(attemptId, "PREPARE", partNumber);
@@ -254,10 +242,37 @@ public class ExportJobService implements AutoCloseable {
                 worker.execute(() -> preparePart(job, attempt));
             } catch (RuntimeException failure) {
                 pendingTasks--;
-                attempt.state = "FAILED";
-                end(job, "FAILED", "EXPORT_FAILED");
+                attempt.state = FAILED_STATE;
+                end(job, FAILED_STATE, EXPORT_FAILED);
             }
             return new Mutation(status(job), 202);
+        }
+    }
+
+    /** Caller holds monitor; rejected admission must not consume an attempt identity. */
+    private void requirePreparation(Job job, int partNumber) {
+        if (!job.active()) {
+            throw ExportRequest.unavailable();
+        }
+        if (job.snapshot == null || pendingTasks != 0 || leased) {
+            throw ExportRequest.busy();
+        }
+        requirePartNumber(job, partNumber);
+        // Reserve one identity for explicit cancellation so a full retry history cannot strand an active job.
+        if (job.attempts.size() >= MAX_ATTEMPTS - 1) {
+            throw new ApiException(
+                    429, "EXPORT_LIMIT",
+                    "This export has reached its retry limit. Cancel it before starting a new export deliberately.", 60);
+        }
+    }
+
+    private static void requirePartNumber(Job job, int partNumber) {
+        if (partNumber < 1 || partNumber > job.parts.size() + 1) {
+            throw ExportRequest.invalid();
+        }
+        if (partNumber == job.parts.size() + 1
+                && job.results.keySet().stream().filter(number -> number <= job.parts.size()).count() != job.parts.size()) {
+            throw new ApiException(409, "EXPORT_PARTS_PENDING", "Prepare every original part before preparing the final index.");
         }
     }
 
@@ -305,14 +320,7 @@ public class ExportJobService implements AutoCloseable {
             var all = new ArrayList<ExportStatus.Part>();
             if (job.snapshot != null) {
                 for (int number = 1; number <= job.parts.size() + 1; number++) {
-                    var result = job.results.get(number);
-                    boolean isCached = cached != null && cached.job == job && cached.number == number;
-                    all.add(new ExportStatus.Part(
-                            number,
-                            number <= job.parts.size() ? "ORIGINALS" : "INDEX",
-                            isCached ? "CACHED" : result != null ? "PROCESSED" : "UNPROCESSED",
-                            result == null ? 0 : included(result.outcomes()),
-                            result == null ? 0 : issues(result.outcomes())));
+                    all.add(partStatus(job, number));
                 }
             }
             int offset = ExportRequest.offset(cursor, id, "PARTS", all.size()),
@@ -322,6 +330,17 @@ public class ExportJobService implements AutoCloseable {
                     List.copyOf(all.subList(offset, end)),
                     end < all.size() ? ExportRequest.cursor(id, "PARTS", end) : null);
         }
+    }
+
+    /** Caller holds monitor while reading the job/cache projection. */
+    private ExportStatus.Part partStatus(Job job, int number) {
+        var result = job.results.get(number);
+        boolean isCached = cached != null && cached.job == job && cached.number == number;
+        return new ExportStatus.Part(
+                number, number <= job.parts.size() ? "ORIGINALS" : "INDEX",
+                isCached ? "CACHED" : result != null ? "PROCESSED" : "UNPROCESSED",
+                result == null ? 0 : included(result.outcomes()),
+                result == null ? 0 : issues(result.outcomes()));
     }
 
     public ExportStatus.Issues issues(UUID id, String limit, String cursor) {
@@ -376,24 +395,7 @@ public class ExportJobService implements AutoCloseable {
             if (pendingTasks != 0 || leased) {
                 throw ExportRequest.busy();
             }
-            if (cached == null || cached.job != job || cached.number != number || !cached.generation.equals(generation)) {
-                throw ExportRequest.notCached();
-            }
-            try {
-                if (!Files.isRegularFile(cached.path, LinkOption.NOFOLLOW_LINKS)
-                        || Files.size(cached.path) != cached.prepared.byteSize()) {
-                    throw ExportRequest.notCached();
-                }
-                result = new Download(
-                        cached,
-                        Files.newInputStream(cached.path, StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS));
-                leased = true;
-            } catch (IOException failure) {
-                throw new ApiException(
-                        503,
-                        "EXPORT_DOWNLOAD_FAILED",
-                        "This temporary export part could not be opened. Prepare it again deliberately.");
-            }
+            result = openCached(job, number, generation);
         }
         try {
             if (!check(job)) {
@@ -404,6 +406,26 @@ public class ExportJobService implements AutoCloseable {
         } catch (RuntimeException failure) {
             result.close();
             throw failure;
+        }
+    }
+
+    /** Caller holds monitor until the cache's stream lease is recorded. */
+    private Download openCached(Job job, int number, UUID generation) {
+        if (cached == null || cached.job != job || cached.number != number || !cached.generation.equals(generation)) {
+            throw ExportRequest.notCached();
+        }
+        try {
+            if (!Files.isRegularFile(cached.path, LinkOption.NOFOLLOW_LINKS)
+                    || Files.size(cached.path) != cached.prepared.byteSize()) {
+                throw ExportRequest.notCached();
+            }
+            var result = new Download(
+                    cached, Files.newInputStream(cached.path, StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS));
+            leased = true;
+            return result;
+        } catch (IOException failure) {
+            throw new ApiException(503, "EXPORT_DOWNLOAD_FAILED",
+                    "This temporary export part could not be opened. Prepare it again deliberately.");
         }
     }
 
@@ -428,7 +450,7 @@ public class ExportJobService implements AutoCloseable {
             }
             if (!repository.stillCurrent(snapshot)) {
                 synchronized (monitor) {
-                    end(job, "STALE", "EXPORT_STALE");
+                    end(job, STALE_STATE, EXPORT_STALE);
                 }
                 return;
             }
@@ -436,7 +458,7 @@ public class ExportJobService implements AutoCloseable {
             authority.require(job.actor);
             if (!repository.stillCurrent(snapshot)) {
                 synchronized (monitor) {
-                    end(job, "STALE", "EXPORT_STALE");
+                    end(job, STALE_STATE, EXPORT_STALE);
                 }
                 return;
             }
@@ -446,7 +468,7 @@ public class ExportJobService implements AutoCloseable {
                 }
                 job.snapshot = snapshot;
                 job.parts = plan;
-                job.state = "READY";
+                job.state = READY_STATE;
             }
         } catch (RuntimeException failure) {
             fail(job, failure);
@@ -496,31 +518,37 @@ public class ExportJobService implements AutoCloseable {
                 cached = new Cached(job, attempt.number, UUID.randomUUID(), attempt.id, destination, prepared);
                 destination = null;
                 attempt.state = "SUCCEEDED";
-                job.state = unavailable(job) > 0 ? "READY_WITH_WARNINGS" : "READY";
+                job.state = unavailable(job) > 0 ? "READY_WITH_WARNINGS" : READY_STATE;
             }
         } catch (RuntimeException failure) {
             synchronized (monitor) {
-                attempt.state = "FAILED";
+                attempt.state = FAILED_STATE;
             }
             fail(job, failure);
         } finally {
             try {
-                if (destination != null) {
-                    synchronized (monitor) {
-                        deletePrivateFile(destination);
-                    }
-                }
-            } catch (RuntimeException cleanupFailure) {
-                synchronized (monitor) {
-                    if (job.active()) {
-                        end(job, "FAILED", "EXPORT_TEMP_UNAVAILABLE");
-                    } else {
-                        job.error = "EXPORT_TEMP_UNAVAILABLE";
-                    }
-                }
+                cleanupUntransferred(job, destination);
             } finally {
                 synchronized (monitor) {
                     pendingTasks--;
+                }
+            }
+        }
+    }
+
+    private void cleanupUntransferred(Job job, Path destination) {
+        try {
+            if (destination != null) {
+                synchronized (monitor) {
+                    deletePrivateFile(destination);
+                }
+            }
+        } catch (RuntimeException cleanupFailure) {
+            synchronized (monitor) {
+                if (job.active()) {
+                    end(job, FAILED_STATE, EXPORT_TEMP_UNAVAILABLE);
+                } else {
+                    job.error = EXPORT_TEMP_UNAVAILABLE;
                 }
             }
         }
@@ -554,7 +582,7 @@ public class ExportJobService implements AutoCloseable {
         }
         if (!repository.originalStillCurrent(snapshot, original)) {
             synchronized (monitor) {
-                end(job, "STALE", "EXPORT_STALE");
+                end(job, STALE_STATE, EXPORT_STALE);
             }
             return false;
         }
@@ -579,7 +607,7 @@ public class ExportJobService implements AutoCloseable {
         }
         if (snapshot != null && !repository.stillCurrent(snapshot)) {
             synchronized (monitor) {
-                end(job, "STALE", "EXPORT_STALE");
+                end(job, STALE_STATE, EXPORT_STALE);
             }
             return false;
         }
@@ -606,8 +634,8 @@ public class ExportJobService implements AutoCloseable {
             if (!job.active()) {
                 return;
             }
-            String code = failure instanceof ApiException api && (api.status() == 401 || api.status() == 403) ? "ACCESS_REVOKED" : "EXPORT_FAILED";
-            end(job, "FAILED", code);
+            String code = failure instanceof ApiException api && (api.status() == 401 || api.status() == 403) ? "ACCESS_REVOKED" : EXPORT_FAILED;
+            end(job, FAILED_STATE, code);
         }
     }
 
@@ -619,15 +647,15 @@ public class ExportJobService implements AutoCloseable {
         job.results.clear();
         job.indexFresh = false;
         for (var attempt : job.attempts.values()) {
-            if ("RUNNING".equals(attempt.state)) {
-                attempt.state = "FAILED";
+            if (RUNNING_STATE.equals(attempt.state)) {
+                attempt.state = FAILED_STATE;
             }
         }
         if (cached != null && cached.job == job && !leased) {
             try {
                 deleteCached();
             } catch (ApiException failure) {
-                job.error = "EXPORT_TEMP_UNAVAILABLE";
+                job.error = EXPORT_TEMP_UNAVAILABLE;
             }
         }
     }
@@ -699,7 +727,7 @@ public class ExportJobService implements AutoCloseable {
             pendingCleanup.remove(path);
         } catch (IOException failure) {
             pendingCleanup.add(path);
-            throw new ApiException(503, "EXPORT_TEMP_UNAVAILABLE", "Temporary export cleanup could not be confirmed. Try later.");
+            throw new ApiException(503, EXPORT_TEMP_UNAVAILABLE, "Temporary export cleanup could not be confirmed. Try later.");
         }
     }
 
@@ -728,39 +756,31 @@ public class ExportJobService implements AutoCloseable {
             directory = candidate;
             return candidate.path();
         } catch (RuntimeException failure) {
-            throw new ApiException(503, "EXPORT_TEMP_UNAVAILABLE", "Private temporary export storage is unavailable.");
+            throw new ApiException(503, EXPORT_TEMP_UNAVAILABLE, "Private temporary export storage is unavailable.");
         }
     }
 
     private ExportStatus status(Job job) {
         var snapshot = job.snapshot;
-        int originals = snapshot == null ? 0 : snapshot.originals().size();
+        var captured = CapturedStatus.from(snapshot, job.parts.size());
         int processed = (int) job.results.keySet().stream()
                 .filter(number -> number <= job.parts.size())
                 .count();
-        var current = cached != null && cached.job == job && job.active() ? cached : null;
-        var part = current == null ? null : new ExportStatus.PreparedPart(
-                current.number,
-                current.number <= job.parts.size() ? "ORIGINALS" : "INDEX",
-                filename(job.id, current.number),
-                current.prepared.byteSize(),
-                current.prepared.sha256(),
-                current.generation,
-                current.attempt);
+        var part = preparedStatus(job);
         int missing = unavailable(job);
         return new ExportStatus(
                 job.id,
                 job.state,
                 job.created,
-                snapshot == null ? null : snapshot.capturedAt(),
+                captured.capturedAt(),
                 job.expires,
                 job.hardExpires,
-                snapshot == null ? 0 : snapshot.memories().size(),
-                originals,
-                snapshot == null ? 0 : snapshot.originals().stream().mapToLong(PortableSnapshot.Original::byteSize).sum(),
-                snapshot == null ? Map.of() : snapshot.excludedCounts(),
+                captured.memories(),
+                captured.originals(),
+                captured.originalBytes(),
+                captured.excludedCounts(),
                 job.parts.size(),
-                snapshot == null ? null : job.parts.size() + 1,
+                captured.indexPartNumber(),
                 processed,
                 available(job),
                 missing,
@@ -770,6 +790,26 @@ public class ExportJobService implements AutoCloseable {
                 job.lastAttempt == null ? null : job.lastAttempt.dto(),
                 job.error,
                 2);
+    }
+
+    private ExportStatus.PreparedPart preparedStatus(Job job) {
+        var current = cached != null && cached.job == job && job.active() ? cached : null;
+        return current == null ? null : new ExportStatus.PreparedPart(
+                current.number, current.number <= job.parts.size() ? "ORIGINALS" : "INDEX",
+                filename(job.id, current.number), current.prepared.byteSize(), current.prepared.sha256(),
+                current.generation, current.attempt);
+    }
+
+    private record CapturedStatus(Instant capturedAt, int memories, int originals, long originalBytes,
+            Map<String, Long> excludedCounts, Integer indexPartNumber) {
+        static CapturedStatus from(PortableSnapshot snapshot, int partCount) {
+            if (snapshot == null) {
+                return new CapturedStatus(null, 0, 0, 0, Map.of(), null);
+            }
+            return new CapturedStatus(snapshot.capturedAt(), snapshot.memories().size(), snapshot.originals().size(),
+                    snapshot.originals().stream().mapToLong(PortableSnapshot.Original::byteSize).sum(),
+                    snapshot.excludedCounts(), partCount + 1);
+        }
     }
 
     private static int available(Job job) {
@@ -895,7 +935,7 @@ public class ExportJobService implements AutoCloseable {
         }
 
         boolean active() {
-            return java.util.Set.of("CAPTURING", "READY", "PREPARING", "READY_WITH_WARNINGS").contains(state);
+            return java.util.Set.of("CAPTURING", READY_STATE, "PREPARING", "READY_WITH_WARNINGS").contains(state);
         }
     }
 
@@ -903,7 +943,7 @@ public class ExportJobService implements AutoCloseable {
         final UUID id;
         final String kind;
         final Integer number;
-        String state = "RUNNING";
+        String state = RUNNING_STATE;
         Attempt(UUID id, String kind, Integer number) {
             this.id = id;
             this.kind = kind;
