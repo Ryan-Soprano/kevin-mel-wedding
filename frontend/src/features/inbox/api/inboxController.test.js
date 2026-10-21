@@ -115,6 +115,65 @@ test("invalid credentials show a safe sign-in error without returning server mes
   assert.equal(JSON.stringify(f.controller.getSnapshot()).includes("raw credential"), false);
 });
 
+test("login 429 honors the absolute Retry-After deadline without early or automatic resubmission", async () => {
+  const clock = timers(), observed = [];
+  let time = 1000, discoveries = 0, attempts = 0;
+  const f = fixture({ ...clock, now: () => time, api: {
+    getSession: async () => { discoveries++; return copy(ANONYMOUS_SESSION); },
+    login: async () => {
+      if (++attempts === 1) throw new ApiError("raw credential diagnostic", { status: 429, code: "RATE_LIMITED", retryAfterSeconds: 125 });
+      return copy(COUPLE_SESSION);
+    },
+  } });
+  f.controller.subscribe(state => observed.push(state));
+  await f.controller.login({ username: "private-fixture-user", password: "private-fixture-password" });
+  assert.equal(f.controller.getSnapshot().loginRetryAfterSeconds, 125);
+  assert.equal(f.controller.getSnapshot().busy, false);
+  assert.equal(f.controller.getSnapshot().session, null);
+  await f.controller.login({ username: "changed-fixture-user", password: "changed-fixture-password" });
+  assert.equal(discoveries, 1, "the wait prevents even session discovery before another credential attempt");
+  assert.equal(attempts, 1);
+
+  time += 61_000;
+  assert.equal(clock.expire(), 1000);
+  assert.equal(f.controller.getSnapshot().loginRetryAfterSeconds, 64, "a delayed tick uses elapsed time, not the number of callbacks");
+  await f.controller.login({ username: "changed-fixture-user", password: "changed-fixture-password" });
+  assert.equal(attempts, 1);
+  time += 64_000;
+  clock.expire();
+  assert.equal(f.controller.getSnapshot().loginRetryAfterSeconds, 0);
+  assert.match(f.controller.getSnapshot().error, /try signing in again/);
+  assert.equal(clock.pending.size, 0);
+  assert.equal(attempts, 1, "finishing the countdown never automatically sends credentials");
+  for (const state of observed) assert.doesNotMatch(JSON.stringify(state), /private-fixture|changed-fixture|raw credential/);
+  await f.controller.login({ username: "deliberate-fixture-user", password: "deliberate-fixture-password" });
+  assert.equal(discoveries, 2);
+  assert.equal(attempts, 2);
+  assert.equal(f.controller.getSnapshot().phase, "inbox");
+  f.controller.dispose();
+});
+
+for (const [label, advised, expected] of [["longer valid delay", 1800, 1800], ["missing delay", null, 900],
+  ["invalid delay", -1, 900], ["nonfinite delay", Infinity, 900], ["immediate retry advice", 0, 0]]) {
+  test("login wait handles " + label + " and releases all owned timers on disposal", async () => {
+    const clock = timers(), observed = [];
+    const f = fixture({ ...clock, now: () => 1000, api: {
+      login: async () => { throw new ApiError("private transport detail", { status: 429, code: "RATE_LIMITED", retryAfterSeconds: advised }); },
+    } });
+    f.controller.subscribe(state => observed.push(state));
+    await f.controller.login({ username: "private-user", password: "private-password" });
+    assert.equal(f.controller.getSnapshot().loginRetryAfterSeconds, expected);
+    const callback = [...clock.pending.values()][0]?.callback;
+    f.controller.dispose();
+    assert.equal(clock.pending.size, 0);
+    assert.equal(f.controller.getSnapshot().loginRetryAfterSeconds, 0);
+    const published = observed.length;
+    callback?.();
+    assert.equal(observed.length, published, "a stale timer cannot publish after unmount/disposal");
+    assert.doesNotMatch(JSON.stringify(f.controller.getSnapshot()), /private-user|private-password|private transport/);
+  });
+}
+
 test("inbox pages replace rather than append and returning from detail preserves the current page", async () => {
   const f = await entered(fixture({ api: { listAlbums: async () => ({ items: [], nextCursor: null }), listMemories: async options => ({
     items: [copy(options.cursor ? photo : MEMORY_DETAIL)], nextCursor: options.cursor ? null : "page-two",

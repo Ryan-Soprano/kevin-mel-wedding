@@ -168,6 +168,16 @@ test("extracted private inbox views preserve loading precedence, memory attribut
     assert.match(login, /autoComplete="username"/);
     assert.match(login, /autoComplete="current-password"/);
     assert.match(login, /disabled="">Signing in…/);
+    for (const [retryAfter, message] of [[900, "15 minutes"], [61, "2 minutes"], [1, "1 minute"]]) {
+      const waiting = render(InboxLogin, { busy: false, retryAfter, username: "editable-user", password: "", setUsername: noop, setPassword: noop, onSubmit: noop });
+      assert.match(waiting, new RegExp("Please wait " + message + " before signing in again"));
+      assert.match(waiting, /role="status" aria-live="polite" aria-atomic="true"/);
+      assert.match(waiting, /disabled="" aria-describedby="archive-login-wait">Please wait…/);
+      assert.doesNotMatch(waiting, /<input[^>]*disabled/, "credentials remain editable during the wait");
+    }
+    const readyLogin = render(InboxLogin, { busy: false, retryAfter: 0, username: "", password: "", setUsername: noop, setPassword: noop, onSubmit: noop });
+    assert.match(readyLogin, /<button type="submit">Sign in<\/button>/);
+    assert.doesNotMatch(readyLogin, /archive-login-wait|Please wait/);
     const access = render(InboxAccessRecovery, { busy: false, logoutUnconfirmed: true, onRetry: noop, onLogout: noop });
     assert.match(access, /Retry signing out/);
     assert.doesNotMatch(access, /Check access again|Sign out of any active session/);

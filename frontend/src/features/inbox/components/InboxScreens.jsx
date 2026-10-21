@@ -14,7 +14,7 @@ function CheckingScreen() {
 }
 
 function LoginScreen({ view }) {
-  return <InboxLogin {...view.loginForm} busy={view.snapshot.busy} />;
+  return <InboxLogin {...view.loginForm} busy={view.snapshot.busy} retryAfter={view.snapshot.loginRetryAfterSeconds} />;
 }
 
 function AccessScreen({ view }) {

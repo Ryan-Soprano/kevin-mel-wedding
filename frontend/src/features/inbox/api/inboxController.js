@@ -11,6 +11,8 @@ import { createTagActions, initialTags } from "../../library/api/tagActions.js";
 import { createExportActions, initialExport } from "../../export/api/exportActions.js";
 
 const interrupted = () => new ApiError("The request was cancelled.", { code: "REQUEST_ABORTED" });
+const LOGIN_RATE_LIMITED = "Too many sign-in attempts.";
+const LOGIN_READY = "You can try signing in again.";
 
 /**
  * A private, in-memory presentation controller. Latest intent owns every result;
@@ -23,13 +25,14 @@ export function createInboxController({
   setTimeoutImpl = globalThis.setTimeout, clearTimeoutImpl = globalThis.clearTimeout,
   albumNameFingerprint, timelineFieldsFingerprint, tagNameFingerprint,
 } = {}) {
-  let state = Object.freeze({ phase: "checking", session: null, busy: false, error: null,
+  let state = Object.freeze({ phase: "checking", session: null, busy: false, error: null, loginRetryAfterSeconds: 0,
     reviewStatus: "PENDING", items: EMPTY_ITEMS, nextCursor: null, detail: null, requestedMemoryId: null,
     photo: idlePhoto(), review: idleReview(), shareLink: idleShareLink(), metadata: idleMetadata(), albums: initialAlbums(), albumReturnId: null,
     timeline: initialTimeline(), timelineReturnId: null, library: initialLibrary(), libraryReturn: false,
     tags: initialTags(), tagReturnId: null, export: initialExport(), notice: null, pageResetVersion: 0, logoutUnconfirmed: false });
   let generation = 0, operation = null, disposed = false, cancelling = false, inboxDirty = false;
   let cancellingLogout = false;
+  let loginRetryAt = 0, loginRetryTimer = null;
   let suspended = false, resuming = null, rechecking = null;
   let notifying = false, notifyAgain = false, batchDepth = 0;
   const listeners = new Set();
@@ -68,6 +71,35 @@ export function createInboxController({
     batchDepth++;
     try { return task(); }
     finally { if (--batchDepth === 0) notify(); }
+  }
+
+  function remainingLoginWait() { return Math.max(0, Math.ceil((loginRetryAt - now()) / 1000)); }
+
+  function clearLoginWait() {
+    if (loginRetryTimer !== null) clearTimeoutImpl(loginRetryTimer);
+    loginRetryTimer = null;
+    loginRetryAt = 0;
+  }
+
+  function updateLoginWait() {
+    loginRetryTimer = null;
+    if (disposed) return;
+    const remaining = remainingLoginWait();
+    publish({ loginRetryAfterSeconds: remaining,
+      ...(remaining === 0 && state.error === LOGIN_RATE_LIMITED ? { error: LOGIN_READY } : {}) });
+    if (remaining > 0 && !disposed) {
+      loginRetryTimer = setTimeoutImpl(updateLoginWait, Math.min(1000, Math.max(1, loginRetryAt - now())));
+      loginRetryTimer?.unref?.();
+    }
+  }
+
+  function waitAfterLoginFailure(seconds) {
+    clearLoginWait();
+    // The current login policy returns 900 seconds; retain that safe fallback
+    // only when a throttled response has no usable Retry-After value.
+    const wait = Number.isFinite(seconds) && seconds >= 0 ? seconds : 900;
+    loginRetryAt = now() + wait * 1000;
+    updateLoginWait();
   }
 
   function cancel(purpose = null) {
@@ -399,9 +431,10 @@ export function createInboxController({
       });
     },
     login(credentials) {
-      if (disposed || cancelling) return Promise.resolve(state);
+      if (disposed || cancelling || remainingLoginWait() > 0) return Promise.resolve(state);
       if (mutations.locked() || albums.locked() || timeline.locked() || tags.locked() || exports.locked()) return Promise.resolve(state);
-      const op = start({ phase: "login", session: null, items: EMPTY_ITEMS, nextCursor: null, detail: null, notice: null, logoutUnconfirmed: false });
+      clearLoginWait();
+      const op = start({ phase: "login", session: null, items: EMPTY_ITEMS, nextCursor: null, detail: null, notice: null, logoutUnconfirmed: false, loginRetryAfterSeconds: 0 });
       return run(op, async () => {
         const fresh = await bounded(op, signal => api.getSession({ signal }));
         const session = sessionCopy(await bounded(op, signal => api.login(
@@ -412,9 +445,10 @@ export function createInboxController({
       }, failure => {
         if (!authFailure(failure)) {
           if (state.session?.authenticated) publish({ phase: "inbox", error: "Your inbox could not be loaded. Try loading it again." });
-          else clearPrivate({ phase: "login", error: failure?.status === 429
-            ? "Too many sign-in attempts. Please wait before trying again."
-            : "Sign-in could not be confirmed. Try signing in again." });
+          else if (failure?.status === 429) {
+            waitAfterLoginFailure(failure.retryAfterSeconds);
+            clearPrivate({ phase: "login", error: remainingLoginWait() > 0 ? LOGIN_RATE_LIMITED : LOGIN_READY });
+          } else clearPrivate({ phase: "login", error: "Sign-in could not be confirmed. Try signing in again." });
         }
       });
     },
@@ -505,6 +539,7 @@ export function createInboxController({
     dispose() {
       if (disposed) return;
       disposed = true;
+      clearLoginWait();
       cancel();
       mutations.dispose();
       inboxDirty = false;
@@ -513,7 +548,7 @@ export function createInboxController({
       library.clear(); tags.clear(); exports.clear();
       state = Object.freeze({ ...state, session: null, items: EMPTY_ITEMS, nextCursor: null,
         detail: null, requestedMemoryId: null, photo: idlePhoto(), review: idleReview(), shareLink: idleShareLink(), metadata: idleMetadata(), albums: initialAlbums(), albumReturnId: null,
-        timeline: initialTimeline(), timelineReturnId: null, library: initialLibrary(), libraryReturn: false, tags: initialTags(), tagReturnId: null, export: initialExport(), notice: null, busy: false, error: null });
+        timeline: initialTimeline(), timelineReturnId: null, library: initialLibrary(), libraryReturn: false, tags: initialTags(), tagReturnId: null, export: initialExport(), notice: null, busy: false, error: null, loginRetryAfterSeconds: 0 });
       suspended = true;
       resuming = null;
       listeners.clear();
