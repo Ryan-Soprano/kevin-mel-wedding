@@ -1,6 +1,8 @@
 # Bringing kevinandmel.com live
 
-Prepared October 21, 2026. Use with the [Go Live checklist](../product/go-live-checklist.md). This is an execution guide, not a completed cutover: **the domain still serves coming-soon, and shared-network enforcement plus the selected live target's operational gates remain open.** No infrastructure or DNS was changed while preparing it.
+Updated October 21, 2026 against main `f9f758b9f0b847f025f867a22c102d4d9797e0e2`. Use with the [Go Live checklist](../product/go-live-checklist.md). This is an execution guide, not a completed cutover: **the latest recorded domain state is Coming Soon, and shared-network enforcement plus the selected live target's operational gates remain open.** Refresh provider state before execution; this source/documentation review changed no infrastructure or DNS.
+
+**Current work is guest rehearsal and cutover preparation.** Ryan deferred failure-handling and recovery automation for now. Keep continuous database RPO, recurring media/current-ledger copies, alerts, source-authority-loss recovery and complete RTO requirements open in the checklist and launch record; the deferral does not mark them passed. Prepare and record the guest/configuration/domain evidence below without reopening that implementation work. The final go/no-go must still identify unresolved requirements and Ryan's decision before public collection opens.
 
 Ryan's confirmed launch target is **Thursday evening, October 22, 2026 (America/Chicago / CDT)**. Record the exact operating window before execution; the checklist sequences preparation for that deadline without waiving the outstanding gates.
 
@@ -18,11 +20,13 @@ Ryan executes the infrastructure steps. Kevin and Melanie approve content, featu
 | Live Render service and `APP_HOST` | Existing `kevinandmel-staging`, promoted in place; `APP_HOST` is `kevinandmel-staging.onrender.com` (hostname only) |
 | Database / private R2 / deletion authority | Retain the existing targets and current authority; verify identities and recovery access privately |
 | Region / plan / instances / budget | Retain one 1-CPU / 2 GiB app instance in Ohio and the existing DB plan/disk; no second hosted stack or scaling change |
-| Release / CI / deployed artifact | Pin the exact reviewed commit and its passing CI; capture the provider deploy ID and actual running artifact |
+| Release / CI / deployed artifact | Starting baseline: deployed `3b2fd0a` has the reviewed `4f23d9f` application sources; freeze the actual promotion artifact and CI evidence, then record its new production-setting deploy ID |
 | Rollback artifact / checkpoint | Retained compatible artifact, canonical-origin configuration, current database/bucket/ledger and fresh recoverable checkpoint |
 | Cutover window / operator | Date, timezone, Ryan's availability and next health/backup check |
 
-The proposed promotion target is `kevinandmel-staging` (`srv-db7nqu67bikc73bhr580`), tested release `01fc4e5e50d3f2f1bab35aace7feec0ad993dc53`, deployment `dep-dbcdaqoae00c739d46ag`. Its database is `kevinandmel-staging-db` (`dpg-db7n4e59fdbs73er7610-a`), PostgreSQL 17, Ohio, `0.1c-256mb`, 1 GB disk, external access denied. These resources currently remain staging until the reviewed promotion is executed. The fallback is `kevinandmel-coming-soon` (`srv-db19f3vavr4c73asu350`), at `kevinandmel-coming-soon.onrender.com`.
+The retained promotion target is `kevinandmel-staging` (`srv-db7nqu67bikc73bhr580`). The latest verified running commit is **`3b2fd0a985fdc526843dde34bb8a6086a8e2da87`**, deployment **`dep-dbchp7dg1s2s73blbqa0`**, live October 21 at 20:13:36 UTC / 3:13:36 p.m. CDT. Its application, Docker, scripts and workflow sources match reviewed application release **`4f23d9f7a7a30b8f8509621538663c1509274411`**, whose [exact-release CI passed](https://github.com/Ryan-Soprano/kevin-mel-wedding/actions/runs/39651085958). Main `f9f758b` adds documentation only relative to that deployed commit. A later documentation merge is not a new application deployment; the staging deploy above is not evidence of production settings or cutover acceptance.
+
+Its database remains `kevinandmel-staging-db` (`dpg-db7n4e59fdbs73er7610-a`), PostgreSQL 17, Ohio, `0.1c-256mb`, 1 GB disk, external access denied. These resources remain staging until the reviewed promotion is executed. The fallback is `kevinandmel-coming-soon` (`srv-db19f3vavr4c73asu350`), at `kevinandmel-coming-soon.onrender.com`. Refresh both services' actual deploy and domain associations before making changes.
 
 Fresh read-only Render inventory on October 21 found only those staging/coming-soon services and the staging database. The proposed separate production resources were never created.
 
@@ -43,11 +47,15 @@ This is a promotion of a retained archive, not an empty production database. Pre
 
 Paid Render Postgres provides PITR, but the [current recovery documentation](https://render.com/docs/postgresql-backups) excludes restore points within the most recent **ten minutes**. PITR alone therefore does not establish the project's **five-minute database RPO**. Prove an additional recovery mechanism meeting the target, or obtain an explicit change to that requirement; do not mark the gate passed merely because the database is paid. This also does not replace original-media/current-ledger copies or timed recovery evidence.
 
+The [October 21 full-database feasibility record](full-database-recovery-feasibility-2026-10-21.md) now includes three accepted encrypted, authenticated and expiry-enrolled database copies plus an isolated restore matching all 19 tables / 1,232 rows and the reviewed catalog. The bounded manual observation reached a maximum conservative point age of 2m46.67s. It installed no recurring job and does not prove continuing five-minute RPO, current media/ledger recovery or complete one-hour RTO. Record the actual checkpoint chosen for cutover privately; that historical observation is not a fresh launch checkpoint.
+
 Capture the old web DNS records, current custom-domain associations, fallback deploy, candidate deploy and private recovery references before changing anything. Leave automatic deployment off on the full app. Do not change the coming-soon service's existing deployment configuration.
 
 ## 2. Prepare the live application
 
-Finish the staging rehearsal and record unresolved uploads. Put the existing app behind Render's default **Maintenance Mode** and verify the public 503 response before changing its profile/admission/origin. Take the reviewed recovery checkpoint with any required quiescence. Keep maintenance through promotion and the domain transfer; remove it only for the controlled public canary in section 5. Neither the public-origin setting nor reveal/upload-pause flags provide this traffic gate.
+Finish guest rehearsal on the current provider origin before changing its configuration: named/anonymous notes, photo/audio, committed-receipt recovery, busy/partial-item retry and anonymous private-access denial. Record unresolved uploads, the shared-network result and representative-phone limits. Use a few owned synthetic submissions and preserve their identity/receipt for explicit same-item recovery. The earlier 100-group capacity run is existing evidence; repeat only affected bounded cases after a relevant change.
+
+At the agreed cutover window, put the existing app behind Render's default **Maintenance Mode** and verify the public 503 response before changing its profile/admission/origin. Take the reviewed recovery checkpoint with any required quiescence. Keep maintenance through promotion and the domain transfer; remove it only for the controlled public canary in section 5. Neither the public-origin setting nor reveal/upload-pause flags provide this traffic gate.
 
 Use the repository-root **Docker web service**, health path `/api/health`, and the pinned release. Keep the reviewed DB migration history; the current candidate bundles V14. Verify backups and rollback compatibility before startup migrations run against retained data.
 
@@ -77,11 +85,13 @@ The promotion candidate's `application-production.properties` now includes Rende
 | `MEMORY_ARCHIVE_RETENTION_ENABLED` | `true` after validating private deletion-ledger permissions and the hosted job; required before offering production Delete |
 | `MEMORY_ARCHIVE_RETENTION_INTERVAL_MS` | Reviewed schedule; default `300000` (five minutes), allowed one minute to one day |
 
+Static source verification on main `f9f758b`: `application-production.properties` binds `0.0.0.0` / `${PORT:10000}`, uses framework forwarding and Secure cookies, requires explicit DB variables and fixes one finalizer. `ArchiveAccessPolicy` rejects a production-profile/archive-environment mismatch and requires an HTTPS public origin plus Secure cookies. Base properties default reveal, storage, audio and retention to false; the Docker frontend audio build argument also defaults to false. These defaults make effective settings and the deployed frontend's audio flag explicit acceptance items; this source check does not read or validate current provider values.
+
 Keep the existing reviewed media sizes, quotas and storage budgets. Do not increase them to clear a launch gate. `sslmode=require` requests encrypted transport; it is not a claim of certificate verification. Put no credentials in Git, this guide, Notion, `VITE_*`, build arguments, screenshots or copied logs.
 
 Apply the production profile and archive environment **together** to this existing service behind maintenance, preserving its exact DB/R2 targets and current authority. Explicit DB credentials are required; the candidate no longer supplies local DB defaults in production. Staging-only Basic Auth/origin settings no longer govern the production profile; retain the old configuration privately for rollback, without using it as the live admission gate. Keep reveal false. Review any existing test-account access before later couple activation; do not create, activate or delete real accounts for anonymous guest launch.
 
-Use service settings or one reviewed environment group as the source of truth; inspect override collisions privately. Render offers save-only, runtime deployment and rebuild options. Choose **Save, rebuild and deploy** when changing the frontend audio flag; saving alone does not change the running service. For a runtime-only change, verify the resulting deployment and artifact rather than assuming the saved value took effect. See [Render environment configuration](https://render.com/docs/configure-environment-variables) and [Render port settings](https://render.com/docs/environment-variables).
+Use service settings or one reviewed environment group as the source of truth; inspect override collisions privately. Render offers save-only, runtime deployment and rebuild options. For production runtime settings, **Save and deploy** reuses the existing build; verify the resulting deploy's actual commit/artifact and effective settings. Confirm the existing frontend was built with `VITE_AUDIO_ENABLED=true`; if that flag must change, use **Save, rebuild and deploy** against the frozen reviewed application source and recheck the new artifact. **Save only** leaves the running service unchanged. Do not rebuild or select a different application release solely because documentation advanced main. See [Render environment configuration](https://render.com/docs/configure-environment-variables) and [Render port settings](https://render.com/docs/environment-variables).
 
 ### Private readiness and media setup
 
@@ -129,14 +139,14 @@ Maintenance blocks public app requests; it does not stop background writers or r
 
 ## 5. Open a controlled public canary, then release the QR
 
-**Turning maintenance off admits all public traffic immediately.** An unannounced URL is still public. Start this window only when the operator is ready to collect and protect real submissions, with the pre-cutover gates closed.
+**Turning maintenance off admits all public traffic immediately.** An unannounced URL is still public. Start this window only when the operator is ready to collect and protect real submissions and the recorded go/no-go resolves the pre-cutover requirements. Preparation, an implementation deferral or an empty launch-record field is not acceptance.
 
 1. Disable maintenance, then verify canonical `/` serves the full guest app, its JS/CSS/gallery load, and same-origin `/api/health` returns 200. Confirm the actual running deployment is still the selected candidate. A health response alone does not prove persistence or media readiness.
 2. From the canonical host, use a few clearly marked synthetic submissions: named and anonymous notes, a photo batch and supported audio. Check validation/draft preservation, receipt recovery, private `PENDING` / `COUPLE_ONLY` defaults and partial-item retry. Test browser R2 CORS and real microphone/file fallback on representative phones. A save must have a committed receipt; a successful PUT alone is insufficient. Reuse the same identity on an uncertain/busy result and honor `Retry-After`; do not create duplicates or re-upload saved siblings.
 3. Check anonymous private routes and private originals remain denied, secure cookie/session behavior and cross-origin rejection. Keep reveal false; these checks do not require activating or signing into real couple accounts. Finish authenticated logout/revocation, private playback/export and shared-device acceptance separately through the approved synthetic process before activating real couple access or opening reveal.
 4. Choose and test the **live target's** provider-host policy. `MEMORY_ARCHIVE_PUBLIC_ORIGIN` does not redirect hosts. After canonical acceptance, disable that live service's Render Subdomain if that is the chosen policy, or use a reviewed canonical redirect. Then test the result. The old `kevinandmel-staging.onrender.com` hostname belongs to this same production service; it is not a test environment. Don't leave an alternate guest entry point whose media CORS/session behavior is broken.
 5. Check current provider memory/CPU, pending/failed media, reservation budgets, backups and alert delivery. The mixed-media rehearsal's highest returned memory sample was about 82% of 2 GiB; it was not an instantaneous peak. Retain the one-slot decoder limit. Unexpected loss, duplicate saves, privacy exposure, repeated unrecovered failures or resource exhaustion stops broad release.
-6. Generate the final QR with **`https://kevinandmel.com`** as the payload and the same human-readable fallback URL. Scan an actual printed sample on iPhone Safari and Android Chrome, check both cellular and the available shared/venue network, and finish affected submission/return/retry cases. The existing [QR card](../product/wedding-qr-card-draft.html) is a layout draft with no final working QR.
+6. Use the real canonical QR in the [printable proof](../product/wedding-qr-card-proof.html), with **`https://kevinandmel.com`** as both exact payload and human-readable fallback URL. Independent decoding of its raster, screen and print-CSS renders passed; actual printed-phone scans and content/distribution approval remain pending. Print at 100% / Actual size, measure the A6 card and preserve the QR's white quiet zone. Scan the printed sample on iPhone Safari and Android Chrome, check both cellular and the available shared/venue network, and finish affected submission/return/retry cases. Remove the proof/distribution labels only after final acceptance. The earlier [placeholder layout](../product/wedding-qr-card-draft.html) remains historical.
 7. Record the release time/timezone, deployed SHA, canonical DNS/TLS, smoke/device results, checkpoint and owner acceptance. Only then distribute cards or announce collection. Keep private credentials and guest content outside the release record.
 
 Observe the first 15 minutes and the first substantial burst, then use the [wedding-day operations sheet](wedding-day-operations.md). Monitor content-free failed saves/busy retries, memory, liveness, actual storage and DB reservations, backup freshness and retention backlog. Review either reservation budget at 80%; do not raise limits blindly. Couple reveal/account activation remains a later operation. The planned October 31 collection review does not install an automatic closure.
@@ -156,3 +166,30 @@ Render rollback uses a retained prior artifact, but also restores that deploy's 
 Prefer the compatible artifact with the reviewed **production** settings. Explicitly set and verify `MEMORY_ARCHIVE_REVEALED=false` before reopening every rollback; a historical deploy can restore an open reveal setting and admit test accounts under staging policy. If a rollback intentionally restores the staging profile, set both `MEMORY_ARCHIVE_PUBLIC_ORIGIN` and `MEMORY_ARCHIVE_STAGING_ORIGIN` to the canonical live origin and use the matching `staging` archive identity, while preserving the current data/authority. Check admission and anonymous private-access denial deliberately before reopening; old tester Basic Auth can otherwise block guests. Do not reopen a rollback still configured only for the provider origin.
 
 Never reset the live database, repair Flyway history, bulk-delete a bucket/prefix, rotate guest retry identities, downgrade migrations or restore stale deletion authority to undo an application/domain change. Preserve all contributions received since opening. Record actual interruption and successful reopening checks, then verify the next backup and alert delivery.
+
+## 7. Fill the launch execution record
+
+Complete this record during execution; a planned value is not an observed result. Keep detailed receipts, private recovery locations, DNS/configuration exports and guest-bearing evidence in the private operator record. Record only content-free outcomes and safe evidence references here or in the checklist.
+
+| Item | Observed value / evidence / time |
+| --- | --- |
+| Operator and agreed window (CDT and UTC) | Ryan: ____ · window: ____ |
+| Pre-change app and fallback deploy/domain readback | ____ |
+| Frozen application commit, exact-source CI/review and rollback artifact | ____ |
+| Guest rehearsal / shared-network result / unresolved items | ____ |
+| Chosen fresh checkpoint and private recovery-access verification | Safe reference: ____ · capture/verified time: ____ |
+| Open recovery/automation requirements and decision before public canary | Requirements: ____ · Ryan's go/no-go and time: ____ |
+| Maintenance enabled and public 503 verified | ____ |
+| Production-setting deploy ID, commit/artifact and effective matrix checked | ____ |
+| Private readiness, retained DB/R2/authority, CORS and lifecycle readback | ____ |
+| Apex/`www` service association, DNS, valid TLS and canonical redirects | ____ |
+| Maintenance disabled / controlled public canary started | ____ |
+| Canonical note/photo/audio, receipts, same-item retry and private denial | ____ |
+| iPhone Safari / Android Chrome / cellular / shared-network evidence | ____ |
+| Printed QR payload and readable fallback verified | `https://kevinandmel.com` · evidence: ____ |
+| Live provider-host policy tested | ____ |
+| Health, memory, failed/pending items and remaining monitoring limits | ____ |
+| Kevin/Melanie guest copy and feature acceptance | ____ |
+| Final distribution go/no-go, sharing time and first-15-minute/burst observer | ____ |
+
+Leave private couple activation/reveal unchecked: production guest collection does not accept authenticated playback/export, logout/revocation or shared-device behavior. Keep `MEMORY_ARCHIVE_REVEALED=false` until that separate acceptance is complete.
