@@ -1,6 +1,7 @@
 name: Release verification 01fc4e5
 
 on:
+  pull_request:
   push:
     branches:
       - feature/release-verification-01fc4e5
