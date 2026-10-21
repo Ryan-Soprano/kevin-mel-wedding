@@ -19,9 +19,14 @@ deploy `dep-dbbu350m7kps73d8tnog` became live on October 20 at 21:49:18 UTC,
 running commit `a4ad947cb2ba76b311a9c20ef0f35cdc348a443b`. Following health
 PR 98's passing exact-head Linux CI/configured review and observed merge,
 deployment `dep-dbbujo61egvs73es5500` became live at **22:24:44.693684 UTC**
-with commit **`bcbb17b40541da55f1d493cbae420ae32820a56b`**. All twelve bounded
-GET checks pass again; served JavaScript/stylesheet decoded UTF-8 hashes match
-the earlier build. Further source changes require a deliberate
+with commit **`bcbb17b40541da55f1d493cbae420ae32820a56b`**. That deployment
+was the pre-pause source for the [independent archive rehearsal](recovery-rehearsal-2026-10-20.md).
+Source resume created the current deployment **`dep-dbc00su1egvs7390am30`**,
+live October 21 at **00:00:18.564203 UTC** (October 20 America/Chicago), at
+documentation main **`03e9ebebe27b61a74c30563cace046ee02740b04`**. Its final
+receipt at **00:02:30.4416753 UTC** records all twelve bounded GET checks
+passing, with the same decoded JavaScript/stylesheet hashes. Earlier
+`bcbb17b`/`a4ad947` checks retain their historical scope. Further source changes require a deliberate
 deployment after current-head CI and configured AI review clear. Refresh the
 identity and repeat affected checks; a merge does not deploy this service.
 Ryan's [October 15 standing authority](../project-plan.md#standing-project-authorization)
