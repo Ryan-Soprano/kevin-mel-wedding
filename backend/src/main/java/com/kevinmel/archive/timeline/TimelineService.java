@@ -53,8 +53,8 @@ public class TimelineService {
             }
         }
         var all = rows.stream()
-                .filter(row -> row != null)
-                .map(row -> row.event())
+                .map(TimelineRepository.ListRow::event)
+                .filter(java.util.Objects::nonNull)
                 .toList();
         boolean more = all.size() > query.limit();
         var items = more ? all.subList(0, query.limit()) : all;

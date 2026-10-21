@@ -73,7 +73,7 @@ final class RecoverySchema {
             .toList();
     private static final List<Table> ALBUM_TABLES;
     private static final List<Table> TIMELINE_TABLES;
-    static final List<Table> TABLES;
+    private static final List<Table> TAG_TABLES;
     private static final List<Table> SHARING_TABLES;
     static {
         var tables = new ArrayList<>(ARCHIVE_TABLES);
@@ -87,8 +87,8 @@ final class RecoverySchema {
         TIMELINE_TABLES = List.copyOf(tables);
         tables.add(table("tag", "id:u name:s? visibility:s revision:u created_at:t updated_at:t deleted_at:t?"));
         tables.add(table(TABLE_MEMORY_TAG, "tag_id:u memory_id:u"));
-        TABLES = List.copyOf(tables);
-        SHARING_TABLES = TABLES.stream()
+        TAG_TABLES = List.copyOf(tables);
+        SHARING_TABLES = TAG_TABLES.stream()
                 .map(table -> table.name().equals(TABLE_REVIEW_AUDIT)
                         ? table(TABLE_REVIEW_AUDIT, table.definition() + " before_visibility:s after_visibility:s")
                         : table)
@@ -255,7 +255,8 @@ final class RecoverySchema {
             if (count == null) {
                 throw invalid();
             }
-            if ((total += count) > MAX_ROWS) {
+            total += count;
+            if (total > MAX_ROWS) {
                 throw new RecoveryException("METADATA_LIMIT");
             }
             String order = switch (table.name()) {
@@ -271,7 +272,7 @@ final class RecoverySchema {
                             .map(column -> sqlIdentifier(column.name()))
                             .collect(java.util.stream.Collectors.joining(","))
                             + " FROM " + quotedTableName + " ORDER BY " + java.util.Arrays.stream(order.split(","))
-                                    .map(value -> value.trim())
+                                    .map(String::trim)
                                     .map(RecoverySchema::sqlIdentifier)
                                     .collect(java.util.stream.Collectors.joining(",")))
                             .query((rs, position) -> {
@@ -302,7 +303,11 @@ final class RecoverySchema {
         int total = 0;
         for (Table table : tables(version)) {
             JsonNode rows = node.get(table.name());
-            if (rows == null || !rows.isArray() || (total += rows.size()) > MAX_ROWS) {
+            if (rows == null || !rows.isArray()) {
+                throw invalid();
+            }
+            total += rows.size();
+            if (total > MAX_ROWS) {
                 throw invalid();
             }
             var decoded = decodeRows(rows, table, version);
@@ -364,6 +369,8 @@ final class RecoverySchema {
             int targetVersion) {
         for (Table table : tables(targetVersion)) {
             for (var row : rows.get(table.name())) {
+                // Identifiers come only from the reviewed schema definitions; row values are
+                // bound below.
                 var query = db.sql("INSERT INTO " + table.name() + " (" + table.columnNames() + ") VALUES ("
                         + String.join(",", table.columns().stream().map(c -> ":" + c.name()).toList()) + ")");
                 for (Column column : table.columns()) {
@@ -407,7 +414,7 @@ final class RecoverySchema {
             return TIMELINE_TABLES;
         }
         if (version == 6) {
-            return TABLES;
+            return TAG_TABLES;
         }
         if (version == 7) {
             return SHARING_TABLES;
@@ -445,11 +452,7 @@ final class RecoverySchema {
         }
 
         String columnNames() {
-            var names = new ArrayList<String>();
-            for (Column column : columns) {
-                names.add(column.name());
-            }
-            return String.join(",", names);
+            return columns.stream().map(Column::name).collect(java.util.stream.Collectors.joining(","));
         }
 
         Map<String, Object> read(ResultSet rs) throws SQLException {
@@ -495,6 +498,29 @@ final class RecoverySchema {
             return id;
         }
 
+        private static Instant canonicalInstant(JsonNode node) {
+            String text = string(node);
+            Instant instant = Instant.parse(text);
+            if (!instant.toString().equals(text)) {
+                throw invalid();
+            }
+            return instant;
+        }
+
+        private static int integerValue(JsonNode node) {
+            if (!node.isIntegralNumber() || !node.canConvertToInt()) {
+                throw invalid();
+            }
+            return node.intValue();
+        }
+
+        private static long longValue(JsonNode node) {
+            if (!node.isIntegralNumber() || !node.canConvertToLong()) {
+                throw invalid();
+            }
+            return node.longValue();
+        }
+
         Object decode(JsonNode node) {
             if (node == null) {
                 throw invalid();
@@ -513,42 +539,10 @@ final class RecoverySchema {
                     case 'l' -> longValue(node);
                     default -> string(node);
                 };
-            } catch (RuntimeException failure) {
+            } catch (RuntimeException _) {
                 throw invalid();
             }
         }
-    }
-
-    private static UUID canonicalUuid(JsonNode node) {
-        String text = string(node);
-        UUID uuid = UUID.fromString(text);
-        if (!uuid.toString().equals(text)) {
-            throw invalid();
-        }
-        return uuid;
-    }
-
-    private static Instant canonicalInstant(JsonNode node) {
-        String text = string(node);
-        Instant instant = Instant.parse(text);
-        if (!instant.toString().equals(text)) {
-            throw invalid();
-        }
-        return instant;
-    }
-
-    private static int integerValue(JsonNode node) {
-        if (!node.isIntegralNumber() || !node.canConvertToInt()) {
-            throw invalid();
-        }
-        return node.intValue();
-    }
-
-    private static long longValue(JsonNode node) {
-        if (!node.isIntegralNumber() || !node.canConvertToLong()) {
-            throw invalid();
-        }
-        return node.longValue();
     }
 
     static String string(JsonNode node) {
