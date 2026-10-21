@@ -127,6 +127,19 @@ function report() {
       "Preparation evidence only; actual iPhone Safari and Android Chrome HTTPS acceptance remains required",
   };
 }
+function signalCopy(signal) {
+  if (!signal) {
+    return "Signal measurement unavailable. Audible replay still needs your check.";
+  }
+  if (signal.allZeroSamples) {
+    return "No sound signal: every decoded sample is zero. The clip contains digital silence. Try recording again or choose an existing file.";
+  }
+  if (signal.lowSignal) {
+    return `Very low sound level (${signal.rmsDbfs.toFixed(1)} dBFS). This is a diagnostic warning, not a speech test. If you spoke, check the selected microphone and try again.`;
+  }
+  return `Sound signal detected (${signal.rmsDbfs.toFixed(1)} dBFS average). This may be your words or background noise; listen to confirm. If the speaker test works but your words are missing, try an existing file.`;
+}
+
 function render(snapshot) {
   element("start").disabled =
     !snapshot.supported ||
@@ -160,13 +173,7 @@ function render(snapshot) {
     element("clip-info").textContent =
       `${snapshot.clip.evidence.decodedDurationSeconds.toFixed(1)} seconds · ${snapshot.clip.evidence.byteSize.toLocaleString()} bytes · ${snapshot.clip.evidence.containerFromBytes}. Declared MIME is recorded separately; no production format is approved.`;
     const signal = snapshot.clip.evidence.signal;
-    element("signal-info").textContent = !signal
-      ? "Signal measurement unavailable. Audible replay still needs your check."
-      : signal.allZeroSamples
-        ? "No sound signal: every decoded sample is zero. The clip contains digital silence. Try recording again or choose an existing file."
-        : signal.lowSignal
-          ? `Very low sound level (${signal.rmsDbfs.toFixed(1)} dBFS). This is a diagnostic warning, not a speech test. If you spoke, check the selected microphone and try again.`
-          : `Sound signal detected (${signal.rmsDbfs.toFixed(1)} dBFS average). This may be your words or background noise; listen to confirm. If the speaker test works but your words are missing, try an existing file.`;
+    element("signal-info").textContent = signalCopy(signal);
     if (signal?.allZeroSamples)
       element("status").textContent =
         "The clip decodes, but it contains digital silence. Replay has not passed.";

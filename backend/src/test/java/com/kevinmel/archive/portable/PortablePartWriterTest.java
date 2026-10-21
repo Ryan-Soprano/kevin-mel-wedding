@@ -2,7 +2,9 @@ package com.kevinmel.archive.portable;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.catchThrowable;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
@@ -169,6 +171,47 @@ class PortablePartWriterTest {
         assertThat(destination).doesNotExist(); Files.writeString(destination, "existing-owned-marker");
         assertThatThrownBy(() -> writer.writeIndexPart(snapshot, List.of(outcome), destination, () -> true)).isInstanceOf(PortableExportException.class);
         assertThat(Files.readString(destination)).isEqualTo("existing-owned-marker");
+    }
+
+    @Test void failedPartialCleanupPreservesThePrimaryFailureAndOnlyAddsASanitizedFailure() throws Exception {
+        Path directory = privateDirectory();
+        var original = original(new byte[] {1}, "image/png", "safe.png");
+        var snapshot = snapshot(List.of(), List.of(original), List.of(), List.of(), List.of());
+        for (var primary : List.of(new CancellationException("Portable original changed."), new PortableExportException())) {
+            Path destination = directory.resolve(UUID.randomUUID() + ".zip");
+            var cleanups = new ArrayList<Path>();
+            var writer = new PortablePartWriter(new Storage(), path -> {
+                cleanups.add(path);
+                throw new IOException("Synthetic private cleanup failure at " + path);
+            });
+
+            Throwable failure = catchThrowable(() -> writer.writeOriginalPart(snapshot, writer.plan(snapshot).getFirst(),
+                    destination, () -> true, ignored -> { throw primary; }));
+
+            assertThat(failure).isSameAs(primary);
+            assertThat(failure.getSuppressed()).singleElement().satisfies(cleanup -> {
+                assertThat(cleanup).isInstanceOf(PortableExportException.class).hasNoCause();
+                assertThat(cleanup.getMessage()).doesNotContain("Synthetic", destination.toString());
+                assertThat(cleanup.getSuppressed()).isEmpty();
+            });
+            assertThat(cleanups).containsExactly(destination.toAbsolutePath().normalize());
+            assertThat(destination).isRegularFile();
+            assertPrivate(destination);
+        }
+    }
+
+    @Test void completedArtifactDoesNotInvokePartialCleanup() throws Exception {
+        Path destination = privateDirectory().resolve("complete.zip");
+        var writer = new PortablePartWriter(new Storage(), path -> {
+            throw new AssertionError("A completed artifact must remain available for download.");
+        });
+
+        var prepared = writer.writeIndexPart(snapshot(List.of(), List.of(), List.of(), List.of(), List.of()),
+                List.of(), destination, () -> true);
+
+        assertThat(prepared.byteSize()).isEqualTo(Files.size(destination));
+        assertThat(prepared.sha256()).isEqualTo(PortableExportRepository.sha256(Files.readAllBytes(destination)));
+        assertPrivate(destination);
     }
 
     static PortableSnapshot snapshot(List<PortableSnapshot.Memory> memories, List<PortableSnapshot.Original> originals, List<PortableSnapshot.Album> albums,

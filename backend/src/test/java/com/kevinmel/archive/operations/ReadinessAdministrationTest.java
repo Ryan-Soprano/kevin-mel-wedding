@@ -2,7 +2,10 @@ package com.kevinmel.archive.operations;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.io.ByteArrayOutputStream;
@@ -11,6 +14,8 @@ import java.net.URLClassLoader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -109,6 +114,43 @@ class ReadinessAdministrationTest {
         assertThat(OperationsReadiness.capacity(100, 100)).isEqualTo(OperationsReadiness.Capacity.AT_LIMIT);
         assertThat(OperationsReadiness.capacity(101, 100)).isEqualTo(OperationsReadiness.Capacity.OVER_LIMIT);
         assertThat(OperationsReadiness.capacity(Long.MAX_VALUE - 1, Long.MAX_VALUE)).isEqualTo(OperationsReadiness.Capacity.REVIEW_REQUIRED);
+    }
+
+    @Test void configuredStatementRemainsOpenForItsCaller() throws Exception {
+        var connection = mock(Connection.class);
+        var statement = mock(PreparedStatement.class);
+        when(connection.prepareStatement("SELECT 1")).thenReturn(statement);
+
+        assertThat(OperationsReadiness.statement(connection, "SELECT 1")).isSameAs(statement);
+        verify(statement).setQueryTimeout(OperationsReadiness.QUERY_TIMEOUT_SECONDS);
+        verify(statement, never()).close();
+    }
+
+    @Test void statementSetupFailureClosesTheStatementAndPreservesTheFailure() throws Exception {
+        for (var failure : List.of(new SQLException(SECRET), new IllegalStateException(SECRET))) {
+            var connection = mock(Connection.class);
+            var statement = mock(PreparedStatement.class);
+            when(connection.prepareStatement("SELECT 1")).thenReturn(statement);
+            doThrow(failure).when(statement).setQueryTimeout(OperationsReadiness.QUERY_TIMEOUT_SECONDS);
+
+            assertThatThrownBy(() -> OperationsReadiness.statement(connection, "SELECT 1")).isSameAs(failure);
+            verify(statement).close();
+            assertThat(failure.getSuppressed()).isEmpty();
+        }
+    }
+
+    @Test void statementCloseFailureDoesNotReplaceTheSetupFailure() throws Exception {
+        var connection = mock(Connection.class);
+        var statement = mock(PreparedStatement.class);
+        var failure = new SQLException(SECRET);
+        var cleanupFailure = new SQLException("synthetic cleanup failure");
+        when(connection.prepareStatement("SELECT 1")).thenReturn(statement);
+        doThrow(failure).when(statement).setQueryTimeout(OperationsReadiness.QUERY_TIMEOUT_SECONDS);
+        doThrow(cleanupFailure).when(statement).close();
+
+        assertThatThrownBy(() -> OperationsReadiness.statement(connection, "SELECT 1")).isSameAs(failure);
+        verify(statement).close();
+        assertThat(failure.getSuppressed()).containsExactly(cleanupFailure);
     }
 
     @Test void runtimeMigrationInventoryRejectsUnknownMissingAndDuplicateResources() throws Exception {

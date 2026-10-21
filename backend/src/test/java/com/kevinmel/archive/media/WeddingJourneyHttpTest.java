@@ -28,6 +28,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.context.annotation.Import;
@@ -41,6 +42,7 @@ import tools.jackson.databind.json.JsonMapper;
 /** Mixed public-to-private journeys. Storage is synthetic: playback issuance and original bytes,
  * not a provider GET, browser playback, microphone capture or hosted-cookie acceptance. */
 @Testcontainers
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
         "archive.environment=local", "spring.profiles.active=local",
         "archive.audio.enabled=true", "archive.revealed=true", "archive.storage.enabled=false",

@@ -35,6 +35,7 @@ import java.util.zip.CRC32;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import com.kevinmel.archive.media.MediaTypes;
 import com.kevinmel.archive.media.ObjectStorage;
@@ -52,9 +53,16 @@ public class PortablePartWriter {
     private static final DateTimeFormatter DISPLAY_TIME = DateTimeFormatter.ofPattern("MMM d, uuuu, h:mm a z", Locale.US)
             .withZone(ZoneId.of("America/New_York"));
     private final ObjectStorage storage;
+    private final FileCleaner cleaner;
 
+    @Autowired
     public PortablePartWriter(ObjectStorage storage) {
+        this(storage, Files::deleteIfExists);
+    }
+
+    PortablePartWriter(ObjectStorage storage, FileCleaner cleaner) {
         this.storage = storage;
+        this.cleaner = cleaner;
     }
 
     public List<OriginalPart> plan(PortableSnapshot snapshot) {
@@ -203,16 +211,24 @@ public class PortablePartWriter {
             BooleanSupplier alive,
             ZipWork work) {
         check(alive);
-        boolean created = false, complete = false;
+        try (var artifact = new PartialArtifact(destination, cleaner)) {
+            return writeArtifact(artifact, alive, work);
+        }
+    }
+
+    private PreparedPart writeArtifact(
+            PartialArtifact artifact,
+            BooleanSupplier alive,
+            ZipWork work) {
         try {
-            Path path = checkedDestination(destination);
+            Path path = checkedDestination(artifact.destination);
             Path parent = path.getParent();
             if (Files.getFileAttributeView(parent, PosixFileAttributeView.class) != null) {
                 Files.createFile(path, PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------")));
             } else {
                 Files.createFile(path);
             }
-            created = true;
+            artifact.created = true;
             confirmPrivate(path, false, true);
             List<OriginalOutcome> outcomes;
             try (var output = new LimitedOutput(Files.newOutputStream(path, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS));
@@ -236,14 +252,35 @@ public class PortablePartWriter {
                 hash = HexFormat.of().formatHex(digest.digest());
             }
             check(alive);
-            complete = true;
-            return new PreparedPart(bytes, hash, outcomes);
+            var prepared = new PreparedPart(bytes, hash, outcomes);
+            artifact.complete = true;
+            return prepared;
         } catch (IOException | java.security.NoSuchAlgorithmException exception) {
             throw new PortableExportException();
-        } finally {
+        }
+    }
+
+    @FunctionalInterface
+    interface FileCleaner {
+        void delete(Path path) throws IOException;
+    }
+
+    private static final class PartialArtifact implements AutoCloseable {
+        private final Path destination;
+        private final FileCleaner cleaner;
+        private boolean created;
+        private boolean complete;
+
+        private PartialArtifact(Path destination, FileCleaner cleaner) {
+            this.destination = destination;
+            this.cleaner = cleaner;
+        }
+
+        @Override
+        public void close() {
             if (created && !complete) {
                 try {
-                    Files.deleteIfExists(destination.toAbsolutePath().normalize());
+                    cleaner.delete(destination.toAbsolutePath().normalize());
                 } catch (IOException exception) {
                     throw new PortableExportException();
                 }

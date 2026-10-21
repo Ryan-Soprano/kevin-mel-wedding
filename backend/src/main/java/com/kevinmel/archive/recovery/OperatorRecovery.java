@@ -27,6 +27,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import javax.sql.DataSource;
 
@@ -170,11 +171,13 @@ public final class OperatorRecovery {
             writePrivate(root.resolve(METADATA_FILE), metadata);
             var erasedAssets = erasedAssets(ledger);
             var objects = new ArrayList<Original>();
-            int unavailable = 0, stored = 0;
+            int unavailable = 0;
+            int stored = 0;
             long total = 0;
             for (var asset : graph.uploaded()) {
                 Original original = original(asset, false);
-                if ((total += original.byteSize()) > MAX_ORIGINAL_BYTES) {
+                total += original.byteSize();
+                if (total > MAX_ORIGINAL_BYTES) {
                     throw failure("ORIGINAL_LIMIT");
                 }
                 boolean available = false;
@@ -216,7 +219,7 @@ public final class OperatorRecovery {
             return report;
         } catch (RecoveryException failure) {
             throw failure;
-        } catch (IOException | RuntimeException failure) {
+        } catch (IOException | RuntimeException _) {
             throw failure("EXPORT_UNCONFIRMED");
         }
     }
@@ -228,9 +231,7 @@ public final class OperatorRecovery {
             verify(bytes, original);
             writePrivate(originals.resolve(original.assetId().toString()), bytes);
             return true;
-        } catch (RecoveryException failure) {
-            return false;
-        } catch (RuntimeException failure) {
+        } catch (RuntimeException _) {
             return false;
         }
     }
@@ -281,7 +282,7 @@ public final class OperatorRecovery {
             }));
         } catch (RecoveryException failure) {
             throw failure;
-        } catch (IOException | RuntimeException failure) {
+        } catch (IOException | RuntimeException _) {
             throw failure("RESTORE_UNCONFIRMED");
         }
     }
@@ -317,12 +318,14 @@ public final class OperatorRecovery {
         var objects = new ArrayList<Original>();
         var names = new HashSet<String>();
         var ids = new HashSet<UUID>();
-        int available = 0, unavailable = 0;
+        int available = 0;
+        int unavailable = 0;
         long bytes = 0;
         var packagedErased = erasedAssets(packaged);
         for (JsonNode entry : list) {
             Original object = decodeOriginal(entry, expected, version, ids);
-            if ((bytes += object.byteSize()) > MAX_ORIGINAL_BYTES) {
+            bytes += object.byteSize();
+            if (bytes > MAX_ORIGINAL_BYTES) {
                 throw failure(INVALID_BUNDLE);
             }
             String idText = object.assetId().toString();
@@ -352,7 +355,7 @@ public final class OperatorRecovery {
         // Lock every archive table together. Accounts are deliberately not replaced or
         // exported.
         var targetTables = RecoverySchema.tables(schema.bundleVersion());
-        db.sql("LOCK TABLE " + String.join(",", targetTables.stream().map(table -> table.name()).toList())
+        db.sql("LOCK TABLE " + String.join(",", targetTables.stream().map(RecoverySchema.Table::name).toList())
                 + " IN ACCESS EXCLUSIVE MODE")
                 .update();
         for (var table : targetTables) {
@@ -405,10 +408,8 @@ public final class OperatorRecovery {
                 MAX_MEDIA_BYTES);
         verify(bytes, original);
         var existing = storage.read(ORIGINALS_PREFIX + original.assetId(), MAX_MEDIA_BYTES);
-        if (existing.isPresent()) {
-            if (!MessageDigest.isEqual(existing.get(), bytes)) {
-                throw failure("TARGET_OBJECT_CONFLICT");
-            }
+        if (existing.isPresent() && !MessageDigest.isEqual(existing.get(), bytes)) {
+            throw failure("TARGET_OBJECT_CONFLICT");
         }
         // Production performs a conditional create and verifies exact bytes/type on a
         // conflict.
@@ -604,14 +605,15 @@ public final class OperatorRecovery {
         do {
             var page = storage.ledger(cursor, 100);
             requireLedgerPage(page, records.size());
-            for (var record : page.records()) {
-                if (record == null || now.isBefore(record.recordedAt())) {
+            for (var plan : page.records()) {
+                if (plan == null || now.isBefore(plan.recordedAt())) {
                     throw failure(INVALID_LEDGER);
                 }
-                if ((bytes += record.encode().length + 1L) > MAX_METADATA_BYTES) {
+                bytes += plan.encode().length + 1L;
+                if (bytes > MAX_METADATA_BYTES) {
                     throw failure("LEDGER_LIMIT");
                 }
-                records.add(record);
+                records.add(plan);
             }
             cursor = page.nextCursor();
             requireLedgerCursor(cursor, seen);
@@ -628,11 +630,11 @@ public final class OperatorRecovery {
         }
         var records = new ArrayList<DeletionRecord>();
         for (var item : node) {
-            DeletionRecord record = DeletionRecord.decode(JSON.writeValueAsBytes(item));
-            if (now.isBefore(record.recordedAt())) {
+            DeletionRecord plan = DeletionRecord.decode(JSON.writeValueAsBytes(item));
+            if (now.isBefore(plan.recordedAt())) {
                 throw failure(INVALID_LEDGER);
             }
-            records.add(record);
+            records.add(plan);
         }
         uniquePlans(records);
         return List.copyOf(records);
@@ -651,11 +653,11 @@ public final class OperatorRecovery {
             List<DeletionRecord> current,
             List<DeletionRecord> packaged) {
         var byId = new HashMap<UUID, DeletionRecord>();
-        for (var record : current) {
-            byId.put(record.memoryId(), record);
+        for (var plan : current) {
+            byId.put(plan.memoryId(), plan);
         }
-        for (var record : packaged) {
-            if (!record.equals(byId.get(record.memoryId()))) {
+        for (var plan : packaged) {
+            if (!plan.equals(byId.get(plan.memoryId()))) {
                 throw failure("LEDGER_INCOMPLETE");
             }
         }
@@ -666,13 +668,10 @@ public final class OperatorRecovery {
     }
 
     private static Set<UUID> erasedAssets(List<DeletionRecord> ledger) {
-        var ids = new HashSet<UUID>();
-        for (var record : ledger) {
-            if (record.assetId() != null) {
-                ids.add(record.assetId());
-            }
-        }
-        return ids;
+        return ledger.stream()
+                .map(DeletionRecord::assetId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toCollection(HashSet::new));
     }
 
     private void verifyImportedCounts(
@@ -691,18 +690,15 @@ public final class OperatorRecovery {
             List<DeletionRecord> ledger,
             int version) {
         var erased = erasedAssets(ledger);
-        var erasedMemories = new HashSet<UUID>();
-        for (var plan : ledger) {
-            erasedMemories.add(plan.memoryId());
-        }
-        var ledgerIds = new HashSet<UUID>();
-        for (var row : tables.get("deletion_ledger")) {
-            ledgerIds.add(uuid(row, MEMORY_ID_COLUMN));
-        }
-        var keyDigests = new HashSet<String>();
-        for (var row : tables.get("erased_submission_key")) {
-            keyDigests.add(text(row, "key_digest"));
-        }
+        var erasedMemories = ledger.stream()
+                .map(DeletionRecord::memoryId)
+                .collect(Collectors.toCollection(HashSet::new));
+        var ledgerIds = tables.get("deletion_ledger").stream()
+                .map(row -> uuid(row, MEMORY_ID_COLUMN))
+                .collect(Collectors.toCollection(HashSet::new));
+        var keyDigests = tables.get("erased_submission_key").stream()
+                .map(row -> text(row, "key_digest"))
+                .collect(Collectors.toCollection(HashSet::new));
         for (var plan : ledger) {
             ledgerIds.add(plan.memoryId());
             keyDigests.add(plan.submissionKeyDigest());
@@ -767,7 +763,7 @@ public final class OperatorRecovery {
             } else {
                 new PhotoVerifier().verify(bytes, expected);
             }
-        } catch (RuntimeException failure) {
+        } catch (RuntimeException _) {
             throw failure("ORIGINAL_INTEGRITY");
         }
     }
@@ -821,7 +817,7 @@ public final class OperatorRecovery {
     private static String sha256(byte[] bytes) {
         try {
             return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
-        } catch (Exception failure) {
+        } catch (Exception _) {
             throw failure("HASH_UNAVAILABLE");
         }
     }
@@ -930,7 +926,7 @@ public final class OperatorRecovery {
             int max) {
         try {
             return readPrivate(path, max);
-        } catch (IOException failure) {
+        } catch (IOException _) {
             throw failure("BUNDLE_READ_UNCONFIRMED");
         }
     }
@@ -1044,6 +1040,7 @@ public final class OperatorRecovery {
     private record FrozenLedger(
             DeletionStorage delegate,
             List<DeletionRecord> plans) implements DeletionStorage {
+        @Override
         public void record(DeletionRecord plan) {
             delegate.record(plan);
         }
