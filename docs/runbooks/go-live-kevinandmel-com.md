@@ -4,7 +4,7 @@ Updated October 21, 2026 against main `f9f758b9f0b847f025f867a22c102d4d9797e0e2`
 
 **Current work is guest rehearsal and cutover preparation.** Ryan deferred failure-handling and recovery automation for now. Keep continuous database RPO, recurring media/current-ledger copies, alerts, source-authority-loss recovery and complete RTO requirements open in the checklist and launch record; the deferral does not mark them passed. Prepare and record the guest/configuration/domain evidence below without reopening that implementation work. The final go/no-go must still identify unresolved requirements and Ryan's decision before public collection opens.
 
-Ryan's confirmed launch target is **Thursday evening, October 22, 2026 (America/Chicago / CDT)**. Record the exact operating window before execution; the checklist sequences preparation for that deadline without waiving the outstanding gates.
+Ryan's confirmed attended cutover start is **Thursday, October 22, 2026, at 6 p.m. CDT / 23:00 UTC**. This is the operator window's planned start; public opening and distribution follow acceptance. Record actual maintenance/canary/distribution times during execution. No unattended launch is installed, and the planned time does not waive the outstanding gates.
 
 The goal is a single combined React/Spring guest application at **https://kevinandmel.com**, with `www` redirecting there, private R2 media and the reveal closed. Keep the existing static coming-soon service available for an emergency collection stop. Do not deploy only the frontend or convert the static service into the backend.
 
@@ -22,7 +22,7 @@ Ryan executes the infrastructure steps. Kevin and Melanie approve content, featu
 | Region / plan / instances / budget | Retain one 1-CPU / 2 GiB app instance in Ohio and the existing DB plan/disk; no second hosted stack or scaling change |
 | Release / CI / deployed artifact | Starting baseline: deployed `3b2fd0a` has the reviewed `4f23d9f` application sources; freeze the actual promotion artifact and CI evidence, then record its new production-setting deploy ID |
 | Rollback artifact / checkpoint | Retained compatible artifact, canonical-origin configuration, current database/bucket/ledger and fresh recoverable checkpoint |
-| Cutover window / operator | Date, timezone, Ryan's availability and next health/backup check |
+| Cutover window / operator | Ryan; planned start October 22 at 6 p.m. CDT / 23:00 UTC; actual maintenance/canary/distribution times and next checks recorded during execution |
 
 The retained promotion target is `kevinandmel-staging` (`srv-db7nqu67bikc73bhr580`). The latest verified running commit is **`3b2fd0a985fdc526843dde34bb8a6086a8e2da87`**, deployment **`dep-dbchp7dg1s2s73blbqa0`**, live October 21 at 20:13:36 UTC / 3:13:36 p.m. CDT. Its application, Docker, scripts and workflow sources match reviewed application release **`4f23d9f7a7a30b8f8509621538663c1509274411`**, whose [exact-release CI passed](https://github.com/Ryan-Soprano/kevin-mel-wedding/actions/runs/39651085958). Main `f9f758b` adds documentation only relative to that deployed commit. A later documentation merge is not a new application deployment; the staging deploy above is not evidence of production settings or cutover acceptance.
 
@@ -43,7 +43,7 @@ Keeping these same plans/instances avoids the proposed second app/database bill.
 
 Resource names containing `staging` can remain during the wedding; names alone do not determine runtime access or production behavior. Renaming is cosmetic and is deferred. After promotion, any reachable old provider hostname points at the live production archive and must not be used as a separate staging site. Routine development uses isolated local Docker data and CI; any live canary must be small, deliberate and recorded.
 
-This is a promotion of a retained archive, not an empty production database. Preserve every current record and original, including the 105 known synthetic rehearsal groups / 150 memories, and keep their ownership journals private. Keep those fixtures private; any later cleanup needs a concrete approved scope and normal Delete/retention. Never presume all existing content is synthetic. Preserve the exact current deletion authority and verified independent copy; record the profile/environment change and use matching console expectations afterward. See [operator recovery](operator-recovery.md).
+This is a promotion of a retained archive, not an empty production database. Preserve every current record and original, including **at least 109 known synthetic rehearsal groups / 155 memories**: the preceding cohorts' 105 / 150 plus the [fresh launch rehearsal](../product/guest-launch-rehearsal-2026-10-21.md)'s four groups / five memories. Earlier retained content remains additional; these scoped counts are not an exhaustive archive inventory or a cleanup allowlist. Keep every cohort and its ownership journal private; any later cleanup needs a concrete approved scope and normal Delete/retention. Never presume all existing content is synthetic. Preserve the exact current deletion authority and verified independent copy; record the profile/environment change and use matching console expectations afterward. See [operator recovery](operator-recovery.md).
 
 Paid Render Postgres provides PITR, but the [current recovery documentation](https://render.com/docs/postgresql-backups) excludes restore points within the most recent **ten minutes**. PITR alone therefore does not establish the project's **five-minute database RPO**. Prove an additional recovery mechanism meeting the target, or obtain an explicit change to that requirement; do not mark the gate passed merely because the database is paid. This also does not replace original-media/current-ledger copies or timed recovery evidence.
 
@@ -173,7 +173,7 @@ Complete this record during execution; a planned value is not an observed result
 
 | Item | Observed value / evidence / time |
 | --- | --- |
-| Operator and agreed window (CDT and UTC) | Ryan: ____ · window: ____ |
+| Operator and agreed window (CDT and UTC) | Planned: Ryan, October 22 at 6 p.m. CDT / 23:00 UTC · actual start/end: ____ |
 | Pre-change app and fallback deploy/domain readback | ____ |
 | Frozen application commit, exact-source CI/review and rollback artifact | ____ |
 | Guest rehearsal / shared-network result / unresolved items | ____ |
