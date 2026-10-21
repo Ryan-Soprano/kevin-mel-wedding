@@ -123,6 +123,14 @@ The console applies owner-only permissions before writing package content and re
 
 The dated rehearsal records the separate local expiry helper's 33 controls, synthetic task check and active task's first actual sweep, all passing. Both task runs were started on demand through Windows Task Scheduler with `Start-ScheduledTask`; they establish the installed launch path/result, not automatic hourly/logon firing. The enrolled archive retains its original capture time in an immutable expiry receipt and becomes eligible for removal at 29 days without resetting age; the helper preserves the separate lifetime ledger. This Limited/Interactive task is configured hourly and at operator logon with catch-up/wake, no startup trigger and no stored password. It requires Ryan logged in and the Windows host, private drive and reviewed runtime available. Read its private instructions/status and preserve failure/late/unmanaged-item latches. Its first passing sweep does not establish logout/reboot/offline behavior, continuous availability or expiry of any other backup copy; those requirements remain open.
 
+The [October 21 home verification](home-recovery-verification-2026-10-21.md)
+adds fresh ciphertext authentication, trusted plaintext-digest checks and an
+observed hourly execution with result 0, unchanged archive/receipt/ledger and
+clean incident latches. No manual start was invoked by that observer; disabled
+task history prevented a separate trigger-reason event. It also records additive
+portable escrow work. These checks do not establish continuous DB backup,
+current ledger-copy freshness, offline availability or full RPO/RTO acceptance.
+
 | Requirement | Operator evidence required before launch |
 |---|---|
 | Wedding database RPO ≤ 5 minutes | Approved hosted PostgreSQL recovery mechanism, actual recovery points and an isolated restoration showing the last recoverable committed fixture lies within five minutes. A manually quiesced archive export does not establish continuous database RPO. |
