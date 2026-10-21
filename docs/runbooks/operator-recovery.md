@@ -131,6 +131,15 @@ task history prevented a separate trigger-reason event. It also records additive
 portable escrow work. These checks do not establish continuous DB backup,
 current ledger-copy freshness, offline availability or full RPO/RTO acceptance.
 
+The later [October 21 full-database feasibility test](full-database-recovery-feasibility-2026-10-21.md)
+accepted three independent encrypted database copies and verified one isolated
+restoration of all 19 tables and reviewed catalog definitions. It uses an online
+read-only exported snapshot rather than this quiescent archive console. The
+bounded manual freshness observation does not establish an unattended schedule
+or continuous RPO. Database restoration alone omits media, current independent
+deletion replay, configuration/access reconciliation and running-app readiness;
+complete one-hour RTO and recovery on another physical host remain open.
+
 | Requirement | Operator evidence required before launch |
 |---|---|
 | Wedding database RPO ≤ 5 minutes | Approved hosted PostgreSQL recovery mechanism, actual recovery points and an isolated restoration showing the last recoverable committed fixture lies within five minutes. A manually quiesced archive export does not establish continuous database RPO. |

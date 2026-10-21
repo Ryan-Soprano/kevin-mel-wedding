@@ -6,6 +6,11 @@ by work on the remaining launch gaps. This record supplements the
 local ciphertext integrity and expiry verification do not establish continuous
 database backup, complete disaster recovery or the launch RPO/RTO.
 
+Later on October 21, the [full database feasibility test](full-database-recovery-feasibility-2026-10-21.md)
+accepted three encrypted database captures and verified one isolated restoration.
+That follow-up supplements the historical results below; continuous five-minute
+RPO and complete one-hour RTO still remain open.
+
 ## Application and infrastructure baseline
 
 The user redeployed the existing Render application. Provider readback identifies
