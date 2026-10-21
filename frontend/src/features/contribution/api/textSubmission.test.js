@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
+import { pid } from "node:process";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createServer } from "vite";
@@ -17,7 +18,7 @@ const draft = { guestName: " Guest ", message: " hello " };
 test("direct note form exposes send, private copy, validation descriptions, pending locks and cooldown label precedence", async () => {
   // SSR verifies real React presentation without executing lifecycle/focus/timer
   // effects; separate mounted checks cover those interaction guarantees.
-  const server = await createServer({ configFile: false, logLevel: "silent", cacheDir: "node_modules/.vite/contribution-presentation-test", root: fileURLToPath(new URL("../../../../", import.meta.url)),
+  const server = await createServer({ configFile: false, logLevel: "silent", cacheDir: `node_modules/.vite/contribution-presentation-test-${pid}`, root: fileURLToPath(new URL("../../../../", import.meta.url)),
     plugins: [react()], server: { middlewareMode: true, hmr: false, watch: null }, appType: "custom",
     optimizeDeps: { noDiscovery: true, include: [] } });
   try {

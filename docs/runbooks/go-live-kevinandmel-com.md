@@ -1,0 +1,158 @@
+# Bringing kevinandmel.com live
+
+Prepared October 21, 2026. Use with the [Go Live checklist](../product/go-live-checklist.md). This is an execution guide, not a completed cutover: **the domain still serves coming-soon, and shared-network enforcement plus the selected live target's operational gates remain open.** No infrastructure or DNS was changed while preparing it.
+
+Ryan's confirmed launch target is **Thursday evening, October 22, 2026 (America/Chicago / CDT)**. Record the exact operating window before execution; the checklist sequences preparation for that deadline without waiving the outstanding gates.
+
+The goal is a single combined React/Spring guest application at **https://kevinandmel.com**, with `www` redirecting there, private R2 media and the reveal closed. Keep the existing static coming-soon service available for an emergency collection stop. Do not deploy only the frontend or convert the static service into the backend.
+
+**Approved plan, October 21:** Ryan approved preparing **promotion of the existing app, database and private bucket** at their current size, avoiding a second recurring hosting bill. There will be one hosted production environment, with local isolated environments and CI for future development. No promotion has been performed. Move the domain away from Coming Soon only during the October 22 evening launch window after the remaining gates pass. The [final review packet](../product/promotion-final-review-2026-10-21.md) separates source fixes, verified evidence and the remaining home/provider checks.
+
+## 1. Record the target and recovery plan
+
+Ryan executes the infrastructure steps. Kevin and Melanie approve content, feature scope and archive decisions. Complete the checklist's pre-cutover gates first.
+
+| Record | Value / decision |
+| --- | --- |
+| Canonical origin | `https://kevinandmel.com` (no trailing slash in application settings) |
+| Live Render service and `APP_HOST` | Existing `kevinandmel-staging`, promoted in place; `APP_HOST` is `kevinandmel-staging.onrender.com` (hostname only) |
+| Database / private R2 / deletion authority | Retain the existing targets and current authority; verify identities and recovery access privately |
+| Region / plan / instances / budget | Retain one 1-CPU / 2 GiB app instance in Ohio and the existing DB plan/disk; no second hosted stack or scaling change |
+| Release / CI / deployed artifact | Pin the exact reviewed commit and its passing CI; capture the provider deploy ID and actual running artifact |
+| Rollback artifact / checkpoint | Retained compatible artifact, canonical-origin configuration, current database/bucket/ledger and fresh recoverable checkpoint |
+| Cutover window / operator | Date, timezone, Ryan's availability and next health/backup check |
+
+The proposed promotion target is `kevinandmel-staging` (`srv-db7nqu67bikc73bhr580`), tested release `01fc4e5e50d3f2f1bab35aace7feec0ad993dc53`, deployment `dep-dbcdaqoae00c739d46ag`. Its database is `kevinandmel-staging-db` (`dpg-db7n4e59fdbs73er7610-a`), PostgreSQL 17, Ohio, `0.1c-256mb`, 1 GB disk, external access denied. These resources currently remain staging until the reviewed promotion is executed. The fallback is `kevinandmel-coming-soon` (`srv-db19f3vavr4c73asu350`), at `kevinandmel-coming-soon.onrender.com`.
+
+Fresh read-only Render inventory on October 21 found only those staging/coming-soon services and the staging database. The proposed separate production resources were never created.
+
+### Promotion plan
+
+| Existing resource | Promotion action | Preservation / verification gate |
+| --- | --- | --- |
+| Render app | Promote `srv-db7nqu67bikc73bhr580` using explicit production settings, the reviewed release and canonical origin | Preserve Docker setup, Ohio, `1c-2g`, one instance, manual deployment and `/api/health`; enable maintenance before changing admission/profile/origin |
+| Render database | Keep `dpg-db7n4e59fdbs73er7610-a`, its internal JDBC URL and retained V14 data | Verify fresh backup/recovery access, `0.1c-256mb`, 1 GB disk and `ipAllowList: []`; no reset, restore-over, downgrade or unnecessary new migrations |
+| Private Cloudflare R2 bucket | Keep the exact current account endpoint, bucket, objects and `deletions/v1/` authority; add canonical CORS | Keep public access off and the reviewed upload lifecycle; verify current ledger/independent copy before and after promotion; do not rename/move the bucket or its object prefixes |
+| Private settings | Preserve the current verified DB/R2 credentials and stable throttle secret in provider-managed settings | Audit current access/scope privately; do not rotate stable retry/throttle identities or expose values merely to relabel the environment |
+
+Keeping these same plans/instances avoids the proposed second app/database bill. Existing fixed charges continue; real traffic, R2/storage, independent backups and taxes can still affect usage charges. No second stack, workspace upgrade, autoscaling or paid add-on is approved. The [project budget](../project-plan.md#accepted-decisions) still applies to the total spend.
+
+Resource names containing `staging` can remain during the wedding; names alone do not determine runtime access or production behavior. Renaming is cosmetic and is deferred. After promotion, any reachable old provider hostname points at the live production archive and must not be used as a separate staging site. Routine development uses isolated local Docker data and CI; any live canary must be small, deliberate and recorded.
+
+This is a promotion of a retained archive, not an empty production database. Preserve every current record and original, including the 105 known synthetic rehearsal groups / 150 memories, and keep their ownership journals private. Keep those fixtures private; any later cleanup needs a concrete approved scope and normal Delete/retention. Never presume all existing content is synthetic. Preserve the exact current deletion authority and verified independent copy; record the profile/environment change and use matching console expectations afterward. See [operator recovery](operator-recovery.md).
+
+Paid Render Postgres provides PITR, but the [current recovery documentation](https://render.com/docs/postgresql-backups) excludes restore points within the most recent **ten minutes**. PITR alone therefore does not establish the project's **five-minute database RPO**. Prove an additional recovery mechanism meeting the target, or obtain an explicit change to that requirement; do not mark the gate passed merely because the database is paid. This also does not replace original-media/current-ledger copies or timed recovery evidence.
+
+Capture the old web DNS records, current custom-domain associations, fallback deploy, candidate deploy and private recovery references before changing anything. Leave automatic deployment off on the full app. Do not change the coming-soon service's existing deployment configuration.
+
+## 2. Prepare the live application
+
+Finish the staging rehearsal and record unresolved uploads. Put the existing app behind Render's default **Maintenance Mode** and verify the public 503 response before changing its profile/admission/origin. Take the reviewed recovery checkpoint with any required quiescence. Keep maintenance through promotion and the domain transfer; remove it only for the controlled public canary in section 5. Neither the public-origin setting nor reveal/upload-pause flags provide this traffic gate.
+
+Use the repository-root **Docker web service**, health path `/api/health`, and the pinned release. Keep the reviewed DB migration history; the current candidate bundles V14. Verify backups and rollback compatibility before startup migrations run against retained data.
+
+The promotion candidate's `application-production.properties` now includes Render binding/port/forwarding, Secure cookies, mandatory database settings and one finalization slot. The image still defaults to Spring's `staging` profile, so select **both** production profile/environment explicitly. Confirm these effective settings on the running candidate, including any provider overrides:
+
+| Setting | Live value / requirement |
+| --- | --- |
+| `SPRING_PROFILES_ACTIVE` | `production` |
+| `MEMORY_ARCHIVE_ENVIRONMENT` | `production`; must agree with the Spring profile and the approved data identity |
+| `MEMORY_ARCHIVE_PUBLIC_ORIGIN` | `https://kevinandmel.com` |
+| `SERVER_ADDRESS` | `0.0.0.0` |
+| `SERVER_PORT` | Match the actual Render `PORT`, normally `10000`; confirm it rather than assuming shell expansion inside a Dashboard value |
+| `SERVER_FORWARD_HEADERS_STRATEGY` | `framework`; also verify the actual proxy/peer boundary before clearing SEC-01 |
+| `MEMORY_ARCHIVE_MAX_CONCURRENT_FINALIZATIONS` | `1` |
+| `JAVA_TOOL_OPTIONS` | For the approved 2 GiB plan: `-Xms64m -Xmx1536m -XX:+ExitOnOutOfMemoryError` |
+| `MEMORY_ARCHIVE_REVEALED` | `false`; guest collection does not require private couple access |
+| `MEMORY_ARCHIVE_DB_URL` | The selected private internal JDBC URL, e.g. `jdbc:postgresql://INTERNAL_HOST:5432/DATABASE?sslmode=require`, without embedded credentials |
+| `MEMORY_ARCHIVE_DB_USERNAME`, `MEMORY_ARCHIVE_DB_PASSWORD` | Selected database's private credentials; external DB access stays disabled |
+| `MEMORY_ARCHIVE_LOGIN_THROTTLE_SECRET` | Stable privately generated secret, at least 32 bytes; preserve across restarts |
+| `MEMORY_ARCHIVE_STORAGE_ENABLED` | `true` after the selected private bucket is ready |
+| `MEMORY_ARCHIVE_R2_ENDPOINT` | `https://<32-hex-account-id>.r2.cloudflarestorage.com` |
+| `MEMORY_ARCHIVE_R2_BUCKET` | Approved live private bucket |
+| `MEMORY_ARCHIVE_R2_ACCESS_KEY_ID`, `MEMORY_ARCHIVE_R2_SECRET_ACCESS_KEY` | Bucket-scoped private Object Read & Write credentials with the required ledger operations |
+| `VITE_AUDIO_ENABLED` | `true` **at Docker build time** for the required voice feature |
+| `MEMORY_ARCHIVE_AUDIO_ENABLED` | `true` at runtime after audio/storage acceptance |
+| `MEMORY_ARCHIVE_UPLOADS_PAUSED` | `false` for normal media collection, after acceptance |
+| `MEMORY_ARCHIVE_RETENTION_ENABLED` | `true` after validating private deletion-ledger permissions and the hosted job; required before offering production Delete |
+| `MEMORY_ARCHIVE_RETENTION_INTERVAL_MS` | Reviewed schedule; default `300000` (five minutes), allowed one minute to one day |
+
+Keep the existing reviewed media sizes, quotas and storage budgets. Do not increase them to clear a launch gate. `sslmode=require` requests encrypted transport; it is not a claim of certificate verification. Put no credentials in Git, this guide, Notion, `VITE_*`, build arguments, screenshots or copied logs.
+
+Apply the production profile and archive environment **together** to this existing service behind maintenance, preserving its exact DB/R2 targets and current authority. Explicit DB credentials are required; the candidate no longer supplies local DB defaults in production. Staging-only Basic Auth/origin settings no longer govern the production profile; retain the old configuration privately for rollback, without using it as the live admission gate. Keep reveal false. Review any existing test-account access before later couple activation; do not create, activate or delete real accounts for anonymous guest launch.
+
+Use service settings or one reviewed environment group as the source of truth; inspect override collisions privately. Render offers save-only, runtime deployment and rebuild options. Choose **Save, rebuild and deploy** when changing the frontend audio flag; saving alone does not change the running service. For a runtime-only change, verify the resulting deployment and artifact rather than assuming the saved value took effect. See [Render environment configuration](https://render.com/docs/configure-environment-variables) and [Render port settings](https://render.com/docs/environment-variables).
+
+### Private readiness and media setup
+
+1. Verify the selected DB/bucket identities privately. Use an approved private Render shell/client; do not open database internet access for diagnostics. Run the read-only packaged report with that target's actual effective environment/settings:
+
+   ```bash
+   java -Xmx256m -Dloader.main=com.kevinmel.archive.operations.ReadinessAdministration \
+     -cp /app/app.jar org.springframework.boot.loader.launch.PropertiesLauncher \
+     --expect-environment production report
+   ```
+
+   The live target must report the `production` identity. The console reads base properties plus environment/JVM overrides, not profile files; supply effective overrides such as the one-slot limit. Exit 0 validates its schema/aggregate checks, not provider access, backups, retention jobs or memory. Keep the report private. See [readiness and rollback](operations-and-rollback.md).
+2. Keep R2 public access (`r2.dev` and public bucket domains) off. Add the exact live origin `https://kevinandmel.com` to CORS, using the reviewed `PUT`, `GET`, `HEAD`, `Content-Type` and `MaxAgeSeconds: 300` policy. No wildcard. Keep the old provider origin only for the deliberate transition/draining window, then remove obsolete origins under the chosen canonical-host policy. It no longer serves an independent staging environment. Confirm browser CORS after cutover; the HTTP capacity harness does not prove it.
+3. Preserve the one-day completed-object lifecycle on **`staging/` only**, never on `originals/`, `deletions/v1/` or an empty prefix. Here `staging/` is the app's temporary-upload object prefix and remains correct in production; do not rename it. Verify actual retention work and current independent deletion evidence separately. Application deletion retention and 30-day backup expiry are different controls. Follow [private photo storage](private-photo-storage.md), [voice memories](voice-memories.md) and [deletion/recovery](deletion-and-recovery.md).
+4. Verify the running candidate's commit/deploy identity against the frozen release and exact-commit CI. Refresh affected evidence after any source/configuration change. Complete candidate-origin checks before changing its origin settings; provider-host checks may then intentionally fail while canonical routing is being prepared.
+
+## 3. Prepare Namecheap and the collection window
+
+Read-only checks on October 21 found:
+
+| DNS item | Observed value | Cutover action |
+| --- | --- | --- |
+| Nameservers | `dns1.registrar-servers.com`, `dns2.registrar-servers.com` | Keep Namecheap DNS |
+| `@` A | `216.24.57.1` | Already points to Render; normally leave it, subject to the target's current Dashboard instructions |
+| `www` CNAME | `kevinandmel-coming-soon.onrender.com` | Change to the approved full-app `APP_HOST` |
+| Apex AAAA | No AAAA answer observed | Check both web hostnames and remove conflicting AAAA records if present |
+
+The resolver returned TTL 300 seconds for the apex and 1800 for `www`; these are observed answers, not a verified inventory of configured TTLs. In Namecheap **Domain List → Manage → Advanced DNS**, review the actual records. Lower the web-record TTL in advance if supported and allow the old TTL to age. Preserve MX, SPF/TXT, verification and other mail records. Keep this cutover separate from any nameserver/Cloudflare migration. See [Render's Namecheap instructions](https://render.com/docs/configure-namecheap-dns).
+
+The apex A record routes to shared Render infrastructure. **Moving the hostname association between Render services is essential even if that A record stays identical.** Changing `www` alone leaves the apex on coming-soon.
+
+The existing hosted staging environment becomes production in this cutover. Stop routine staging testing before promotion. Cookies/drafts belong to their original hostname and do not automatically transfer to the custom domain; a restart can expire in-memory sessions. Complete old-origin tests and record unresolved canaries before changing the service's origin configuration. Keep the existing DB/bucket, and use local isolated environments for subsequent development.
+
+For a paid web service, enable its default **Maintenance Mode** while configuring the target and moving the domain. It serves public 503 responses, including `/api/health`, while the service remains running for private checks. Use private readiness during this window and public health after reopening. Do not point its custom maintenance HTML at an untested page with relative assets. See [Render maintenance mode](https://render.com/docs/maintenance-mode).
+
+Maintenance blocks public app requests; it does not stop background writers or revoke already issued R2 PUT permissions. Any backup/restore requiring quiescence must also stop all relevant writers/maintenance processes and wait at least five minutes for issued grants to expire, following [operator recovery](operator-recovery.md#consistency-and-unfinished-uploads).
+
+## 4. Move the hostname and verify TLS
+
+1. In the Render Dashboard, inspect **Settings → Custom Domains** on both coming-soon and the approved full-app target. Capture current associations. Use a supported domain-move action if available; otherwise, in the planned window remove **only** the old apex/`www` association(s) and add `kevinandmel.com` to the full-app target. Render automatically adds `www` redirecting to the apex. Do not delete either service. If Render says the hostname is still in use, stop and resolve its association rather than changing nameservers or deleting infrastructure.
+2. In Namecheap Advanced DNS, set `www` CNAME to the actual `APP_HOST` (hostname only). Keep apex `@` A `216.24.57.1` if still directed by Render. Remove only conflicting web records/redirects/AAAA, preserving mail and unrelated records.
+3. Use Render's **Verify** action for the new target's custom domains and wait for valid certificates. Render manages TLS and HTTP-to-HTTPS redirects. DNS caches, certificate issuance and routing can lag; this procedure does not guarantee a downtime-free transfer. Do not distribute the link during verification or a routing/502 failure. See [Render custom domains](https://render.com/docs/custom-domains).
+4. Check DNS from more than one resolver/network and test apex/`www` HTTPS with certificate validation enabled. While maintenance is on, 503 is expected from the target; it is not the final acceptance result. Verify both HTTP entry points redirect to canonical HTTPS and `https://www.kevinandmel.com` redirects to `https://kevinandmel.com` without a loop.
+5. Confirm the domain belongs to the selected full-app service, not merely that it displays some Render response. Record its live deploy/commit in the operator record; use private provider evidence rather than exposing an operational version endpoint. Keep the fallback service intact.
+
+## 5. Open a controlled public canary, then release the QR
+
+**Turning maintenance off admits all public traffic immediately.** An unannounced URL is still public. Start this window only when the operator is ready to collect and protect real submissions, with the pre-cutover gates closed.
+
+1. Disable maintenance, then verify canonical `/` serves the full guest app, its JS/CSS/gallery load, and same-origin `/api/health` returns 200. Confirm the actual running deployment is still the selected candidate. A health response alone does not prove persistence or media readiness.
+2. From the canonical host, use a few clearly marked synthetic submissions: named and anonymous notes, a photo batch and supported audio. Check validation/draft preservation, receipt recovery, private `PENDING` / `COUPLE_ONLY` defaults and partial-item retry. Test browser R2 CORS and real microphone/file fallback on representative phones. A save must have a committed receipt; a successful PUT alone is insufficient. Reuse the same identity on an uncertain/busy result and honor `Retry-After`; do not create duplicates or re-upload saved siblings.
+3. Check anonymous private routes and private originals remain denied, secure cookie/session behavior and cross-origin rejection. Keep reveal false; these checks do not require activating or signing into real couple accounts. Finish authenticated logout/revocation, private playback/export and shared-device acceptance separately through the approved synthetic process before activating real couple access or opening reveal.
+4. Choose and test the **live target's** provider-host policy. `MEMORY_ARCHIVE_PUBLIC_ORIGIN` does not redirect hosts. After canonical acceptance, disable that live service's Render Subdomain if that is the chosen policy, or use a reviewed canonical redirect. Then test the result. The old `kevinandmel-staging.onrender.com` hostname belongs to this same production service; it is not a test environment. Don't leave an alternate guest entry point whose media CORS/session behavior is broken.
+5. Check current provider memory/CPU, pending/failed media, reservation budgets, backups and alert delivery. The mixed-media rehearsal's highest returned memory sample was about 82% of 2 GiB; it was not an instantaneous peak. Retain the one-slot decoder limit. Unexpected loss, duplicate saves, privacy exposure, repeated unrecovered failures or resource exhaustion stops broad release.
+6. Generate the final QR with **`https://kevinandmel.com`** as the payload and the same human-readable fallback URL. Scan an actual printed sample on iPhone Safari and Android Chrome, check both cellular and the available shared/venue network, and finish affected submission/return/retry cases. The existing [QR card](../product/wedding-qr-card-draft.html) is a layout draft with no final working QR.
+7. Record the release time/timezone, deployed SHA, canonical DNS/TLS, smoke/device results, checkpoint and owner acceptance. Only then distribute cards or announce collection. Keep private credentials and guest content outside the release record.
+
+Observe the first 15 minutes and the first substantial burst, then use the [wedding-day operations sheet](wedding-day-operations.md). Monitor content-free failed saves/busy retries, memory, liveness, actual storage and DB reservations, backup freshness and retention backlog. Review either reservation budget at 80%; do not raise limits blindly. Couple reveal/account activation remains a later operation. The planned October 31 collection review does not install an automatic closure.
+
+## 6. Interruption and rollback
+
+| Situation | Action |
+| --- | --- |
+| Media admission needs relief | Set `MEMORY_ARCHIVE_UPLOADS_PAUSED=true` and deploy the reviewed runtime setting. New media intents/grants stop; notes, issued grants, receipts and finalization remain available. This is not a full collection stop. |
+| Collection must stop while investigated | Enable web-service Maintenance Mode. Record the interruption; preserve drafts, receipts, current data and operational evidence. Stop background writers too if a recovery/export requires quiescence. `REVEALED=false` does not stop guest intake. |
+| App regression with compatible schema | Deploy a retained reviewed artifact against the **same current database, R2 bucket and current deletion authority**, with the correct canonical-origin configuration. Validate schema compatibility, private readiness, receipts and same-item recovery before reopening. |
+| Domain routing/TLS failure | Keep collection stopped. Correct the association/DNS; if necessary return apex/`www` to the recorded coming-soon service and original web records. This restores a holding page, not working receipt/upload recovery. Cached clients and open pages may still fail. |
+| Data-loss/corruption recovery | Keep traffic and relevant writers stopped; follow the separate reviewed database/archive recovery procedure with current independent deletion evidence. Do not improvise a prelaunch database restore over new contributions. |
+
+Render rollback uses a retained prior artifact, but also restores that deploy's environment values, while custom domains use current service configuration. Review restored origin, profile, data credentials, runtime/start/health settings and one-slot limit before reopening: an older staging-origin configuration can break the live hostname. Dashboard and API rollback differ in their automatic-deployment behavior; explicitly keep/recheck it off. Artifact availability and schema compatibility are prerequisites. See [Render rollbacks](https://render.com/docs/rollbacks).
+
+Prefer the compatible artifact with the reviewed **production** settings. Explicitly set and verify `MEMORY_ARCHIVE_REVEALED=false` before reopening every rollback; a historical deploy can restore an open reveal setting and admit test accounts under staging policy. If a rollback intentionally restores the staging profile, set both `MEMORY_ARCHIVE_PUBLIC_ORIGIN` and `MEMORY_ARCHIVE_STAGING_ORIGIN` to the canonical live origin and use the matching `staging` archive identity, while preserving the current data/authority. Check admission and anonymous private-access denial deliberately before reopening; old tester Basic Auth can otherwise block guests. Do not reopen a rollback still configured only for the provider origin.
+
+Never reset the live database, repair Flyway history, bulk-delete a bucket/prefix, rotate guest retry identities, downgrade migrations or restore stale deletion authority to undo an application/domain change. Preserve all contributions received since opening. Record actual interruption and successful reopening checks, then verify the next backup and alert delivery.

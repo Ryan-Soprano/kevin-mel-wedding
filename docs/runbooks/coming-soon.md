@@ -2,6 +2,8 @@
 
 Created 2026-10-04 for Ryan's registered `kevinandmel.com` domain. This is a standalone static page, not a production deployment of the memory archive. Ryan authorized publishing it on October 4; record the provider URL and DNS/HTTPS verification only after they work.
 
+To replace this page with guest collection, use the [Go Live checklist](../product/go-live-checklist.md) and [full-app domain cutover guide](go-live-kevinandmel-com.md). Keep this static service intact as a fallback; moving the custom-domain association is separate from changing its content.
+
 ## Files and boundaries
 
 The deployable folder is [coming-soon/](../../coming-soon/). It contains `index.html`, `styles.css`, `favicon.svg`, `robots.txt`, and one approved image at `images/kevin-mel-grand-central.jpg`. Publish this folder, never the repository root or the existing React application.

@@ -316,6 +316,12 @@ export function createInboxController({
       const owner = generation;
       return createCoupleSubmissionApi({ api, getSession: () => state.session,
         isCurrent: () => !disposed && !cancelling && !suspended && generation === owner && state.phase === "create",
+        onSessionRefresh: (session, previous) => {
+          if (!disposed && !cancelling && !suspended && generation === owner
+            && state.phase === "create" && state.session === previous) {
+            publish({ session: sessionCopy(session) });
+          }
+        },
         onAccessFailure: failure => {
           const owner = cancel();
           if (!disposed && generation === owner) authFailure(failure);

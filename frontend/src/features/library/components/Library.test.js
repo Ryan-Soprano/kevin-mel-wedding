@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
+import { pid } from "node:process";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createServer } from "vite";
@@ -39,6 +40,7 @@ test("actual Library/Tags views expose literal filters, partial dates, bounded p
   const server = await createServer({
     configFile: false,
     logLevel: "silent",
+    cacheDir: `node_modules/.vite/library-test-${pid}`,
     root: fileURLToPath(new URL("../../../../", import.meta.url)),
     plugins: [react()],
     server: {
@@ -220,6 +222,7 @@ async function withLibraryView(check) {
   const server = await createServer({
     configFile: false,
     logLevel: "silent",
+    cacheDir: `node_modules/.vite/library-test-${pid}`,
     root: fileURLToPath(new URL("../../../../", import.meta.url)),
     plugins: [react()],
     server: {
@@ -529,6 +532,7 @@ async function withTagsView(check) {
   const server = await createServer({
     configFile: false,
     logLevel: "silent",
+    cacheDir: `node_modules/.vite/library-test-${pid}`,
     root: fileURLToPath(new URL("../../../../", import.meta.url)),
     plugins: [react()],
     server: {
