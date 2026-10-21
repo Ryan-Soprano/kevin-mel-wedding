@@ -135,8 +135,14 @@ public final class OperationsReadiness {
             Connection connection,
             String sql) throws SQLException {
         var statement = connection.prepareStatement(sql);
-        statement.setQueryTimeout(QUERY_TIMEOUT_SECONDS);
-        return statement;
+        try {
+            statement.setQueryTimeout(QUERY_TIMEOUT_SECONDS);
+            return statement;
+        } catch (SQLException | RuntimeException failure) {
+            try (statement) {
+                throw failure;
+            }
+        }
     }
 
     static Capacity capacity(

@@ -16,6 +16,7 @@ import com.kevinmel.archive.retention.RetentionRepository;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.context.annotation.Import;
@@ -27,6 +28,7 @@ import tools.jackson.databind.json.JsonMapper;
 
 /** Real HTTP, sessions and disposable PostgreSQL; uploaded media remains synthetic. */
 @Testcontainers
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 @SpringBootTest(webEnvironment=SpringBootTest.WebEnvironment.RANDOM_PORT,properties={
         "archive.environment=local","spring.profiles.active=local","archive.audio.enabled=true",
         "archive.revealed=true","archive.storage.enabled=false","archive.media.uploads-paused=false","archive.retention.enabled=false"})
