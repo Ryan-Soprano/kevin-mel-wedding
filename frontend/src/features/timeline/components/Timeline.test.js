@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
+import { pid } from "node:process";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createServer } from "vite";
@@ -24,7 +25,7 @@ const event = { eventId: "22222222-2222-4222-8222-222222222222", title: "Our <mi
 const noop = () => {}, actions = Object.fromEntries(["inbox", "list", "open", "beginCreate", "create", "edit", "delete", "select", "link", "unlink", "openMemory", "page", "reload", "retry"].map(key => [key, noop]));
 
 function createViewServer() {
-  return createServer({ configFile: false, logLevel: "silent", root: fileURLToPath(new URL("../../../../", import.meta.url)),
+  return createServer({ configFile: false, logLevel: "silent", cacheDir: `node_modules/.vite/timeline-test-${pid}`, root: fileURLToPath(new URL("../../../../", import.meta.url)),
     plugins: [react()], server: { middlewareMode: true, hmr: false, watch: null }, appType: "custom", optimizeDeps: { noDiscovery: true, include: [] } });
 }
 

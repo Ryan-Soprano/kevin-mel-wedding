@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
+import { pid } from "node:process";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createServer } from "vite";
@@ -16,6 +17,7 @@ function createViewServer() {
   return createServer({
     configFile: false,
     logLevel: "silent",
+    cacheDir: `node_modules/.vite/albums-test-${pid}`,
     root: fileURLToPath(new URL("../../../../", import.meta.url)),
     plugins: [react()],
     server: { middlewareMode: true, hmr: false, watch: null },

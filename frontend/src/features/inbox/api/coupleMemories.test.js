@@ -9,7 +9,7 @@ import { ApiError, createApiClient } from "../../../shared/api/apiClient.js";
 import { createTextSubmission } from "../../contribution/api/textSubmission.js";
 import { createPhotoBatchSubmission } from "../../media/api/photoBatchSubmission.js";
 import { createAudioSubmission } from "../../audio/api/audioSubmission.js";
-import { COUPLE_SESSION, IDS, MEDIA_DETAIL, MEMORY_DETAIL, TEXT_RECEIPT, UPLOAD_GRANT } from "../../../shared/api/v1/fixtures.js";
+import { ANONYMOUS_SESSION, COUPLE_SESSION, IDS, MEDIA_DETAIL, MEMORY_DETAIL, TEXT_RECEIPT, UPLOAD_GRANT } from "../../../shared/api/v1/fixtures.js";
 
 const copy = value => structuredClone(value);
 const target = { title: "Private title", description: "Remembered context", memoryDate: "2024-06", datePrecision: "MONTH" };
@@ -235,6 +235,207 @@ test("access failure clears creator/session and invalidates every retained priva
   await assert.rejects(privateApi.createTextContribution({ message: "sensitive" }, { idempotencyKey: IDS.key }), { status: 401 });
   assert.equal(controller.getSnapshot().phase, "login"); assert.equal(controller.getSnapshot().session, null);
   await assert.rejects(privateApi.createTextContribution({ message: "sensitive" }, { idempotencyKey: IDS.key }), { status: 401 }); controller.dispose();
+});
+
+for (const [type, rejectedStage] of [
+  ["TEXT", "create"],
+  ...["PHOTO", "AUDIO"].flatMap(type => ["create", "grant", "finalize"].map(stage => [type, stage])),
+]) {
+  test(`private ${type} ${rejectedStage} CSRF recovery retains the original intent and waits for explicit retry`, async () => {
+    const refreshed = { ...copy(COUPLE_SESSION), csrfToken: "synthetic-refreshed-private-csrf-token" };
+    const calls = { create: [], grant: [], finalize: [], transfers: [] };
+    let sessionReads = 0, rejected = false, receipt = null;
+    const rejectOnce = stage => {
+      if (stage === rejectedStage && !rejected) {
+        rejected = true;
+        throw new ApiError("Synthetic stale token.", { status: 403, code: "CSRF_INVALID" });
+      }
+    };
+    const create = async (payload, options) => {
+      calls.create.push({ payload: copy(payload), key: options.idempotencyKey, csrf: options.csrfToken });
+      rejectOnce("create");
+      receipt ??= {
+        ...copy(TEXT_RECEIPT),
+        completion: type === "TEXT" ? "COMPLETE" : "PENDING",
+        memories: [{ ...copy(TEXT_RECEIPT.memories[0]),
+          clientItemId: type === "TEXT" ? null : payload.items[0].clientItemId,
+          memoryType: type, reviewStatus: "KEEP", uploadState: type === "TEXT" ? null : "PENDING" }],
+      };
+      return copy(receipt);
+    };
+    const api = {
+      getSession: async () => copy(++sessionReads === 1 ? COUPLE_SESSION : refreshed),
+      listMemories: async () => ({ items: [], nextCursor: null }),
+      createCoupleTextContribution: create,
+      createCoupleMediaContribution: create,
+      getCoupleReceipt: async () => copy(receipt),
+      authorizeCoupleUpload: async (_contributionId, _memoryId, options) => {
+        calls.grant.push({ key: options.idempotencyKey, csrf: options.csrfToken });
+        rejectOnce("grant");
+        return { ...copy(UPLOAD_GRANT), headers: { "Content-Type": type === "PHOTO" ? "image/png" : "audio/webm" } };
+      },
+      uploadMedia: async (_grant, original) => { calls.transfers.push(original); return { transferred: true }; },
+      finalizeCoupleUpload: async (_contributionId, _memoryId, _grantId, options) => {
+        calls.finalize.push({ key: options.idempotencyKey, csrf: options.csrfToken });
+        rejectOnce("finalize");
+        receipt = { ...receipt, completion: "COMPLETE",
+          memories: receipt.memories.map(memory => ({ ...memory, uploadState: "UPLOADED" })) };
+        return copy(receipt);
+      },
+    };
+    const controller = createInboxController({ api });
+    await controller.loadSession(); controller.beginCreation();
+    const privateApi = controller.getCreationApi();
+    const file = new File(["synthetic retained original"], type === "PHOTO" ? "original.png" : "original.webm", {
+      type: type === "PHOTO" ? "image/png" : "audio/webm",
+    });
+    let nextId = 40;
+    const sender = type === "TEXT" ? createTextSubmission({ api: privateApi })
+      : type === "PHOTO" ? createPhotoBatchSubmission({ api: privateApi })
+        : createAudioSubmission({ api: privateApi,
+          randomUUID: () => `00000000-0000-4000-8000-${String(nextId++).padStart(12, "0")}` });
+    const payload = type === "TEXT" ? { message: "Synthetic retained private note" }
+      : type === "PHOTO" ? { photos: [{ id: IDS.clientItem, file, caption: "Original private caption" }] }
+        : { file, durationSeconds: 2, caption: "Original private caption" };
+    try {
+      let firstFailure;
+      const first = await sender.submit(payload).catch(error => { firstFailure = error; });
+      firstFailure ??= first?.error;
+      assert.equal(firstFailure?.code, "CSRF_INVALID");
+      assert.equal(sender.pending, true);
+      assert.equal(controller.getSnapshot().phase, "create");
+      assert.equal(controller.getSnapshot().session.csrfToken, refreshed.csrfToken);
+      assert.equal(sessionReads, 2);
+      assert.equal(calls[rejectedStage].length, 1);
+      await turn();
+      assert.equal(calls[rejectedStage].length, 1, "refresh must not replay the rejected mutation");
+      await sender.submit(payload);
+      assert.equal(sender.receipt.completion, "COMPLETE");
+      assert.equal(sender.pending, false);
+      const allWrites = [...calls.create, ...calls.grant, ...calls.finalize];
+      assert.ok(allWrites.every(call => call.key === calls.create[0].key));
+      assert.equal(calls[rejectedStage][1].csrf, refreshed.csrfToken);
+      assert.deepEqual(calls.create.at(-1).payload, calls.create[0].payload);
+      assert.ok(calls.transfers.every(original => original === file));
+      if (rejectedStage === "finalize") assert.equal(calls.transfers.length, 1, "retry must finalize the retained grant before reuploading");
+    } finally { sender.dispose(); controller.dispose(); }
+  });
+}
+
+for (const [name, refresh, expectedPhase] of [
+  ["anonymous access", async () => copy(ANONYMOUS_SESSION), "login"],
+  ["changed visible owner", async () => ({ ...copy(COUPLE_SESSION), user: { ...copy(COUPLE_SESSION.user), displayName: "Another synthetic owner" } }), "unavailable"],
+  ["failed access check", async () => { throw new ApiError("Synthetic unavailable read.", { status: 503 }); }, "unavailable"],
+]) {
+  test(`private CSRF refresh clears the creator after ${name}`, async () => {
+    let reads = 0, writes = 0;
+    const api = {
+      getSession: () => ++reads === 1 ? Promise.resolve(copy(COUPLE_SESSION)) : refresh(),
+      listMemories: async () => ({ items: [], nextCursor: null }),
+      createCoupleTextContribution: async () => { writes++; throw new ApiError("Synthetic stale token.", { status: 403, code: "CSRF_INVALID" }); },
+    };
+    const controller = createInboxController({ api });
+    try {
+      await controller.loadSession(); controller.beginCreation();
+      await assert.rejects(controller.getCreationApi().createTextContribution({ message: "Synthetic draft" }, { idempotencyKey: IDS.key }));
+      assert.equal(writes, 1);
+      assert.equal(controller.getSnapshot().phase, expectedPhase);
+      assert.equal(controller.getSnapshot().session, null);
+    } finally { controller.dispose(); }
+  });
+}
+
+for (const lateFailure of [false, true]) {
+  test(`obsolete CSRF refresh ${lateFailure ? "failure" : "success"} cannot clear or replace a newer creator`, async () => {
+    const pending = deferred(); let reads = 0, writes = 0;
+    const api = {
+      getSession: async () => ++reads === 2 ? pending.promise : copy(COUPLE_SESSION),
+      listMemories: async () => ({ items: [], nextCursor: null }),
+      createCoupleTextContribution: async () => { writes++; throw new ApiError("Synthetic stale token.", { status: 403, code: "CSRF_INVALID" }); },
+    };
+    const controller = createInboxController({ api });
+    try {
+      await controller.loadSession(); controller.beginCreation();
+      const saving = controller.getCreationApi().createTextContribution({ message: "Synthetic old draft" }, { idempotencyKey: IDS.key });
+      const rejected = assert.rejects(saving);
+      await turn();
+      await controller.backToInbox(); controller.beginCreation();
+      const replacement = controller.getSnapshot();
+      if (lateFailure) pending.resolve(Promise.reject(new ApiError("Synthetic late failure.", { status: 503 })));
+      else pending.resolve({ ...copy(COUPLE_SESSION), csrfToken: "synthetic-obsolete-refreshed-token" });
+      await rejected;
+      assert.equal(controller.getSnapshot(), replacement);
+      assert.equal(controller.getSnapshot().phase, "create");
+      assert.equal(writes, 1);
+    } finally { controller.dispose(); }
+  });
+}
+
+test("a replacement session owns a creator while an older CSRF refresh is still pending", async () => {
+  const pending = deferred();
+  const replacement = { ...copy(COUPLE_SESSION), csrfToken: "synthetic-new-session-token" };
+  let reads = 0;
+  const api = {
+    getSession: async () => ++reads === 2 ? pending.promise : copy(reads === 1 ? COUPLE_SESSION : replacement),
+    listMemories: async () => ({ items: [], nextCursor: null }),
+    createCoupleTextContribution: async () => { throw new ApiError("Synthetic stale token.", { status: 403, code: "CSRF_INVALID" }); },
+  };
+  const controller = createInboxController({ api });
+  try {
+    await controller.loadSession(); controller.beginCreation();
+    const saving = controller.getCreationApi().createTextContribution({ message: "Synthetic old draft" }, { idempotencyKey: IDS.key });
+    const rejected = assert.rejects(saving, { code: "REQUEST_ABORTED" });
+    await turn(); await controller.recheckSession();
+    const current = controller.getSnapshot();
+    assert.equal(current.session.csrfToken, replacement.csrfToken);
+    pending.resolve(copy(ANONYMOUS_SESSION));
+    await rejected;
+    assert.equal(controller.getSnapshot(), current);
+  } finally { controller.dispose(); }
+});
+
+test("an aborted private request cannot install a late CSRF refresh or clear its current creator", async () => {
+  const pending = deferred(), cancellation = new AbortController();
+  let reads = 0, refreshSignal;
+  const api = {
+    getSession: async options => {
+      if (++reads === 1) return copy(COUPLE_SESSION);
+      refreshSignal = options.signal;
+      return pending.promise;
+    },
+    listMemories: async () => ({ items: [], nextCursor: null }),
+    createCoupleTextContribution: async () => { throw new ApiError("Synthetic stale token.", { status: 403, code: "CSRF_INVALID" }); },
+  };
+  const controller = createInboxController({ api });
+  try {
+    await controller.loadSession(); controller.beginCreation();
+    const current = controller.getSnapshot();
+    const saving = controller.getCreationApi().createTextContribution({ message: "Synthetic draft" }, {
+      idempotencyKey: IDS.key, signal: cancellation.signal,
+    });
+    const rejected = assert.rejects(saving, { code: "REQUEST_ABORTED" });
+    await turn(); cancellation.abort();
+    assert.equal(refreshSignal, cancellation.signal);
+    pending.resolve({ ...copy(COUPLE_SESSION), csrfToken: "synthetic-late-token" });
+    await rejected;
+    assert.equal(controller.getSnapshot(), current);
+  } finally { controller.dispose(); }
+});
+
+test("private authoring still clears genuine application 403 access loss without a CSRF refresh", async () => {
+  let reads = 0;
+  const controller = createInboxController({ api: {
+    getSession: async () => { reads++; return copy(COUPLE_SESSION); },
+    listMemories: async () => ({ items: [], nextCursor: null }),
+    createCoupleTextContribution: async () => { throw new ApiError("Synthetic unavailable archive.", { status: 403, code: "ARCHIVE_UNAVAILABLE" }); },
+  } });
+  try {
+    await controller.loadSession(); controller.beginCreation();
+    await assert.rejects(controller.getCreationApi().createTextContribution({ message: "Synthetic draft" }, { idempotencyKey: IDS.key }), { status: 403 });
+    assert.equal(controller.getSnapshot().phase, "unavailable");
+    assert.equal(controller.getSnapshot().session, null);
+    assert.equal(reads, 1);
+  } finally { controller.dispose(); }
 });
 
 test("disposing a note before transport or while transport ignores abort never sends a late write or exposes a late receipt", async () => {

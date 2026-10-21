@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
+import { pid } from "node:process";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createServer } from "vite";
@@ -12,7 +13,7 @@ import { initialTags } from "../../library/api/tagActions.js";
 import { initialExport } from "../../export/api/exportActions.js";
 
 test("screen adapters preserve access precedence, creation guards and editor reset boundaries", async () => {
-  const server = await createServer({ configFile: false, logLevel: "silent", cacheDir: "node_modules/.vite/inbox-screens-test", root: fileURLToPath(new URL("../../../../", import.meta.url)),
+  const server = await createServer({ configFile: false, logLevel: "silent", cacheDir: `node_modules/.vite/inbox-screens-test-${pid}`, root: fileURLToPath(new URL("../../../../", import.meta.url)),
     plugins: [react()], server: { middlewareMode: true, hmr: false, watch: null }, appType: "custom",
     optimizeDeps: { noDiscovery: true, include: [] } });
   try {

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { pid } from "node:process";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createServer } from "vite";
@@ -238,6 +239,7 @@ test("real public gallery immediately renders one accessible slide with navigati
   const server = await createServer({
     configFile: false,
     logLevel: "silent",
+    cacheDir: `node_modules/.vite/guest-gallery-test-${pid}`,
     root: fileURLToPath(new URL("../../../", import.meta.url)),
     plugins: [react()],
     server: { middlewareMode: true, hmr: false, watch: null },

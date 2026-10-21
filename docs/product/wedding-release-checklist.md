@@ -2,6 +2,8 @@
 
 Prepared October 9, 2026 for QA-02 / REL-01 / REL-02. **Drafts prepared; release gates pending.**
 
+For the October 21 launch snapshot and remaining gates, start with the [Go Live checklist](go-live-checklist.md) and [kevinandmel.com cutover guide](../runbooks/go-live-kevinandmel-com.md). The dated evidence below remains historical; it does not replace those current release decisions.
+
 Kevin and Melanie are product collaborators and the private archive's intended users. Ryan operates infrastructure; Kevin and Melanie decide moderation, publication and continued use. This document prepares reviewable materials and later acceptance. It does not authorize hosting, spending, account activation, messaging testers, public collection or printing final QR cards.
 
 ## Prepared locally
