@@ -59,13 +59,16 @@ final class RecoverySchema {
                     : table)
             .toList();
     private static final List<Table> ARCHIVE_TABLES = AUDIO_TABLES.stream()
-            .map(table -> switch (table.name()) {
-                case TABLE_CONTRIBUTION ->
-                    table(TABLE_CONTRIBUTION, table.definition() + " source:s author_account_id:u?");
-                case TABLE_MEMORY ->
-                    table(TABLE_MEMORY,
-                            table.definition() + " title:s? description:s? memory_date:s? date_precision:s");
-                default -> table;
+            .map(table -> {
+                switch (table.name()) {
+                    case TABLE_CONTRIBUTION:
+                        return table(TABLE_CONTRIBUTION, table.definition() + " source:s author_account_id:u?");
+                    case TABLE_MEMORY:
+                        return table(TABLE_MEMORY,
+                                table.definition() + " title:s? description:s? memory_date:s? date_precision:s");
+                    default:
+                        return table;
+                }
             })
             .toList();
     private static final List<Table> ALBUM_TABLES;
@@ -268,7 +271,7 @@ final class RecoverySchema {
                             .map(column -> sqlIdentifier(column.name()))
                             .collect(java.util.stream.Collectors.joining(","))
                             + " FROM " + quotedTableName + " ORDER BY " + java.util.Arrays.stream(order.split(","))
-                                    .map(String::trim)
+                                    .map(value -> value.trim())
                                     .map(RecoverySchema::sqlIdentifier)
                                     .collect(java.util.stream.Collectors.joining(",")))
                             .query((rs, position) -> {
@@ -517,6 +520,13 @@ final class RecoverySchema {
     }
 
     private static UUID canonicalUuid(JsonNode node) {
+        String text = string(node);
+        UUID uuid = UUID.fromString(text);
+        if (!uuid.toString().equals(text)) {
+            throw invalid();
+        }
+        return uuid;
+    }
 
     private static Instant canonicalInstant(JsonNode node) {
         String text = string(node);
