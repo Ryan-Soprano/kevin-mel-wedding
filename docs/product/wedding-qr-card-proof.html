@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Kevin &amp; Melanie — printable QR proof</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 24px; background: #eee; color: #000; font-family: Georgia, "Times New Roman", serif; }
+    .proof-note { max-width: 650px; margin: 0 auto 24px; font: 15px/1.5 system-ui, sans-serif; }
+    .proof-note h1 { margin: 0 0 8px; font-size: 22px; line-height: 1.25; }
+    .proof-note p { margin: 8px 0; }
+    .status { display: inline-block; margin: 0 0 8px; padding: 5px 8px; border: 2px solid #000; font-size: 13px; font-weight: 800; letter-spacing: .02em; }
+    .card { display: flex; flex-direction: column; width: 105mm; height: 148mm; margin: 0 auto; padding: 7mm 8mm 6mm; border: 1px solid #000; background: #fff; text-align: center; }
+    .names { margin: 0 0 2mm; font: 700 11px/1.3 system-ui, sans-serif; letter-spacing: .12em; }
+    .card h2 { margin: 0 0 2.5mm; font-size: 25px; line-height: 1.13; font-weight: normal; }
+    .invitation { margin: 0 0 3mm; font-size: 15px; line-height: 1.35; }
+    .scan { margin: 0 0 1mm; font: 700 12px/1.3 system-ui, sans-serif; }
+    .qr { display: block; flex: 0 0 auto; width: 48mm; height: 48mm; margin: 0 auto 1.5mm; }
+    .address { margin: 0 0 3mm; font: 700 14px/1.25 system-ui, sans-serif; white-space: nowrap; }
+    .privacy { margin: 0 0 2mm; font: 12.5px/1.4 system-ui, sans-serif; }
+    .reassurance { margin: 0; font: 12px/1.4 system-ui, sans-serif; }
+    .printed-proof { margin: auto 0 0; padding-top: 2mm; font: 800 9px/1.3 system-ui, sans-serif; letter-spacing: .035em; }
+    .print-help { max-width: 650px; margin: 20px auto 0; font: 13px/1.5 system-ui, sans-serif; }
+    @page { size: A4 portrait; margin: 12mm; }
+    @media print {
+      body { padding: 0; background: #fff; }
+      .proof-note { width: 105mm; margin: 0 auto 6mm; font-size: 10px; line-height: 1.35; }
+      .proof-note h1 { font-size: 14px; }
+      .proof-note p { margin: 4px 0; }
+      .status { font-size: 10px; padding: 3px 5px; }
+      .card { break-inside: avoid; }
+      .print-help { width: 105mm; margin: 5mm auto 0; font-size: 9px; }
+    }
+  </style>
+</head>
+<body>
+  <header class="proof-note">
+    <p class="status">PROOF — NOT APPROVED FOR DISTRIBUTION</p>
+    <h1>Wedding memory card · print and scan proof</h1>
+    <p>The card below is A6 portrait (105 × 148 mm). Its real QR encodes exactly <strong>https://kevinandmel.com</strong>. The address may still show Coming Soon until the approved cutover.</p>
+    <p>Kevin and Melanie’s wording/feature approval and physical printed scans on iPhone Safari and Android Chrome are pending. This proof does not approve launch or guest distribution.</p>
+  </header>
+  <main class="card" aria-label="A6 wedding memory card proof">
+    <p class="names">KEVIN &amp; MELANIE</p>
+    <h2>Help us remember<br>our wedding.</h2>
+    <p class="invitation">Leave a note, photos<br>or a voice memory.</p>
+    <p class="scan">Scan to share a memory.</p>
+    <img class="qr" src="kevinandmel-qr.svg" width="182" height="182" alt="QR code for https://kevinandmel.com">
+    <p class="address">https://kevinandmel.com</p>
+    <p class="privacy">Sent privately to Kevin and Melanie.<br>They choose what to share.</p>
+    <p class="reassurance">No account needed.<br>Your name is optional.</p>
+    <p class="printed-proof">PRINT PROOF — DO NOT DISTRIBUTE</p>
+  </main>
+  <footer class="print-help">
+    Print this A4 proof sheet at <strong>100% / Actual size</strong>, with browser headers and footers off. Measure the bordered card: 105 × 148 mm. The QR is 48 × 48 mm including its four-module white quiet zone; leave that white area clear. Scan the printed proof on both phones and record the exact destination before approving any final handout.
+  </footer>
+</body>
+</html>
