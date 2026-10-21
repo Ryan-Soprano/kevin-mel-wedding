@@ -143,7 +143,8 @@ public final class ReadinessAdministration {
             boolean guard) throws Exception {
         // Validate the arbitrary prior artifact before contacting the database.
         var current = guard ? OperationsSchema.bundled() : null;
-        if (guard && !current.equals(OperationsSchema.priorJar(Path.of(args[4])))) {
+        if (guard && (current == null
+            || !current.equals(OperationsSchema.priorJar(Path.of(args[4]))))) {
             throw OperationsSchema.rejected();
         }
         DataSource source = databaseFactory.apply(settings);

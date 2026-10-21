@@ -57,7 +57,7 @@ public class TagService {
             throw LibraryRequest.tagConflict();
         }
         var cards = rows.stream()
-                .map(TagRepository.ListRow::tag)
+            .map(row -> row.tag())
                 .filter(java.util.Objects::nonNull)
                 .toList();
         boolean more = cards.size() > query.limit();
@@ -97,7 +97,7 @@ public class TagService {
             throw LibraryRequest.tagConflict();
         }
         var cards = rows.stream()
-                .map(TagRepository.MemberRow::memory)
+            .map(row -> row.memory())
                 .filter(java.util.Objects::nonNull)
                 .toList();
         boolean more = cards.size() > query.limit();

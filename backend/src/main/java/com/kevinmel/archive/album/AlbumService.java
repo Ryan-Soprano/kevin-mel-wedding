@@ -44,7 +44,9 @@ public class AlbumService {
         var last = items.isEmpty() ? null : items.getLast();
         return new AlbumPage(
                 List.copyOf(items),
-                more ? AlbumCursor.listing(last.createdAt(), last.albumId()).encode() : null);
+                more && last != null
+                        ? AlbumCursor.listing(last.createdAt(), last.albumId()).encode()
+                        : null);
     }
 
     @Transactional(readOnly = true)

@@ -37,7 +37,7 @@ public final class PortableSnapshot {
         this.tags = List.copyOf(tags);
         this.excludedCounts = Map.copyOf(excludedCounts);
         this.validation = validation.entrySet().stream().collect(java.util.stream.Collectors.toUnmodifiableMap(
-                Map.Entry::getKey,
+                entry -> entry.getKey(),
                 entry -> Map.copyOf(entry.getValue())));
     }
 
@@ -78,7 +78,11 @@ public final class PortableSnapshot {
     }
 
     public long originalBytes() {
-        return originals.stream().mapToLong(Original::byteSize).sum();
+        long total = 0;
+        for (Original original : originals) {
+            total += original.byteSize();
+        }
+        return total;
     }
 
     public Map<String, Object> archiveData() {

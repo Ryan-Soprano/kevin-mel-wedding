@@ -144,7 +144,7 @@ public class PhotoRepository {
                 .query(Long.class)
                 .single();
         long requested = items.stream()
-                .mapToLong(PhotoRequest.Item::byteSize)
+                .mapToLong(item -> item.byteSize())
                 .sum();
         admission.requireCapacity(reserved, requested);
         var inserted = db

@@ -29,7 +29,10 @@ import org.springframework.stereotype.Component;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
-/** Bounded full decoding of an original; decoded PCM is counted and discarded, never persisted. */
+/**
+ * Bounded full decoding of an original; decoded PCM is counted and discarded,
+ * never persisted.
+ */
 @Component
 public class AudioVerifier {
     private static final String THREADS_OPTION = "-threads";
@@ -68,7 +71,10 @@ public class AudioVerifier {
         this.timeoutMillis = timeoutMillis;
     }
 
-    /** Missing tools are an operational failure and must not mark an otherwise retryable upload FAILED. */
+    /**
+     * Missing tools are an operational failure and must not mark an otherwise
+     * retryable upload FAILED.
+     */
     public synchronized void requireAvailable() {
         if (available) {
             return;
@@ -206,8 +212,10 @@ public class AudioVerifier {
                 THREADS_OPTION,
                 "1"));
         decode.addAll(input);
-        // Count playable samples and fill interior timestamp gaps. Pinning first_pts to zero would
-        // add demuxer/codec startup padding (not playable audio) on older WebM/Opus runtimes.
+        // Count playable samples and fill interior timestamp gaps. Pinning first_pts to
+        // zero would
+        // add demuxer/codec startup padding (not playable audio) on older WebM/Opus
+        // runtimes.
         decode.addAll(List.of(
                 "-map",
                 "0:a:0",
@@ -243,7 +251,8 @@ public class AudioVerifier {
         var builder = new ProcessBuilder(command);
         var environment = builder.environment();
         environment.clear();
-        // Decoder children need no database, storage or application secrets, nor FFREPORT log settings.
+        // Decoder children need no database, storage or application secrets, nor
+        // FFREPORT log settings.
         for (String name : List.of("PATH", "SystemRoot", "WINDIR", "TEMP", "TMP")) {
             String value = System.getenv(name);
             if (value != null) {
@@ -284,7 +293,7 @@ public class AudioVerifier {
         if (bytes.length < 5 || java.nio.ByteBuffer.wrap(bytes, 0, 4).getInt() != 0x1a45dfa3) {
             throw invalid();
         }
-        int[] position = {4};
+        int[] position = { 4 };
         long headerLength = vint(bytes, position, false);
         if (headerLength > 4096 || headerLength > bytes.length - position[0]) {
             throw invalid();
@@ -333,7 +342,8 @@ public class AudioVerifier {
         }
     }
 
-    private static OggPage oggPage(byte[] bytes, int offset, int sequence, long serial, boolean continued, boolean ended) {
+    private static OggPage oggPage(byte[] bytes, int offset, int sequence, long serial, boolean continued,
+            boolean ended) {
         checkOggHeader(bytes, offset, ended);
         int flags = bytes[offset + 5] & 255;
         checkOggFlags(flags, sequence, continued);
@@ -452,7 +462,8 @@ public class AudioVerifier {
                 "matroska,webm,ogg,mov",
                 "-f",
                 type.equals(MP4_TYPE) ? "mov" : type.equals(OGG_TYPE) ? "ogg" : "matroska"));
-        // MOV external data references stay disabled; originals cannot name other local files.
+        // MOV external data references stay disabled; originals cannot name other local
+        // files.
         if (type.equals(MP4_TYPE)) {
             options.addAll(List.of("-enable_drefs", "0", "-use_absolute_path", "0"));
         }
@@ -461,12 +472,15 @@ public class AudioVerifier {
     }
 
     private static void checkHeaderDuration(JsonNode value) {
-        if (value.isMissingNode() || value.isNull() || (value.isString() && "N/A".equals(value.textValue()))) {
+        if (value.isMissingNode() || value.isNull() || (value.isString() && "N/A".equals(value.asString()))) {
             return;
         }
         try {
-            double seconds = Double.parseDouble(value.asText());
-            // Codec padding is removed during decoding. The exact cap is checked on decoded PCM below.
+            String duration = value.isString() ? value.stringValue()
+                    : value.isNumber() ? value.numberValue().toString() : "";
+            double seconds = Double.parseDouble(duration);
+            // Codec padding is removed during decoding. The exact cap is checked on decoded
+            // PCM below.
             if (!Double.isFinite(seconds) || seconds < 0 || seconds > 120.1) {
                 throw invalid();
             }
@@ -501,9 +515,14 @@ public class AudioVerifier {
             } catch (ExecutionException | TimeoutException failed) {
                 throw unavailable();
             } finally {
-                process.descendants().forEach(ProcessHandle::destroyForcibly);
+                process.descendants().forEach(handle -> {
+                    if (handle != null) {
+                        handle.destroyForcibly();
+                    }
+                });
                 process.destroyForcibly();
-                // Native file handles must be released before verify() removes its private original.
+                // Native file handles must be released before verify() removes its private
+                // original.
                 boolean wasInterrupted = Thread.interrupted();
                 try {
                     process.waitFor(2, TimeUnit.SECONDS);

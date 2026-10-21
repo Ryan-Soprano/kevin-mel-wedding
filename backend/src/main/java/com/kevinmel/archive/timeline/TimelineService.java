@@ -53,8 +53,8 @@ public class TimelineService {
             }
         }
         var all = rows.stream()
-                .map(TimelineRepository.ListRow::event)
-                .filter(java.util.Objects::nonNull)
+                .filter(row -> row != null)
+                .map(row -> row.event())
                 .toList();
         boolean more = all.size() > query.limit();
         var items = more ? all.subList(0, query.limit()) : all;
@@ -99,7 +99,7 @@ public class TimelineService {
             }
         }
         var all = rows.stream()
-                .map(TimelineRepository.MemberRow::memory)
+                .map(row -> row == null ? null : row.memory())
                 .filter(java.util.Objects::nonNull)
                 .toList();
         boolean more = all.size() > query.limit();

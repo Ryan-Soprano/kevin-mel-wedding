@@ -60,9 +60,11 @@ final class RecoverySchema {
             .toList();
     private static final List<Table> ARCHIVE_TABLES = AUDIO_TABLES.stream()
             .map(table -> switch (table.name()) {
-                case TABLE_CONTRIBUTION -> table(TABLE_CONTRIBUTION, table.definition() + " source:s author_account_id:u?");
+                case TABLE_CONTRIBUTION ->
+                    table(TABLE_CONTRIBUTION, table.definition() + " source:s author_account_id:u?");
                 case TABLE_MEMORY ->
-                    table(TABLE_MEMORY, table.definition() + " title:s? description:s? memory_date:s? date_precision:s");
+                    table(TABLE_MEMORY,
+                            table.definition() + " title:s? description:s? memory_date:s? date_precision:s");
                 default -> table;
             })
             .toList();
@@ -139,7 +141,7 @@ final class RecoverySchema {
             return new Reviewed(bundleVersion, fingerprints.get(bundleVersion), Map.copyOf(fingerprints));
         } catch (RecoveryException failure) {
             throw failure;
-        } catch (Exception failure) {
+        } catch (Exception _) {
             throw invalid();
         }
     }
@@ -245,7 +247,11 @@ final class RecoverySchema {
         var writer = tools.jackson.databind.json.JsonMapper.builder().build();
         long total = 0;
         for (Table table : tables(version)) {
-            long count = db.sql("SELECT COUNT(*) FROM " + table.name()).query(Long.class).single();
+            String quotedTableName = sqlIdentifier(table.name());
+            Long count = db.sql("SELECT COUNT(*) FROM " + quotedTableName).query(Long.class).single();
+            if (count == null) {
+                throw invalid();
+            }
             if ((total += count) > MAX_ROWS) {
                 throw new RecoveryException("METADATA_LIMIT");
             }
@@ -258,7 +264,13 @@ final class RecoverySchema {
             };
             result.put(
                     table.name(),
-                    db.sql("SELECT " + table.columnNames() + " FROM " + table.name() + " ORDER BY " + order)
+                    db.sql("SELECT " + table.columns().stream()
+                            .map(column -> sqlIdentifier(column.name()))
+                            .collect(java.util.stream.Collectors.joining(","))
+                            + " FROM " + quotedTableName + " ORDER BY " + java.util.Arrays.stream(order.split(","))
+                                    .map(String::trim)
+                                    .map(RecoverySchema::sqlIdentifier)
+                                    .collect(java.util.stream.Collectors.joining(",")))
                             .query((rs, position) -> {
                                 var row = table.read(rs);
                                 if (encodedSize.addAndGet(writer.writeValueAsBytes(jsonRow(row)).length
@@ -270,6 +282,13 @@ final class RecoverySchema {
                             .list());
         }
         return result;
+    }
+
+    private static String sqlIdentifier(String identifier) {
+        if (identifier == null || !identifier.matches("[a-z_][a-z0-9_]*")) {
+            throw invalid();
+        }
+        return '"' + identifier + '"';
     }
 
     static Map<String, List<Map<String, Object>>> decode(JsonNode node, int version) {
@@ -423,7 +442,11 @@ final class RecoverySchema {
         }
 
         String columnNames() {
-            return String.join(",", columns.stream().map(Column::name).toList());
+            var names = new ArrayList<String>();
+            for (Column column : columns) {
+                names.add(column.name());
+            }
+            return String.join(",", names);
         }
 
         Map<String, Object> read(ResultSet rs) throws SQLException {
@@ -460,6 +483,15 @@ final class RecoverySchema {
             String name,
             char type,
             boolean nullable) {
+        private static UUID canonicalUuid(JsonNode node) {
+            String text = string(node);
+            UUID id = UUID.fromString(text);
+            if (!id.toString().equals(text)) {
+                throw invalid();
+            }
+            return id;
+        }
+
         Object decode(JsonNode node) {
             if (node == null) {
                 throw invalid();
@@ -485,13 +517,6 @@ final class RecoverySchema {
     }
 
     private static UUID canonicalUuid(JsonNode node) {
-        String text = string(node);
-        UUID id = UUID.fromString(text);
-        if (!id.toString().equals(text)) {
-            throw invalid();
-        }
-        return id;
-    }
 
     private static Instant canonicalInstant(JsonNode node) {
         String text = string(node);

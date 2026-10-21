@@ -387,7 +387,7 @@ public class PortablePartWriter {
             boolean complete) {
         Set<UUID> visible = snapshot.memories().stream()
                 .limit(READER_ROWS)
-                .map(PortableSnapshot.Memory::memoryId)
+                .map(memory -> memory.memoryId())
                 .collect(java.util.stream.Collectors.toSet());
         var html = new StringBuilder("<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">")
                 .append("<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'\">")

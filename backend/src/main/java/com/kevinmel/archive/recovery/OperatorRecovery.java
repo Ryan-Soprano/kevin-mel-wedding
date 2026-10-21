@@ -352,7 +352,7 @@ public final class OperatorRecovery {
         // Lock every archive table together. Accounts are deliberately not replaced or
         // exported.
         var targetTables = RecoverySchema.tables(schema.bundleVersion());
-        db.sql("LOCK TABLE " + String.join(",", targetTables.stream().map(RecoverySchema.Table::name).toList())
+        db.sql("LOCK TABLE " + String.join(",", targetTables.stream().map(table -> table.name()).toList())
                 + " IN ACCESS EXCLUSIVE MODE")
                 .update();
         for (var table : targetTables) {

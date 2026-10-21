@@ -118,7 +118,7 @@ public class ExportJobService implements AutoCloseable {
                 }
                 throw new ApiException(412, "EXPORT_EXISTS", "Read this known export before starting another.");
             }
-            long active = jobs.values().stream().filter(Job::active).count();
+            long active = jobs.values().stream().filter(job -> job != null && job.active()).count();
             if (active >= MAX_ACTIVE || jobs.values().stream()
                     .anyMatch(j -> j.active() && j.actor.accountId().equals(actor.accountId()))) {
                 throw ExportRequest.busy();
@@ -807,7 +807,7 @@ public class ExportJobService implements AutoCloseable {
                 return new CapturedStatus(null, 0, 0, 0, Map.of(), null);
             }
             return new CapturedStatus(snapshot.capturedAt(), snapshot.memories().size(), snapshot.originals().size(),
-                    snapshot.originals().stream().mapToLong(PortableSnapshot.Original::byteSize).sum(),
+                    snapshot.originals().stream().mapToLong(original -> original.byteSize()).sum(),
                     snapshot.excludedCounts(), partCount + 1);
         }
     }

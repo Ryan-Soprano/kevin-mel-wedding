@@ -112,7 +112,7 @@ public final class OperationsReadiness {
     }
 
     static void readOnly(Connection connection) throws SQLException {
-        connection.setNetworkTimeout(Runnable::run, NETWORK_TIMEOUT_MILLIS);
+        connection.setNetworkTimeout(command -> command.run(), NETWORK_TIMEOUT_MILLIS);
         connection.setReadOnly(true);
         connection.setTransactionIsolation(Connection.TRANSACTION_REPEATABLE_READ);
         connection.setAutoCommit(false);

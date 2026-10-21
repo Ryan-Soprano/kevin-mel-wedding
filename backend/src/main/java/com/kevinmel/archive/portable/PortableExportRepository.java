@@ -90,9 +90,9 @@ public class PortableExportRepository {
                         clock.instant(),
                         memories,
                         originals,
-                        albums.values().stream().map(Organization::album).toList(),
-                        events.values().stream().map(Organization::event).toList(),
-                        tags.values().stream().map(Organization::tag).toList(),
+                        albums.values().stream().map(organization -> organization.album()).toList(),
+                        events.values().stream().map(organization -> organization.event()).toList(),
+                        tags.values().stream().map(organization -> java.util.Objects.requireNonNull(organization).tag()).toList(),
                         excluded(connection),
                         validation);
                 if (JSON.writeValueAsBytes(snapshot.archiveData()).length > PortableSnapshot.MAX_METADATA_BYTES) {
@@ -412,7 +412,7 @@ public class PortableExportRepository {
             this.connection = DataSourceUtils.getConnection(data);
             try {
                 networkTimeout = connection.getNetworkTimeout();
-                connection.setNetworkTimeout(Runnable::run, 15_000);
+                connection.setNetworkTimeout(command -> command.run(), 15_000);
             } catch (SQLException failure) {
                 DataSourceUtils.releaseConnection(connection, data);
                 throw failure;
@@ -422,7 +422,7 @@ public class PortableExportRepository {
         @Override
         public void close() throws SQLException {
             try {
-                connection.setNetworkTimeout(Runnable::run, networkTimeout);
+                connection.setNetworkTimeout(command -> command.run(), networkTimeout);
             } finally {
                 DataSourceUtils.releaseConnection(connection, data);
             }
@@ -486,7 +486,7 @@ public class PortableExportRepository {
                     precision,
                     created,
                     updated,
-                    links.stream().map(Link::memoryId).toList());
+                    links.stream().map(link -> link.memoryId()).toList());
         }
 
         PortableSnapshot.Tag tag() {
@@ -495,7 +495,7 @@ public class PortableExportRepository {
                     name,
                     created,
                     updated,
-                    links.stream().map(Link::memoryId).toList());
+                    links.stream().map(link -> link.memoryId()).toList());
         }
     }
     private static final class Budget {

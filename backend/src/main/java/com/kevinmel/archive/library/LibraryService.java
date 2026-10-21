@@ -44,7 +44,7 @@ public class LibraryService {
             throw LibraryRequest.libraryConflict();
         }
         var cards = rows.stream()
-                .map(LibraryRepository.Row::memory)
+            .map(row -> row.memory())
                 .filter(java.util.Objects::nonNull)
                 .toList();
         boolean more = cards.size() > query.limit();
