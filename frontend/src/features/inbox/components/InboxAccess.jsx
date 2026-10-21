@@ -1,6 +1,10 @@
-export function InboxLogin({ busy, username, password, setUsername, setPassword, onSubmit }) {
+export function InboxLogin({ busy, retryAfter = 0, username, password, setUsername, setPassword, onSubmit }) {
+  const waiting = retryAfter > 0;
+  const waitMinutes = Math.ceil(retryAfter / 60);
+  const waitMessage = "Please wait " + waitMinutes + (waitMinutes === 1 ? " minute" : " minutes") + " before signing in again.";
   let buttonLabel = "Sign in";
   let progressLabel = "";
+  if (waiting) buttonLabel = "Please wait…";
   if (busy) {
     buttonLabel = "Signing in…";
     progressLabel = "Signing in to your private archive…";
@@ -28,7 +32,8 @@ export function InboxLogin({ busy, username, password, setUsername, setPassword,
           <input id="archive-password" type="password" autoComplete="current-password" value={password}
             onChange={event => setPassword(event.target.value)} disabled={busy} required />
         </div>
-        <button type="submit" disabled={busy}>{buttonLabel}</button>
+        {waiting && <p id="archive-login-wait" role="status" aria-live="polite" aria-atomic="true">{waitMessage}</p>}
+        <button type="submit" disabled={busy || waiting} aria-describedby={waiting ? "archive-login-wait" : undefined}>{buttonLabel}</button>
         <output className="visually-hidden">{progressLabel}</output>
       </form>
     </section>
