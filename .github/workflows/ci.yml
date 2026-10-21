@@ -1,10 +1,9 @@
-name: CI
+name: Release verification 01fc4e5
 
 on:
-  pull_request:
   push:
     branches:
-      - main
+      - feature/release-verification-01fc4e5
 
 permissions:
   contents: read
@@ -25,6 +24,14 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
+        with:
+          ref: 01fc4e5e50d3f2f1bab35aace7feec0ad993dc53
+
+      - name: Confirm exact release commit
+        run: |
+          actual="$(git rev-parse HEAD)"
+          echo "Checked out release commit: $actual"
+          test "$actual" = "01fc4e5e50d3f2f1bab35aace7feec0ad993dc53"
 
       - name: Set up Java 25
         uses: actions/setup-java@v6
@@ -75,6 +82,14 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
+        with:
+          ref: 01fc4e5e50d3f2f1bab35aace7feec0ad993dc53
+
+      - name: Confirm exact release commit
+        run: |
+          actual="$(git rev-parse HEAD)"
+          echo "Checked out release commit: $actual"
+          test "$actual" = "01fc4e5e50d3f2f1bab35aace7feec0ad993dc53"
 
       - name: Set up Node
         uses: actions/setup-node@v7
