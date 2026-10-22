@@ -62,7 +62,63 @@ jobs:
           key: ${{ steps.test-images-cache.outputs.cache-primary-key }}
 
       - name: Install audio verification runtime
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+        run: |
+          set -euo pipefail
+
+          # Keep APT's signature verification and bound only index/archive acquisition.
+          apt_options=(
+            -o Acquire::Retries=1
+            -o Acquire::http::Timeout=15
+            -o Acquire::https::Timeout=15
+            -o Acquire::AllowInsecureRepositories=false
+            -o APT::Get::AllowUnauthenticated=false
+          )
+
+          sudo env DEBIAN_FRONTEND=noninteractive timeout --signal=TERM --kill-after=5s 240s \
+            bash -euo pipefail -s -- "${apt_options[@]}" <<'APT_ACQUIRE'
+          apt_options=("$@")
+
+          acquire() {
+            timeout --signal=TERM --kill-after=5s 100s bash -euo pipefail -c '
+              apt-get "$@" update --error-on=any
+              apt-get "$@" install --download-only --no-install-recommends -y ffmpeg
+            ' apt-acquire "${apt_options[@]}"
+          }
+
+          if acquire; then
+            exit 0
+          fi
+
+          # One fallback on the disposable x64 Ubuntu runner. Preserve suites, components,
+          # Ubuntu keyrings, unrelated repositories and the distinct security endpoint.
+          source /etc/os-release
+          if [[ "${ID:-}" != ubuntu || "$(dpkg --print-architecture)" != amd64 ]]; then
+            echo 'Required Ubuntu x64 mirror fallback is unavailable.' >&2
+            exit 1
+          fi
+          azure_pattern='https?://azure\.archive\.ubuntu\.com/ubuntu(/|[[:space:]]|$)'
+          changed=0
+          for file in /etc/apt/apt-mirrors.txt /etc/apt/sources.list /etc/apt/sources.list.d/ubuntu.sources; do
+            if [[ -f "$file" ]] && grep -Eq "$azure_pattern" "$file"; then
+              sed -E -i "s#${azure_pattern}#https://archive.ubuntu.com/ubuntu\\1#g" "$file"
+              changed=1
+            fi
+          done
+          if [[ "$changed" != 1 ]]; then
+            echo 'Expected Azure Ubuntu source was not found; refusing an unrelated source change.' >&2
+            exit 1
+          fi
+          echo 'Retrying acquisition once through the official Ubuntu archive.'
+          acquire
+          APT_ACQUIRE
+
+          # All archives are already verified/downloaded. Do not wrap active dpkg work in
+          # a new helper timeout or retry an interrupted installation. The job retains its
+          # existing 15-minute backstop and must fail if installation or verification fails.
+          sudo env DEBIAN_FRONTEND=noninteractive apt-get "${apt_options[@]}" \
+            install --no-download --no-install-recommends -y ffmpeg
+          ffmpeg -hide_banner -version
+          ffprobe -hide_banner -version
 
       - name: Run backend tests
         run: ./backend/mvnw -f backend/pom.xml --batch-mode test
