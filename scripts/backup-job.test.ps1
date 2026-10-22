@@ -64,7 +64,7 @@ function Assert-CaptureFailure([scriptblock]$Action) {
     $caught = $null
     try { & $Action | Out-Null } catch { $caught = $_.Exception.Message }
     Assert-Test ($caught -ceq 'capture_failed')
-    Assert-Test (-not $script:CleanupUnconfirmed)
+    Assert-Test ($script:CleanupUnconfirmed)
 }
 function New-TestProcess([string[]]$Arguments) {
     $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
@@ -112,7 +112,7 @@ try {
     Write-TestText $leafPath @'
 const fs = require('node:fs');
 fs.writeFileSync(process.argv[2], JSON.stringify({ leaf: process.pid, adapter: process.ppid }));
-setTimeout(() => fs.writeFileSync(process.argv[3], 'synthetic delayed write'), 3000);
+setTimeout(() => fs.writeFileSync(process.argv[3], 'synthetic delayed write'), 10000);
 '@
     $adapterPath = Join-Path $fixtureRoot 'adapter.ps1'
     Write-TestText $adapterPath @'
@@ -189,7 +189,19 @@ exit 0
         Assert-ProcessGone $identities.adapter
         Assert-Test (-not [System.IO.File]::Exists($marker))
         Complete-Test ('descendants terminated before return: ' + $mode)
+        # These isolated fixture processes perform no remote operations. Their
+        # exact owned identities are gone, so reset only this test invocation.
+        $script:CleanupUnconfirmed = $false
     }
+
+    $script:Case = 'local drain does not establish remote completion'
+    $nativeEnvironment = [Collections.Generic.Dictionary[string,string]]::new()
+    $nativeEnvironment['SystemRoot'] = $env:SystemRoot
+    $drained = [KevinMelBackup.ContainedChild]::Run($NodePath, @('-e', 'setTimeout(()=>{},10000)'),
+        $nativeEnvironment, 1)
+    Assert-Test ($drained.Failure -ceq 'capture_failed' -and $drained.ForcedTermination -and
+        $drained.LocalCleanupConfirmed -and -not $drained.CleanupConfirmed)
+    Complete-Test 'forced termination remains uncertain after confirmed local drain'
 
     # Full coordinator cases use a fixture publisher which validates the real
     # protocol then writes a local marker. It has no Git or network operation.
@@ -208,6 +220,11 @@ if (args[0] === '--publish') fs.writeFileSync(path.join(path.dirname(receiptPath
     Write-TestText $producerAdapter @'
 param($ConfigurationPath)
 $configuration = Get-Content -LiteralPath $ConfigurationPath -Raw | ConvertFrom-Json
+$launches = if ([System.IO.File]::Exists($configuration.launchCounterPath)) {
+    [int][System.IO.File]::ReadAllText($configuration.launchCounterPath)
+} else { 0 }
+[System.IO.File]::WriteAllText($configuration.launchCounterPath, [string]($launches + 1))
+if ($configuration.mode -eq 'nonzero') { exit 42 }
 if ($configuration.mode -eq 'accepted') {
     $now = [DateTimeOffset]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ss.fffZ')
     $receipt = @{ schemaVersion = 1; kind = 'kevin-mel-backup-receipt'; state = 'accepted'; observedAt = $now
@@ -220,6 +237,7 @@ if ($configuration.mode -eq 'accepted') {
 exit $LASTEXITCODE
 '@
     $producerConfiguration = Join-Path $fixtureRoot 'producer-config.json'
+    $launchCounterPath = Join-Path $fixtureRoot 'fixture-producer-launches.txt'
     $receiptPath = Join-Path $fixtureRoot 'producer-receipt.json'
     $statePath = Join-Path $fixtureRoot 'last-accepted-receipt.json'
     $lockPath = Join-Path $fixtureRoot 'capture.lock'
@@ -242,7 +260,8 @@ exit $LASTEXITCODE
         $script:ProducerReady = Join-Path $fixtureRoot ($Name + '-ready.json')
         $script:ProducerMarker = Join-Path $fixtureRoot ($Name + '-late.txt')
         Write-TestText $producerConfiguration (@{ mode = $Mode; receiptPath = $receiptPath; adapterPath = $adapterPath
-            nodePath = $NodePath; leafPath = $leafPath; readyPath = $script:ProducerReady; markerPath = $script:ProducerMarker } | ConvertTo-Json)
+            nodePath = $NodePath; leafPath = $leafPath; readyPath = $script:ProducerReady; markerPath = $script:ProducerMarker;
+            launchCounterPath = $launchCounterPath } | ConvertTo-Json)
     }
     function Start-TestCoordinator {
         return New-TestProcess @('-NoProfile', '-NonInteractive', '-File', $runnerPath, '-ConfigPath', $configurationPath)
@@ -268,18 +287,42 @@ exit $LASTEXITCODE
     Assert-TestLockAvailable
     Complete-Test 'coordinator accepts only fresh receipt and releases lock'
 
-    $script:Case = 'coordinator orphan failure'
+    $script:Case = 'coordinator forced cleanup preserves remote uncertainty'
     Write-TestText $statePath $lastGoodJson
     Set-TestProducer 'inherited' 'coordinator-orphan'
+    $publishedBefore = [System.IO.File]::ReadAllText((Join-Path $fixtureRoot 'fixture-publication.json'))
+    $launchesBefore = [int][System.IO.File]::ReadAllText($launchCounterPath)
+    $failure = Read-TestProcess (Start-TestCoordinator)
+    Assert-Test ($failure.Code -eq 1 -and $failure.Error -ceq 'BACKUP_JOB_FAILED:capture_failed')
+    Assert-Test ([System.IO.File]::ReadAllText($statePath) -ceq $lastGoodJson)
+    Assert-Test ([System.IO.File]::ReadAllText((Join-Path $fixtureRoot 'fixture-publication.json')) -ceq $publishedBefore)
+    Assert-Test ([System.IO.File]::ReadAllText($lockPath) -ceq 'BACKUP_JOB_INFLIGHT')
+    Assert-Test ([int][System.IO.File]::ReadAllText($launchCounterPath) -eq $launchesBefore + 1)
+    # A local fixture counter represents a potentially outstanding remote job.
+    # No network is used, and no failure publisher or replacement may launch.
+    Set-TestProducer 'accepted' 'blocked-replacement'
+    $blockedReplacement = Read-TestProcess (Start-TestCoordinator)
+    Assert-Test ($blockedReplacement.Code -eq 1 -and $blockedReplacement.Error -ceq 'BACKUP_JOB_FAILED:capture_failed')
+    Assert-Test ([int][System.IO.File]::ReadAllText($launchCounterPath) -eq $launchesBefore + 1)
+    Assert-Test ([System.IO.File]::ReadAllText((Join-Path $fixtureRoot 'fixture-publication.json')) -ceq $publishedBefore)
+    $orphanReady = Join-Path $fixtureRoot 'coordinator-orphan-ready.json'
+    $identities = Get-Content -LiteralPath $orphanReady -Raw | ConvertFrom-Json
+    Assert-ProcessGone $identities.leaf
+    Assert-ProcessGone $identities.adapter
+    Assert-Test ([System.IO.File]::ReadAllText($lockPath) -ceq 'BACKUP_JOB_INFLIGHT')
+    Complete-Test 'forced cleanup preserves marker and blocks failure publication and replacement capture'
+    # Explicitly reconcile this synthetic no-network case before another case.
+    Write-TestText $lockPath ''
+
+    $script:Case = 'coordinator normal nonzero failure'
+    Set-TestProducer 'nonzero' 'coordinator-nonzero'
     $failure = Read-TestProcess (Start-TestCoordinator)
     Assert-Test ($failure.Code -eq 1 -and $failure.Error -ceq 'BACKUP_JOB_FAILED:capture_failed')
     Assert-Test ([System.IO.File]::ReadAllText($statePath) -ceq $lastGoodJson)
     $failedReceipt = Get-Content -LiteralPath (Join-Path $fixtureRoot 'fixture-publication.json') -Raw | ConvertFrom-Json -DateKind String
     Assert-Test ($failedReceipt.failure -ceq 'capture_failed' -and $failedReceipt.database.recoveryPointAt -ceq $oldTime)
-    $identities = Get-Content -LiteralPath $script:ProducerReady -Raw | ConvertFrom-Json
-    Assert-ProcessGone $identities.leaf
     Assert-TestLockAvailable
-    Complete-Test 'orphan failure preserves last good evidence before releasing lock'
+    Complete-Test 'normal nonzero failure preserves last good evidence and releases lock'
 
     $script:Case = 'single flight and coordinator termination'
     Set-TestProducer 'wait' 'coordinator-killed'
@@ -364,7 +407,7 @@ namespace BackupChildFixture {
     Complete-Test 'nonempty cleanup latch blocks subsequent producer launches'
 
     $script:Case = 'no delayed writes'
-    Start-Sleep -Milliseconds 3200
+    Start-Sleep -Milliseconds 10200
     Assert-Test (@(Get-ChildItem -LiteralPath $fixtureRoot -Filter '*-late.txt').Count -eq 0)
     Complete-Test 'no descendant writes after any cleanup returns'
     [Console]::Out.WriteLine('BACKUP_CHILD_TESTS_PASSED:' + $script:Passed)

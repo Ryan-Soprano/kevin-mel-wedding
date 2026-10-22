@@ -177,6 +177,8 @@ namespace KevinMelBackup {
         public int ExitCode { get; internal set; }
         public string Failure { get; internal set; }
         public bool CleanupConfirmed { get; internal set; }
+        public bool LocalCleanupConfirmed { get; internal set; }
+        public bool ForcedTermination { get; internal set; }
     }
 
     public static class ContainedChild {
@@ -276,7 +278,7 @@ namespace KevinMelBackup {
         }
         public static ChildResult Run(string executable, string[] arguments,
                 IDictionary<string, string> environment, int timeoutSeconds) {
-            var result = new ChildResult { Failure = "runtime_unavailable", CleanupConfirmed = true };
+            var result = new ChildResult { Failure = "runtime_unavailable", CleanupConfirmed = true, LocalCleanupConfirmed = true };
             IntPtr job = IntPtr.Zero, nul = InvalidHandle, attributes = IntPtr.Zero;
             IntPtr jobList = IntPtr.Zero, handleList = IntPtr.Zero, environmentBlock = IntPtr.Zero;
             bool initialized = false, created = false;
@@ -342,12 +344,19 @@ namespace KevinMelBackup {
                     bool empty = ActiveProcesses(job, out active) && active == 0;
                     if (!empty) {
                         result.Failure = "capture_failed";
-                        result.CleanupConfirmed = TerminateJobObject(job, 1) && WaitForEmptyJob(job, 5000);
+                        result.ForcedTermination = true;
+                        // Killing the local client cannot establish that an SSH,
+                        // Git or copy operation stopped at its remote endpoint.
+                        // Preserve the write-ahead marker even after the local
+                        // job drains; only operator reconciliation may clear it.
+                        result.CleanupConfirmed = false;
+                        result.LocalCleanupConfirmed = TerminateJobObject(job, 1) && WaitForEmptyJob(job, 5000);
                     }
                     CloseHandle(job); // Last, noninherited handle; kill-on-close remains a backstop.
                 } else if (created) {
                     result.Failure = "capture_failed";
                     result.CleanupConfirmed = false;
+                    result.LocalCleanupConfirmed = false;
                 }
                 if (process.Thread != IntPtr.Zero) CloseHandle(process.Thread);
                 if (process.Process != IntPtr.Zero) CloseHandle(process.Process);
@@ -377,7 +386,8 @@ function Invoke-BackupChild([string]$Executable, [string[]]$Arguments, [int]$Tim
     $result = [KevinMelBackup.ContainedChild]::Run($Executable, $Arguments, $info.Environment, $TimeoutSeconds)
     if (-not $result.CleanupConfirmed) {
         # The write-ahead marker already exists durably. Never replace or clear
-        # it after uncertain cleanup: a later run must refuse this lock.
+        # it after forced termination or uncertain cleanup: local process exit
+        # cannot reconcile an operation that may still be running remotely.
         $script:CleanupUnconfirmed = $true
     }
     if ($null -ne $result.Failure) { Stop-BackupJob $result.Failure }

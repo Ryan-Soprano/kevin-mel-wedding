@@ -155,7 +155,7 @@ complete restoration and recovery on another physical host remain unproved, with
 
 ### Wedding automation activation — October 22
 
-The status publisher (`scripts/backup-status.mjs`), independent watchdog (`scripts/backup-watchdog.mjs`) and scheduled workflow (`.github/workflows/backup-watchdog.yml`) are prepared with activation disabled until configured. They do not create a database/media backup. Private machine-local capture/crypto helper copies are present on this wedding laptop but excluded from Git. The former temporary SSH/client context is retired; a newly approved dedicated SSH route is registered and laptop source preflight passed. Actual producer integration, client/proof lifecycle and scheduled captures remain unaccepted. Git transfer alone cannot install or prove the producer. The local [issue 118](https://github.com/Ryan-Soprano/kevin-mel-wedding/issues/118) correction passed 18 Windows regressions and independent review. Delivery must pass current-head CI/configured review before installation; updated runner pin and remaining producer/copy/expiry gates still apply. See the [October 22 readiness review](../product/cutover-readiness-review-2026-10-22.md).
+The status publisher (`scripts/backup-status.mjs`), independent watchdog (`scripts/backup-watchdog.mjs`) and scheduled workflow (`.github/workflows/backup-watchdog.yml`) are prepared with activation disabled until configured. They do not create a database/media backup. Private machine-local capture/crypto helper copies are present on this wedding laptop but excluded from Git. The former temporary SSH/client context is retired; a newly approved dedicated SSH route is registered and laptop source preflight passed. Actual producer integration, client/proof lifecycle and scheduled captures remain unaccepted. Git transfer alone cannot install or prove the producer. The local [issue 118](https://github.com/Ryan-Soprano/kevin-mel-wedding/issues/118) correction passed 20 Windows regressions and independent review. Delivery must pass current-head CI/configured review before installation; updated runner pin and remaining producer/copy/expiry gates still apply. See the [October 22 readiness review](../product/cutover-readiness-review-2026-10-22.md).
 
 Before resuming captures at home, update every private backup, recovery and manual client that uses the replaced database credentials, then verify its required operations privately. Preserve the existing R2/encryption credentials and current deletion authority. Revoke the old database credentials only after affected clients and the current application have passed their checks. A local credential check or clean application startup does not prove complete backup or original-media coverage. Keep credential values and private endpoints outside this record.
 
@@ -169,13 +169,13 @@ Ryan intentionally removed test-only originals on October 22. Reconcile the affe
 
 The opted-in private issue is prepared and must remain titled `Backup watchdog operations` with `<!-- kevin-mel-backup-watchdog:allow -->` in its body. Set its numeric issue number in `ARCHIVE_BACKUP_WATCHDOG_ISSUE`. The workflow names the four `ARCHIVE_BACKUP_WATCHDOG_*_MAX_AGE_SECONDS` variables explicitly; use `300` for `DATABASE`, `MEDIA` and `LEDGER`, and `7200` for `EXPIRY`. No recipient email address is stored in these variables. The confirmed synthetic issue-mention route does not establish delivery of failed-Actions notifications or other operational alert types; verify those separately. If notification routing changes, reverify affected delivery rather than inferring it from a successful API response.
 
-The October 22 allowance readback showed 1,840/2,000 included Actions minutes
-used and a $0 provider spending budget blocking paid usage. Ryan subsequently
-authorized up to $20 for Actions wedding monitoring only; financial setup and
-the actual provider cap remain pending. The included balance alone cannot cover
-the whole intended window. Keep activation off until the real capped window
-and producer/copy/host-proof gates pass; this exception authorizes no other new
-resource, plan increase or assumed subscription change.
+Ryan completed the GitHub Pro upgrade on October 22. The later authenticated
+readback showed 1,840/3,000 included Actions minutes used, 1,160 remaining at
+inspection and $0 billable usage. His authorized Actions wedding-monitoring cap
+is saved as $20 with stop-at-limit and budget alerts enabled. Account usage is
+shared: record the actual monitoring end and recheck the allowance/cap. Keep
+activation off until the operating window and producer/copy/host-proof gates
+pass; this exception authorizes no other new resources or plan increases.
 
 ### Private coordinator contract
 
@@ -232,13 +232,17 @@ resume capture; a later run refuses the nonempty lock even when the OS lock is
 free. Preserve the marker and last accepted evidence, investigate local
 descendants and remote capture/publication work, and independently confirm all
 relevant work has stopped before deliberately clearing the existing marker.
+Any forced child termination retains this uncertainty, even when the local
+Job is confirmed empty: an already-submitted remote copy or Git push may still
+be active. The coordinator preserves the marker and suppresses further failure
+publication in that case. Confirm both local and remote completion independently.
 Record that operator action and revalidate before a new capture. Never delete
 the lock as a blanket retry fix or assume crash/restart guarantees automatic
 resumption. Recheck real backup freshness and watchdog state after recovery.
 
 October 22 implementation verification used Node 24.21.0 and PowerShell 7.6.5: 57 protocol/local-Git fixture checks and 24 coordinator/registrar checks passed. These cover a status-only remote tree, unchanged application index/HEAD, concurrent/refused pushes, preserved accepted evidence, strict pins/private configuration, duplicate keys, missing/stale/future receipts, single-flight locking and bounded child timeout/cleanup. In-memory watchdog checks covered incident/reminder/recovery, malformed or missing status, write failures, deduplication and synthetic/live isolation. That implementation exercise published no live status, registered no scheduled task and sent no notification. The later synthetic phone-delivery verification is credited above; the actual home producer and live monitoring remain unproved.
 
-The later local issue 118 correction passed 18 Windows regressions plus independent
+The later local issue 118 correction passed 20 Windows regressions plus independent
 review, including descendants after leader exit/timeout, abrupt coordinator death,
 preserved marker/restart refusal, exclusive locking, literal arguments and
 discarded output. These are isolated fixtures; they do not merge the correction,

@@ -116,14 +116,14 @@ producer evidence and all activation gates before enabling live checks. The
 ten-minute check schedule and notifications remain best effort; the five-minute
 database freshness goal is a measured target, not a delivery or data-loss guarantee.
 
-An October 22 read-only allowance inspection showed **1,840/2,000 included
-Actions minutes used** and a **$0 Actions spending budget with paid usage
-blocked**; the included balance is insufficient for the entire intended window.
-Ryan subsequently authorized **up to $20 for Actions wedding monitoring only**.
-Financial setup is pending and the provider budget is still $0; no live watchdog
-activation or subscription change is credited. Verify the actual capped window
-and remaining producer/copy gates before enabling monitoring. This spending
-exception does not authorize other new resources or plan increases.
+Ryan completed the GitHub Pro upgrade after the earlier Free-plan allowance
+inspection. The later authenticated readback showed **1,840/3,000 included
+Actions minutes used**, 1,160 remaining at inspection and $0 billable usage.
+He authorized **up to $20 for Actions wedding monitoring**; the saved provider
+budget is **$20 with stop-at-limit and budget alerts enabled**. No live watchdog
+activation is credited. Verify the actual operating window and remaining
+producer/copy gates before enabling monitoring, then recheck shared account
+usage. This exception does not authorize other new resources or plan increases.
 
 ## Actionable review findings
 
@@ -140,10 +140,12 @@ exception does not authorize other new resources or plan increases.
    execution, contains descendants, discards output to NUL and confirms an empty
    Job on normal/failure cleanup. It durably writes `BACKUP_JOB_INFLIGHT` into
    the exclusive `capture.lock` before every child, including publication.
-   A crash/nonempty marker or uncertain cleanup refuses restart. Preserve that
+   A crash/nonempty marker or uncertain cleanup refuses restart. Any forced
+   termination retains the marker and suppresses failure publication, even after
+   the local Job drains: remote copy/push work may remain active. Preserve that
    evidence until independently confirming no local descendants or remote work
    remain, then record deliberate clearing of the existing marker; never
-   blanket-delete the lock. Eighteen isolated Windows regressions and independent
+   blanket-delete the lock. Twenty isolated Windows regressions and independent
    review passed. Delivery must pass current-head CI/configured review before
    installation; updated pins and remaining real producer/copy gates still apply.
    No production capture task was installed or affected by these tests.
