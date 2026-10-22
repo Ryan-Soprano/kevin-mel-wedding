@@ -4,6 +4,7 @@ import MemoryMetadataEditor from "./MemoryMetadataEditor.jsx";
 import MemoryTags from "../../library/components/MemoryTags.jsx";
 import MemoryMedia from "./MemoryMedia.jsx";
 import MemoryReview from "./MemoryReview.jsx";
+import { ArchiveActions, ArchiveScreen } from "./ArchiveLayout.jsx";
 
 function MemoryContents({ state, locked, actions, audioPlayback, reviewControls, deleteButton, cancelDelete, reviewFeedback }) {
   const memory = state.detail;
@@ -44,12 +45,16 @@ function MemoryContents({ state, locked, actions, audioPlayback, reviewControls,
 
 export default function MemoryDetail({ state, locked, actions, audioPlayback, reviewControls, deleteButton, cancelDelete, reviewFeedback }) {
   return (
-    <section className="inbox-detail" aria-label="Memory detail" aria-busy={state.busy}>
-      <button type="button" className="button-secondary" disabled={locked} onClick={actions.navigation.back}>{getDetailBackLabel(state)}</button>
-      {state.busy && !state.detail && <output>Loading memory…</output>}
-      {!state.busy && !state.detail && state.error && <p>This memory could not be loaded. Return to the inbox and try opening it again.</p>}
-      <MemoryContents state={state} locked={locked} actions={actions} audioPlayback={audioPlayback} reviewControls={reviewControls}
-        deleteButton={deleteButton} cancelDelete={cancelDelete} reviewFeedback={reviewFeedback} />
-    </section>
+    <ArchiveScreen className="inbox-detail" label="Memory detail" busy={state.busy}>
+      <ArchiveActions>
+        <button type="button" className="button-secondary" disabled={locked} onClick={actions.navigation.back}>{getDetailBackLabel(state)}</button>
+      </ArchiveActions>
+      <article className="inbox-detail-body">
+        {state.busy && !state.detail && <output>Loading memory…</output>}
+        {!state.busy && !state.detail && state.error && <p>This memory could not be loaded. Return to the inbox and try opening it again.</p>}
+        <MemoryContents state={state} locked={locked} actions={actions} audioPlayback={audioPlayback} reviewControls={reviewControls}
+          deleteButton={deleteButton} cancelDelete={cancelDelete} reviewFeedback={reviewFeedback} />
+      </article>
+    </ArchiveScreen>
   );
 }
