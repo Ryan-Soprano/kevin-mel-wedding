@@ -1,12 +1,7 @@
 @import "./guestFonts.css";
 
-/* Warm paper carries the page. Their favorite colors are small, deliberate accents. */
+/* Keep the established typography and layout within the shared wedding palette. */
 .guest-page {
-  --color-primary: #3f594c;
-  --color-primary-hover: #31463b;
-  --color-text: #34312c;
-  --color-muted: #6c655b;
-  --guest-wine: #77434c;
   --guest-heading-font: "Fraunces", Georgia, "Times New Roman", serif;
   font-family: "Manrope", Arial, sans-serif;
 }

@@ -24,10 +24,10 @@
 .private-inbox .archive-panel {
   min-width: 0;
   padding: clamp(20px, 3vw, 28px);
-  border: 1px solid var(--inbox-border, #dfded4);
+  border: 1px solid var(--inbox-border, var(--color-border-subtle));
   border-radius: 18px;
-  background: #fffefa;
-  box-shadow: 0 3px 12px rgb(41 37 36 / 3%);
+  background: var(--color-surface-raised);
+  box-shadow: 0 3px 12px var(--color-shadow);
 }
 
 .private-inbox .archive-panel-header { margin-bottom: 20px; }
@@ -50,7 +50,7 @@
   min-width: 0;
   min-height: 48px;
   padding: 12px;
-  border: 1px solid #aaa99f;
+  border: 1px solid var(--color-border);
   border-radius: 10px;
   color: var(--color-text);
   background: var(--color-surface);
@@ -61,7 +61,7 @@
 .private-inbox .archive-screen select:focus-visible { outline: 3px solid var(--color-primary); outline-offset: 3px; }
 .private-inbox .archive-screen input:disabled,
 .private-inbox .archive-screen textarea:disabled,
-.private-inbox .archive-screen select:disabled { color: var(--color-muted); background: #f2f1eb; cursor: not-allowed; }
+.private-inbox .archive-screen select:disabled { color: var(--color-muted); background: var(--color-background); cursor: not-allowed; }
 .private-inbox .archive-screen input[aria-invalid="true"],
 .private-inbox .archive-screen textarea[aria-invalid="true"],
 .private-inbox .archive-screen select[aria-invalid="true"] { border: 2px solid var(--color-error); }
@@ -81,19 +81,19 @@
   gap: 14px;
   min-width: 0;
   padding: clamp(28px, 5vw, 48px) 24px;
-  border: 1px dashed #d3d8ca;
+  border: 1px dashed var(--color-border-subtle);
   border-radius: 18px;
-  background: #f6f7f0;
+  background: var(--color-background);
   text-align: center;
 }
 
-.private-inbox .archive-empty-icon { display: grid; place-items: center; width: 60px; height: 60px; border-radius: 50%; color: var(--color-primary); background: #e9eee2; }
+.private-inbox .archive-empty-icon { display: grid; place-items: center; width: 60px; height: 60px; border-radius: 50%; color: var(--color-primary); background: var(--color-surface-sage); }
 .private-inbox .archive-empty-icon svg { width: 28px; height: 28px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
 .private-inbox .archive-empty h3 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: 1.4rem; font-weight: 500; }
 .private-inbox .archive-empty-copy { display: grid; justify-items: center; gap: 12px; max-width: 540px; color: var(--color-muted); line-height: 1.65; }
 .private-inbox .archive-empty-copy > :last-child { margin-bottom: 0; }
 
-.private-inbox .archive-pagination { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 16px; padding-top: 22px; border-top: 1px solid var(--inbox-border, #dfded4); }
+.private-inbox .archive-pagination { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 16px; padding-top: 22px; border-top: 1px solid var(--inbox-border, var(--color-border-subtle)); }
 .private-inbox .archive-pagination > button:first-child { justify-self: start; }
 .private-inbox .archive-pagination > button:last-child { justify-self: end; }
 .private-inbox .archive-page-number { color: var(--color-muted); font-size: 0.875rem; text-align: center; font-variant-numeric: tabular-nums; }

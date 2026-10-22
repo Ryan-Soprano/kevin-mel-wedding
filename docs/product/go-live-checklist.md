@@ -16,6 +16,8 @@ Use the [step-by-step launch guide](../runbooks/go-live-kevinandmel-com.md) to e
 
 **Settings now:** use the [four-value Save only preparation](../runbooks/production-settings-preparation-2026-10-21.md). Its save/readback status is recorded separately from running production acceptance. Hold deployments after saving; the next deployment consumes the saved values. Keep Coming Soon's domain associations and DNS unchanged until the attended window.
 
+**Later frontend change:** the [full-app palette](production-palette-2026-10-21.md) now matches Coming Soon in prepared source. At cutover, rebuild the frozen reviewed release with frontend audio enabled; reusing the existing live build would omit the new colors. No early deployment is authorized by this source change.
+
 ## Work backward from Thursday evening
 
 | When | Required outcome |

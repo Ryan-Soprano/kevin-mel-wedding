@@ -5,10 +5,10 @@
   min-width: 0;
   margin: 0;
   padding: clamp(22px, 3vw, 28px);
-  border: 1px solid #dfded4;
+  border: 1px solid var(--color-border-subtle);
   border-radius: 20px;
-  background: #fffefa;
-  box-shadow: 0 6px 24px rgb(61 66 49 / 4%);
+  background: var(--color-surface-raised);
+  box-shadow: 0 6px 24px var(--color-shadow);
 }
 
 .contribution-flow .note-compose { gap: 20px; }
@@ -16,16 +16,16 @@
 .note-compose label { margin-bottom: 10px; font-size: 0.95rem; }
 .note-compose .message-starters { margin: 0 0 12px; color: var(--color-muted); font-size: 0.85rem; line-height: 1.65; }
 .note-compose input,
-.note-compose textarea { border-color: #b9b8ad; border-radius: 12px; background: var(--color-surface); }
+.note-compose textarea { border-color: var(--color-border); border-radius: 12px; background: var(--color-surface); }
 .note-compose textarea { min-height: 170px; line-height: 1.75; }
 .note-compose input:disabled,
-.note-compose textarea:disabled { color: var(--color-muted); background: #f0f2eb; }
+.note-compose textarea:disabled { color: var(--color-muted); background: var(--color-surface-sage); }
 .note-compose input[aria-invalid="true"],
 .note-compose textarea[aria-invalid="true"] { border-color: var(--color-error); }
 .note-compose #message-count { margin-top: 8px; text-align: right; font-size: 0.78rem; font-variant-numeric: tabular-nums; }
 .note-compose .form-error { margin: 0; color: var(--color-error); }
-.note-compose .note-pending { margin: 0; padding: 14px 16px; border-radius: 12px; color: var(--color-primary); background: #eef2e8; font-size: 0.9rem; line-height: 1.65; }
-.note-compose .note-compose-footer { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 20px; padding-top: 20px; border-top: 1px solid #e6e5dc; }
+.note-compose .note-pending { margin: 0; padding: 14px 16px; border-radius: 12px; color: var(--color-primary); background: var(--color-surface-sage); font-size: 0.9rem; line-height: 1.65; }
+.note-compose .note-compose-footer { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 20px; padding-top: 20px; border-top: 1px solid var(--color-line); }
 .note-compose-footer .note-privacy { display: flex; align-items: flex-start; gap: 8px; max-width: 340px; margin: 0; color: var(--color-muted); font-size: 0.8rem; line-height: 1.6; }
 .note-privacy svg { flex: 0 0 17px; width: 17px; height: 19px; fill: none; stroke: var(--color-primary); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
 .note-compose-footer button { flex: 0 0 auto; min-height: 48px; padding: 12px 26px; border-radius: 10px; }

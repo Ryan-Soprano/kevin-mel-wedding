@@ -1,6 +1,6 @@
 # Bringing kevinandmel.com live
 
-Updated October 21, 2026 against main `228d672f1a07a85be35a4ef39543c0f026297096`. Use with the [Go Live checklist](../product/go-live-checklist.md). This is an execution guide, not a completed cutover: **the latest recorded domain state is Coming Soon, and shared-network enforcement plus the selected live target's operational gates remain open.** Refresh provider state before execution; preparation is not running production acceptance.
+Updated October 21, 2026. The [production palette record](../product/production-palette-2026-10-21.md) identifies the prepared palette source and its verification. Use with the [Go Live checklist](../product/go-live-checklist.md). This is an execution guide, not a completed cutover: **the latest recorded domain state is Coming Soon, and shared-network enforcement plus the selected live target's operational gates remain open.** Refresh provider state before execution; preparation is not running production acceptance.
 
 **Current work is guest rehearsal and cutover preparation.** Ryan deferred failure-handling and recovery automation for now. Keep continuous database RPO, recurring media/current-ledger copies, alerts, source-authority-loss recovery and complete RTO requirements open in the checklist and launch record; the deferral does not mark them passed. Prepare and record the guest/configuration/domain evidence below without reopening that implementation work. The final go/no-go must still identify unresolved requirements and Ryan's decision before public collection opens.
 
@@ -22,11 +22,13 @@ Ryan executes the infrastructure steps. Kevin and Melanie approve content, featu
 | Live Render service and `APP_HOST` | Existing `kevinandmel-staging`, promoted in place; `APP_HOST` is `kevinandmel-staging.onrender.com` (hostname only) |
 | Database / private R2 / deletion authority | Retain the existing targets and current authority; verify identities and recovery access privately |
 | Region / plan / instances / budget | Retain one 1-CPU / 2 GiB app instance in Ohio and the existing DB plan/disk; no second hosted stack or scaling change |
-| Release / CI / deployed artifact | Starting baseline: deployed `3b2fd0a` has the reviewed `4f23d9f` application sources; freeze the actual promotion artifact and CI evidence, then record its new production-setting deploy ID |
+| Release / CI / deployed artifact | Running baseline: `3b2fd0a` has the reviewed `4f23d9f` application sources. Freeze the palette commit and CI/review evidence from the [palette record](../product/production-palette-2026-10-21.md), rebuild with audio enabled, and record the new artifact/deploy ID |
 | Rollback artifact / checkpoint | Retained compatible artifact, canonical-origin configuration, current database/bucket/ledger and fresh recoverable checkpoint |
 | Cutover window / operator | Ryan; planned start October 22 at 6 p.m. CDT / 23:00 UTC; actual maintenance/canary/distribution times and next checks recorded during execution |
 
 The retained promotion target is `kevinandmel-staging` (`srv-db7nqu67bikc73bhr580`). The latest verified running commit is **`3b2fd0a985fdc526843dde34bb8a6086a8e2da87`**, deployment **`dep-dbchp7dg1s2s73blbqa0`**, live October 21 at 20:13:36 UTC / 3:13:36 p.m. CDT. Its application, Docker, scripts and workflow sources match reviewed application release **`4f23d9f7a7a30b8f8509621538663c1509274411`**, whose [exact-release CI passed](https://github.com/Ryan-Soprano/kevin-mel-wedding/actions/runs/39651085958). Main `f9f758b` adds documentation only relative to that deployed commit. A later documentation merge is not a new application deployment; the staging deploy above is not evidence of production settings or cutover acceptance.
+
+The prepared palette changes frontend application styles relative to that still-running baseline. Its [current source and verification record](../product/production-palette-2026-10-21.md) governs the final reviewed palette candidate. No palette deployment has been performed. At the attended cutover, the palette requires a new build of the frozen reviewed source with `VITE_AUDIO_ENABLED=true`; reusing the existing live build cannot deliver the new CSS.
 
 Its database remains `kevinandmel-staging-db` (`dpg-db7n4e59fdbs73er7610-a`), PostgreSQL 17, Ohio, `0.1c-256mb`, 1 GB disk, external access denied. These resources remain staging until the reviewed promotion is executed. The fallback is `kevinandmel-coming-soon` (`srv-db19f3vavr4c73asu350`), at `kevinandmel-coming-soon.onrender.com`. Refresh both services' actual deploy and domain associations before making changes.
 
@@ -70,7 +72,7 @@ Use exactly `production` for the active profile; retaining `staging` as an addit
 
 **Do not use the Render MCP environment-update tool for this preparation.** Its [official implementation](https://github.com/render-oss/render-mcp-server/blob/main/pkg/service/tools.go) updates settings and then triggers a deployment, including with `replace=false` and automatic deployment off. Dashboard [Save only](https://render.com/docs/configure-environment-variables) leaves the current deployment running. Saved settings are consumed by the **next deployment**, so hold manual/API deployments and rebuilds until the attended window and keep automatic deployment off. Do not link an environment group as a preparation shortcut; that also deploys. Keep Coming Soon's domain associations, settings and DNS unchanged now.
 
-Saved Dashboard values are not evidence of effective running production settings. Record the unchanged live deploy and public Coming Soon response after saving. At the window, follow the maintenance/checkpoint procedure below before deploying the saved batch. A restart reuses the current deployment's settings; use a runtime deployment to apply the saved values.
+Saved Dashboard values are not evidence of effective running production settings. Record the unchanged live deploy and public Coming Soon response after saving. At the window, follow the maintenance/checkpoint procedure below before deploying the saved batch with the new palette build. A restart reuses the current deployment's settings; a runtime-only redeploy also cannot supply the prepared palette CSS.
 
 ### Deploy and verify during the attended window
 
@@ -112,7 +114,7 @@ Keep the existing reviewed media sizes, quotas and storage budgets. Do not incre
 
 Apply the production profile and archive environment **together** to this existing service behind maintenance, preserving its exact DB/R2 targets and current authority. Explicit DB credentials are required; the candidate no longer supplies local DB defaults in production. Staging-only Basic Auth/origin settings no longer govern the production profile; retain the old configuration privately for rollback, without using it as the live admission gate. Keep reveal false. Review any existing test-account access before later couple activation; do not create, activate or delete real accounts for anonymous guest launch.
 
-Use the existing service settings as the preparation source of truth; inspect existing environment-group collisions privately. At cutover, Render's **Save and deploy** reuses the existing build for runtime settings; verify the resulting deploy's actual commit/artifact and effective settings. Confirm the existing frontend was built with `VITE_AUDIO_ENABLED=true`; if that flag must change, use **Save, rebuild and deploy** against the frozen reviewed application source and recheck the new artifact. Do not rebuild or select a different application release solely because documentation advanced main. See [Render environment configuration](https://render.com/docs/configure-environment-variables) and [Render port settings](https://render.com/docs/environment-variables).
+Use the existing service settings as the preparation source of truth; inspect existing environment-group collisions privately. At cutover, **rebuild and deploy the final frozen reviewed palette source behind maintenance**, with `VITE_AUDIO_ENABLED=true` verified at build time. This rebuild is required even if the existing frontend already has audio enabled: Render's runtime-only **Save and deploy** reuses that older build and cannot deliver the new CSS. If editing build settings, choose **Save, rebuild and deploy** against the frozen reviewed source. Verify the resulting deploy's actual commit/artifact, palette, audio feature and effective production settings before opening the canary. A documentation merge alone does not require a new application build. See [Render environment configuration](https://render.com/docs/configure-environment-variables) and [Render port settings](https://render.com/docs/environment-variables).
 
 ### Private readiness and media setup
 
@@ -197,7 +199,7 @@ Complete this record during execution; a planned value is not an observed result
 | Operator and agreed window (CDT and UTC) | Planned: Ryan, October 22 at 6 p.m. CDT / 23:00 UTC · actual start/end: ____ |
 | Pre-change app and fallback deploy/domain readback | ____ |
 | Four-value Save only batch and private override audit | Save/readback time: ____ · unchanged deploy/Coming Soon: ____ · override audit: ____ |
-| Frozen application commit, exact-source CI/review and rollback artifact | ____ |
+| Frozen palette commit, exact-source CI/review, audio-enabled build and rollback artifact | ____ |
 | Guest rehearsal / shared-network result / unresolved items | ____ |
 | Chosen fresh checkpoint and private recovery-access verification | Safe reference: ____ · capture/verified time: ____ |
 | Open recovery/automation requirements and decision before public canary | Requirements: ____ · Ryan's go/no-go and time: ____ |

@@ -9,7 +9,7 @@
 
 .private-inbox .library-filters { margin: 0; }
 .private-inbox .library-filters .guest-help { margin: 10px 0 0; }
-.private-inbox .library-tag-filter { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px; padding: 16px; border-radius: 12px; background: var(--inbox-soft, #f0f3ed); }
+.private-inbox .library-tag-filter { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px; padding: 16px; border-radius: 12px; background: var(--inbox-soft, var(--color-surface-sage)); }
 .private-inbox .library-tag-filter p { margin: 0; }
 .private-inbox .library-tag-search,
 .private-inbox .tag-search,

@@ -1,11 +1,26 @@
 :root {
-  --color-background: #faf7f2;
-  --color-border: #78716c;
-  --color-border-subtle: #a8a29e;
-  --color-error: #b91c1c;
-  --color-muted: #57534e;
-  --color-primary: #405747;
-  --color-primary-hover: #304236;
-  --color-surface: #ffffff;
-  --color-text: #292524;
+  color-scheme: light;
+  /* The Coming Soon palette follows guests into the full archive. */
+  --color-background: #fbf7ee;
+  --color-border: #967e87;
+  --color-border-subtle: #dac5cb;
+  --color-line: #e3d1d4;
+  --color-error: #a3293d;
+  --color-error-surface: #f8e5e7;
+  --color-muted: #68565b;
+  --color-primary: #315e4c;
+  --color-primary-hover: #244a3b;
+  --color-accent: #84354b;
+  --color-surface: #fffbf6;
+  --color-surface-raised: #fffdf9;
+  --color-surface-sage: #e8f0e3;
+  --color-surface-blush: #f5e6e7;
+  --color-text: #55283b;
+  --color-gold: #a47d47;
+  --color-overlay: rgb(55 28 41 / 76%);
+  --color-shadow: rgb(85 40 59 / 10%);
+  --color-page-gradient:
+    radial-gradient(ellipse at 88% 30%, #d9e8d4ad, transparent 54%),
+    radial-gradient(ellipse at 8% 82%, #ecd0d2a6, transparent 55%),
+    linear-gradient(135deg, #fffaf3, #f9f3ea 62%, #f5f0e9);
 }

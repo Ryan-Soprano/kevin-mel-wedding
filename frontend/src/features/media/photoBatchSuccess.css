@@ -11,7 +11,7 @@
   height: 56px;
   border-radius: 50%;
   color: var(--color-primary);
-  background: #edf2e7;
+  background: var(--color-surface-sage);
 }
 
 /* The guest form normally hides its repeated title beneath the page heading. */

@@ -1,6 +1,6 @@
 .private-inbox {
-  --inbox-border: #dfded4;
-  --inbox-soft: #f0f3ed;
+  --inbox-border: var(--color-border-subtle);
+  --inbox-soft: var(--color-surface-sage);
   max-width: 1020px;
   padding: clamp(24px, 5vw, 56px) clamp(18px, 4vw, 40px) 64px;
   overflow-wrap: anywhere;
@@ -55,7 +55,7 @@
 
 .inbox-vault-label {
   padding: 7px 12px;
-  border: 1px solid #d5dfd2;
+  border: 1px solid var(--color-border-subtle);
   border-radius: 999px;
   background: var(--inbox-soft);
 }
@@ -112,7 +112,7 @@
 
 .inbox-tool-links .button-secondary:hover:not(:disabled) {
   color: var(--color-primary);
-  background: #e7ece3;
+  background: var(--color-surface-sage);
 }
 
 .inbox-filters {
@@ -121,7 +121,7 @@
   padding: 7px;
   border: 1px solid var(--inbox-border);
   border-radius: 14px;
-  background: #eeeee6;
+  background: var(--color-surface-blush);
 }
 
 .inbox-filters button {
@@ -136,7 +136,7 @@
 .inbox-filters [aria-pressed="true"] {
   color: var(--color-surface);
   background: var(--color-primary);
-  box-shadow: 0 2px 5px rgb(41 37 36 / 8%);
+  box-shadow: 0 2px 5px var(--color-shadow);
 }
 
 .inbox-page-count { margin: 0 0 16px; color: var(--color-muted); font-size: 0.85rem; }
@@ -158,7 +158,7 @@
   border: 1px solid var(--inbox-border);
   border-radius: 18px;
   background: var(--color-surface);
-  box-shadow: 0 5px 20px rgb(61 66 49 / 4%);
+  box-shadow: 0 5px 20px var(--color-shadow);
 }
 
 .inbox-card-top { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
@@ -190,7 +190,7 @@
   border: 1px solid var(--inbox-border);
   border-radius: 22px;
   background: var(--color-surface);
-  box-shadow: 0 12px 32px rgb(61 66 49 / 5%);
+  box-shadow: 0 12px 32px var(--color-shadow);
 }
 
 .inbox-login-welcome {
@@ -199,8 +199,8 @@
   align-items: flex-start;
   justify-content: center;
   padding: 38px;
-  color: #fffdf7;
-  background: radial-gradient(ellipse at top left, #697b61, transparent 80%), #405747;
+  color: var(--color-surface-raised);
+  background: radial-gradient(ellipse at top left, var(--color-primary), transparent 80%), var(--color-primary-hover);
 }
 
 .inbox-monogram {
@@ -211,7 +211,7 @@
   width: 105px;
   height: 105px;
   margin-bottom: 27px;
-  border: 1px solid rgb(255 253 247 / 35%);
+  border: 1px solid color-mix(in srgb, var(--color-surface-raised) 35%, transparent);
   border-radius: 50%;
   font-family: Georgia, "Times New Roman", serif;
   font-size: 2rem;
@@ -229,7 +229,7 @@
 
 .inbox-login-welcome p { font-size: 0.92rem; line-height: 1.8; }
 
-.inbox-login-private { margin: 18px 0 0; padding-top: 20px; border-top: 1px solid rgb(255 253 247 / 25%); font-size: 0.78rem !important; }
+.inbox-login-private { margin: 18px 0 0; padding-top: 20px; border-top: 1px solid color-mix(in srgb, var(--color-surface-raised) 25%, transparent); font-size: 0.78rem !important; }
 
 .inbox-login-form { gap: 22px; margin: 0; padding: 38px; align-content: center; }
 
@@ -237,7 +237,7 @@
 
 .inbox-login-intro p { margin: 0; color: var(--color-muted); font-size: 0.9rem; line-height: 1.7; }
 
-.inbox-login-form input { min-height: 50px; border-color: #aaa99d; border-radius: 10px; }
+.inbox-login-form input { min-height: 50px; border-color: var(--color-border); border-radius: 10px; }
 
 .inbox-loading,
 .inbox-empty {
@@ -261,7 +261,7 @@
 
 .inbox-empty p { margin: 0; }
 
-.inbox-note { padding: 22px; border: 1px solid var(--inbox-border); border-radius: 12px; background: #faf9f5; line-height: 1.85; }
+.inbox-note { padding: 22px; border: 1px solid var(--inbox-border); border-radius: 12px; background: var(--color-surface-raised); line-height: 1.85; }
 
 .inbox-detail { display: grid; gap: 16px; min-width: 0; padding: 28px; border: 1px solid var(--inbox-border); border-radius: 20px; background: var(--color-surface); }
 
@@ -298,7 +298,7 @@
 .inbox-context > summary:focus-visible { outline: 3px solid var(--color-primary); outline-offset: 3px; }
 .inbox-context[open] { display: grid; gap: 16px; }
 
-.inbox-delete-confirmation button:last-child { background: #944838; color: white; }
+.inbox-delete-confirmation button:last-child { background: var(--color-error); color: var(--color-surface-raised); }
 
 .inbox-metadata form { display: grid; gap: 8px; }
 
