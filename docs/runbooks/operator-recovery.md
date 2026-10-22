@@ -155,11 +155,27 @@ complete restoration and recovery on another physical host remain unproved, with
 
 ### Wedding automation activation — October 22
 
-The status publisher (`scripts/backup-status.mjs`), independent watchdog (`scripts/backup-watchdog.mjs`) and scheduled workflow (`.github/workflows/backup-watchdog.yml`) are prepared with activation disabled until configured. They do not create a database/media backup. Private machine-local capture/crypto helper copies are present on this wedding laptop but excluded from Git. The former temporary SSH/client context is retired; a newly approved dedicated SSH route is registered and laptop source preflight passed. Actual producer integration, client/proof lifecycle and scheduled captures remain unaccepted. Git transfer alone cannot install or prove the producer. The local [issue 118](https://github.com/Ryan-Soprano/kevin-mel-wedding/issues/118) correction passed 20 Windows regressions and independent review. Delivery must pass current-head CI/configured review before installation; updated runner pin and remaining producer/copy/expiry gates still apply. See the [October 22 readiness review](../product/cutover-readiness-review-2026-10-22.md).
+The status publisher (`scripts/backup-status.mjs`), independent watchdog (`scripts/backup-watchdog.mjs`) and scheduled workflow (`.github/workflows/backup-watchdog.yml`) are prepared with activation disabled until configured. They do not create a database/media backup. Private machine-local capture/crypto helper copies are present on this wedding laptop but excluded from Git. [PR 120](https://github.com/Ryan-Soprano/kevin-mel-wedding/pull/120) merged as `ed40593e`, closing [issue 118](https://github.com/Ryan-Soprano/kevin-mel-wedding/issues/118) after 20 Windows regressions, CI and configured AI review passed. Updated private pins and remaining scheduled producer/copy/expiry gates still apply. No capture task is installed; Git transfer alone cannot install or prove it. See the [October 22 readiness review](../product/cutover-readiness-review-2026-10-22.md).
+
+The approved dedicated SSH route is registered. The current source bootstrap is
+bound to application `726cb03` and passed its read-only schema/catalog probe.
+A new DB-only checkpoint was accepted on October 22 at approximately **21:58 UTC /
+4:58 p.m. CDT**, with authenticated readback, an independent encrypted F: copy,
+immutable expiry enrollment, same-snapshot proof and exact source-proof cleanup.
+It does not establish scheduled capture, complete original-media/current-ledger
+coverage or functional full recovery. An intervening user deployment invalidated
+the preceding temporary source route; its local context/journal is preserved and
+that earlier remote cleanup was not observed. Do not transfer the new cleanup
+proof to the earlier context. Recheck source binding after any further deployment.
 
 Before resuming captures at home, update every private backup, recovery and manual client that uses the replaced database credentials, then verify its required operations privately. Preserve the existing R2/encryption credentials and current deletion authority. Revoke the old database credentials only after affected clients and the current application have passed their checks. A local credential check or clean application startup does not prove complete backup or original-media coverage. Keep credential values and private endpoints outside this record.
 
 Ryan intentionally removed test-only originals on October 22. Reconcile the affected database references, remaining objects and current deletion evidence through the approved procedures before accepting a new complete checkpoint or backup baseline. Report missing originals accurately; do not invent deletion evidence, reset the archive or silently treat missing objects as a complete copy. Preserve earlier dated restore results within their original scope.
+The read-only reconciliation and scoped plan are prepared: missing uploaded
+originals remain, with exact private journal ownership for only part of the
+candidate set. Permanent disposal is not authorized. Preserve unrelated and
+unmatched records and current authority. Normal Delete's 30-day deadline does
+not by itself make an archive with missing originals complete.
 
 1. On that laptop, verify the existing capture, encryption and expiry helpers, private runtime/drive access, least-privilege internal database route and recovery key. Keep database internet access closed. Preserve single-flight capture and expiry locking, original capture age, authenticated readback and durable receipts. A file's existence or process success alone is insufficient.
 2. Connect scheduled capture to the status publisher only after the real encrypted copy is verified, durably published and expiry-enrolled. Measure DB freshness separately from independent original-media/current-ledger copy coverage; do not turn an unverified or DB-only result into a complete-backup success. Publish content-free status only to the private `feature/backup-status` branch at `ops/backup-status.json`, using the laptop's private Git authentication without checking out, resetting or force-pushing that branch. Record failures and gaps without refreshing the last accepted recovery point.
@@ -215,7 +231,7 @@ After preparing reviewed private paths, use only the read-only validation modes 
 & $reviewedPwshPath -NoProfile -NonInteractive -File $reviewedRegistrarPath -ConfigPath $privateJobConfiguration -ValidateOnly
 ```
 
-Both require `BACKUP_JOB_CONFIGURATION_VALID` and exit 0; validation performs no capture, publication, state update or task registration. Installation remains a later deliberate step after producer/copy/expiry and alert evidence is accepted. The registrar refuses an existing `KevinMelBackupCapture` task and never replaces the existing expiry task. Its eventual capture task uses the current Interactive/Limited operator, no stored password, a two-minute trigger, `IgnoreNew`, catch-up/wake and hidden task/PowerShell windows. Execution is bounded by `timeoutSeconds + 480` seconds, at most 12 minutes, to allow validation and success/failure publication. A long run skips overlapping triggers; stale status still alerts through the independent watchdog, without a five-minute completion or notification guarantee.
+Both require `BACKUP_JOB_CONFIGURATION_VALID` and exit 0; validation performs no capture, publication, state update or task registration. Installation remains a later deliberate step after producer/copy/expiry and alert evidence is accepted. The registrar refuses an existing `KevinMelBackupCapture` task and never replaces the existing expiry task. Its eventual capture task uses the current Interactive/Limited operator, no stored password, a two-minute trigger, `IgnoreNew`, catch-up/wake and hidden task/PowerShell windows. Battery operation permits a capture to start and does not stop one when AC power is unplugged. Keep the wedding laptop plugged in, signed in, online and connected to the recovery drive; tasks cannot run while the laptop is shut down or the operator is signed out. Execution is bounded by `timeoutSeconds + 480` seconds, at most 12 minutes, to allow validation and success/failure publication. A long run skips overlapping triggers; stale status still alerts through the independent watchdog, without a five-minute completion or notification guarantee.
 
 The issue 118 correction assigns each child to a Windows kill-on-close Job
 atomically during process creation, before the suspended child can execute.
@@ -242,10 +258,11 @@ resumption. Recheck real backup freshness and watchdog state after recovery.
 
 October 22 implementation verification used Node 24.21.0 and PowerShell 7.6.5: 57 protocol/local-Git fixture checks and 24 coordinator/registrar checks passed. These cover a status-only remote tree, unchanged application index/HEAD, concurrent/refused pushes, preserved accepted evidence, strict pins/private configuration, duplicate keys, missing/stale/future receipts, single-flight locking and bounded child timeout/cleanup. In-memory watchdog checks covered incident/reminder/recovery, malformed or missing status, write failures, deduplication and synthetic/live isolation. That implementation exercise published no live status, registered no scheduled task and sent no notification. The later synthetic phone-delivery verification is credited above; the actual home producer and live monitoring remain unproved.
 
-The later local issue 118 correction passed 20 Windows regressions plus independent
-review, including descendants after leader exit/timeout, abrupt coordinator death,
+The delivered issue 118 correction passed 20 Windows regressions plus independent
+review, CI and configured AI review, including descendants after leader exit/timeout, abrupt coordinator death,
 preserved marker/restart refusal, exclusive locking, literal arguments and
-discarded output. These are isolated fixtures; they do not merge the correction,
-install the real capture task or prove a live accepted backup.
+discarded output. PR 120 merged as `ed40593e`. These isolated fixtures do not
+install the real capture task or establish recurring complete recovery coverage;
+the separate accepted DB-only checkpoint retains only its recorded scope.
 
 The dated hosted rehearsal verifies authenticated original reads, isolated recovery writes and cleanup for the actual small staging archive. Guest PUT/CORS/grant-expiry/retry behavior, representative capacity, full database recovery, recurring scheduling, live operational alerts (OPS-03), backup retention and the broader operational targets remain release acceptance. Audio also participates in synthetic original-preserving export, restoration and current-ledger erasure tests. Audio admission is already enabled; physical recording/audibility, private original comparison and affected canonical-origin acceptance retain their recorded limits. Decoder/recovery checks do not establish phone recording behavior or representative hosted recovery capacity.

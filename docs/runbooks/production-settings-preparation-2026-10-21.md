@@ -2,7 +2,7 @@
 
 Ryan originally requested preparation for **Thursday, October 22 at 6 p.m. CDT / 23:00 UTC**, keeping Coming Soon until the attended cutover. On October 22 he made that time flexible: the attended cutover may begin at any time today once preparation is complete and he records the readiness/go-no-go decision. Promote the existing app/database/private bucket at their current sizes. No second hosted stack, scheduled launch, account activation, reveal or fixture cleanup is part of this preparation.
 
-**Latest state, October 22: application commit `0a343abf1c2047af8870707627b9ef9cefa32b93` remains deployed as `dep-dbd60hnavr4c73cuk67g` behind maintenance. The new-Shell read-only database/schema/aggregate report passed at 20:40:12 UTC / 3:40:12 p.m. CDT. Repository main can advance independently.** The [home handoff](../../HANDOFF-2026-10-19.md#1-resume-here) retains the filtered command for affected rechecks; its later successful result supersedes the failed multiline paste's pending status. Keep maintenance **ON**, automatic deployment **OFF**, reveal `false`, retention `false` and canonical Coming Soon in place. Media integrity, backup operation, credential-consumer retirement and canonical acceptance remain separate. No domain move or public canary occurred.
+**Latest state, October 22: Ryan manually deployed application commit `726cb035fd041e2089b9864f874686ef822f0dc4` as `dep-dbd7vgfavr4c73d4gih0`, live at 21:28:41 UTC / 4:28:41 p.m. CDT. Maintenance was restored ON around 21:33 UTC / 4:33 p.m. CDT. Guarded running-process startup-input checks and private database/schema checks passed.** [Exact-source CI 39857342756](https://github.com/Ryan-Soprano/kevin-mel-wedding/actions/runs/39857342756) passed, with independent frontend-diff review clear; configured GitHub AI review is not credited for this direct user commit. The [home handoff](../../HANDOFF-2026-10-19.md#1-resume-here) retains the filtered command for affected rechecks. Keep maintenance **ON**, automatic deployment **OFF**, reveal `false`, retention `false` and canonical Coming Soon in place. The new approximately 21:58 UTC DB-only checkpoint passed authenticated readback, independent encrypted F: publication, immutable expiry enrollment, same-snapshot proof and exact source-proof cleanup. Full media/recovery, scheduled backup operation, credential-consumer retirement and canonical acceptance remain separate. No domain move or canonical public canary occurred.
 
 The original Save only action and screenshot below are historical preparation evidence, not current credential authority. Ryan saved the four intended values without changing the running deployment at that step; the connector lacked a save-only update. Later deployments and security remediation are recorded separately below. Never obtain current DB credentials from an old screenshot or chat value.
 
@@ -28,7 +28,7 @@ entries. Maintenance remains ON and automatic deployment OFF at the existing
 single 1-CPU / 2 GiB size. Public provider root/health GETs returned maintenance
 503; the canonical homepage returned 200 Coming Soon. No DNS move occurred.
 
-Later readback shows the same application commit deployed as
+Historical later readback showed the same application commit deployed as
 `dep-dbd60hnavr4c73cuk67g`, live October 22 at **19:13:45.411104 UTC /
 2:13:45 p.m. CDT**. Startup at 19:13:34.548 UTC confirms exactly one active
 profile, `production`; maintenance remains enabled, automatic deployment off,
@@ -37,12 +37,14 @@ maintenance 503 and canonical apex/`www` still serve Coming Soon. The earlier
 JDBC/Flyway observation is historical, not fresh verification of all effective
 settings or private readiness on this later deployment.
 
-**Observed at 20:40:12 UTC on October 22:** the new Shell report returned
+**Historical observation at 20:40:12 UTC on October 22, on `0a343ab`:** the new Shell report returned
 `OPERATIONS_OBSERVED_CHECKS_PASS`, `DATABASE_AVAILABLE`, `SCHEMA_REVIEWED` and
 `READINESS_EXIT=0`. This confirms read-only database/schema/aggregate checks,
 not current R2 bytes, backups, complete consumer remediation or canonical
-acceptance. The handoff owns the one-line command and continuation; use it for
-affected future rechecks without hardcoding old credentials. Maintenance remains on.
+acceptance. Current `726cb03` readiness subsequently returned the same pass flags;
+its guarded running-process startup-input checks also passed, with reveal/retention false.
+The handoff owns the one-line command and continuation; use it for affected
+future rechecks without hardcoding old credentials. Maintenance remains on.
 
 Earlier private console DB/schema observations, all ten guarded PID1 startup
 checks, and no-extra-override/no-external-configuration checks passed on the prior
@@ -91,7 +93,8 @@ The Render MCP environment-update wrapper is unsuitable here: its [official impl
 | --- | --- |
 | App target | `kevinandmel-staging`, `srv-db7nqu67bikc73bhr580`, Ohio, one 1-CPU / 2 GiB instance |
 | Historical save-only baseline | `dep-dbchp7dg1s2s73blbqa0`, commit `3b2fd0a985fdc526843dde34bb8a6086a8e2da87`; automatic deployment off, maintenance off |
-| Current October 22 deployment | `dep-dbd60hnavr4c73cuk67g` / application commit `0a343abf1c2047af8870707627b9ef9cefa32b93`, live 19:13:45.411104 UTC; production profile confirmed. Maintenance ON, automatic deployment OFF; 20:40:12 UTC database/schema/aggregate report passed, with remaining effective settings/media/backup acceptance open |
+| Current October 22 deployment | `dep-dbd7vgfavr4c73d4gih0` / application commit `726cb035fd041e2089b9864f874686ef822f0dc4`, live 21:28:41 UTC; maintenance restored ON around 21:33 UTC, automatic deployment OFF. Guarded running-process startup-input checks and private readiness passed; full media/recovery/scheduled backup/canonical acceptance remains open |
+| Historical afternoon deployment | `dep-dbd60hnavr4c73cuk67g` / application commit `0a343ab`, live 19:13:45.411104 UTC; production startup and 20:40:12 UTC database/schema report passed within their recorded scope |
 | Historical credential deployment | `dep-dbd5u4g473hc73dh8gkg`, same application commit, live 19:08:39.066959 UTC; complete production/JDBC/Flyway/Tomcat startup observed after the replacement DB credential was saved privately |
 | Historical morning deployment | Ryan manually deployed `dep-dbcvtr6q1p3s73dfu31g`, live at 12:18:24.182776 UTC / 7:18:24 a.m. CDT, commit `caec4a96656b1cde101a5ee470c8fd90698878c9`; same service/size, automatic deployment off and maintenance off then. Application sources matched `3b2fd0a`; startup logs confirmed production profile. Later private console/PID1 checks retain their pre-rotation scope |
 | Bounded app-log readback | No error-level application entries returned for 12:18–12:27:22 UTC on October 22; this is a bounded observation, not uptime or complete launch acceptance |
@@ -107,7 +110,7 @@ The private ignored `logs/production-settings-20261021.local/` folder holds the 
 
 The [October 22 handoff](../../HANDOFF-2026-10-19.md#later-home-production-configuration-readback) records the later home readback that superseded the original pending preparation audit. Ryan confirmed the saved production profile/environment, canonical origin and reveal `false`. His full environment screenshot confirmed audio/storage enabled, `VITE_AUDIO_ENABLED=true`, retention `false`, and `JAVA_TOOL_OPTIONS=-Xms64m -Xmx1536m -XX:+ExitOnOutOfMemoryError`. He confirmed `PORT=10000`, no linked environment groups and no secret files; no extra datasource/server/config/profile override keys appeared in the table. Upload-pause and retention-interval overrides were absent (source defaults `false` and `300000` ms). The private observer verified the retained DB target and matching throttle-HMAC configuration without exporting secrets. Preserve retention `false`. This screenshot remains preparation evidence and is not authority for credentials after today's rotation; current deployment/fresh-report status is above.
 
-Ryan added only the canonical origin to existing R2 CORS. Unsigned OPTIONS retests passed exact-origin PUT/GET/HEAD for canonical and staging origins, including PUT Content-Type and the existing 300-second max-age; a foreign reserved origin remained denied. No object bodies were uploaded or read. Ryan confirmed public development URL disabled, no custom domains, one-day completed-object deletion enabled for exactly `staging/`, and no completed-object delete rule for an empty prefix, `originals/` or `deletions/v1/`. The separate default incomplete-multipart abort rule was preserved. These historical settings checks do not prove current bytes after the reported object removal. Canonical browser saves, phone/printed-QR acceptance and current media consistency remain pending. The 20:40:12 UTC database/schema/aggregate report passed; it does not establish those media checks.
+Ryan added only the canonical origin to existing R2 CORS. Unsigned OPTIONS retests passed exact-origin PUT/GET/HEAD for canonical and staging origins, including PUT Content-Type and the existing 300-second max-age; a foreign reserved origin remained denied. No object bodies were uploaded or read. Ryan confirmed public development URL disabled, no custom domains, one-day completed-object deletion enabled for exactly `staging/`, and no completed-object delete rule for an empty prefix, `originals/` or `deletions/v1/`. The separate default incomplete-multipart abort rule was preserved. These historical settings checks do not prove current bytes after the reported object removal. Canonical browser saves, phone/printed-QR acceptance and current media consistency remain pending. The current database/schema report passed; it does not establish those media checks. Read-only reconciliation found missing uploaded originals, with exact private ownership evidence for only part of the set. The scoped plan is prepared, but permanent disposal is not authorized; preserve unrelated/unmatched data and current authority.
 
 Continue from the [home handoff's ordered actions](../../HANDOFF-2026-10-19.md#1-resume-here): credit the fresh report, then finish credential consumers, rehearsal-media reconciliation and actual home producer/copy/expiry/recovery acceptance. Explicit synthetic warning/recovery delivery to Gmail and iPhone is confirmed; it is not an installed live monitor. Follow the existing operator activation plan for remaining budget/host-proof/live gates.
 
