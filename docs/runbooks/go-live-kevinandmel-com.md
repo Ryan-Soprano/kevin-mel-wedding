@@ -1,10 +1,12 @@
 # Bringing kevinandmel.com live
 
-Updated October 21, 2026 against main `f9f758b9f0b847f025f867a22c102d4d9797e0e2`. Use with the [Go Live checklist](../product/go-live-checklist.md). This is an execution guide, not a completed cutover: **the latest recorded domain state is Coming Soon, and shared-network enforcement plus the selected live target's operational gates remain open.** Refresh provider state before execution; this source/documentation review changed no infrastructure or DNS.
+Updated October 21, 2026 against main `228d672f1a07a85be35a4ef39543c0f026297096`. Use with the [Go Live checklist](../product/go-live-checklist.md). This is an execution guide, not a completed cutover: **the latest recorded domain state is Coming Soon, and shared-network enforcement plus the selected live target's operational gates remain open.** Refresh provider state before execution; preparation is not running production acceptance.
 
 **Current work is guest rehearsal and cutover preparation.** Ryan deferred failure-handling and recovery automation for now. Keep continuous database RPO, recurring media/current-ledger copies, alerts, source-authority-loss recovery and complete RTO requirements open in the checklist and launch record; the deferral does not mark them passed. Prepare and record the guest/configuration/domain evidence below without reopening that implementation work. The final go/no-go must still identify unresolved requirements and Ryan's decision before public collection opens.
 
 Ryan's confirmed attended cutover start is **Thursday, October 22, 2026, at 6 p.m. CDT / 23:00 UTC**. This is the operator window's planned start; public opening and distribution follow acceptance. Record actual maintenance/canary/distribution times during execution. No unattended launch is installed, and the planned time does not waive the outstanding gates.
+
+Ryan has already printed the QR on every guest placemat and confirmed its exact URL is **`https://kevinandmel.com`**, currently reaching Coming Soon. Keep that page in place until the attended window. Use the actual placemats for final QR acceptance; the generated card proof is historical evidence. Post-cutover phone saves and the canonical destination still require acceptance.
 
 The goal is a single combined React/Spring guest application at **https://kevinandmel.com**, with `www` redirecting there, private R2 media and the reveal closed. Keep the existing static coming-soon service available for an emergency collection stop. Do not deploy only the frontend or convert the static service into the backend.
 
@@ -53,6 +55,25 @@ Capture the old web DNS records, current custom-domain associations, fallback de
 
 ## 2. Prepare the live application
 
+### Save settings ahead of the window
+
+The [October 21 settings preparation record](production-settings-preparation-2026-10-21.md) contains the four-value batch and its actual save/readback status. In the existing app's Dashboard **Environment**, edit only these four values together, preserving every other variable, and choose **Save only**:
+
+```dotenv
+SPRING_PROFILES_ACTIVE=production
+MEMORY_ARCHIVE_ENVIRONMENT=production
+MEMORY_ARCHIVE_PUBLIC_ORIGIN=https://kevinandmel.com
+MEMORY_ARCHIVE_REVEALED=false
+```
+
+Use exactly `production` for the active profile; retaining `staging` as an additional profile retains staging-only admission. Read back the four saved values privately and audit profile includes/groups, direct `ARCHIVE_*`, `SPRING_DATASOURCE_*`, `SERVER_*`, `SPRING_APPLICATION_JSON`, JVM `-D` and start-command overrides before deployment. Preserve the working DB/R2 credentials and identities, stable throttle secret, audio/storage/retention controls, media limits, one finalizer, port/proxy and JVM sizing. This batch does not enable retention, rotate credentials or rebuild the frontend.
+
+**Do not use the Render MCP environment-update tool for this preparation.** Its [official implementation](https://github.com/render-oss/render-mcp-server/blob/main/pkg/service/tools.go) updates settings and then triggers a deployment, including with `replace=false` and automatic deployment off. Dashboard [Save only](https://render.com/docs/configure-environment-variables) leaves the current deployment running. Saved settings are consumed by the **next deployment**, so hold manual/API deployments and rebuilds until the attended window and keep automatic deployment off. Do not link an environment group as a preparation shortcut; that also deploys. Keep Coming Soon's domain associations, settings and DNS unchanged now.
+
+Saved Dashboard values are not evidence of effective running production settings. Record the unchanged live deploy and public Coming Soon response after saving. At the window, follow the maintenance/checkpoint procedure below before deploying the saved batch. A restart reuses the current deployment's settings; use a runtime deployment to apply the saved values.
+
+### Deploy and verify during the attended window
+
 Finish guest rehearsal on the current provider origin before changing its configuration: named/anonymous notes, photo/audio, committed-receipt recovery, busy/partial-item retry and anonymous private-access denial. Record unresolved uploads, the shared-network result and representative-phone limits. Use a few owned synthetic submissions and preserve their identity/receipt for explicit same-item recovery. The earlier 100-group capacity run is existing evidence; repeat only affected bounded cases after a relevant change.
 
 At the agreed cutover window, put the existing app behind Render's default **Maintenance Mode** and verify the public 503 response before changing its profile/admission/origin. Take the reviewed recovery checkpoint with any required quiescence. Keep maintenance through promotion and the domain transfer; remove it only for the controlled public canary in section 5. Neither the public-origin setting nor reveal/upload-pause flags provide this traffic gate.
@@ -91,7 +112,7 @@ Keep the existing reviewed media sizes, quotas and storage budgets. Do not incre
 
 Apply the production profile and archive environment **together** to this existing service behind maintenance, preserving its exact DB/R2 targets and current authority. Explicit DB credentials are required; the candidate no longer supplies local DB defaults in production. Staging-only Basic Auth/origin settings no longer govern the production profile; retain the old configuration privately for rollback, without using it as the live admission gate. Keep reveal false. Review any existing test-account access before later couple activation; do not create, activate or delete real accounts for anonymous guest launch.
 
-Use service settings or one reviewed environment group as the source of truth; inspect override collisions privately. Render offers save-only, runtime deployment and rebuild options. For production runtime settings, **Save and deploy** reuses the existing build; verify the resulting deploy's actual commit/artifact and effective settings. Confirm the existing frontend was built with `VITE_AUDIO_ENABLED=true`; if that flag must change, use **Save, rebuild and deploy** against the frozen reviewed application source and recheck the new artifact. **Save only** leaves the running service unchanged. Do not rebuild or select a different application release solely because documentation advanced main. See [Render environment configuration](https://render.com/docs/configure-environment-variables) and [Render port settings](https://render.com/docs/environment-variables).
+Use the existing service settings as the preparation source of truth; inspect existing environment-group collisions privately. At cutover, Render's **Save and deploy** reuses the existing build for runtime settings; verify the resulting deploy's actual commit/artifact and effective settings. Confirm the existing frontend was built with `VITE_AUDIO_ENABLED=true`; if that flag must change, use **Save, rebuild and deploy** against the frozen reviewed application source and recheck the new artifact. Do not rebuild or select a different application release solely because documentation advanced main. See [Render environment configuration](https://render.com/docs/configure-environment-variables) and [Render port settings](https://render.com/docs/environment-variables).
 
 ### Private readiness and media setup
 
@@ -137,7 +158,7 @@ Maintenance blocks public app requests; it does not stop background writers or r
 4. Check DNS from more than one resolver/network and test apex/`www` HTTPS with certificate validation enabled. While maintenance is on, 503 is expected from the target; it is not the final acceptance result. Verify both HTTP entry points redirect to canonical HTTPS and `https://www.kevinandmel.com` redirects to `https://kevinandmel.com` without a loop.
 5. Confirm the domain belongs to the selected full-app service, not merely that it displays some Render response. Record its live deploy/commit in the operator record; use private provider evidence rather than exposing an operational version endpoint. Keep the fallback service intact.
 
-## 5. Open a controlled public canary, then release the QR
+## 5. Open a controlled public canary, then announce collection
 
 **Turning maintenance off admits all public traffic immediately.** An unannounced URL is still public. Start this window only when the operator is ready to collect and protect real submissions and the recorded go/no-go resolves the pre-cutover requirements. Preparation, an implementation deferral or an empty launch-record field is not acceptance.
 
@@ -146,8 +167,8 @@ Maintenance blocks public app requests; it does not stop background writers or r
 3. Check anonymous private routes and private originals remain denied, secure cookie/session behavior and cross-origin rejection. Keep reveal false; these checks do not require activating or signing into real couple accounts. Finish authenticated logout/revocation, private playback/export and shared-device acceptance separately through the approved synthetic process before activating real couple access or opening reveal.
 4. Choose and test the **live target's** provider-host policy. `MEMORY_ARCHIVE_PUBLIC_ORIGIN` does not redirect hosts. After canonical acceptance, disable that live service's Render Subdomain if that is the chosen policy, or use a reviewed canonical redirect. Then test the result. The old `kevinandmel-staging.onrender.com` hostname belongs to this same production service; it is not a test environment. Don't leave an alternate guest entry point whose media CORS/session behavior is broken.
 5. Check current provider memory/CPU, pending/failed media, reservation budgets, backups and alert delivery. The mixed-media rehearsal's highest returned memory sample was about 82% of 2 GiB; it was not an instantaneous peak. Retain the one-slot decoder limit. Unexpected loss, duplicate saves, privacy exposure, repeated unrecovered failures or resource exhaustion stops broad release.
-6. Use the real canonical QR in the [printable proof](../product/wedding-qr-card-proof.html), with **`https://kevinandmel.com`** as both exact payload and human-readable fallback URL. Independent decoding of its raster, screen and print-CSS renders passed; actual printed-phone scans and content/distribution approval remain pending. Print at 100% / Actual size, measure the A6 card and preserve the QR's white quiet zone. Scan the printed sample on iPhone Safari and Android Chrome, check both cellular and the available shared/venue network, and finish affected submission/return/retry cases. Remove the proof/distribution labels only after final acceptance. The earlier [placeholder layout](../product/wedding-qr-card-draft.html) remains historical.
-7. Record the release time/timezone, deployed SHA, canonical DNS/TLS, smoke/device results, checkpoint and owner acceptance. Only then distribute cards or announce collection. Keep private credentials and guest content outside the release record.
+6. Scan the QR on an **actual printed guest placemat** on iPhone Safari and Android Chrome. Confirm its recorded payload reaches the full app at **`https://kevinandmel.com`** after cutover. Check cellular and the available shared/venue network, then finish affected submission/return/retry cases. Ryan's earlier Coming Soon confirmation does not prove this post-cutover behavior. The generated [card proof](../product/wedding-qr-card-proof.html) and earlier [placeholder layout](../product/wedding-qr-card-draft.html) remain historical; no replacement print job is required by this guide.
+7. Record the release time/timezone, deployed SHA, canonical DNS/TLS, smoke/device results, checkpoint and Kevin/Melanie's copy/feature acceptance. Only then announce availability using the existing placemats/link. Keep private credentials and guest content outside the release record.
 
 Observe the first 15 minutes and the first substantial burst, then use the [wedding-day operations sheet](wedding-day-operations.md). Monitor content-free failed saves/busy retries, memory, liveness, actual storage and DB reservations, backup freshness and retention backlog. Review either reservation budget at 80%; do not raise limits blindly. Couple reveal/account activation remains a later operation. The planned October 31 collection review does not install an automatic closure.
 
@@ -175,6 +196,7 @@ Complete this record during execution; a planned value is not an observed result
 | --- | --- |
 | Operator and agreed window (CDT and UTC) | Planned: Ryan, October 22 at 6 p.m. CDT / 23:00 UTC · actual start/end: ____ |
 | Pre-change app and fallback deploy/domain readback | ____ |
+| Four-value Save only batch and private override audit | Save/readback time: ____ · unchanged deploy/Coming Soon: ____ · override audit: ____ |
 | Frozen application commit, exact-source CI/review and rollback artifact | ____ |
 | Guest rehearsal / shared-network result / unresolved items | ____ |
 | Chosen fresh checkpoint and private recovery-access verification | Safe reference: ____ · capture/verified time: ____ |
@@ -186,7 +208,7 @@ Complete this record during execution; a planned value is not an observed result
 | Maintenance disabled / controlled public canary started | ____ |
 | Canonical note/photo/audio, receipts, same-item retry and private denial | ____ |
 | iPhone Safari / Android Chrome / cellular / shared-network evidence | ____ |
-| Printed QR payload and readable fallback verified | `https://kevinandmel.com` · evidence: ____ |
+| Actual placemat QR payload and post-cutover destination | Ryan-confirmed payload: `https://kevinandmel.com` · post-cutover canonical destination/phone evidence: ____ |
 | Live provider-host policy tested | ____ |
 | Health, memory, failed/pending items and remaining monitoring limits | ____ |
 | Kevin/Melanie guest copy and feature acceptance | ____ |
