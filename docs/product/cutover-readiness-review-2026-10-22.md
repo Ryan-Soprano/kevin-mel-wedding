@@ -11,7 +11,7 @@ Read-only provider, GitHub and HTTPS checks on October 22 established:
 
 | Check | Observed result | Limit |
 | --- | --- | --- |
-| Remote main and retained deployment | `0a343abf1c2047af8870707627b9ef9cefa32b93`; deploy `dep-dbd60hnavr4c73cuk67g`, live at 19:13:45.411104 UTC / 2:13:45 p.m. CDT | A provider `live` result does not establish complete readiness. |
+| Deployed application source and retained deployment | `0a343abf1c2047af8870707627b9ef9cefa32b93`; deploy `dep-dbd60hnavr4c73cuk67g`, live at 19:13:45.411104 UTC / 2:13:45 p.m. CDT | A provider `live` result does not establish complete readiness. Repository main can advance independently. |
 | Exact merged-main CI | [Run 39795263279](https://github.com/Ryan-Soprano/kevin-mel-wedding/actions/runs/39795263279) passed, including backend, frontend, operational helpers, lint and build | New source changes require their own checks. |
 | PR 115 review | [Configured Codex review](https://github.com/Ryan-Soprano/kevin-mel-wedding/pull/115#issuecomment-6342905313) completed without findings on `93a9257f4edbe279ce709f4be30e3b741825be34`; PR merged as `0a343ab` | Prepared tooling is distinct from installed and accepted operation. The later local coordinator finding below remains actionable. |
 | Active profile | Startup at 19:13:34.548 UTC records exactly one active profile, `production` | This does not verify every effective secret/property or admission setting. |
@@ -24,6 +24,33 @@ The newer image includes PR 114's private styling and PR 115's prepared backup
 tools. Shipping those files in the application image does not install a Windows
 capture task or enable the independent watchdog. Private couple reveal remains
 closed under the existing launch policy; verify its effective value before opening.
+
+## Earlier handoff facts reconciled before capture
+
+[PR 117](https://github.com/Ryan-Soprano/kevin-mel-wedding/pull/117) records a
+database-credential exposure and Ryan's replacement credential preparation,
+followed by the historical 19:08 deployment. Complete home consumer migration
+and old-database-credential revocation remain unverified. Update and privately
+verify affected backup/recovery/manual database clients before revocation;
+preserve the existing R2/encryption credentials and current deletion authority.
+Review historical rollback environment values so they cannot reintroduce the
+exposed database credential. These are reconciled records, not new remediation
+or credential readbacks from this review.
+
+PR 117 also records Ryan's intentional removal of synthetic/rehearsal originals
+and his instruction to restore none. This report does not newly verify object
+or metadata state. Reconcile affected database references, actual object
+existence and current independent deletion evidence before accepting a complete
+checkpoint or backup baseline. Preserve remaining data and authority; no blanket
+database reset, invented deletion evidence or automatic restoration is authorized.
+
+The fresh private report remains pending after an earlier failed multiline
+paste. Open a **new Render Dashboard Shell** for the current deployment and use
+the [handoff's exact single-line filtered command](../../HANDOFF-2026-10-19.md#1-resume-here).
+Record only its three expected pass flags and `READINESS_EXIT=0`; keep
+maintenance enabled if the result differs. Startup and public maintenance
+responses do not replace that database/schema/aggregate check or prove media
+integrity and complete recovery.
 
 ## Recovery locations and actual operation
 
@@ -116,19 +143,22 @@ backup identity or live fixture was used.
 
 ## Remaining launch sequence
 
-1. Resolve and verify coordinator containment; integrate the inspected private
+1. Complete fresh new-Shell readiness, affected database-credential consumer
+   checks/retirement and the reported rehearsal-original reconciliation before
+   accepting a complete new checkpoint or backup baseline.
+2. Resolve and verify coordinator containment; integrate the inspected private
    producer without weakening its source, encryption, expiry or refusal guards.
-2. Prove scheduled accepted captures, measured freshness, independent media/current
+3. Prove scheduled accepted captures, measured freshness, independent media/current
    ledger coverage, all-copy expiry, functional isolated recovery and live alert
    behavior. Preserve the credited phone-delivery result.
-3. Record the selected immutable application and compatible rollback artifacts,
+4. Record the selected immutable application and compatible rollback artifacts,
    effective production/private settings, current recoverable checkpoint and
    operator window. Keep reveal and production retention false for guest collection.
-4. Follow the [Go Live checklist](go-live-checklist.md) and
+5. Follow the [Go Live checklist](go-live-checklist.md) and
    [cutover procedure](../runbooks/go-live-kevinandmel-com.md): attended go/no-go,
    domain/TLS move behind maintenance, controlled canonical canary and actual
    printed-placemat scans plus note/photo/audio/retry checks on representative phones.
-5. Open broadly only after the recorded acceptance, then observe the first fifteen
+6. Open broadly only after the recorded acceptance, then observe the first fifteen
    minutes and first substantial burst. Preserve every retained and new submission.
 
 No new paid service, plan increase, fixture reset, couple activation or domain
