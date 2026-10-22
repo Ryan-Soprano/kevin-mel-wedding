@@ -1,5 +1,6 @@
 import { memoryTime } from "../memoryDisplay.js";
 import { getMemoryCardTitle, getMemoryExcerpt, getMemoryOpenLabel, getMemorySourceLabel, MEMORY_TYPE_LABELS, REVIEW_STATUS_LABELS, VISIBILITY_LABELS } from "../inboxDisplay.js";
+import { ArchiveEmpty, ArchivePagination, ArchiveScreen } from "./ArchiveLayout.jsx";
 
 function MemoryIcon({ type }) {
   return (
@@ -30,7 +31,7 @@ function InboxCard({ memory, onOpen }) {
 function InboxItems({ state, cursor, actions }) {
   if (state.busy) return <output className="inbox-loading"><span className="inbox-loading-dot" aria-hidden="true" />Loading your memories…</output>;
   if (state.error) return <button type="button" onClick={() => actions.reloadInbox(state.reviewStatus, cursor)}>Try again</button>;
-  if (state.items.length === 0) return <div className="inbox-empty" role="status"><span aria-hidden="true">♡</span><p>No {REVIEW_STATUS_LABELS[state.reviewStatus].toLowerCase()} memories right now.</p><p className="guest-help">Your memories will be waiting here when they arrive.</p></div>;
+  if (state.items.length === 0) return <ArchiveEmpty icon="inbox" title={`No ${REVIEW_STATUS_LABELS[state.reviewStatus].toLowerCase()} memories right now.`}><p>Your memories will be waiting here when they arrive.</p></ArchiveEmpty>;
   let countLabel = "memories";
   if (state.items.length === 1) countLabel = "memory";
   return (
@@ -47,17 +48,15 @@ function InboxPagination({ state, pageCount, onNext, onPrevious }) {
   let pageLabel = `Page ${pageCount}`;
   if (state.error) pageLabel = `Page ${pageCount} could not be loaded`;
   return (
-    <div className="inbox-pagination">
-      <button type="button" className="button-secondary" disabled={state.busy || Boolean(state.error) || pageCount < 2} onClick={onPrevious}>Previous page</button>
-      <span>{pageLabel}</span>
-      <button type="button" className="button-secondary" disabled={state.busy || Boolean(state.error) || !state.nextCursor} onClick={onNext}>Next page</button>
-    </div>
+    <ArchivePagination page={pageCount} pageLabel={pageLabel} label="Inbox pages"
+      disabled={state.busy || Boolean(state.error)} canPrevious={pageCount > 1} canNext={Boolean(state.nextCursor)}
+      onPrevious={onPrevious} onNext={onNext} />
   );
 }
 
 export default function InboxList({ state, pages, actions, onFilter, onNext, onPrevious }) {
   return (
-    <section className="inbox-memories" aria-label="Private memories" aria-busy={state.busy}>
+    <ArchiveScreen className="inbox-memories" label="Private memories" busy={state.busy}>
       <nav className="inbox-tools" aria-label="Your archive">
         <button type="button" disabled={state.busy} onClick={actions.navigation.create}>Add a memory</button>
         <div className="inbox-tool-links">
@@ -76,6 +75,6 @@ export default function InboxList({ state, pages, actions, onFilter, onNext, onP
       </nav>
       <InboxItems state={state} cursor={pages.at(-1)} actions={actions.navigation} />
       <InboxPagination state={state} pageCount={pages.length} onNext={onNext} onPrevious={onPrevious} />
-    </section>
+    </ArchiveScreen>
   );
 }
