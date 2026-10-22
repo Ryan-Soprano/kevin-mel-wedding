@@ -1,29 +1,32 @@
 # Cutover readiness review — October 22, 2026
 
-**Decision: HOLD.** The current reviewed application is deployed behind Render
-maintenance; the canonical domain still serves Coming Soon. This review corrects
-the handoff and incident instructions. It does not activate backups, change
-provider configuration, open collection or complete canonical phone acceptance.
+**Decision: HOLD.** The current application is deployed behind Render
+maintenance; the canonical domain still serves Coming Soon. This record credits
+the observed maintenance restoration, approved Actions budget and accepted
+DB-only checkpoint below. No domain move, public collection opening, scheduled
+capture task, live watchdog activation or canonical phone acceptance is credited.
 
 ## Verified application baseline
 
-Read-only provider, GitHub and HTTPS checks on October 22 established:
+October 22 provider, GitHub, HTTPS and private recovery evidence established:
 
 | Check | Observed result | Limit |
 | --- | --- | --- |
-| Deployed application source and retained deployment | `0a343abf1c2047af8870707627b9ef9cefa32b93`; deploy `dep-dbd60hnavr4c73cuk67g`, live at 19:13:45.411104 UTC / 2:13:45 p.m. CDT | A provider `live` result does not establish complete readiness. Repository main can advance independently. |
-| Deployed-source CI | [Run 39795263279](https://github.com/Ryan-Soprano/kevin-mel-wedding/actions/runs/39795263279) passed on application commit `0a343ab`, including backend, frontend, operational helpers, lint and build | New source changes require their own checks. |
+| Deployed application source and retained deployment | Ryan's manual deployment of `726cb035fd041e2089b9864f874686ef822f0dc4`; deploy `dep-dbd7vgfavr4c73d4gih0`, live at 21:28:41 UTC / 4:28:41 p.m. CDT | A provider `live` result does not establish complete readiness. Repository main can advance independently. |
+| Deployed-source CI/review | [Run 39857342756](https://github.com/Ryan-Soprano/kevin-mel-wedding/actions/runs/39857342756) passed on application commit `726cb03`; independent frontend-diff review found no actionable issue | Configured GitHub AI review is not credited for this direct user commit. New source changes require their own checks. |
 | Merged documentation CI | PR 117 merge `8c101cd` passed [run 39848823402](https://github.com/Ryan-Soprano/kevin-mel-wedding/actions/runs/39848823402); PR 119 merge `baeab30` passed [run 39847127609](https://github.com/Ryan-Soprano/kevin-mel-wedding/actions/runs/39847127609) | Repository delivery does not change the retained application deployment or accept the new coordinator operation. |
-| PR 115 review | [Configured Codex review](https://github.com/Ryan-Soprano/kevin-mel-wedding/pull/115#issuecomment-6342905313) completed without findings on `93a9257f4edbe279ce709f4be30e3b741825be34`; PR merged as `0a343ab` | Prepared tooling is distinct from installed and accepted operation. The later local coordinator finding below remains actionable. |
-| Active profile | Startup at 19:13:34.548 UTC records exactly one active profile, `production` | This does not verify every effective secret/property or admission setting. |
-| Fresh private report | New Shell at **20:40:12 UTC / 3:40:12 p.m. CDT** returned `OPERATIONS_OBSERVED_CHECKS_PASS`, `DATABASE_AVAILABLE`, `SCHEMA_REVIEWED`, `READINESS_EXIT=0` | Read-only database/schema/aggregate checks passed; this does not inspect current media bytes or establish backups/canonical acceptance. |
-| Service controls | Maintenance enabled, automatic deployment off, one Ohio 1-CPU / 2-GiB instance | Preserve the observed maintenance state through preparation. |
-| Provider root and `/api/health` | Both returned HTTP 503 while maintenance was enabled | These responses do not exercise the underlying application or private routes. |
+| Containment delivery | [PR 120](https://github.com/Ryan-Soprano/kevin-mel-wedding/pull/120) merged as `ed40593e`, closing [issue 118](https://github.com/Ryan-Soprano/kevin-mel-wedding/issues/118); 20 Windows regressions, CI and configured AI review passed | Delivered runner containment is separate from installed scheduled operation and full recovery acceptance. |
+| Guarded startup inputs | All 23 guarded running-process startup-input checks passed on exact source `726cb03`, rechecked around 22:10 UTC / 5:10 p.m. CDT; the inspected inputs select production with reveal/retention false and reject logging/debug/trace overrides | These checks reconstruct configuration from the running process's startup environment/CLI, working directory, absence of configuration overrides and reviewed source; they are not a direct Spring Environment dump. Provider logging/privacy acceptance, current media, independent copies, recovery and canonical browser behavior remain separate. |
+| Fresh private report | The current deployment returned `OPERATIONS_OBSERVED_CHECKS_PASS`, `DATABASE_AVAILABLE`, `SCHEMA_REVIEWED`, `READINESS_EXIT=0` | Read-only database/schema checks passed; this does not inspect current media bytes or establish complete backups/canonical acceptance. |
+| Service controls | Maintenance restored ON around 21:33 UTC / 4:33 p.m. CDT, automatic deployment off, one Ohio 1-CPU / 2-GiB instance | Preserve the observed maintenance state through preparation. |
+| DB-only checkpoint | Accepted approximately 21:58 UTC / 4:58 p.m. CDT: authenticated readback, independent encrypted F: copy, immutable expiry enrollment, same-snapshot proof and exact source-proof cleanup | No scheduled capture, complete original-media/current-ledger backup or functional full recovery is credited. |
 | Canonical domain | Apex returned HTTP 200 Coming Soon; `www` redirected to the apex and returned the same page | No canonical full-app, phone-save or placemat acceptance is credited. |
 
-The earlier `caec4a9` deployment and its guest/security evidence remain historical.
-The newer image includes PR 114's private styling and PR 115's prepared backup
-tools. Shipping those files in the application image does not install a Windows
+The earlier `caec4a9` and `0a343ab` deployments retain only their historical scope.
+On `0a343ab`, production startup at 19:13:34.548 UTC, the 20:40:12 UTC private
+report and [exact-source CI 39795263279](https://github.com/Ryan-Soprano/kevin-mel-wedding/actions/runs/39795263279)
+passed. PR 115's configured review passed on its own head; later containment
+delivery is recorded separately above. Shipping backup files does not install a Windows
 capture task or enable the independent watchdog. Private couple reveal remains
 closed under the existing launch policy; verify its effective value before opening.
 
@@ -40,14 +43,18 @@ exposed database credential. These are reconciled records, not new remediation
 or credential readbacks from this review.
 
 PR 117 also records Ryan's intentional removal of synthetic/rehearsal originals
-and his instruction to restore none. This report does not newly verify object
-or metadata state. Reconcile affected database references, actual object
-existence and current independent deletion evidence before accepting a complete
-checkpoint or backup baseline. Preserve remaining data and authority; no blanket
-database reset, invented deletion evidence or automatic restoration is authorized.
+and his instruction to restore none. The later read-only reconciliation confirms
+missing uploaded originals; private ownership journals identify only part of the
+candidate set exactly. A scoped reconciliation plan is prepared, but permanent
+disposal is not authorized. Preserve unmatched records, unrelated data, remaining
+objects and current authority. Complete the metadata/object/deletion-authority
+decision before accepting a complete archive checkpoint or backup baseline.
+The accepted DB-only checkpoint does not close this gate. No blanket database
+reset, invented deletion evidence or automatic restoration is authorized.
 
-The later new-Shell private report passed at **20:40:12 UTC** with the exact
-flags recorded above, superseding the failed multiline paste's pending status.
+The `0a343ab` new-Shell report passed at **20:40:12 UTC**, superseding the failed
+multiline paste's pending status. Current-deployment readiness also passed as
+recorded above.
 Keep the [handoff's single-line filtered command](../../HANDOFF-2026-10-19.md#1-resume-here)
 for affected deployment/configuration rechecks. Maintenance stays enabled;
 database/schema/aggregate success does not prove current media integrity,
@@ -64,25 +71,34 @@ Capacity/source separation alone does not prove current capture/media/ledger
 coverage; no additional cloud-backup requirement is introduced.
 
 The installed expiry task was enabled, with hourly and operator-logon triggers,
-and its last observed run at **19:24:39 UTC / 2:24:39 p.m. CDT** returned 0.
-The existing four managed ciphertexts have four immutable expiry receipts; none
-was eligible or late at inspection. The newest accepted conservative capture was
-**October 21 at 22:26:15 UTC / 5:26:15 p.m. CDT**, roughly 21.5 hours old during
-this review. The independent lifetime-ledger copy remains separate. These are
-inventory/task readbacks, not a new authenticated capture or restore.
+and its last observed run at **21:24:39 UTC / 4:24:39 p.m. CDT** returned 0.
+The existing managed ciphertext/immutable-receipt inventory passed its earlier
+inspection. A new DB-only checkpoint was accepted at approximately **21:58 UTC /
+4:58 p.m. CDT** after authenticated ciphertext readback, independent encrypted
+publication to F:, immutable expiry enrollment, same-snapshot proof and verified
+exact source-proof cleanup. Detailed operational counts and proof identities
+remain private. The separate independent lifetime-ledger copy and complete
+original-media coverage still require current acceptance; this is not a new
+full-archive restore or recurring-capture result.
 
 **No scheduled capture task was found.** The existing expiry task removes old
-copies; it does not create new backups. Private producer integration, a current
-least-privilege source connection, recurring authenticated captures and accepted
+copies; it does not create new backups. The accepted DB-only checkpoint and
+validated native-contained wrapper establish a bounded manual result. Recurring
+authenticated captures, complete media/current-ledger copies and scheduled
 durable receipts remain required.
 
 All 658 entries in the installed pinned PowerShell runtime matched their recorded
 hashes, with none missing. The previous manual database-capture source context is
 explicitly cleaned: its temporary private SSH key is absent, and remote client/
 proof removal was attested. It cannot be reused as an unattended source route.
-A newly approved dedicated SSH route is now registered, and laptop source
-preflight passed. This establishes the tested source-access prerequisite only;
-verify the real capture/client/proof lifecycle and accepted receipts separately.
+A newly approved dedicated SSH route is registered. Ryan's later application
+deployment invalidated an intervening temporary source route; its local context
+and journal are preserved, but its remote cleanup was not observed. The new
+bootstrap is bound to current application source `726cb03`; its read-only probe
+confirmed the reviewed schema/catalog, expected PostgreSQL version and no invalid
+indexes or constraints. Its DB-only capture and exact source-proof cleanup
+passed. Do not transfer that cleanup proof to the earlier context, and recheck
+the ephemeral source setup after any further application deployment.
 Keep database external access closed.
 
 The existing private Google Drive recovery folder contains the portable
@@ -100,7 +116,8 @@ The existing F: volume can supply that independent failure domain; Drive remains
 portable-key escrow. If optional cloud backup copies are later added, verify
 actual uploaded bytes, private/restore access and original-age expiry; a sync
 queue or file existence is not proof.
-This review uploads and moves no recovery material.
+The new DB-only encrypted publication is credited within its recorded scope;
+complete original-media/current-ledger and recurring-copy acceptance remain open.
 
 ## Alert delivery now credited
 
@@ -127,15 +144,16 @@ usage. This exception does not authorize other new resources or plan increases.
 
 ## Actionable review findings
 
-1. **Backup subprocess containment correction is locally verified; installation requires reviewed delivery.** Tracked as
-   [issue 118](https://github.com/Ryan-Soprano/kevin-mel-wedding/issues/118). In
-   `scripts/run-backup-job.ps1`, `Invoke-BackupChild` waits for the immediate
-   adapter process and then waits five seconds for its output streams. If the
-   adapter exits while a descendant retains those streams, the drain fails but
-   cleanup skips process-tree termination because the immediate process has
+1. **Backup subprocess containment correction is delivered in PR 120.**
+   [Issue 118](https://github.com/Ryan-Soprano/kevin-mel-wedding/issues/118) is closed
+   by merge `ed40593e`. In the earlier `scripts/run-backup-job.ps1`,
+   `Invoke-BackupChild` waited for the immediate
+   adapter process and then waited five seconds for its output streams. If the
+   adapter exited while a descendant retained those streams, the drain failed but
+   cleanup skipped process-tree termination because the immediate process had
    already exited. A bounded Windows synthetic test reproduced work continuing
    after the coordinator returned `capture_failed`. Releasing the capture lock
-   can then permit another capture while that work remains active. The local
+   could then permit another capture while that work remained active. The delivered
    correction assigns children atomically to a Windows kill-on-close Job before
    execution, contains descendants, discards output to NUL and confirms an empty
    Job on normal/failure cleanup. It durably writes `BACKUP_JOB_INFLIGHT` into
@@ -145,10 +163,10 @@ usage. This exception does not authorize other new resources or plan increases.
    the local Job drains: remote copy/push work may remain active. Preserve that
    evidence until independently confirming no local descendants or remote work
    remain, then record deliberate clearing of the existing marker; never
-   blanket-delete the lock. Twenty isolated Windows regressions and independent
-   review passed. Delivery must pass current-head CI/configured review before
-   installation; updated pins and remaining real producer/copy gates still apply.
-   No production capture task was installed or affected by these tests.
+   blanket-delete the lock. Twenty isolated Windows regressions, independent
+   review, delivery CI and configured AI review passed. Updated pins and remaining
+   scheduled producer/copy/expiry gates still apply. No production capture task
+   was installed or affected by those tests.
 2. **Render upload-pause instructions needed correction.** A plain restart
    reuses the existing deployment's settings. The incident and wedding operator
    sheets now direct a deliberate runtime-setting deployment and effective-pause
@@ -168,12 +186,18 @@ backup identity or live fixture was used.
 
 ## Remaining launch sequence
 
-1. Credit the completed new-Shell report, then finish affected database-credential
-   consumer checks/retirement and the reported rehearsal-original reconciliation before
-   accepting a complete new checkpoint or backup baseline.
-2. Deliver the locally verified containment correction through current-head
-   checks/review and merge, then integrate the inspected private
-   producer without weakening its source, encryption, expiry or refusal guards.
+Later October 22 tracker readbacks confirmed the current startup-input/readiness,
+DB-only checkpoint and PR 120 delivery evidence in OPS-01, OPS-03, REL-01 and
+SEC-02. Their statuses were unchanged; no private operational counts or proof
+identities were published. QA-02 retains Ryan's skipped VoiceOver result.
+
+1. Credit current startup-input/readiness checks and the accepted DB-only checkpoint,
+   then finish affected database-credential consumer checks/retirement and the
+   scoped rehearsal-original reconciliation. Permanent disposal is not authorized;
+   preserve unrelated/unmatched data. A complete archive baseline remains open.
+2. Credit merged PR 120 containment delivery, verify current private pins/source
+   binding and integrate scheduled operation without weakening source,
+   encryption, expiry or refusal guards. No capture task is installed.
 3. Prove scheduled accepted captures, measured freshness, independent media/current
    ledger coverage, all-copy expiry, functional isolated recovery and live alert
    behavior. Preserve the credited phone-delivery result.

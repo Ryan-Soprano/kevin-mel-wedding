@@ -193,6 +193,7 @@ try {
     $trigger = New-ScheduledTaskTrigger -Once -At ([DateTime]::Now.AddMinutes(1)) -RepetitionInterval ([TimeSpan]::FromMinutes(2))
     $principal = New-ScheduledTaskPrincipal -UserId $operatorSid -LogonType Interactive -RunLevel Limited
     $settings = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -StartWhenAvailable -WakeToRun -Hidden `
+        -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
         -ExecutionTimeLimit ([TimeSpan]::FromSeconds([int]$context.TimeoutSeconds + 480))
     $definition = New-ScheduledTask -Action $action -Trigger $trigger -Principal $principal -Settings $settings `
         -Description 'Kevin and Melanie private backup capture; validated configuration required.'
