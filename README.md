@@ -18,6 +18,7 @@ Kevin and Melanie already know about the project and help shape it. Include them
 
 ## Start here
 
+- **Finish launch preparation:** start with the [current handoff](HANDOFF-2026-10-19.md) and [Go Live checklist](docs/product/go-live-checklist.md) for the latest running deployment, accepted evidence and remaining gates. Ryan confirmed on October 22 that the attended cutover can happen any time today once readiness is accepted; Coming Soon remains until that decision.
 - **Choose or claim work:** use the Notion [Memory Archive — Issues](https://app.notion.com/p/2d5a40baef85426a94bd059f7d0e2ce8) database for MVPs, status, ownership, dependencies, acceptance criteria, blockers, pull-request links, and evidence.
 - **Understand the project:** open the [Notion project home](https://app.notion.com/p/3dad9739c6bc81ff89cbd713cddf08d1?pvs=204) and read the [project plan](docs/project-plan.md) for scope, accepted architecture, module boundaries, and collaboration conventions.
 - **Run the code:** use the local-development instructions below.
@@ -26,7 +27,7 @@ This is a learning project with [standing autonomous project authorization](docs
 
 ## Local development
 
-OPS-03 adds a private read-only database/schema/capacity report and a disposable local application rollback rehearsal. See the [operations runbook](docs/runbooks/operations-and-rollback.md) for commands and incident/pause/reopen steps. Provider health, backup/alert delivery and hosted recovery targets remain acceptance work; hosting and spending stay deferred.
+OPS-03 adds a private read-only database/schema/capacity report and a disposable local application rollback rehearsal. See the [operations runbook](docs/runbooks/operations-and-rollback.md) for commands and incident/pause/reopen steps. The approved launch plan promotes the existing hosted app/database/private bucket at their current sizes. Provider health, backup/alert delivery and hosted recovery targets remain acceptance work; no new paid resources or plan increase are authorized.
 
 AUD-02/AUD-03 add gated voice recording/file upload, independently verified audio
 originals, private playback/download and audio review/export/restore. On October 14,

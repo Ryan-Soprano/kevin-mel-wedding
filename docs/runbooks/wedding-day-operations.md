@@ -1,17 +1,17 @@
 # Wedding-day operator sheet — REL-02 preparation
 
-Prepared October 11, 2026. **Procedure prepared; rehearsal, hosted operation and release acceptance remain pending.** Ryan is the sole infrastructure operator. Kevin and Melanie decide moderation, publication and continued intake. Kade may support development and synthetic review without production access.
+Prepared October 11, 2026; launch references refreshed October 22. **Procedure prepared; complete hosted operation and release acceptance remain pending.** Ryan is the sole infrastructure operator. Kevin and Melanie decide moderation, publication and continued intake. Kade may support development and synthetic review without production access.
 
-This sheet puts the existing technical procedures into an event sequence for October 24. Use it after the [release checklist](../product/wedding-release-checklist.md) records the approved build, accepted contribution types, full-app HTTPS address, private storage, backups, operator access and actual phone/QR/network evidence. It supplies no hosting, spending, account activation, guest messages or completed acceptance. Audio remains part of the required scope unless Ryan changes that scope; its separate acceptance must precede enablement.
+This sheet puts the existing technical procedures into an event sequence for October 24. Start with the current [Go Live checklist](../product/go-live-checklist.md) and [cutover guide](go-live-kevinandmel-com.md), preserving the [older release checklist](../product/wedding-release-checklist.md) as detailed acceptance/history. Record the approved build, accepted contribution types, full-app HTTPS address, private storage, backups, operator access and actual phone/QR/network evidence. Ryan confirmed an attended cutover may happen any time October 22 once readiness is accepted. The existing app now runs the production profile; public-domain opening remains pending. Audio is enabled under Ryan's October 14 instruction, with remaining device/canonical-origin acceptance recorded separately. Keep reveal and production retention false for guest collection; any later activation requires its own accepted procedure.
 
-## Prepare before the October 17 rehearsal
+## Before launch and the October 24 reception
 
 - [ ] Fill the private operator record below with the actual approved target and access references. Keep credentials, backup paths, guest content, retry identities and signed links outside the repository and tracker.
 - [ ] Identify the exact deployed artifact and the reviewed recovery/rollback artifacts. Use [OPS-03](operations-and-rollback.md) for the readiness report and compatibility checks; its local rehearsal does not establish that any earlier build can safely use the current schema.
 - [ ] Record real health/log/alert destinations, how Ryan reaches them from the venue, and who can tell Ryan that guests are having trouble. This document creates no alerts or automatic messages.
 - [ ] Record the hosted database recovery mechanism, last verified recovery point, private original-media backup, encrypted independent copy and current deletion-ledger recovery evidence. Use [OPS-02 recovery targets](operator-recovery.md#location-retention-and-recovery-targets): wedding database recovery point within five minutes, complete recovery within one hour, and contribution-bearing backup expiry after 30 days. Scheduling and representative timed restore evidence remain required.
 - [ ] Rehearse the incident choices below with synthetic data. Use the [tester guide](../product/qa02-tester-guide.md) for guest and private-archive behavior and the [release checklist](../product/wedding-release-checklist.md) for actual phones, assistive technology, reception network and printed QR acceptance.
-- [ ] Review results before the October 20 freeze. Record the concrete release decision before opening collection; calendar dates do not enable features.
+- [ ] Review the final evidence and freeze the accepted release. Record the concrete release decision before opening collection; the earlier October 17 rehearsal/October 20 freeze dates are historical targets.
 
 ```text
 Private operator record — retain outside Git/Notion:

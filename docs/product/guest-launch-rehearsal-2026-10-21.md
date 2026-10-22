@@ -4,6 +4,8 @@
 
 Ryan directed this work after the database feasibility checkpoint and deferred failure-handling/recovery automation for now. That work remains open; this rehearsal does not waive or complete its requirements. No domain, production configuration, account activation, reveal, sizing or database-access change was performed.
 
+**October 22 supersession note:** the [later home saved-settings/R2 readback and current deployment record](../runbooks/production-settings-preparation-2026-10-21.md) supplement this rehearsal and complete its pending preparation readback; Ryan confirmed his manual deployment and startup logs show the `production` profile. Ryan made the original 6 p.m. target flexible: cutover may begin at any attended time today after readiness/go-no-go acceptance. The [bounded deployed CREATE test](../runbooks/shared-peer-recovery-verification-2026-10-22.md) separately proved exact-peer denial and natural-expiry recovery. Earlier pending/inconclusive statements and the fixed timing below describe this rehearsal's original scope. The complete effective runtime matrix, canonical browser saves/CORS, physical venue/shared-network behavior, mobile retry UX and deferred recovery requirements remain open. Preserve retention `false`, reveal `false` and Coming Soon until acceptance.
+
 ## Deployment and retained targets
 
 Read-only Render discovery still identifies the existing Ohio application on one **1-CPU / 2 GiB** instance, automatic deployment off, and deployment `dep-dbchp7dg1s2s73blbqa0` live at commit **`3b2fd0a985fdc526843dde34bb8a6086a8e2da87`**. The existing PostgreSQL instance remains available on **0.1 CPU / 256 MiB / 1 GB**, with no external-access allowlist entries. No second environment is being created.
