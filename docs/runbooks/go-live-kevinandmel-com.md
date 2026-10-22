@@ -74,7 +74,7 @@ Saved Dashboard values alone are not evidence of effective running production se
 
 ### Deploy and verify during the attended window
 
-Credit the existing guest rehearsal: named/anonymous notes, photo/audio, committed-receipt recovery, busy/partial-item retry and anonymous private-access denial. Record unresolved uploads, the shared-network result and representative-phone limits. The retained service now runs the production profile and canonical-origin settings; use the controlled canonical canary in section 5 for affected acceptance. Preserve synthetic identity/receipts for explicit same-item recovery. Do not repeat the completed 100-group capacity run against this production target.
+Credit the existing guest rehearsal: named/anonymous notes, photo/audio, committed-receipt recovery, busy/partial-item retry and anonymous private-access denial. Record unresolved uploads, the shared-network result and representative-phone limits. The retained service now runs the production profile; its effective canonical-origin setting still needs verification. Use the controlled canonical canary in section 5 for affected acceptance. Preserve synthetic identity/receipts for explicit same-item recovery. Do not repeat the completed 100-group capacity run against this production target.
 
 At the agreed cutover window, put the existing app behind Render's default **Maintenance Mode** and verify the public 503 response before any profile/admission/origin correction or domain transfer. Take the reviewed recovery checkpoint with any required quiescence. Keep maintenance through verification and the domain transfer; remove it only for the controlled public canary in section 5. Neither the public-origin setting nor reveal/upload-pause flags provide this traffic gate.
 
