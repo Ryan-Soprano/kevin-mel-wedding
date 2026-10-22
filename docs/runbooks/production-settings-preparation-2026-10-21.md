@@ -2,7 +2,7 @@
 
 Ryan originally requested preparation for **Thursday, October 22 at 6 p.m. CDT / 23:00 UTC**, keeping Coming Soon until the attended cutover. On October 22 he made that time flexible: the attended cutover may begin at any time today once preparation is complete and he records the readiness/go-no-go decision. Promote the existing app/database/private bucket at their current sizes. No second hosted stack, scheduled launch, account activation, reveal or fixture cleanup is part of this preparation.
 
-**Latest state, October 22: current main `0a343abf1c2047af8870707627b9ef9cefa32b93` is LIVE behind maintenance after replacement DB credentials were saved privately. Fresh Shell readiness is pending.** Start at the [existing home handoff](../../HANDOFF-2026-10-19.md#1-resume-here) and run its corrected single-line read-only report in a **new** Render Dashboard Shell. The earlier multiline paste failed and is not a successful fresh report. Keep maintenance **ON**, automatic deployment **OFF**, reveal `false`, retention `false` and canonical Coming Soon in place. No domain move or public canary occurred.
+**Latest state, October 22: application commit `0a343abf1c2047af8870707627b9ef9cefa32b93` is deployed as `dep-dbd60hnavr4c73cuk67g` behind maintenance; fresh Shell readiness remains pending. Repository main can advance independently.** Start at the [existing home handoff](../../HANDOFF-2026-10-19.md#1-resume-here) and run its corrected single-line read-only report in a **new** Render Dashboard Shell. The earlier multiline paste failed and is not a successful fresh report. Keep maintenance **ON**, automatic deployment **OFF**, reveal `false`, retention `false` and canonical Coming Soon in place. No domain move or public canary occurred.
 
 The original Save only action and screenshot below are historical preparation evidence, not current credential authority. Ryan saved the four intended values without changing the running deployment at that step; the connector lacked a save-only update. Later deployments and security remediation are recorded separately below. Never obtain current DB credentials from an old screenshot or chat value.
 
@@ -16,8 +16,8 @@ the deployment. Use only the current private Dashboard default credential for
 app/home consumers. Home backup/recovery clients must be reconciled before old
 credential retirement; complete remediation/retirement is not yet verified.
 
-The current deployment is `dep-dbd5u4g473hc73dh8gkg` on main
-`0a343abf1c2047af8870707627b9ef9cefa32b93`, created at 19:08:02.439722 UTC and
+The historical credential deployment was `dep-dbd5u4g473hc73dh8gkg` on application
+commit `0a343abf1c2047af8870707627b9ef9cefa32b93`, created at 19:08:02.439722 UTC and
 LIVE at **19:08:39.066959 UTC / 2:08:39 p.m. CDT**. Backend/frontend CI checks
 passed on that exact source; backend/Docker sources match earlier `caec4a9`.
 The complete 43-entry startup-log readback for 19:08–19:10 UTC shows production
@@ -27,6 +27,15 @@ actual OOM failure was found; the complete error-filtered query returned zero
 entries. Maintenance remains ON and automatic deployment OFF at the existing
 single 1-CPU / 2 GiB size. Public provider root/health GETs returned maintenance
 503; the canonical homepage returned 200 Coming Soon. No DNS move occurred.
+
+Later readback shows the same application commit deployed as
+`dep-dbd60hnavr4c73cuk67g`, live October 22 at **19:13:45.411104 UTC /
+2:13:45 p.m. CDT**. Startup at 19:13:34.548 UTC confirms exactly one active
+profile, `production`; maintenance remains enabled, automatic deployment off,
+with the same Ohio single 1-CPU / 2 GiB instance. Provider root/health return
+maintenance 503 and canonical apex/`www` still serve Coming Soon. The earlier
+JDBC/Flyway observation is historical, not fresh verification of all effective
+settings or private readiness on this later deployment.
 
 **Still pending:** the new Shell report must return
 `OPERATIONS_OBSERVED_CHECKS_PASS`, `DATABASE_AVAILABLE`, `SCHEMA_REVIEWED` and
@@ -83,7 +92,8 @@ The Render MCP environment-update wrapper is unsuitable here: its [official impl
 | --- | --- |
 | App target | `kevinandmel-staging`, `srv-db7nqu67bikc73bhr580`, Ohio, one 1-CPU / 2 GiB instance |
 | Historical save-only baseline | `dep-dbchp7dg1s2s73blbqa0`, commit `3b2fd0a985fdc526843dde34bb8a6086a8e2da87`; automatic deployment off, maintenance off |
-| Current October 22 deployment | `dep-dbd5u4g473hc73dh8gkg` / main `0a343abf1c2047af8870707627b9ef9cefa32b93`, LIVE 19:08:39.066959 UTC; complete production/JDBC/Flyway/Tomcat startup observed. Maintenance ON, automatic deployment OFF; fresh Shell readiness pending |
+| Current October 22 deployment | `dep-dbd60hnavr4c73cuk67g` / application commit `0a343abf1c2047af8870707627b9ef9cefa32b93`, live 19:13:45.411104 UTC; production profile confirmed. Maintenance ON, automatic deployment OFF; remaining effective settings and fresh Shell readiness pending |
+| Historical credential deployment | `dep-dbd5u4g473hc73dh8gkg`, same application commit, live 19:08:39.066959 UTC; complete production/JDBC/Flyway/Tomcat startup observed after the replacement DB credential was saved privately |
 | Historical morning deployment | Ryan manually deployed `dep-dbcvtr6q1p3s73dfu31g`, live at 12:18:24.182776 UTC / 7:18:24 a.m. CDT, commit `caec4a96656b1cde101a5ee470c8fd90698878c9`; same service/size, automatic deployment off and maintenance off then. Application sources matched `3b2fd0a`; startup logs confirmed production profile. Later private console/PID1 checks retain their pre-rotation scope |
 | Bounded app-log readback | No error-level application entries returned for 12:18–12:27:22 UTC on October 22; this is a bounded observation, not uptime or complete launch acceptance |
 | Saved four-value batch | Ryan replied done to the Save only instruction and supplied a screenshot showing exactly the four intended values; no independent environment-read operation is available through the connector |
