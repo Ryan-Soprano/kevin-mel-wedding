@@ -8,8 +8,9 @@ database backup, complete disaster recovery or the launch RPO/RTO.
 
 Later on October 21, the [full database feasibility test](full-database-recovery-feasibility-2026-10-21.md)
 accepted three encrypted database captures and verified one isolated restoration.
-That follow-up supplements the historical results below; continuous five-minute
-RPO and complete one-hour RTO still remain open.
+That follow-up supplements the historical results below; it does not establish unattended operation or complete recovery.
+
+**October 22 policy supersession:** Ryan accepted a measured five-minute database freshness target without a hard data-loss guarantee, best-effort wedding restoration when he is available, and unattended encrypted backups with Gmail alerts. The same home Windows laptop and recovery drive will travel to the wedding's private room, superseding the home-stay availability assumption below. See the [current operating policy and activation plan](operator-recovery.md#location-retention-and-recovery-targets). The historical timings remain unchanged; real producer integration, independent media/current-ledger copies, 30-day expiry and actual phone-alert delivery still require evidence. The former one-hour wedding recovery requirement no longer governs launch.
 
 ## Application and infrastructure baseline
 
@@ -100,8 +101,8 @@ Executing complete recovery on another physical machine remains unproved.
 
 ## Availability and remaining launch work
 
-Ryan confirmed that the home computer can remain powered on, signed in, online
-and connected to the recovery drive during wedding collection. Locking the
+Ryan originally confirmed that the home computer could remain powered on, signed in, online
+and connected to the recovery drive during wedding collection. On October 22 he chose to bring that same laptop and drive to the wedding's private room instead. Record travel interruption and verify power, sign-in, network, drive and scheduled execution again at the venue. Locking the
 session does not require logging out. This is an operating commitment, not a
 tested offline/reboot guarantee or 30-day availability proof. Preserve the
 existing failure/late/unmanaged-file latches. Volume encryption could not be
@@ -114,20 +115,20 @@ confirmed through the available read access, so retain ciphertext only.
    records omitted from archive exports and current configuration/account
    recovery with reveal closed. The existing archive console requires stopped
    writers and expired PUT grants; it is not an online recurring DB backup job.
-3. Meet the **five-minute database RPO** with a measured durable recovery point.
+3. Measure the accepted **five-minute database freshness target** using actual durable recovery points.
    Render's [current PITR procedure](https://render.com/docs/postgresql-backups)
-   excludes the latest ten minutes, so PITR alone does not satisfy this gate.
-   A periodic job's interval plus capture/upload/verification delay and missed
-   runs must fit the target; alerts alone do not create a recoverable copy.
+   excludes the latest ten minutes, so PITR alone does not meet that target.
+   Measure the periodic job's interval, capture/upload/verification delay and missed
+   runs honestly; the target is not a hard data-loss guarantee, and alerts alone do not create a recoverable copy.
 4. Establish recurring independent media/current-ledger copies and content-free
    backup-freshness/failure alerts. Verify every contribution-bearing copy's
    expiry and coverage when the home host or drive is unavailable.
 5. Resolve total original-ledger-authority loss under the existing fail-closed
    identity rules. A relocated ledger copy cannot currently replace the source
    endpoint/bucket identity. Do not weaken that guard to obtain a passing restore.
-6. Time a complete recovery, including access/preparation, full DB, media,
+6. Verify functional complete recovery, including access/preparation, full DB, media,
    current deletion replay, configuration, verification and a running
-   reveal-closed app, within one hour at representative size.
+   reveal-closed app. Record timing and operator availability; wedding response/restoration is best effort under the October 22 decision.
 
 The [operator requirements](operator-recovery.md#location-retention-and-recovery-targets),
 [deletion authority rules](deletion-and-recovery.md) and
@@ -139,8 +140,4 @@ over the existing internal connection, encrypted before persistent storage and
 copied independently. A full dump can capture a consistent database during
 writes, but its completion/freshness and resource cost need measurement at the
 retained application/database sizes. A five-minute scheduling interval is not
-proof of a five-minute recovery point. A hard ceiling also needs an explicit
-policy for durable writes when verified backup freshness becomes insufficient,
-including background and in-flight work. No such scheduler or admission policy
-was installed by this home-key/expiry work. Preserve the existing requirement
-until a proven implementation or Ryan's explicit requirement decision.
+proof of a five-minute recovery point. This historical work installed no scheduler or admission policy. Under Ryan's October 22 decision, freshness gaps require accurate status, alerts and best-effort assessment; an automatic all-writer stop is not installed or promised. The current activation plan still requires the real producer to be inspected, integrated and observed on the traveling laptop before credit.

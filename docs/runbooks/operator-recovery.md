@@ -30,7 +30,7 @@ It also removes tag associations and refreshes affected tag revisions while pres
 
 Metadata includes contribution/memory/asset IDs, names, notes, captions, original filenames, grouping/order, creation fingerprints, **raw guest retry capabilities**, review revisions, deletion deadlines/tombstones, upload-grant reservations, review audit and erased-key reservations. Keep packages outside the repository, web roots, shared downloads, sync folders and screenshots. Use an operator-owned private parent on an encrypted volume and a reviewed encrypted independent recovery copy. Never paste package content, credentials, JDBC errors or signed URLs into logs, Git, Notion or this chat.
 
-Accounts/password hashes, sessions, throttle buckets, application settings, provider credentials and temporary staging bytes are excluded. Restore requires separate reviewed account/configuration recovery with reveal closed. Preserve review actor UUIDs as historical references; importing audit data does not create accounts or grant authority. A hosted PostgreSQL backup is still required for full database disaster recovery and the five-minute database RPO; this archive package supplements that backup.
+Accounts/password hashes, sessions, throttle buckets, application settings, provider credentials and temporary staging bytes are excluded. Restore requires separate reviewed account/configuration recovery with reveal closed. Preserve review actor UUIDs as historical references; importing audit data does not create accounts or grant authority. A full PostgreSQL backup remains required for database disaster recovery and the measured wedding freshness target; this archive package supplements that backup.
 
 ## Consistency and unfinished uploads
 
@@ -119,6 +119,8 @@ Capture and verify source-ledger authority settings separately **before** applyi
 
 Before collection, Ryan must record the approved private backup location, encrypted independent copy, restore destination access and test schedule in private operator configuration. This repository deliberately contains no production credentials or backup path. Package format/version and nonsecret verification evidence belong in Notion; guest content and credentials do not.
 
+**October 22 wedding policy update:** Ryan accepted unattended encrypted backups with Gmail alerts to his phone. Five-minute database recovery-point freshness is a measured operating target, not a guaranteed maximum data-loss window. Incident response and restoration are best effort when Ryan is available; the former one-hour wedding recovery requirement is superseded. The same home Windows laptop and existing recovery drive will travel to the wedding and remain available in a private room. No new paid resources are authorized. Durable verified backup receipts, independent original-media/current-deletion-ledger copies, 30-day contribution-bearing expiry, secret privacy and isolated local/CI verification remain required. Authorization does not establish that the automation is installed or working.
+
 The console applies owner-only permissions before writing package content and rejects filesystems where private permissions cannot be established. Choose an encrypted private parent first; permissions do not provide encryption. It does not schedule copies or prune exported directories. Ryan must enforce and verify the 30-day expiry of every contribution-bearing package, incomplete export and recovery copy using the approved backup policy.
 
 The dated rehearsal records the separate local expiry helper's 33 controls, synthetic task check and active task's first actual sweep, all passing. Both task runs were started on demand through Windows Task Scheduler with `Start-ScheduledTask`; they establish the installed launch path/result, not automatic hourly/logon firing. The enrolled archive retains its original capture time in an immutable expiry receipt and becomes eligible for removal at 29 days without resetting age; the helper preserves the separate lifetime ledger. This Limited/Interactive task is configured hourly and at operator logon with catch-up/wake, no startup trigger and no stored password. It requires Ryan logged in and the Windows host, private drive and reviewed runtime available. Read its private instructions/status and preserve failure/late/unmanaged-item latches. Its first passing sweep does not establish logout/reboot/offline behavior, continuous availability or expiry of any other backup copy; those requirements remain open.
@@ -129,24 +131,78 @@ observed hourly execution with result 0, unchanged archive/receipt/ledger and
 clean incident latches. No manual start was invoked by that observer; disabled
 task history prevented a separate trigger-reason event. It also records additive
 portable escrow work. These checks do not establish continuous DB backup,
-current ledger-copy freshness, offline availability or full RPO/RTO acceptance.
+current ledger-copy freshness, offline availability or the current operating policy's unattended backup/alert acceptance.
 
 The later [October 21 full-database feasibility test](full-database-recovery-feasibility-2026-10-21.md)
 accepted three independent encrypted database copies and verified one isolated
 restoration of all 19 tables and reviewed catalog definitions. It uses an online
 read-only exported snapshot rather than this quiescent archive console. The
 bounded manual freshness observation does not establish an unattended schedule
-or continuous RPO. Database restoration alone omits media, current independent
+or continuing coverage of the five-minute freshness target. Database restoration alone omits media, current independent
 deletion replay, configuration/access reconciliation and running-app readiness;
-complete one-hour RTO and recovery on another physical host remain open.
+complete restoration and recovery on another physical host remain unproved, without a one-hour wedding guarantee.
 
 | Requirement | Operator evidence required before launch |
 |---|---|
-| Wedding database RPO ≤ 5 minutes | Approved hosted PostgreSQL recovery mechanism, actual recovery points and an isolated restoration showing the last recoverable committed fixture lies within five minutes. A manually quiesced archive export does not establish continuous database RPO. |
-| Wedding RTO ≤ 1 hour | Timed complete recovery, including DB/media, current ledger, verification, configuration and readiness, at representative archive size. Small local fixtures establish functional behavior only. |
+| Wedding database freshness target: five minutes | Install and observe unattended encrypted captures, accepted durable receipts and independent-copy publication; measure actual recovery-point age and alert when stale, failed or missing. This is an operating target, not a hard data-loss guarantee. A timer or manually quiesced archive export alone does not establish coverage. |
+| Wedding restoration: best effort when Ryan is available | Verify operator/portable-key access and a functional isolated restore, including DB/media, current ledger, configuration and readiness. Record measured recovery work and availability honestly; no one-hour wedding restoration promise remains. Privacy, deletion authority and reopening checks still apply. |
 | Normal-operation RPO/RTO ≤ 24 hours | Verified recurring DB/media backup and complete timed recovery. Document interruptions and operator coverage. |
 | Contribution-bearing backups expire after 30 days | Enforced expiry on every primary/recovery copy, including provider DB backups and incomplete exports. Verify the policy actually removes expired contribution-bearing copies. Content-free independent tombstones/retry reservations remain for archive lifetime. |
 | Independent recovery copy | Verified encrypted operator-only copy in a separate failure domain, restore access and current ledger recovery/merge; never rely on the live bucket as its sole recovery copy. |
 | Operator recovery access | Ryan alone, least necessary source/destination permissions, credential recovery and audited private access; no production access delegated to development or couple application roles. |
+
+### Wedding automation activation — October 22
+
+The status publisher (`scripts/backup-status.mjs`), independent watchdog (`scripts/backup-watchdog.mjs`) and scheduled workflow (`.github/workflows/backup-watchdog.yml`) are prepared with activation disabled until configured. They do not create a database/media backup. The tested home capture/crypto helpers are private and absent from this work checkout; inspect their actual source and installed state on the traveling laptop before integration. Git transfer alone cannot install or prove that producer.
+
+1. On that laptop, verify the existing capture, encryption and expiry helpers, private runtime/drive access, least-privilege internal database route and recovery key. Keep database internet access closed. Preserve single-flight capture and expiry locking, original capture age, authenticated readback and durable receipts. A file's existence or process success alone is insufficient.
+2. Connect scheduled capture to the status publisher only after the real encrypted copy is verified, durably published and expiry-enrolled. Measure DB freshness separately from independent original-media/current-ledger copy coverage; do not turn an unverified or DB-only result into a complete-backup success. Publish content-free status only to the private `feature/backup-status` branch at `ops/backup-status.json`, using the laptop's private Git authentication without checking out, resetting or force-pushing that branch. Record failures and gaps without refreshing the last accepted recovery point.
+3. Configure the independent GitHub watchdog with read-only contents access and issue-write access to its dedicated private operations issue. Incident/recovery mentions of the repository owner rely on GitHub notification routing to Gmail, not Gmail credentials in CI; actual routing and phone delivery must pass. Keep all activation gates unset here. After independently checking included Actions minutes and zero overage, `ARCHIVE_BACKUP_WATCHDOG_BUDGET_CONFIRMED=true` permits only explicitly dispatched `synthetic-failure`/`synthetic-recovery` notification tests while the live enable, recipient and host-proof gates remain unset. These tests use separate synthetic state and leave live status/state unchanged; the fixed private repository/owner, opted-in issue and explicit threshold checks still apply. Live checks require `ARCHIVE_BACKUP_WATCHDOG_ENABLED`, `ARCHIVE_BACKUP_WATCHDOG_BUDGET_CONFIRMED`, `ARCHIVE_BACKUP_WATCHDOG_RECIPIENT_CONFIRMED` and `ARCHIVE_BACKUP_WATCHDOG_HOST_PROOF_CONFIRMED` all exactly `true`, after a real home-producer accepted receipt and phone delivery are verified. Configure 300-second DB/media/ledger freshness thresholds and a 7200-second expiry-sweep threshold. The ten-minute schedule makes 144 checks/day; sub-minute private-repository Linux jobs can consume about 144 included minutes/day, with the three-minute job limit allowing about 432 runner minutes/day. Scheduling and delivery are best effort; thresholds and explicit failures are assessed on the next executed check, not within a guaranteed five minutes. Test stale/missing status, producer failure and recovery. A laptop-local alert cannot alone detect laptop loss. No guest data, backup paths, secrets, digests, capabilities or raw logs belong in published status or email; no R2/Gmail credentials belong in CI.
+4. Use synthetic fixtures in isolated local/CI environments for implementation checks. Then observe bounded read-only live captures and real scheduled runs on the laptop, verify independent copies/expiry and a functional isolated restore, and record actual freshness and alert evidence. Do not use the retained live archive for fixture writes, load tests or reset rehearsals. Until this evidence passes, the producer, recurring copies and alerts remain unaccepted.
+5. Before travel, record a verified checkpoint and any expected interruption. At the private-home venue, plug the laptop into power, prevent automatic sleep while plugged in, keep Windows signed in (the screen may be locked), attach the same recovery drive and verify the venue network. An open lid alone does not establish background availability. Verify a new scheduled accepted copy plus phone-alert delivery; this document changes no power settings. Record transit, sleep, restart, network and drive gaps honestly. Exceeding five minutes prompts an alert and best-effort operator assessment; this policy does not install an automatic all-writer stop. Stop collection when an incident requires it, using the existing maintenance/quiescence procedure rather than claiming upload pause stops every writer.
+
+The opted-in private issue must be titled `Backup watchdog operations` and contain `<!-- kevin-mel-backup-watchdog:allow -->` in its body. Set its numeric issue number in `ARCHIVE_BACKUP_WATCHDOG_ISSUE`. The workflow names the four `ARCHIVE_BACKUP_WATCHDOG_*_MAX_AGE_SECONDS` variables explicitly; use `300` for `DATABASE`, `MEDIA` and `LEDGER`, and `7200` for `EXPIRY`. No recipient email address is stored in these variables. Confirm GitHub routes the owner's issue mentions and failed Actions notifications to the intended Gmail inbox, then confirm the actual synthetic incident and recovery on the phone before setting the recipient gate. Never infer delivery from a successful API response alone.
+
+### Private coordinator contract
+
+The runner configuration has exactly these 16 top-level keys. All paths and SHA-256 values below are placeholders, not a usable configuration; inspect the actual home helper interfaces and reviewed files before supplying private values. The five pins each contain exactly `path` and a 64-character lowercase hexadecimal `sha256`.
+
+```json
+{
+  "schemaVersion": 1,
+  "operatorSid": "S-1-5-21-<operator-SID>",
+  "driveRoot": "X:\\",
+  "privateWorkDirectory": "X:\\PRIVATE_WORK",
+  "repositoryDirectory": "X:\\REVIEWED_REPOSITORY",
+  "receiptPath": "X:\\PRIVATE_WORK\\producer-receipt.json",
+  "statePath": "X:\\PRIVATE_WORK\\last-accepted-receipt.json",
+  "lockPath": "X:\\PRIVATE_WORK\\capture.lock",
+  "runtime": { "path": "C:\\REVIEWED_RUNTIME\\pwsh.exe", "sha256": "<reviewed-sha256>" },
+  "node": { "path": "C:\\REVIEWED_RUNTIME\\node.exe", "sha256": "<reviewed-sha256>" },
+  "producerAdapter": { "path": "X:\\PRIVATE_WORK\\producer-adapter.ps1", "sha256": "<reviewed-sha256>" },
+  "publisher": { "path": "X:\\REVIEWED_REPOSITORY\\scripts\\backup-status.mjs", "sha256": "<reviewed-sha256>" },
+  "runner": { "path": "X:\\REVIEWED_REPOSITORY\\scripts\\run-backup-job.ps1", "sha256": "<reviewed-sha256>" },
+  "producerConfigurationPath": "X:\\PRIVATE_WORK\\producer-config.json",
+  "timeoutSeconds": 120,
+  "taskName": "KevinMelBackupCapture"
+}
+```
+
+`operatorSid` must match the current Windows operator. `driveRoot` is an existing uppercase drive-letter root, and the private work directory must be on that drive. Receipt/state/lock paths must use exactly the three filenames above within that directory. Paths must be absolute local paths with no symlink, junction or other reparse ancestor. Private configuration, adapter, producer configuration and work/receipt files require operator ownership and restricted ACLs allowing only the operator, SYSTEM or local Administrators; the registrar also requires a protected configuration DACL. Preserve the laptop's existing private Git authentication and operator-owned work directory; put no tokens or storage/Gmail credentials in this JSON or CI.
+
+Use a dedicated coordinator work directory, separate from all managed ciphertext/expiry inventory roots and the existing expiry lock. It also holds `failure-receipt.json` and temporary Git-index directories. The unavailable home expiry configuration cannot be inferred from this schema; inspect it and confirm separation before creating coordinator files or registering the task. The adapter must still use the existing expiry publication lock for actual backup enrollment.
+
+The private adapter receives exactly one positional argument: the absolute `producerConfigurationPath`, launched by the pinned PowerShell runtime. It must call the inspected real helpers and write the strict `kevin-mel-backup-receipt` schema validated by `scripts/backup-status.mjs` at `receiptPath`. Database recovery-point/verification times, independent media/ledger verification and expiry health must attest actual accepted work. Do not generate a successful sample receipt or advance timestamps to simulate backup success. `timeoutSeconds` is an integer from 30 through 240 for the producer; failed or uncertain capture must not replace the last accepted receipt.
+
+After preparing reviewed private paths, use only the read-only validation modes first:
+
+```powershell
+& $reviewedPwshPath -NoProfile -NonInteractive -File $reviewedRunnerPath -ConfigPath $privateJobConfiguration -ValidateOnly
+& $reviewedPwshPath -NoProfile -NonInteractive -File $reviewedRegistrarPath -ConfigPath $privateJobConfiguration -ValidateOnly
+```
+
+Both require `BACKUP_JOB_CONFIGURATION_VALID` and exit 0; validation performs no capture, publication, state update or task registration. Installation remains a later deliberate step after producer/copy/expiry and alert evidence is accepted. The registrar refuses an existing `KevinMelBackupCapture` task and never replaces the existing expiry task. Its eventual capture task uses the current Interactive/Limited operator, no stored password, a two-minute trigger, `IgnoreNew`, catch-up/wake and hidden task/PowerShell windows. Execution is bounded by `timeoutSeconds + 480` seconds, at most 12 minutes, to allow validation and success/failure publication. A long run skips overlapping triggers; stale status still alerts through the independent watchdog, without a five-minute completion or notification guarantee.
+
+October 22 implementation verification used Node 24.21.0 and PowerShell 7.6.5: 57 protocol/local-Git fixture checks and 24 coordinator/registrar checks passed. These cover a status-only remote tree, unchanged application index/HEAD, concurrent/refused pushes, preserved accepted evidence, strict pins/private configuration, duplicate keys, missing/stale/future receipts, single-flight locking and bounded child timeout/cleanup. In-memory watchdog checks covered incident/reminder/recovery, malformed or missing status, write failures, deduplication and synthetic/live isolation. No live status was published, scheduled task registered or notification sent; the actual home producer and delivery remain unproved.
 
 The dated hosted rehearsal verifies authenticated original reads, isolated recovery writes and cleanup for the actual small staging archive. Guest PUT/CORS/grant-expiry/retry behavior, representative capacity, full database recovery, recurring scheduling, alerts (OPS-03), backup retention and the broader operational targets remain release acceptance. Audio also participates in synthetic original-preserving export, restoration and current-ledger erasure tests. Repeat with accepted physical-device originals before audio collection is enabled; decoder/recovery checks do not establish phone recording behavior or representative hosted recovery capacity.

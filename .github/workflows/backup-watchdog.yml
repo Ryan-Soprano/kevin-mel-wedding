@@ -1,0 +1,61 @@
+name: Backup freshness watchdog
+
+on:
+  schedule:
+    - cron: "7,17,27,37,47,57 * * * *"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Synthetic tests need budget confirmation; live checks need every activation gate"
+        required: true
+        default: live
+        type: choice
+        options:
+          - live
+          - synthetic-failure
+          - synthetic-recovery
+
+# No application/backup credentials or data are available to this job.
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: archive-backup-watchdog
+  cancel-in-progress: false
+
+jobs:
+  watchdog:
+    if: >-
+      github.repository == 'Ryan-Soprano/kevin-mel-wedding' &&
+      vars.ARCHIVE_BACKUP_WATCHDOG_BUDGET_CONFIRMED == 'true' &&
+      ((github.event_name == 'workflow_dispatch' &&
+        (inputs.mode == 'synthetic-failure' || inputs.mode == 'synthetic-recovery')) ||
+       (vars.ARCHIVE_BACKUP_WATCHDOG_ENABLED == 'true' &&
+        vars.ARCHIVE_BACKUP_WATCHDOG_RECIPIENT_CONFIRMED == 'true' &&
+        vars.ARCHIVE_BACKUP_WATCHDOG_HOST_PROOF_CONFIRMED == 'true'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Check out reviewed watchdog
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - name: Check status and notify the private operations issue
+        run: node scripts/backup-watchdog.mjs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          ARCHIVE_BACKUP_WATCHDOG_ENABLED: ${{ vars.ARCHIVE_BACKUP_WATCHDOG_ENABLED }}
+          ARCHIVE_BACKUP_WATCHDOG_BUDGET_CONFIRMED: ${{ vars.ARCHIVE_BACKUP_WATCHDOG_BUDGET_CONFIRMED }}
+          ARCHIVE_BACKUP_WATCHDOG_RECIPIENT_CONFIRMED: ${{ vars.ARCHIVE_BACKUP_WATCHDOG_RECIPIENT_CONFIRMED }}
+          ARCHIVE_BACKUP_WATCHDOG_HOST_PROOF_CONFIRMED: ${{ vars.ARCHIVE_BACKUP_WATCHDOG_HOST_PROOF_CONFIRMED }}
+          ARCHIVE_BACKUP_WATCHDOG_ISSUE: ${{ vars.ARCHIVE_BACKUP_WATCHDOG_ISSUE }}
+          ARCHIVE_BACKUP_WATCHDOG_DATABASE_MAX_AGE_SECONDS: ${{ vars.ARCHIVE_BACKUP_WATCHDOG_DATABASE_MAX_AGE_SECONDS }}
+          ARCHIVE_BACKUP_WATCHDOG_MEDIA_MAX_AGE_SECONDS: ${{ vars.ARCHIVE_BACKUP_WATCHDOG_MEDIA_MAX_AGE_SECONDS }}
+          ARCHIVE_BACKUP_WATCHDOG_LEDGER_MAX_AGE_SECONDS: ${{ vars.ARCHIVE_BACKUP_WATCHDOG_LEDGER_MAX_AGE_SECONDS }}
+          ARCHIVE_BACKUP_WATCHDOG_EXPIRY_MAX_AGE_SECONDS: ${{ vars.ARCHIVE_BACKUP_WATCHDOG_EXPIRY_MAX_AGE_SECONDS }}
+          ARCHIVE_BACKUP_WATCHDOG_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'live' }}
