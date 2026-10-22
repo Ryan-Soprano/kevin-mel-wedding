@@ -50,4 +50,11 @@ An original publication can succeed before database commit fails. Retry the same
 
 ## Remaining release checks
 
+The [October 22 verification](shared-peer-recovery-verification-2026-10-22.md)
+passed deployed CREATE peer-limit denial and same-key natural-expiry admission
+through a controlled internal proxy simulation, with exact private counter
+attribution and no saved content. This supplements the observed public proxy
+distribution and retry-key cooldown; physical venue throughput, other hosted
+operation limits and mobile draft/retry acceptance remain separate checks.
+
 Repeat correct and wrong-size signed PUTs through actual private R2 and physical browsers; confirm filename/key/method/type/size restrictions, expiry, exact-origin CORS, unsigned denial and verified original integrity. Record only outcomes. Verify hosted peer/origin behavior, shared-network throughput and operator monitoring before public collection. Audio remains provisional until its implementation/format evidence is complete. See [SEC-01 verification](../api/v1/anonymous-protection-verification.md) and the [SEC-02 release review](security-review.md).
