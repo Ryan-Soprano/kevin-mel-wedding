@@ -321,23 +321,37 @@ export default function App({
       )}
 
       {welcome && (
-        <aside className="guest-registry" aria-label="Wedding registry">
-          <a
-            href="https://www.zola.com/wedding/melaniekevinfollybeach"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M4 11h16v10H4zM3 7h18v4H3zM12 7v14" />
-              <path d="M12 7H8.5A2.5 2.5 0 1 1 11 4.5L12 7Zm0 0h3.5A2.5 2.5 0 1 0 13 4.5L12 7Z" />
-            </svg>
-            Their wedding registry
-            <span aria-hidden="true">↗</span>
-            <span className="visually-hidden"> (opens in a new tab)</span>
-          </a>
-          <p>
-            Zola <span aria-hidden="true">·</span> Password: <span>ODIE123</span>
-          </p>
+        <aside className="guest-registry" aria-labelledby="wedding-registry">
+          <div className="guest-registry-copy">
+            <h2 id="wedding-registry">A little note of thanks</h2>
+            <p className="guest-registry-description">
+              Having you in our lives is the greatest gift. Thank you for all
+              the love, laughter, and memories as we start this next chapter.
+            </p>
+            <p className="guest-registry-signature">
+              With love, <span>Kevin &amp; Melanie</span>
+            </p>
+          </div>
+          <div className="guest-registry-actions">
+            <p className="guest-registry-invitation">
+              If you feel inclined, here is the link to our registry
+            </p>
+            <a
+              className="guest-registry-link"
+              href="https://www.zola.com/wedding/melaniekevinfollybeach"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Visit our registry
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M5 12h14m-5-5 5 5-5 5" />
+              </svg>
+              <span className="visually-hidden"> (opens in a new tab)</span>
+            </a>
+            <p className="guest-registry-password">
+              Zola password <span>ODIE123</span>
+            </p>
+          </div>
         </aside>
       )}
 
