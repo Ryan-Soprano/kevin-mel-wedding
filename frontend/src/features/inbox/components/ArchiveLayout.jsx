@@ -31,7 +31,8 @@ function EmptyIcon({ icon }) {
       : icon === "library" ? <><path d="M4 4h4v16H4zM10 4h4v16h-4zM16 5l4-1 3 15-4 1zM4 8h4M10 8h4" /></>
         : icon === "tags" ? <><path d="m3 12 9 9 9-9V3h-9z" /><circle cx="16" cy="8" r="1" /></>
           : icon === "export" ? <><path d="M12 3v12m-4-4 4 4 4-4M4 15v5h16v-5" /></>
-            : <><rect x="4" y="3" width="16" height="18" rx="2" /><path d="M8 3v18M12 8h4M12 12h4" /></>}
+            : icon === "inbox" ? <path d="M20 5a5 5 0 0 0-7 0l-1 1-1-1a5 5 0 0 0-7 7l8 8 8-8a5 5 0 0 0 0-7Z" />
+              : <><rect x="4" y="3" width="16" height="18" rx="2" /><path d="M8 3v18M12 8h4M12 12h4" /></>}
   </svg>;
 }
 
@@ -43,11 +44,11 @@ export function ArchiveEmpty({ title, children, icon = "album" }) {
   </div>;
 }
 
-export function ArchivePagination({ previousLabel = "Previous page", nextLabel = "Next page", page,
+export function ArchivePagination({ previousLabel = "Previous page", nextLabel = "Next page", page, pageLabel, label = "Archive pages",
   disabled, canPrevious, canNext, onPrevious, onNext }) {
-  return <nav className="archive-pagination" aria-label="Archive pages">
+  return <nav className="archive-pagination" aria-label={label}>
     <button className="button-secondary" type="button" disabled={disabled || !canPrevious} onClick={onPrevious}>{previousLabel}</button>
-    <span className="archive-page-number">Page {page}</span>
+    <span className="archive-page-number">{pageLabel ?? `Page ${page}`}</span>
     <button className="button-secondary" type="button" disabled={disabled || !canNext} onClick={onNext}>{nextLabel}</button>
   </nav>;
 }
