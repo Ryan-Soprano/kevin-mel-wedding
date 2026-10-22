@@ -36,6 +36,8 @@ Ryan completed the human test-inbox check and confirmed all five items. A local 
 
 ## Physical phones and QR proof
 
+**Later October 21 update:** Ryan confirmed that a QR is already printed on every guest placemat, encodes exactly `https://kevinandmel.com`, and reaches the current Coming Soon page. Those actual placemats govern launch acceptance; the generated proof below is historical rendering evidence. Verify the placemat's canonical destination and phone saves after cutover. No replacement printing is requested. The [settings preparation record](../runbooks/production-settings-preparation-2026-10-21.md) tracks the subsequent save-only work separately from this completed rehearsal.
+
 Ryan reports that the requested note/photo/record-preview-send/gallery flows have previously been performed successfully on **both iPhone and Android**. Carry that report forward as prior human acceptance; no new model, OS/browser version, network or same-build physical observation was supplied in this exercise. The final canonical origin and printed QR still need physical checks after cutover.
 
 The [printable QR proof](wedding-qr-card-proof.html) now contains a real [QR SVG](kevinandmel-qr.svg) for exactly **`https://kevinandmel.com`**. Independent decoding of a 300-dpi raster, screen render and print-CSS render returned those exact bytes, with no trailing slash. The QR has a four-module white quiet zone and measures 48 mm including that zone; its bordered card is A6, 105 × 148 mm. Layout and dimensions were inspected. Print the A4 proof sheet at 100% / Actual size with browser headers/footers off.
