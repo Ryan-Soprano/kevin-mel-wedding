@@ -2,7 +2,59 @@
 
 Ryan originally requested preparation for **Thursday, October 22 at 6 p.m. CDT / 23:00 UTC**, keeping Coming Soon until the attended cutover. On October 22 he made that time flexible: the attended cutover may begin at any time today once preparation is complete and he records the readiness/go-no-go decision. Promote the existing app/database/private bucket at their current sizes. No second hosted stack, scheduled launch, account activation, reveal or fixture cleanup is part of this preparation.
 
-**Status: Ryan confirmed the Dashboard Save only action; his supplied screenshot shows all four intended values. The immediate post-save checks found the same deployment and Coming Soon routing. Ryan subsequently confirmed his October 22 manual deployment; startup logs confirm the `production` profile, while the complete effective runtime matrix remains unconfirmed.** The four existing keys were edited in place, preserving the other variables. The saving was human-attested with visible value verification, not an independent provider environment API read. At the save-only step, the connector could not perform a save-only update and browser control could not initialize. The save-only preparation performed no deployment, DNS or custom-domain move; the later deployment is recorded separately below.
+**Latest state, October 22: current main `0a343abf1c2047af8870707627b9ef9cefa32b93` is LIVE behind maintenance after replacement DB credentials were saved privately. Fresh Shell readiness is pending.** Start at the [existing home handoff](../../HANDOFF-2026-10-19.md#1-resume-here) and run its corrected single-line read-only report in a **new** Render Dashboard Shell. The earlier multiline paste failed and is not a successful fresh report. Keep maintenance **ON**, automatic deployment **OFF**, reveal `false`, retention `false` and canonical Coming Soon in place. No domain move or public canary occurred.
+
+The original Save only action and screenshot below are historical preparation evidence, not current credential authority. Ryan saved the four intended values without changing the running deployment at that step; the connector lacked a save-only update. Later deployments and security remediation are recorded separately below. Never obtain current DB credentials from an old screenshot or chat value.
+
+## October 22 credential remediation and current deployment
+
+A database password was inadvertently pasted into chat and must be treated as
+exposed. This document records no value, username or raw connection URL. Ryan
+created a replacement default DB credential and privately confirmed that the
+app's saved username/password match it; he used **Save only** before authorizing
+the deployment. Use only the current private Dashboard default credential for
+app/home consumers. Home backup/recovery clients must be reconciled before old
+credential retirement; complete remediation/retirement is not yet verified.
+
+The current deployment is `dep-dbd5u4g473hc73dh8gkg` on main
+`0a343abf1c2047af8870707627b9ef9cefa32b93`, created at 19:08:02.439722 UTC and
+LIVE at **19:08:39.066959 UTC / 2:08:39 p.m. CDT**. Backend/frontend CI checks
+passed on that exact source; backend/Docker sources match earlier `caec4a9`.
+The complete 43-entry startup-log readback for 19:08–19:10 UTC shows production
+profile, a new Hikari JDBC connection/pool, validated/up-to-date Flyway schema,
+and Tomcat/application startup. No authentication, permission, migration or
+actual OOM failure was found; the complete error-filtered query returned zero
+entries. Maintenance remains ON and automatic deployment OFF at the existing
+single 1-CPU / 2 GiB size. Public provider root/health GETs returned maintenance
+503; the canonical homepage returned 200 Coming Soon. No DNS move occurred.
+
+**Still pending:** the new Shell report must return
+`OPERATIONS_OBSERVED_CHECKS_PASS`, `DATABASE_AVAILABLE`, `SCHEMA_REVIEWED` and
+`READINESS_EXIT=0`. Startup connection success is useful evidence but does not
+replace that report or current R2/media consistency checks. The handoff owns
+the one-line command and ordered continuation; do not retry the failed multiline
+paste or hardcode an older username/password. If any result fails, leave the
+service behind maintenance.
+
+Earlier private console DB/schema observations, all ten guarded PID1 startup
+checks, and no-extra-override/no-external-configuration checks passed on the prior
+deployment. Ryan confirmed that the internal DB target matches the retained
+database. Keep those dated results as historical evidence; they are not fresh
+post-rotation acceptance. Render rollback can restore historical environment
+values, so a fallback must be reconciled with current credentials and preserved
+production/reveal/retention settings before traffic reopens.
+
+Ryan confirmed no external Render Log Stream destination and both R2 public
+access mechanisms off. The endpoint alone did not establish a historical bucket
+name. He reported deleting all `originals/` entries in the app-configured bucket
+about thirty minutes before the report, confirmed that these were only
+synthetic/rehearsal uploads, and intended to keep none. No DB metadata or ledger
+cleanup is proved by that object operation. Preserve current deletion authority
+and remaining bytes; reconcile DB/object/ledger state privately before accepting
+backups or opening collection. Do not restore unwanted rehearsal originals,
+reset the archive or create replacement canaries merely to clear this gap.
+The October 20 approved cleanup concerned only a separate isolated restore
+target; its scope did not authorize source-wide original deletion.
 
 ## Prepared batch
 
@@ -15,7 +67,7 @@ MEMORY_ARCHIVE_PUBLIC_ORIGIN=https://kevinandmel.com
 MEMORY_ARCHIVE_REVEALED=false
 ```
 
-Read back all four values privately. Use exactly `production`, without an additional `staging` profile. Preserve existing DB/R2 credentials, bucket/deletion authority, stable throttle secret, audio/storage/retention controls, upload state, media limits, one finalizer, heap, port and proxy configuration. Do not enable retention or rotate secrets as a shortcut to promotion.
+Read back all four values privately. Use exactly `production`, without an additional `staging` profile. Preserve bucket/deletion authority, stable throttle secret, audio/storage/retention controls, upload state, media limits, one finalizer, heap, port and proxy configuration. The later DB security rotation above is a separate authorized action; do not enable retention or rotate unrelated secrets merely to relabel the environment.
 
 The source-checked production profile already provides Render binding/port/forwarding, Secure cookies, explicit database requirements and one finalizer. The working frontend already supports the rehearsed audio feature. These four runtime changes need no frontend rebuild. The later readback below supersedes the preparation's earlier pending provider-value/override audit. Use the full [production matrix](go-live-kevinandmel-com.md#2-prepare-the-live-application) to verify effective profile, property/JVM/start-command overrides and running acceptance after deployment; saved settings are not running proof.
 
@@ -31,20 +83,23 @@ The Render MCP environment-update wrapper is unsuitable here: its [official impl
 | --- | --- |
 | App target | `kevinandmel-staging`, `srv-db7nqu67bikc73bhr580`, Ohio, one 1-CPU / 2 GiB instance |
 | Historical save-only baseline | `dep-dbchp7dg1s2s73blbqa0`, commit `3b2fd0a985fdc526843dde34bb8a6086a8e2da87`; automatic deployment off, maintenance off |
-| October 22 current-deploy readback | Ryan confirmed manually deploying `dep-dbcvtr6q1p3s73dfu31g`, live at 12:18:24.182776 UTC / 7:18:24 a.m. CDT, commit `caec4a96656b1cde101a5ee470c8fd90698878c9`; same service/size, automatic deployment off, maintenance off. Application sources match `3b2fd0a`. Startup logs at 12:18:12.959 UTC confirm the `production` profile; the complete effective runtime matrix remains unconfirmed |
+| Current October 22 deployment | `dep-dbd5u4g473hc73dh8gkg` / main `0a343abf1c2047af8870707627b9ef9cefa32b93`, LIVE 19:08:39.066959 UTC; complete production/JDBC/Flyway/Tomcat startup observed. Maintenance ON, automatic deployment OFF; fresh Shell readiness pending |
+| Historical morning deployment | Ryan manually deployed `dep-dbcvtr6q1p3s73dfu31g`, live at 12:18:24.182776 UTC / 7:18:24 a.m. CDT, commit `caec4a96656b1cde101a5ee470c8fd90698878c9`; same service/size, automatic deployment off and maintenance off then. Application sources matched `3b2fd0a`; startup logs confirmed production profile. Later private console/PID1 checks retain their pre-rotation scope |
 | Bounded app-log readback | No error-level application entries returned for 12:18–12:27:22 UTC on October 22; this is a bounded observation, not uptime or complete launch acceptance |
 | Saved four-value batch | Ryan replied done to the Save only instruction and supplied a screenshot showing exactly the four intended values; no independent environment-read operation is available through the connector |
 | Post-save unchanged deployment and public Coming Soon | October 22 at 00:20:31 UTC / October 21 at 7:20:31 p.m. CDT: same live deploy/commit, no newer deploy listed, auto-deploy off; certificate-validated apex and `www` both 200 Coming Soon, `www` redirects to apex |
 | Public DNS readback | Apex A `216.24.57.1`; `www` CNAME `kevinandmel-coming-soon.onrender.com`, unchanged from baseline; resolver TTL 1761 seconds, not an authoritative configured-TTL inventory |
 | Printed placemats | Ryan confirms QR printed on every guest placemat, exact encoded URL `https://kevinandmel.com`, and current Coming Soon access; post-cutover physical scans remain pending |
-| Canonical routing and running production settings | Apex and `www` still serve Coming Soon; provider URL serves the guest app and health returns 200 after the October 22 deployment. No domain/DNS move observed. Health/source equality do not establish effective production settings or canonical cutover acceptance |
+| Canonical routing and current public hold | Canonical homepage remains 200 Coming Soon; provider root/health return maintenance 503. No domain/DNS move or controlled canonical canary occurred. Earlier guest/health 200 observations are historical; neither public status nor source equality verifies current media bytes or launch acceptance |
 
 The private ignored `logs/production-settings-20261021.local/` folder holds the four nonsecret candidate values and content-free receipts under owner-only access. No credential values or guest content belong in this record. The initial screenshot visibly confirms profile/environment `production`, canonical HTTPS origin and reveal `false`; masked surrounding values were not inspected at that step. The later readback below adds preparation evidence. Saving the batch is not proof of the running configuration, private readiness, canonical browser CORS, production TLS, actual placemat/phone saves or any deferred recovery requirement.
 
 ## Later home configuration and R2 readback
 
-The [October 22 handoff](../../HANDOFF-2026-10-19.md#later-home-production-configuration-readback) records the later home readback that supersedes the earlier pending preparation audit. Ryan confirmed the saved production profile/environment, canonical origin and reveal `false`. His full environment screenshot confirmed audio/storage enabled, `VITE_AUDIO_ENABLED=true`, retention `false`, and `JAVA_TOOL_OPTIONS=-Xms64m -Xmx1536m -XX:+ExitOnOutOfMemoryError`. He confirmed `PORT=10000`, no linked environment groups and no secret files; no extra datasource/server/config/profile override keys appeared in the table. Upload-pause and retention-interval overrides were absent (source defaults `false` and `300000` ms). The private observer verified the retained DB target and matching throttle-HMAC configuration without exporting secrets. Preserve retention `false`; this is not running production acceptance.
+The [October 22 handoff](../../HANDOFF-2026-10-19.md#later-home-production-configuration-readback) records the later home readback that superseded the original pending preparation audit. Ryan confirmed the saved production profile/environment, canonical origin and reveal `false`. His full environment screenshot confirmed audio/storage enabled, `VITE_AUDIO_ENABLED=true`, retention `false`, and `JAVA_TOOL_OPTIONS=-Xms64m -Xmx1536m -XX:+ExitOnOutOfMemoryError`. He confirmed `PORT=10000`, no linked environment groups and no secret files; no extra datasource/server/config/profile override keys appeared in the table. Upload-pause and retention-interval overrides were absent (source defaults `false` and `300000` ms). The private observer verified the retained DB target and matching throttle-HMAC configuration without exporting secrets. Preserve retention `false`. This screenshot remains preparation evidence and is not authority for credentials after today's rotation; current deployment/fresh-report status is above.
 
-Ryan added only the canonical origin to existing R2 CORS. Unsigned OPTIONS retests passed exact-origin PUT/GET/HEAD for canonical and staging origins, including PUT Content-Type and the existing 300-second max-age; a foreign reserved origin remained denied. No object bodies were uploaded or read. Ryan confirmed public development URL disabled, no custom domains, one-day completed-object deletion enabled for exactly `staging/`, and no completed-object delete rule for an empty prefix, `originals/` or `deletions/v1/`. The separate default incomplete-multipart abort rule was preserved. Canonical browser saves, phone/printed-QR acceptance, the complete effective runtime matrix and private readiness still require acceptance.
+Ryan added only the canonical origin to existing R2 CORS. Unsigned OPTIONS retests passed exact-origin PUT/GET/HEAD for canonical and staging origins, including PUT Content-Type and the existing 300-second max-age; a foreign reserved origin remained denied. No object bodies were uploaded or read. Ryan confirmed public development URL disabled, no custom domains, one-day completed-object deletion enabled for exactly `staging/`, and no completed-object delete rule for an empty prefix, `originals/` or `deletions/v1/`. The separate default incomplete-multipart abort rule was preserved. These historical settings checks do not prove current bytes after the reported object removal. Canonical browser saves, phone/printed-QR acceptance, current media consistency and the new private readiness report remain pending.
 
-At an **attended time on October 22 once readiness is accepted**, begin the [cutover procedure](go-live-kevinandmel-com.md): resolve the recorded go/no-go decisions, enable and verify maintenance, take the required checkpoint, and verify the existing deployment's actual settings/artifact/private readiness. Do not repeat a deployment merely to consume the already deployed batch; any required correction needs reviewed settings and affected checks. Then move the custom domains/DNS, verify TLS/CORS and open the controlled canonical canary. Removing maintenance already admits public traffic through the printed QR. Scan an actual placemat on iPhone and Android and complete affected save/retry checks before announcing availability. Kevin/Melanie's content acceptance and the checklist's deferred recovery and physical shared-network requirements remain separately recorded. Keep reveal false.
+Continue first from the [home handoff's new Shell command and ordered actions](../../HANDOFF-2026-10-19.md#1-resume-here): finish fresh readiness/credential consumers, rehearsal-media reconciliation and actual home producer/copy/expiry/recovery acceptance. Explicit synthetic warning/recovery delivery to Gmail and iPhone is confirmed; it is not an installed live monitor. Follow the existing operator activation plan for remaining budget/host-proof/live gates.
+
+At an **attended time on October 22 once readiness is accepted**, use the [cutover procedure](go-live-kevinandmel-com.md). Maintenance is already ON; preserve it while resolving the recorded go/no-go decisions and taking the required checkpoint. Do not repeat a deployment merely to consume an old saved batch. Then deliberately move custom domains/DNS, verify TLS/CORS and open the controlled canonical canary. Removing maintenance already admits public traffic through the printed QR. Scan an actual placemat on iPhone and Android and complete affected save/retry checks before announcing availability. Kevin/Melanie's content acceptance and the checklist's recovery and physical shared-network requirements remain separate. Keep reveal false and retention false.
