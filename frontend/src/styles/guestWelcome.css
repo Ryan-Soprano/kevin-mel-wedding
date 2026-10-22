@@ -64,6 +64,52 @@
 .guest-page .guest-gallery h2 { color: var(--color-text); }
 .guest-page .memory-choice-prompt { font-family: var(--guest-heading-font); }
 
+.guest-registry {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  margin-top: 32px;
+  text-align: center;
+}
+
+.guest-registry a {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  color: var(--guest-wine);
+  font-family: var(--guest-heading-font);
+  font-size: 1.15rem;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 5px;
+}
+
+.guest-registry a:hover { color: var(--color-primary); }
+.guest-registry a:focus-visible {
+  outline: 3px solid var(--color-primary);
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+
+.guest-registry svg {
+  flex-shrink: 0;
+  width: 21px;
+  height: 21px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.guest-registry p {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 0.75rem;
+}
+
+.guest-registry p > span:last-child { user-select: all; }
+
 @media (max-width: 560px) {
   .guest-page--welcome { padding: 29px 26px 32px; }
 }

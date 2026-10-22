@@ -320,6 +320,27 @@ export default function App({
         </section>
       )}
 
+      {welcome && (
+        <aside className="guest-registry" aria-label="Wedding registry">
+          <a
+            href="https://www.zola.com/wedding/melaniekevinfollybeach"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 11h16v10H4zM3 7h18v4H3zM12 7v14" />
+              <path d="M12 7H8.5A2.5 2.5 0 1 1 11 4.5L12 7Zm0 0h3.5A2.5 2.5 0 1 0 13 4.5L12 7Z" />
+            </svg>
+            Their wedding registry
+            <span aria-hidden="true">↗</span>
+            <span className="visually-hidden"> (opens in a new tab)</span>
+          </a>
+          <p>
+            Zola <span aria-hidden="true">·</span> Password: <span>ODIE123</span>
+          </p>
+        </aside>
+      )}
+
       {/* Retain the home album and loaded public content so history restores the page guests left. */}
       <div ref={homeAlbum} hidden={!welcome}>
         <GuestGallery
