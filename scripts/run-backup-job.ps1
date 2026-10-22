@@ -157,15 +157,215 @@ function Read-BackupConfiguration {
     return $configuration
 }
 
+function Initialize-BackupChildRuntime {
+    if ('KevinMelBackup.ContainedChild' -as [type]) { return }
+    # Keep this implementation inside the pinned runner. Windows assigns the
+    # job during CreateProcess, before the suspended child can execute. Only a
+    # NUL handle is inherited: output is discarded without pipes or buffers,
+    # and neither the capture lock nor the kill-on-close job can escape.
+    Add-Type -TypeDefinition @'
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Linq;
+using System.Runtime.InteropServices;
+using System.Text;
+using System.Threading;
+
+namespace KevinMelBackup {
+    public sealed class ChildResult {
+        public int ExitCode { get; internal set; }
+        public string Failure { get; internal set; }
+        public bool CleanupConfirmed { get; internal set; }
+    }
+
+    public static class ContainedChild {
+        const uint KillOnClose = 0x2000;
+        const uint Suspended = 0x4, NoWindow = 0x08000000, UnicodeEnvironment = 0x400, ExtendedStartup = 0x80000;
+        const uint WaitObject = 0, WaitTimeout = 258, InvalidResult = 0xffffffff;
+        static readonly IntPtr InvalidHandle = new IntPtr(-1);
+
+        [StructLayout(LayoutKind.Sequential)] struct SecurityAttributes {
+            public uint Length; public IntPtr Descriptor; public int Inherit;
+        }
+        [StructLayout(LayoutKind.Sequential)] struct StartupInfo {
+            public uint Size; public IntPtr Reserved, Desktop, Title;
+            public uint X, Y, XSize, YSize, XChars, YChars, Fill, Flags;
+            public ushort Show, ReservedSize; public IntPtr ReservedBytes, Input, Output, Error;
+        }
+        [StructLayout(LayoutKind.Sequential)] struct StartupInfoEx {
+            public StartupInfo Startup; public IntPtr Attributes;
+        }
+        [StructLayout(LayoutKind.Sequential)] struct ProcessInformation {
+            public IntPtr Process, Thread; public uint ProcessId, ThreadId;
+        }
+        [StructLayout(LayoutKind.Sequential)] struct BasicLimits {
+            public long ProcessTime, JobTime; public uint Flags;
+            public UIntPtr MinimumWorkingSet, MaximumWorkingSet;
+            public uint ActiveProcessLimit; public UIntPtr Affinity; public uint Priority, Scheduling;
+        }
+        [StructLayout(LayoutKind.Sequential)] struct IoCounters {
+            public ulong ReadOperations, WriteOperations, OtherOperations, ReadBytes, WriteBytes, OtherBytes;
+        }
+        [StructLayout(LayoutKind.Sequential)] struct ExtendedLimits {
+            public BasicLimits Basic; public IoCounters Io;
+            public UIntPtr ProcessMemory, JobMemory, PeakProcessMemory, PeakJobMemory;
+        }
+        [StructLayout(LayoutKind.Sequential)] struct Accounting {
+            public long UserTime, KernelTime, PeriodUserTime, PeriodKernelTime;
+            public uint PageFaults, TotalProcesses, ActiveProcesses, TerminatedProcesses;
+        }
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        static extern IntPtr CreateJobObjectW(IntPtr attributes, string name);
+        [DllImport("kernel32.dll", SetLastError = true)] [return: MarshalAs(UnmanagedType.Bool)]
+        static extern bool SetInformationJobObject(IntPtr job, int kind, ref ExtendedLimits limits, uint length);
+        [DllImport("kernel32.dll", SetLastError = true)] [return: MarshalAs(UnmanagedType.Bool)]
+        static extern bool QueryInformationJobObject(IntPtr job, int kind, out Accounting accounting, uint length, IntPtr returned);
+        [DllImport("kernel32.dll", SetLastError = true)] [return: MarshalAs(UnmanagedType.Bool)]
+        static extern bool TerminateJobObject(IntPtr job, uint exitCode);
+        [DllImport("kernel32.dll", SetLastError = true)] [return: MarshalAs(UnmanagedType.Bool)]
+        static extern bool InitializeProcThreadAttributeList(IntPtr attributes, int count, uint flags, ref IntPtr size);
+        [DllImport("kernel32.dll", SetLastError = true)] [return: MarshalAs(UnmanagedType.Bool)]
+        static extern bool UpdateProcThreadAttribute(IntPtr attributes, uint flags, IntPtr attribute, IntPtr value,
+            IntPtr size, IntPtr previous, IntPtr returned);
+        [DllImport("kernel32.dll")] static extern void DeleteProcThreadAttributeList(IntPtr attributes);
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        static extern IntPtr CreateFileW(string name, uint access, uint sharing, ref SecurityAttributes attributes,
+            uint creation, uint flags, IntPtr template);
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)] [return: MarshalAs(UnmanagedType.Bool)]
+        static extern bool CreateProcessW(string application, StringBuilder commandLine, IntPtr processAttributes,
+            IntPtr threadAttributes, [MarshalAs(UnmanagedType.Bool)] bool inherit, uint flags,
+            IntPtr environment, string directory, ref StartupInfoEx startup, out ProcessInformation process);
+        [DllImport("kernel32.dll", SetLastError = true)] [return: MarshalAs(UnmanagedType.Bool)]
+        static extern bool IsProcessInJob(IntPtr process, IntPtr job, [MarshalAs(UnmanagedType.Bool)] out bool member);
+        [DllImport("kernel32.dll", SetLastError = true)] static extern uint ResumeThread(IntPtr thread);
+        [DllImport("kernel32.dll", SetLastError = true)] static extern uint WaitForSingleObject(IntPtr handle, uint milliseconds);
+        [DllImport("kernel32.dll", SetLastError = true)] [return: MarshalAs(UnmanagedType.Bool)]
+        static extern bool GetExitCodeProcess(IntPtr process, out uint exitCode);
+        [DllImport("kernel32.dll", SetLastError = true)] [return: MarshalAs(UnmanagedType.Bool)]
+        static extern bool CloseHandle(IntPtr handle);
+
+        // Windows argv quoting, including embedded quotes and trailing slashes.
+        // No shell is involved; the separately supplied application is exact.
+        static string Quote(string value) {
+            if (value == null || value.IndexOf('\0') >= 0) throw new InvalidOperationException();
+            var result = new StringBuilder("\"");
+            int slashes = 0;
+            foreach (char character in value) {
+                if (character == '\\') { slashes++; continue; }
+                result.Append('\\', character == '"' ? slashes * 2 + 1 : slashes);
+                result.Append(character); slashes = 0;
+            }
+            return result.Append('\\', slashes * 2).Append('"').ToString();
+        }
+        static bool ActiveProcesses(IntPtr job, out uint active) {
+            Accounting accounting;
+            bool valid = QueryInformationJobObject(job, 1, out accounting, (uint)Marshal.SizeOf<Accounting>(), IntPtr.Zero);
+            active = accounting.ActiveProcesses;
+            return valid;
+        }
+        static bool WaitForEmptyJob(IntPtr job, int milliseconds) {
+            var deadline = Stopwatch.StartNew();
+            do {
+                uint active;
+                if (!ActiveProcesses(job, out active)) return false;
+                if (active == 0) return true;
+                Thread.Sleep(10);
+            } while (deadline.ElapsedMilliseconds < milliseconds);
+            return false;
+        }
+        public static ChildResult Run(string executable, string[] arguments,
+                IDictionary<string, string> environment, int timeoutSeconds) {
+            var result = new ChildResult { Failure = "runtime_unavailable", CleanupConfirmed = true };
+            IntPtr job = IntPtr.Zero, nul = InvalidHandle, attributes = IntPtr.Zero;
+            IntPtr jobList = IntPtr.Zero, handleList = IntPtr.Zero, environmentBlock = IntPtr.Zero;
+            bool initialized = false, created = false;
+            var process = new ProcessInformation();
+            try {
+                if (timeoutSeconds < 1 || timeoutSeconds > 240 || !System.IO.Path.IsPathFullyQualified(executable))
+                    return result;
+                var command = new StringBuilder(Quote(executable));
+                foreach (string argument in arguments) command.Append(' ').Append(Quote(argument));
+                if (command.Length >= 32767) return result;
+                var entries = environment.OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase)
+                    .Select(pair => pair.Key + "=" + pair.Value);
+                environmentBlock = Marshal.StringToHGlobalUni(string.Join("\0", entries) + "\0\0");
+                job = CreateJobObjectW(IntPtr.Zero, null);
+                if (job == IntPtr.Zero) return result;
+                var limits = new ExtendedLimits();
+                limits.Basic.Flags = KillOnClose; // Neither normal nor silent breakaway is permitted.
+                if (!SetInformationJobObject(job, 9, ref limits, (uint)Marshal.SizeOf<ExtendedLimits>())) return result;
+                var security = new SecurityAttributes { Length = (uint)Marshal.SizeOf<SecurityAttributes>(), Inherit = 1 };
+                nul = CreateFileW("NUL", 0xc0000000, 3, ref security, 3, 0x80, IntPtr.Zero);
+                if (nul == InvalidHandle) return result;
+                IntPtr size = IntPtr.Zero;
+                InitializeProcThreadAttributeList(IntPtr.Zero, 2, 0, ref size);
+                if (size == IntPtr.Zero) return result;
+                attributes = Marshal.AllocHGlobal(size);
+                if (!InitializeProcThreadAttributeList(attributes, 2, 0, ref size)) return result;
+                initialized = true;
+                jobList = Marshal.AllocHGlobal(IntPtr.Size); Marshal.WriteIntPtr(jobList, job);
+                handleList = Marshal.AllocHGlobal(IntPtr.Size); Marshal.WriteIntPtr(handleList, nul);
+                // PROC_THREAD_ATTRIBUTE_JOB_LIST assigns containment atomically
+                // at creation, including if the coordinator dies before resume.
+                if (!UpdateProcThreadAttribute(attributes, 0, new IntPtr(0x2000d), jobList, new IntPtr(IntPtr.Size), IntPtr.Zero, IntPtr.Zero)
+                    || !UpdateProcThreadAttribute(attributes, 0, new IntPtr(0x20002), handleList, new IntPtr(IntPtr.Size), IntPtr.Zero, IntPtr.Zero))
+                    return result;
+                var startup = new StartupInfoEx();
+                startup.Startup.Size = (uint)Marshal.SizeOf<StartupInfoEx>();
+                startup.Startup.Flags = 0x101; // STARTF_USESTDHANDLES | STARTF_USESHOWWINDOW; SW_HIDE = 0.
+                startup.Startup.Input = startup.Startup.Output = startup.Startup.Error = nul;
+                startup.Attributes = attributes;
+                if (!CreateProcessW(executable, command, IntPtr.Zero, IntPtr.Zero, true,
+                    Suspended | NoWindow | UnicodeEnvironment | ExtendedStartup, environmentBlock,
+                    null, ref startup, out process)) return result;
+                created = true;
+                bool member;
+                if (!IsProcessInJob(process.Process, job, out member) || !member) return result;
+                if (ResumeThread(process.Thread) == InvalidResult) return result;
+                result.Failure = "capture_failed";
+                uint wait = WaitForSingleObject(process.Process, checked((uint)timeoutSeconds * 1000));
+                if (wait == WaitTimeout || wait != WaitObject) return result;
+                uint exitCode;
+                // An exited leader with surviving descendants is a failed run,
+                // even if those descendants closed every output handle. Allow
+                // the kernel's asynchronous exit accounting to settle first.
+                if (!WaitForEmptyJob(job, 250) || !GetExitCodeProcess(process.Process, out exitCode)) return result;
+                result.ExitCode = unchecked((int)exitCode);
+                result.Failure = null;
+                return result;
+            } catch {
+                return result; // Never expose native diagnostics, arguments, paths or child output.
+            } finally {
+                if (job != IntPtr.Zero) {
+                    uint active;
+                    bool empty = ActiveProcesses(job, out active) && active == 0;
+                    if (!empty) {
+                        result.Failure = "capture_failed";
+                        result.CleanupConfirmed = TerminateJobObject(job, 1) && WaitForEmptyJob(job, 5000);
+                    }
+                    CloseHandle(job); // Last, noninherited handle; kill-on-close remains a backstop.
+                } else if (created) {
+                    result.Failure = "capture_failed";
+                    result.CleanupConfirmed = false;
+                }
+                if (process.Thread != IntPtr.Zero) CloseHandle(process.Thread);
+                if (process.Process != IntPtr.Zero) CloseHandle(process.Process);
+                if (nul != InvalidHandle) CloseHandle(nul);
+                if (initialized) DeleteProcThreadAttributeList(attributes);
+                foreach (IntPtr allocation in new[] { attributes, jobList, handleList, environmentBlock })
+                    if (allocation != IntPtr.Zero) Marshal.FreeHGlobal(allocation);
+            }
+        }
+    }
+}
+'@
+}
+
 function Invoke-BackupChild([string]$Executable, [string[]]$Arguments, [int]$TimeoutSeconds) {
+    if ($script:CleanupUnconfirmed) { Stop-BackupJob 'capture_failed' }
+    Initialize-BackupChildRuntime
     $info = [System.Diagnostics.ProcessStartInfo]::new()
-    $info.FileName = $Executable
-    $info.UseShellExecute = $false
-    $info.CreateNoWindow = $true
-    $info.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Hidden
-    $info.RedirectStandardOutput = $true
-    $info.RedirectStandardError = $true
-    $info.RedirectStandardInput = $true
     $info.Environment.Clear()
     foreach ($name in @('PATH', 'Path', 'SystemRoot', 'WINDIR', 'TEMP', 'TMP', 'USERPROFILE', 'APPDATA', 'LOCALAPPDATA',
         'ProgramData', 'HOMEDRIVE', 'HOMEPATH', 'HOME', 'COMSPEC', 'PATHEXT')) {
@@ -174,27 +374,14 @@ function Invoke-BackupChild([string]$Executable, [string[]]$Arguments, [int]$Tim
     }
     $info.Environment['GIT_TERMINAL_PROMPT'] = '0'
     $info.Environment['GCM_INTERACTIVE'] = 'Never'
-    foreach ($argument in $Arguments) { [void]$info.ArgumentList.Add($argument) }
-    $child = [System.Diagnostics.Process]::new()
-    $child.StartInfo = $info
-    $ownedChild = $false
-    try {
-        if (-not $child.Start()) { Stop-BackupJob 'runtime_unavailable' }
-        $ownedChild = $true
-        $child.StandardInput.Close()
-        $stdout = $child.StandardOutput.BaseStream.CopyToAsync([System.IO.Stream]::Null)
-        $stderr = $child.StandardError.BaseStream.CopyToAsync([System.IO.Stream]::Null)
-        if (-not $child.WaitForExit($TimeoutSeconds * 1000)) {
-            $child.Kill($true)
-            [void]$child.WaitForExit(5000)
-            Stop-BackupJob 'capture_failed'
-        }
-        if (-not [System.Threading.Tasks.Task]::WhenAll([System.Threading.Tasks.Task[]]@($stdout, $stderr)).Wait(5000)) { Stop-BackupJob 'capture_failed' }
-        return $child.ExitCode
-    } finally {
-        if ($ownedChild -and -not $child.HasExited) { $child.Kill($true); [void]$child.WaitForExit(5000) }
-        $child.Dispose()
+    $result = [KevinMelBackup.ContainedChild]::Run($Executable, $Arguments, $info.Environment, $TimeoutSeconds)
+    if (-not $result.CleanupConfirmed) {
+        # The write-ahead marker already exists durably. Never replace or clear
+        # it after uncertain cleanup: a later run must refuse this lock.
+        $script:CleanupUnconfirmed = $true
     }
+    if ($null -ne $result.Failure) { Stop-BackupJob $result.Failure }
+    return $result.ExitCode
 }
 
 function Assert-Receipt($Configuration, [string]$Receipt) {
@@ -253,6 +440,8 @@ function Publish-Failure($Configuration, [string]$Category) {
 
 $configuration = $null
 $captureLock = $null
+$script:CleanupUnconfirmed = $false
+$inFlightMarked = $false
 $failure = 'capture_failed'
 try {
     $configuration = Read-BackupConfiguration
@@ -261,6 +450,17 @@ try {
         $captureLock = [System.IO.FileStream]::new($configuration.lockPath, [System.IO.FileMode]::OpenOrCreate,
             [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None)
     } catch [System.IO.IOException] { Write-Output 'BACKUP_JOB_SKIPPED_BUSY'; exit 0 }
+    if ($captureLock.Length -ne 0) {
+        $script:CleanupUnconfirmed = $true
+        Stop-BackupJob 'capture_failed'
+    }
+    # Persist uncertainty before launching any child, including publication.
+    # A crash or failed flush leaves a marker and cannot silently admit a new
+    # capture. Only this run's fully flushed marker may be cleared below.
+    $marker = [System.Text.Encoding]::ASCII.GetBytes('BACKUP_JOB_INFLIGHT')
+    $captureLock.Write($marker, 0, $marker.Length)
+    $captureLock.Flush($true)
+    $inFlightMarked = $true
     $started = [DateTimeOffset]::UtcNow
     Assert-Pin $configuration.runtime '.exe'
     Assert-Pin $configuration.producerAdapter '.ps1'
@@ -295,11 +495,25 @@ try {
     exit 0
 } catch {
     if ($_.Exception.Message -in $script:FailureCategories) { $failure = $_.Exception.Message }
-    if ($null -ne $configuration -and -not $ValidateOnly -and $null -ne $captureLock) {
+    if ($null -ne $configuration -and -not $ValidateOnly -and $inFlightMarked -and -not $script:CleanupUnconfirmed) {
         try { Publish-Failure $configuration $failure } catch { }
     }
     [Console]::Error.WriteLine('BACKUP_JOB_FAILED:' + $failure)
     exit 1
 } finally {
-    if ($null -ne $captureLock) { $captureLock.Dispose() }
+    if ($null -ne $captureLock) {
+        $clearFailed = $false
+        try {
+            if ($inFlightMarked -and -not $script:CleanupUnconfirmed) {
+                # Invoke-BackupChild confirms an empty job before it returns or
+                # leaves CleanupUnconfirmed set. Preserve all other markers.
+                $captureLock.SetLength(0)
+                $captureLock.Flush($true)
+            }
+        } catch {
+            $clearFailed = $true
+            [Console]::Error.WriteLine('BACKUP_JOB_FAILED:capture_failed')
+        } finally { $captureLock.Dispose() }
+        if ($clearFailed) { exit 1 }
+    }
 }
