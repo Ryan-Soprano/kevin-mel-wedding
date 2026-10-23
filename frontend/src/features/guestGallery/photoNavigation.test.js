@@ -1,6 +1,16 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { decodeGalleryImage, initialPhotoNavigation, isActivePhotoRequest, photoNavigation, resolvePhotoReturnTarget } from "./photoNavigation.js";
+import { decodeGalleryImage, initialPhotoNavigation, isActivePhotoRequest, needsPhotoFocusTransfer, photoNavigation, resolvePhotoReturnTarget } from "./photoNavigation.js";
+
+test("promoting a requested photo transfers preview focus without stealing focus from other controls", () => {
+  const preview = {};
+  const state = { pending: { key: 2 } };
+  assert.equal(needsPhotoFocusTransfer(state, 2, preview, preview), true);
+  assert.equal(needsPhotoFocusTransfer(state, 2, {}, preview), false);
+  assert.equal(needsPhotoFocusTransfer(state, 1, preview, preview), false);
+  assert.equal(needsPhotoFocusTransfer({ pending: null }, 2, preview, preview), false);
+  assert.equal(needsPhotoFocusTransfer(state, 2, null, null), false);
+});
 
 test("dialog return preserves connected thumbnails and resolves a replaced preview button", () => {
   const thumbnail = { isConnected: true };

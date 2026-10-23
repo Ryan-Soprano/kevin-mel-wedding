@@ -9,7 +9,7 @@ import {
 } from "react";
 import { couplePhotos } from "./photos.js";
 import { startSlideshow } from "./slideshow.js";
-import { decodeGalleryImage, initialPhotoNavigation, isActivePhotoRequest, photoNavigation, resolvePhotoReturnTarget } from "./photoNavigation.js";
+import { decodeGalleryImage, initialPhotoNavigation, isActivePhotoRequest, needsPhotoFocusTransfer, photoNavigation, resolvePhotoReturnTarget } from "./photoNavigation.js";
 import { observeMorePhotos } from "./thumbnailLoading.js";
 import "./guestGallery.css";
 
@@ -79,6 +79,7 @@ function Photo({ photo, index, total, deferLoading = false, enlarged = false, hi
     >
       {onOpen ? (
         <button
+          id={hidden ? undefined : "couple-gallery-open-photo"}
           type="button"
           className="guest-gallery-enlarge"
           aria-label={`Enlarge photo ${index + 1} of ${total}: ${photo.alt}`}
@@ -291,8 +292,8 @@ export default function GuestGallery({ photos = couplePhotos, deferInitialPhoto 
     }
     pendingFocus.current = null;
     element.focus({ preventScroll: true });
-    element.scrollIntoView({ block: target.block ?? "nearest", behavior: "instant" });
-  }, [active, appendPhotos, photos.length, view, visibleCount]);
+    if (target.scroll !== false) element.scrollIntoView({ block: target.block ?? "nearest", behavior: "instant" });
+  }, [active, appendPhotos, photoState.key, photos.length, view, visibleCount]);
 
   function move(direction) {
     setPlaying(false);
@@ -369,6 +370,10 @@ export default function GuestGallery({ photos = couplePhotos, deferInitialPhoto 
   }
 
   function photoReady(key) {
+    const previewButton = resolvePhotoReturnTarget(null, gallery.current);
+    if (active && !expanded && needsPhotoFocusTransfer(currentPhotoState.current, key, document.activeElement, previewButton)) {
+      pendingFocus.current = { id: "couple-gallery-open-photo", scroll: false };
+    }
     dispatchPhoto({ type: "ready", key });
   }
 

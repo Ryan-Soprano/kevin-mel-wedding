@@ -7,6 +7,10 @@ export function resolvePhotoReturnTarget(opener, gallery) {
   return gallery?.querySelector("#couple-gallery-slide .guest-gallery-photo:not([hidden]) button") ?? null;
 }
 
+export function needsPhotoFocusTransfer(state, key, activeElement, previewButton) {
+  return key === state.pending?.key && previewButton != null && activeElement === previewButton;
+}
+
 export function isActivePhotoRequest(state, key) {
   return key === state.key || key === state.pending?.key;
 }
