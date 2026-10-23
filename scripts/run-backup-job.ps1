@@ -478,7 +478,14 @@ try {
     # home capture command or receipt format is assumed by this coordinator.
     $producerCode = Invoke-BackupChild $configuration.runtime.path @('-NoLogo', '-NoProfile', '-NonInteractive', '-File',
         $configuration.producerAdapter.path, $configuration.producerConfigurationPath) $configuration.timeoutSeconds
-    if ($producerCode -ne 0) { Stop-BackupJob 'capture_failed' }
+    if ($producerCode -ne 0) {
+        # An adapter can terminate its own SSH/copy children before returning a
+        # normal nonzero exit. An empty local job cannot prove that remote work
+        # stopped, and a crash may prevent the adapter from recording why it
+        # failed. Retain the write-ahead marker for every producer failure.
+        $script:CleanupUnconfirmed = $true
+        Stop-BackupJob 'capture_failed'
+    }
     $receipt = Assert-Receipt $configuration $configuration.receiptPath
     if ($receipt.failure -in $script:FailureCategories) { Stop-BackupJob $receipt.failure }
     if ($receipt.expiry.healthy -eq $false) { Stop-BackupJob 'expiry_failed' }

@@ -225,6 +225,36 @@ $launches = if ([System.IO.File]::Exists($configuration.launchCounterPath)) {
 } else { 0 }
 [System.IO.File]::WriteAllText($configuration.launchCounterPath, [string]($launches + 1))
 if ($configuration.mode -eq 'nonzero') { exit 42 }
+if ($configuration.mode -eq 'nested-nonzero') {
+    # Model a private adapter which kills its own native child, then exits
+    # normally with failure. No network or actual backup operation is used.
+    $startInfo = [System.Diagnostics.ProcessStartInfo]::new($configuration.nodePath)
+    $startInfo.UseShellExecute = $false
+    $startInfo.CreateNoWindow = $true
+    $startInfo.RedirectStandardInput = $true
+    $startInfo.RedirectStandardOutput = $true
+    $startInfo.RedirectStandardError = $true
+    $program = 'require("node:fs").writeFileSync(process.argv[1],JSON.stringify({pid:process.pid}));setTimeout(()=>{},15000)'
+    foreach ($argument in @('-e', $program, $configuration.readyPath)) { [void]$startInfo.ArgumentList.Add($argument) }
+    $nested = [System.Diagnostics.Process]::Start($startInfo)
+    try {
+        $nested.StandardInput.Close()
+        $output = $nested.StandardOutput.ReadToEndAsync()
+        $errors = $nested.StandardError.ReadToEndAsync()
+        $deadline = [System.Diagnostics.Stopwatch]::StartNew()
+        while (-not [System.IO.File]::Exists($configuration.readyPath) -and $deadline.Elapsed.TotalSeconds -lt 5) { Start-Sleep -Milliseconds 10 }
+        if (-not [System.IO.File]::Exists($configuration.readyPath)) { exit 43 }
+        $nested.Kill($true)
+        if (-not $nested.WaitForExit(5000) -or -not [Threading.Tasks.Task]::WhenAll([Threading.Tasks.Task[]]@($output,$errors)).Wait(5000)) { exit 43 }
+        $evidence = @{ pid = $nested.Id; childExited = $nested.HasExited; forcedTermination = $true
+            diagnosticsEmpty = $output.Result.Length -eq 0 -and $errors.Result.Length -eq 0; remoteCompletionConfirmed = $false }
+        [System.IO.File]::WriteAllText($configuration.readyPath, ($evidence | ConvertTo-Json))
+    } finally {
+        if (-not $nested.HasExited) { $nested.Kill($true); [void]$nested.WaitForExit(5000) }
+        $nested.Dispose()
+    }
+    exit 42
+}
 if ($configuration.mode -eq 'accepted') {
     $now = [DateTimeOffset]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ss.fffZ')
     $receipt = @{ schemaVersion = 1; kind = 'kevin-mel-backup-receipt'; state = 'accepted'; observedAt = $now
@@ -316,13 +346,57 @@ exit $LASTEXITCODE
 
     $script:Case = 'coordinator normal nonzero failure'
     Set-TestProducer 'nonzero' 'coordinator-nonzero'
+    $publishedBefore = [System.IO.File]::ReadAllText((Join-Path $fixtureRoot 'fixture-publication.json'))
+    $launchesBefore = [int][System.IO.File]::ReadAllText($launchCounterPath)
     $failure = Read-TestProcess (Start-TestCoordinator)
     Assert-Test ($failure.Code -eq 1 -and $failure.Error -ceq 'BACKUP_JOB_FAILED:capture_failed')
     Assert-Test ([System.IO.File]::ReadAllText($statePath) -ceq $lastGoodJson)
-    $failedReceipt = Get-Content -LiteralPath (Join-Path $fixtureRoot 'fixture-publication.json') -Raw | ConvertFrom-Json -DateKind String
-    Assert-Test ($failedReceipt.failure -ceq 'capture_failed' -and $failedReceipt.database.recoveryPointAt -ceq $oldTime)
-    Assert-TestLockAvailable
-    Complete-Test 'normal nonzero failure preserves last good evidence and releases lock'
+    Assert-Test ([System.IO.File]::ReadAllText((Join-Path $fixtureRoot 'fixture-publication.json')) -ceq $publishedBefore)
+    Assert-Test ([System.IO.File]::ReadAllText($lockPath) -ceq 'BACKUP_JOB_INFLIGHT')
+    Set-TestProducer 'accepted' 'nonzero-blocked-replacement'
+    $blockedReplacement = Read-TestProcess (Start-TestCoordinator)
+    Assert-Test ($blockedReplacement.Code -eq 1 -and $blockedReplacement.Error -ceq 'BACKUP_JOB_FAILED:capture_failed')
+    Assert-Test ([int][System.IO.File]::ReadAllText($launchCounterPath) -eq $launchesBefore + 1)
+    Assert-Test ([System.IO.File]::ReadAllText((Join-Path $fixtureRoot 'fixture-publication.json')) -ceq $publishedBefore)
+    Assert-Test ([System.IO.File]::ReadAllText($lockPath) -ceq 'BACKUP_JOB_INFLIGHT')
+    Complete-Test 'nonzero producer exit blocks failure publication and replacement capture'
+    Write-TestText $lockPath '' # Explicit reconciliation of this no-network fixture.
+
+    $script:Case = 'nested adapter failure with clean local native completion'
+    Set-TestProducer 'nested-nonzero' 'coordinator-nested'
+    $nestedEnvironment = [Collections.Generic.Dictionary[string,string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($name in @('SystemRoot','WINDIR','PATH','TEMP','TMP','USERPROFILE','APPDATA','LOCALAPPDATA','COMSPEC','PATHEXT')) {
+        $value = [Environment]::GetEnvironmentVariable($name)
+        if ($null -ne $value) { $nestedEnvironment[$name] = $value }
+    }
+    $nestedResult = [KevinMelBackup.ContainedChild]::Run($runtimePath,
+        @('-NoProfile','-NonInteractive','-File',$producerAdapter,$producerConfiguration), $nestedEnvironment, 10)
+    Assert-Test ($null -eq $nestedResult.Failure -and $nestedResult.ExitCode -eq 42 -and
+        $nestedResult.LocalCleanupConfirmed -and $nestedResult.CleanupConfirmed -and -not $nestedResult.ForcedTermination)
+    $nestedEvidence = Get-Content -LiteralPath $script:ProducerReady -Raw | ConvertFrom-Json
+    Assert-Test ($nestedEvidence.childExited -and $nestedEvidence.forcedTermination -and
+        $nestedEvidence.diagnosticsEmpty -and -not $nestedEvidence.remoteCompletionConfirmed)
+    Assert-ProcessGone $nestedEvidence.pid
+    Complete-Test 'inner forced termination can leave outer native cleanup confirmed'
+    [System.IO.File]::Delete($script:ProducerReady)
+    $launchesBefore = [int][System.IO.File]::ReadAllText($launchCounterPath)
+    $failure = Read-TestProcess (Start-TestCoordinator)
+    Assert-Test ($failure.Code -eq 1 -and $failure.Error -ceq 'BACKUP_JOB_FAILED:capture_failed')
+    $nestedEvidence = Get-Content -LiteralPath $script:ProducerReady -Raw | ConvertFrom-Json
+    Assert-Test ($nestedEvidence.childExited -and $nestedEvidence.forcedTermination -and
+        $nestedEvidence.diagnosticsEmpty -and -not $nestedEvidence.remoteCompletionConfirmed)
+    Assert-ProcessGone $nestedEvidence.pid
+    Assert-Test ([System.IO.File]::ReadAllText($statePath) -ceq $lastGoodJson)
+    Assert-Test ([System.IO.File]::ReadAllText((Join-Path $fixtureRoot 'fixture-publication.json')) -ceq $publishedBefore)
+    Assert-Test ([System.IO.File]::ReadAllText($lockPath) -ceq 'BACKUP_JOB_INFLIGHT')
+    Set-TestProducer 'accepted' 'nested-blocked-replacement'
+    $blockedReplacement = Read-TestProcess (Start-TestCoordinator)
+    Assert-Test ($blockedReplacement.Code -eq 1 -and $blockedReplacement.Error -ceq 'BACKUP_JOB_FAILED:capture_failed')
+    Assert-Test ([int][System.IO.File]::ReadAllText($launchCounterPath) -eq $launchesBefore + 1)
+    Assert-Test ([System.IO.File]::ReadAllText((Join-Path $fixtureRoot 'fixture-publication.json')) -ceq $publishedBefore)
+    Assert-Test ([System.IO.File]::ReadAllText($lockPath) -ceq 'BACKUP_JOB_INFLIGHT')
+    Complete-Test 'nested producer failure retains marker despite clean local completion'
+    Write-TestText $lockPath '' # Exact synthetic child identity is gone; no remote operation was used.
 
     $script:Case = 'single flight and coordinator termination'
     Set-TestProducer 'wait' 'coordinator-killed'
