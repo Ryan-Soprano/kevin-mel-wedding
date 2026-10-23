@@ -22,7 +22,7 @@ RUN ./backend/mvnw -f backend/pom.xml --batch-mode -DskipTests package
 
 FROM eclipse-temurin:25.0.4.1_1-jre-noble AS runtime
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ffmpeg \
+    && apt-get install -y --no-install-recommends ffmpeg tini \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 ENV SPRING_PROFILES_ACTIVE=staging
@@ -35,4 +35,4 @@ COPY --from=backend-build --chown=10001:10001 \
     /build/backend/target/memory-archive-0.0.1-SNAPSHOT.jar /app/app.jar
 USER 10001:10001
 EXPOSE 10000
-ENTRYPOINT ["java", "-Djava.awt.headless=true", "-jar", "/app/app.jar"]
+ENTRYPOINT ["/usr/bin/tini", "--", "java", "-Djava.awt.headless=true", "-jar", "/app/app.jar"]
