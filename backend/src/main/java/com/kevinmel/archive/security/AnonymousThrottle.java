@@ -18,7 +18,9 @@ import com.kevinmel.archive.contribution.ContributionService;
 @Component
 public class AnonymousThrottle {
     public enum Operation {
-        CREATE(800, 400, 12), GRANT(1500, 1000, 40), FINALIZE(2000, 1500, 60), RECEIPT(3000, 2000, 100);
+        CREATE(800, 400, 12), GRANT(1500, 1000, 40), FINALIZE(2000, 1500, 60), RECEIPT(3000, 2000, 100),
+        // An independent domain: reporting never consumes a save, grant, finalize or receipt allowance.
+        SIGNAL(600, 300, 12);
 
         private final int globalLimit;
         private final int peerLimit;

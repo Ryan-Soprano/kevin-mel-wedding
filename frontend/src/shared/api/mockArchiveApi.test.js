@@ -23,7 +23,7 @@ async function finalize(api, receipt, transfer) {
 test("mock and real adapters expose the same feature methods", () => {
   const api = createMockArchiveApi();
   for (const method of ["createTextContribution", "createMediaContribution", "getReceipt",
-    "authorizeUpload", "uploadMedia", "finalizeUpload", "getSession", "login", "logout",
+    "authorizeUpload", "reportUploadFailure", "uploadMedia", "finalizeUpload", "getSession", "login", "logout",
     "listMemories", "getMemory", "reviewMemory", "getPlayback"]) assert.equal(typeof api[method], "function");
   assert.throws(() => api.setScenario("unknown"), TypeError);
   assert.equal(SCENARIOS.length, 14);

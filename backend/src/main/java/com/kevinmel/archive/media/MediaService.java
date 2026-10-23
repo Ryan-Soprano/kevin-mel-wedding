@@ -201,9 +201,7 @@ public class MediaService {
         }
         // Admit before the transactional read/decode/publish, so waiting requests retain no media buffers or locks.
         if (!finalizationSlots.tryAcquire()) {
-            throw new ApiException(
-                    503,
-                    "MEDIA_UNAVAILABLE",
+            throw ApiException.expectedUnavailable(
                     "Media verification is busy. Please retry this memory.",
                     5);
         }

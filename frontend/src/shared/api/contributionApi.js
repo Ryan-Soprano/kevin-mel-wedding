@@ -91,6 +91,20 @@ export function createContributionApi({ client, uploadFetch }) {
         statuses: [201], decode: decodeGrant, signal,
       });
     },
+    async reportUploadFailure(contributionId, memoryId, grantId, { idempotencyKey } = {}) {
+      // Best effort, independent from the retained mutation and its abort/retry lifecycle.
+      // The only body value is an already issued grant; no content, URL or diagnostics leave the page.
+      const controller = new AbortController();
+      const timer = globalThis.setTimeout(() => controller.abort(), 2000);
+      try {
+        await client.request("/api/contributions/" + id(contributionId) + "/memories/"
+          + id(memoryId) + "/upload-failures", {
+          method: "POST", body: { grantId: id(grantId) },
+          headers: { "Idempotency-Key": key(idempotencyKey) }, statuses: [204], signal: controller.signal,
+        });
+      } catch { /* A telemetry failure never changes the original save outcome. */ }
+      finally { globalThis.clearTimeout(timer); }
+    },
     async uploadMedia(grant, file, { signal } = {}) {
       decodeGrant(grant);
       if (Date.parse(grant.expiresAt) <= Date.now()) {

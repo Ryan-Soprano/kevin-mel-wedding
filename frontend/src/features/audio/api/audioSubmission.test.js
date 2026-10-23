@@ -36,6 +36,35 @@ const turn = () => new Promise((resolve) => setImmediate(resolve));
 
 function deferred() { let resolve; const promise = new Promise(yes => { resolve = yes; }); return { promise, resolve }; }
 
+test("audio PUT failure reports a fixed grant capability without delaying or replacing the original error", async () => {
+  const reports = [];
+  const original = new ApiError("private audio transport detail", { code: "UPLOAD_FAILED", unknownOutcome: true });
+  const f = fixture({ api: {
+    uploadMedia: async () => { throw original; },
+    reportUploadFailure: (...args) => { reports.push(args); throw new Error("private telemetry detail"); },
+  } });
+  await assert.rejects(f.submission.submit(raw), error => error === original);
+  await Promise.resolve(); await Promise.resolve();
+  assert.deepEqual(reports, [[pending.contributionId, pending.memories[0].memoryId, grant.grantId,
+    { idempotencyKey: IDS.key }]]);
+  assert.equal(f.submission.pending, true);
+  assert.equal(f.submission.retained, true);
+  assert.equal(JSON.stringify(reports).includes("private"), false);
+});
+
+test("audio preflight expiry and server finalization failure do not emit a client transport report", async () => {
+  for (const at of ["upload", "finalize"]) {
+    const reports = [];
+    const f = fixture({ api: {
+      ...(at === "upload" ? { uploadMedia: async () => { throw new ApiError("expired", {
+        code: "UPLOAD_GRANT_EXPIRED", status: 410,
+      }); } } : { finalizeUpload: async () => { throw unknown(); } }),
+      reportUploadFailure: (...args) => reports.push(args),
+    } });
+    await assert.rejects(f.submission.submit(raw)); await Promise.resolve(); assert.deepEqual(reports, []);
+  }
+});
+
 function fixture(overrides = {}) {
   const calls = [];
   let current = pending,

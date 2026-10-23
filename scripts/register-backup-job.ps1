@@ -14,6 +14,19 @@ function Assert-RegistrationCondition {
     if (-not $Condition) { throw 'BACKUP_JOB_TASK_REFUSED' }
 }
 
+function Get-RegistrationAccountName {
+    param([string]$OperatorSid)
+    $current = [System.Security.Principal.WindowsIdentity]::GetCurrent().User
+    Assert-RegistrationCondition ($OperatorSid -ceq $current.Value)
+    # Resolve the Windows account name for Task Scheduler's UserId XML.
+    # Keep the configured SID as the authority and verify the name round trip.
+    $account = $current.Translate([System.Security.Principal.NTAccount])
+    $confirmedSid = $account.Translate([System.Security.Principal.SecurityIdentifier])
+    Assert-RegistrationCondition (-not [string]::IsNullOrWhiteSpace($account.Value) -and
+        $confirmedSid.Value -ceq $OperatorSid)
+    return $account.Value
+}
+
 function Get-AbsoluteRegistrationPath {
     param([object]$Value)
     Assert-RegistrationCondition ($Value -is [string] -and $Value.Length -gt 0 -and
@@ -179,6 +192,7 @@ try {
     $confirmed = Get-RegistrationContext $configurationPath $operatorSid
     Assert-RegistrationCondition ($confirmed.ConfigurationHash -ceq $context.ConfigurationHash -and
         $confirmed.RuntimePath -ceq $context.RuntimePath -and $confirmed.RunnerPath -ceq $context.RunnerPath)
+    $accountName = Get-RegistrationAccountName $operatorSid
 
     if ($ValidateOnly) {
         [Console]::Out.WriteLine('BACKUP_JOB_CONFIGURATION_VALID')
@@ -191,7 +205,7 @@ try {
         $context.RunnerPath + '" -ConfigPath "' + $configurationPath + '"'
     $action = New-ScheduledTaskAction -Execute $context.RuntimePath -Argument $arguments -WorkingDirectory $context.RepositoryPath
     $trigger = New-ScheduledTaskTrigger -Once -At ([DateTime]::Now.AddMinutes(1)) -RepetitionInterval ([TimeSpan]::FromMinutes(2))
-    $principal = New-ScheduledTaskPrincipal -UserId $operatorSid -LogonType Interactive -RunLevel Limited
+    $principal = New-ScheduledTaskPrincipal -UserId $accountName -LogonType Interactive -RunLevel Limited
     $settings = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -StartWhenAvailable -WakeToRun -Hidden `
         -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
         -ExecutionTimeLimit ([TimeSpan]::FromSeconds([int]$context.TimeoutSeconds + 480))

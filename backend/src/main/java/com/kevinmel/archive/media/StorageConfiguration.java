@@ -25,7 +25,8 @@ public class StorageConfiguration {
     ObjectStorage disabledStorage() {
         return new ObjectStorage() {
             public void requireAvailable() {
-                throw unavailable();
+                throw ApiException.expectedUnavailable(
+                        "Photo storage is unavailable. Keep your photo and try again later.", 0);
             }
 
             public UploadGrant authorize(

@@ -8,6 +8,7 @@ public class ApiException extends RuntimeException {
     private final String code;
     private final transient List<FieldError> fieldErrors;
     private final long retryAfterSeconds;
+    private final boolean expectedOperationalResponse;
 
     public ApiException(int status, String code, String message) {
         this(status, code, message, List.of());
@@ -22,18 +23,30 @@ public class ApiException extends RuntimeException {
     }
 
     private ApiException(int status, String code, String message, List<FieldError> fieldErrors, long retryAfterSeconds) {
+        this(status, code, message, fieldErrors, retryAfterSeconds, false);
+    }
+
+    private ApiException(int status, String code, String message, List<FieldError> fieldErrors,
+            long retryAfterSeconds, boolean expectedOperationalResponse) {
         super(message);
         this.status = status;
         this.code = code;
         this.fieldErrors = List.copyOf(fieldErrors);
         if (retryAfterSeconds < 0) throw new IllegalArgumentException("Retry delay must be nonnegative.");
         this.retryAfterSeconds = retryAfterSeconds;
+        this.expectedOperationalResponse = expectedOperationalResponse;
     }
 
     public int status() { return status; }
     public String code() { return code; }
     public List<FieldError> fieldErrors() { return fieldErrors; }
     public long retryAfterSeconds() { return retryAfterSeconds; }
+    public boolean expectedOperationalResponse() { return expectedOperationalResponse; }
+
+    /** Internal admission/backpressure classification; the public error contract remains unchanged. */
+    public static ApiException expectedUnavailable(String message, long retryAfterSeconds) {
+        return new ApiException(503, "MEDIA_UNAVAILABLE", message, List.of(), retryAfterSeconds, true);
+    }
 
     public static ApiException notFound() {
         return new ApiException(404, "NOT_FOUND", "That receipt is unavailable.");

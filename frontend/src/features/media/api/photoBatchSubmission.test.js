@@ -55,6 +55,7 @@ function fixture({ count = 3, hooks = {}, timers = {}, digest, now } = {}) {
       if (hooks.upload) return hooks.upload(...args);
       return { transferred: true };
     },
+    ...(hooks.report ? { reportUploadFailure: (...args) => hooks.report(...args) } : {}),
     async finalizeUpload(...args) {
       calls.push({ op: "finalize", args });
       if (hooks.finalize) return hooks.finalize(...args);
@@ -71,6 +72,39 @@ function fixture({ count = 3, hooks = {}, timers = {}, digest, now } = {}) {
   return { raw, calls, hashes, states, grants, receipt, submission, indexOfMemory,
     get generated() { return generated - 900; } };
 }
+
+test("a failed direct PUT reports only its retained capability and never waits for telemetry or changes retry state", async () => {
+  const reports = [];
+  const f = fixture({ count: 1, hooks: {
+    upload: async () => { throw new ApiError("private transport detail", { code: "UPLOAD_FAILED", unknownOutcome: true }); },
+    report: (...args) => { reports.push(args); return new Promise(() => {}); },
+  } });
+  await f.submission.submit(f.raw);
+  await Promise.resolve();
+  assert.equal(reports.length, 1);
+  assert.deepEqual(reports[0], [id(90), id(100), id(500), { idempotencyKey: id(900) }]);
+  assert.equal(f.submission.snapshot.items[0].error.code, "UPLOAD_FAILED");
+  assert.equal(f.submission.pending, true);
+  assert.equal(f.submission.snapshot.items[0].status, "failed");
+  assert.equal(JSON.stringify(reports).includes("private"), false);
+});
+
+test("preflight expiry, finalization errors and disposal do not report a direct PUT failure", async () => {
+  for (const code of ["UPLOAD_GRANT_EXPIRED", "CONTRACT_MISMATCH", "REQUEST_ABORTED"]) {
+    const reports = [];
+    const f = fixture({ count: 1, hooks: {
+      upload: async () => { throw new ApiError("not a technical PUT response", { code, status: code === "UPLOAD_GRANT_EXPIRED" ? 410 : 0 }); },
+      report: (...args) => reports.push(args),
+    } });
+    await f.submission.submit(f.raw); await Promise.resolve();
+    assert.deepEqual(reports, []);
+  }
+  const reports = [];
+  const f = fixture({ count: 1, hooks: {
+    finalize: async () => { throw unknown(); }, report: (...args) => reports.push(args),
+  } });
+  await f.submission.submit(f.raw); await Promise.resolve(); assert.deepEqual(reports, []);
+});
 
 function manualTimers() {
   const pending = new Map(); let sequence = 0;
