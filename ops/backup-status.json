@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "kind": "kevin-mel-backup-status",
+  "state": "unavailable",
+  "observedAt": "2026-10-23T00:07:12.607Z",
+  "database": {
+    "recoveryPointAt": null,
+    "verifiedAt": null
+  },
+  "media": {
+    "verifiedAt": null
+  },
+  "ledger": {
+    "verifiedAt": null
+  },
+  "expiry": {
+    "checkedAt": null,
+    "healthy": null
+  },
+  "failure": "capture_failed"
+}
