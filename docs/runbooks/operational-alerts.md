@@ -2,7 +2,7 @@
 
 Ryan selected automatic alerts before launch. This adds operational-condition monitoring alongside the existing backup freshness watchdog. Response and restoration remain best effort when Ryan is available. Neither a ten-minute GitHub schedule nor phone delivery has a guaranteed maximum delay.
 
-The new workflow is **disabled by default**. Source code, isolated tests and configured gates do not establish that the collector, scheduled checks or notifications are operating. Keep collection closed until the selected launch checks are accepted.
+The workflow is **disabled by default**. As of Friday, October 23, the final application has signals enabled, and the installed operational collector has independently accepted natural all-clear runs matching its GitHub publications. Both live watchdogs are enabled with host proof and accepted manual live baselines. A controlled collector pause produced a genuine [live stale warning](https://github.com/Ryan-Soprano/kevin-mel-wedding/actions/runs/39926468695); guarded resumption preserved continuity and naturally returned through a gap observation to all-clear, followed by a genuine [live recovery](https://github.com/Ryan-Soprano/kevin-mel-wedding/actions/runs/39927171600). Both matching emails were independently read in Gmail, and Ryan confirmed both reached his phone. This accepts that live path and recipient pair. The first automatic scheduled watchdog invocation after activation remains unobserved. Canonical HTTPS probing remains disabled while Coming Soon and maintenance are expected. The backup capture task is now deliberately disabled after a separate strict source-time refusal; its clock synchronization is verified, while guarded reconciliation and fresh manual/natural acceptance remain open. Keep collection closed until backup resumption, automatic-watchdog execution and attended canonical launch checks pass. Manual dispatch and delivered alerts do not establish continuing automatic monitoring or idle R2 availability.
 
 ## Observations and privacy
 
@@ -58,11 +58,13 @@ The publisher uses existing Git authentication, a private alternate index and no
 
 ## Independent watchdog
 
-`.github/workflows/operational-watchdog.yml` runs every ten minutes at minutes 2, 12, 22, 32, 42 and 52, on a best-effort GitHub schedule. It uses the pinned Node version, a three-minute job limit, read-only repository contents and issue-write permission. It reads only the operational-status ref and the opted-in private operations issue. It requires the exact private repository and issue `#116`, titled `Backup watchdog operations`, with its existing `<!-- kevin-mel-backup-watchdog:allow -->` marker.
+`.github/workflows/operational-watchdog.yml` configures a ten-minute best-effort schedule at minutes 3, 13, 23, 33, 43 and 53 UTC in this revision. It uses the pinned Node version, a three-minute job limit, read-only repository contents and issue-write permission. It reads only the operational-status ref and the opted-in private operations issue. It requires the exact private repository and issue `#116`, titled `Backup watchdog operations`, with its existing `<!-- kevin-mel-backup-watchdog:allow -->` marker.
 
 Each category has separate incident/reminder/recovery state. The observer itself has an additional `observation` condition. A missing/inaccessible/malformed/future status or any observation older than 300 seconds becomes `unconfirmed`, never healthy. A nonnull collector failure also makes the observation condition unconfirmed. An old individual check becomes unconfirmed even if the top-level timestamp is fresh. A new fault, changed fault classification, hourly unresolved reminder or transition back to clear produces a content-free issue mention through the existing Gmail/phone route. Concurrent faults cannot hide one another. Notification is written before state acknowledgement; an uncertain write can produce a duplicate rather than lose the only warning.
 
 Operational state uses `kevin-mel-operational-watchdog-state:v1:live` and `:synthetic` comments. It is independent of backup watchdog state and synthetic tests cannot clear a live incident. Damaged or ambiguous prior state refuses the run; a successful run or issue write does not prove phone delivery. Failure of GitHub itself or the watchdog can prevent its own issue notification; monitor failed workflow runs and retain Render's separate failure-email route.
+
+A one-minute cron refresh is prepared for review: operational checks move to minutes 3, 13, 23, 33, 43 and 53 UTC; backup checks move to 8, 18, 28, 38, 48 and 58 UTC. The six checks per hour for each workflow, five-minute stagger, spending, permissions and activation gates are unchanged. This is a bounded scheduling diagnostic, with no proven cause or fix. Verify delivery to the default branch and an actual automatic run before crediting automatic firing. Manual dispatch does not establish cron execution.
 
 The live state retains the last valid content-free source observation as a time watermark. A replayed older clear status, an edited state at the same observation time, or a regressed individual check becomes unconfirmed and preserves that watermark. Temporary status-read failure cannot erase it.
 
@@ -85,7 +87,7 @@ Explicit `workflow_dispatch` modes `synthetic-failure` and `synthetic-recovery` 
 
 The two watchdogs together schedule 288 jobs/day. Jobs are capped at three minutes each; account-wide included usage and the approved $20 Actions stop-cap remain the spending boundary. Extra checks consume that allowance, and reaching the stop-cap can stop monitoring. No new paid stack, dependency or CI secret is added.
 
-At Monday, October 26, noon CDT / 17:00 UTC, manually disable both live watchdog enables and verify the saved values. No automatic end is installed. Preserve backup and expiry tasks and the approved spending stop.
+At Monday, October 26, noon CDT / 17:00 UTC, manually set both `ARCHIVE_BACKUP_WATCHDOG_ENABLED` and `ARCHIVE_OPERATIONAL_WATCHDOG_ENABLED` to `false`, stop/disable the operations collector task and verify those saved states. No automatic end is installed. Preserve backup and expiry tasks and the approved spending stop.
 
 ### Optional canonical HTTPS liveness
 

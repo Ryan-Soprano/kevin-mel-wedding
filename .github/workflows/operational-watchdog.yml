@@ -2,7 +2,7 @@ name: Operational condition watchdog
 
 on:
   schedule:
-    - cron: "2,12,22,32,42,52 * * * *"
+    - cron: "3,13,23,33,43,53 * * * *"
   workflow_dispatch:
     inputs:
       mode:
