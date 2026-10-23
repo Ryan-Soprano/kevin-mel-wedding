@@ -9,7 +9,7 @@ import {
 } from "react";
 import { couplePhotos } from "./photos.js";
 import { startSlideshow } from "./slideshow.js";
-import { decodeGalleryImage, initialPhotoNavigation, isActivePhotoRequest, photoNavigation } from "./photoNavigation.js";
+import { decodeGalleryImage, initialPhotoNavigation, isActivePhotoRequest, photoNavigation, resolvePhotoReturnTarget } from "./photoNavigation.js";
 import { observeMorePhotos } from "./thumbnailLoading.js";
 import "./guestGallery.css";
 
@@ -336,13 +336,15 @@ export default function GuestGallery({ photos = couplePhotos, deferInitialPhoto 
     setExpanded(false);
     const target = viewerReturn.current;
     viewerReturn.current = null;
-    if (!active || !target?.opener.isConnected) return;
-    target.opener.focus({ preventScroll: true });
+    if (!active || !target) return;
+    const opener = resolvePhotoReturnTarget(target.opener, gallery.current);
+    if (!opener) return;
+    opener.focus({ preventScroll: true });
     let top = target.y;
     if (target.width !== window.innerWidth || target.height !== window.innerHeight) {
       // A rotation or resize changes row geometry: keep the opening photo in
       // view rather than restoring coordinates from the old layout.
-      const bounds = target.opener.getBoundingClientRect();
+      const bounds = opener.getBoundingClientRect();
       const visibleTop = Math.max(0, Math.min(target.top, window.innerHeight - bounds.height));
       top = window.scrollY + bounds.top - visibleTop;
     }

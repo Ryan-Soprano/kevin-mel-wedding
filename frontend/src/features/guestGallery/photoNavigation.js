@@ -2,6 +2,11 @@ export function initialPhotoNavigation() {
   return { index: 0, key: 0, serial: 0, ready: false, pending: null, error: null };
 }
 
+export function resolvePhotoReturnTarget(opener, gallery) {
+  if (opener?.isConnected) return opener;
+  return gallery?.querySelector("#couple-gallery-slide .guest-gallery-photo:not([hidden]) button") ?? null;
+}
+
 export function isActivePhotoRequest(state, key) {
   return key === state.key || key === state.pending?.key;
 }

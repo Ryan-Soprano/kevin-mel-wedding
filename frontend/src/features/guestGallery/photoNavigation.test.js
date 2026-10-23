@@ -1,6 +1,18 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { decodeGalleryImage, initialPhotoNavigation, isActivePhotoRequest, photoNavigation } from "./photoNavigation.js";
+import { decodeGalleryImage, initialPhotoNavigation, isActivePhotoRequest, photoNavigation, resolvePhotoReturnTarget } from "./photoNavigation.js";
+
+test("dialog return preserves connected thumbnails and resolves a replaced preview button", () => {
+  const thumbnail = { isConnected: true };
+  const preview = { isConnected: true };
+  const gallery = { querySelector(selector) {
+    assert.equal(selector, "#couple-gallery-slide .guest-gallery-photo:not([hidden]) button");
+    return preview;
+  } };
+  assert.equal(resolvePhotoReturnTarget(thumbnail, gallery), thumbnail);
+  assert.equal(resolvePhotoReturnTarget({ isConnected: false }, gallery), preview);
+  assert.equal(resolvePhotoReturnTarget({ isConnected: false }, null), null);
+});
 
 const update = (state, action) => photoNavigation(state, { total: 3, ...action });
 const loadedFirst = () => update(initialPhotoNavigation(), { type: "ready", key: 0 });
