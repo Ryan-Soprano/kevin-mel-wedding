@@ -442,7 +442,7 @@ export default function GuestGallery({ photos = couplePhotos, deferInitialPhoto 
                 {playing && hovered
                   ? "Paused while your pointer is over the photo."
                   : playing
-                    ? "Photos stay for at least five seconds while the next one loads."
+                    ? "Photos change every four seconds."
                     : "Take your time, or play the slideshow."}
               </p>
             </div>

@@ -553,7 +553,7 @@ test("real public gallery immediately renders one accessible slide with navigati
   }
 });
 
-test("slideshow advances every five seconds only in a visible tab and clears timers/listeners when paused or unmounted", () => {
+test("slideshow advances every four seconds only in a visible tab and clears timers/listeners when paused or unmounted", () => {
   const documentImpl = new EventTarget();
   documentImpl.hidden = false;
   const timers = new Map();
@@ -562,7 +562,7 @@ test("slideshow advances every five seconds only in a visible tab and clears tim
   const stop = startSlideshow(() => advances++, {
     documentImpl,
     setIntervalImpl(callback, milliseconds) {
-      assert.equal(milliseconds, 5000);
+      assert.equal(milliseconds, 4000);
       timers.set(++nextTimer, callback);
       return nextTimer;
     },
