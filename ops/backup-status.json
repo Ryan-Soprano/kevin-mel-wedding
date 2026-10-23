@@ -2,19 +2,19 @@
   "schemaVersion": 1,
   "kind": "kevin-mel-backup-status",
   "state": "accepted",
-  "observedAt": "2026-10-23T10:37:46.960Z",
+  "observedAt": "2026-10-23T10:39:46.081Z",
   "database": {
-    "recoveryPointAt": "2026-10-23T10:36:26.329Z",
-    "verifiedAt": "2026-10-23T10:36:54.956Z"
+    "recoveryPointAt": "2026-10-23T10:38:27.091Z",
+    "verifiedAt": "2026-10-23T10:38:56.165Z"
   },
   "media": {
-    "verifiedAt": "2026-10-23T10:37:22.615Z"
+    "verifiedAt": "2026-10-23T10:39:22.080Z"
   },
   "ledger": {
-    "verifiedAt": "2026-10-23T10:37:22.615Z"
+    "verifiedAt": "2026-10-23T10:39:22.080Z"
   },
   "expiry": {
-    "checkedAt": "2026-10-23T10:37:46.789Z",
+    "checkedAt": "2026-10-23T10:39:45.900Z",
     "healthy": true
   },
   "failure": null
