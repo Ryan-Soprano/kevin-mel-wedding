@@ -84,7 +84,8 @@ public class SecurityConfiguration {
                 .requestMatchers(HttpMethod.GET, "/api/health", SESSION_ENDPOINT, "/api/contributions/*/receipt").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/shared-memories", "/api/shared-memories/*", "/api/shared-memories/*/playback").permitAll()
                 .requestMatchers(HttpMethod.POST, SESSION_ENDPOINT, "/api/contributions",
-                        "/api/contributions/*/memories/*/upload-grants", "/api/contributions/*/memories/*/finalize").permitAll()
+                        "/api/contributions/*/memories/*/upload-grants", "/api/contributions/*/memories/*/finalize",
+                        "/api/contributions/*/memories/*/upload-failures").permitAll()
                 .requestMatchers(HttpMethod.DELETE, SESSION_ENDPOINT).permitAll()
                 .requestMatchers(HttpMethod.GET, "/", "/index.html", "/assets/**", "/favicon.ico").permitAll()
                 .requestMatchers(HttpMethod.GET, "/shared/*").permitAll()
@@ -95,7 +96,7 @@ public class SecurityConfiguration {
             .csrf(csrf -> csrf.csrfTokenRepository(tokens).csrfTokenRequestHandler(handler)
                     // Guest routes use independent same-origin, JSON and retry-capability checks.
                     .ignoringRequestMatchers("/api/contributions", "/api/contributions/*/memories/*/upload-grants",
-                            "/api/contributions/*/memories/*/finalize"))
+                            "/api/contributions/*/memories/*/finalize", "/api/contributions/*/memories/*/upload-failures"))
             .exceptionHandling(exceptions -> exceptions
                     .authenticationEntryPoint((request, response, exception) -> errors.write(request, response,
                             401, "AUTH_REQUIRED", "Please sign in to access the archive."))

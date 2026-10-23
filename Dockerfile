@@ -30,7 +30,7 @@ ENV SPRING_PROFILES_ACTIVE=staging
 RUN groupadd --gid 10001 archive \
     && useradd --uid 10001 --gid archive --create-home \
         --home-dir /home/archive --shell /bin/bash archive \
-    && install -d -o archive -g archive -m 0700 /home/archive/.ssh
+    && install -d -o archive -g archive -m 0700 /home/archive/.ssh /home/archive/.operations
 COPY --from=backend-build --chown=10001:10001 \
     /build/backend/target/memory-archive-0.0.1-SNAPSHOT.jar /app/app.jar
 USER 10001:10001

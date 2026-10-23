@@ -17,6 +17,9 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 public class ApiExceptionHandler {
     @ExceptionHandler(ApiException.class)
     public ResponseEntity<ErrorResponse> handleApi(ApiException exception, HttpServletRequest request) {
+        if (exception.expectedOperationalResponse()) {
+            request.setAttribute(com.kevinmel.archive.operations.GuestOperationsFilter.EXPECTED_UNAVAILABLE, true);
+        }
         var result = response(exception.status(), exception.code(), exception.getMessage(), exception.fieldErrors(), request);
         if (exception.retryAfterSeconds() == 0) return result;
         return ResponseEntity.status(result.getStatusCode()).headers(result.getHeaders())

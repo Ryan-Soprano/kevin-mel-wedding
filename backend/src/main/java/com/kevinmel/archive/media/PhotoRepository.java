@@ -223,9 +223,7 @@ public class PhotoRepository {
     }
 
     public static ApiException audioUnavailable() {
-        return new ApiException(
-                503,
-                "MEDIA_UNAVAILABLE",
+        return ApiException.expectedUnavailable(
                 "Voice memories are temporarily unavailable. Keep your recording and try again later.",
                 60);
     }

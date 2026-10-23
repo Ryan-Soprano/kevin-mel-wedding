@@ -11,7 +11,7 @@ test("archive facade retains its named exports and complete ordered method surfa
     getCurrentExport createExport getExport getExportAttempt prepareExportPart cancelExport listExportParts listExportIssues downloadExportPart
     listPublicMemories getSharedMemory getSharedPlayback createShareLink
     createCoupleTextContribution createCoupleMediaContribution getCoupleReceipt authorizeCoupleUpload finalizeCoupleUpload
-    createTextContribution createMediaContribution getReceipt authorizeUpload uploadMedia finalizeUpload
+    createTextContribution createMediaContribution getReceipt authorizeUpload reportUploadFailure uploadMedia finalizeUpload
     getSession login logout listMemories getMemory updateMemoryMetadata reviewMemory getPlayback`.split(/\s+/);
   const api = archive.createArchiveApi();
   assert.deepEqual(Object.keys(api), methods);

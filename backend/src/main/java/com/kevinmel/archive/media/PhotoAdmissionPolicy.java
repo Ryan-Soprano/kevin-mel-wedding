@@ -26,9 +26,7 @@ public final class PhotoAdmissionPolicy {
 
     public void requireNewUpload() {
         if (paused) {
-            throw new ApiException(
-                    503,
-                    "MEDIA_UNAVAILABLE",
+            throw ApiException.expectedUnavailable(
                     "Photo uploads are temporarily paused. Keep your photos and try again later.",
                     60);
         }

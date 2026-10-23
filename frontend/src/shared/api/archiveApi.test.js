@@ -14,6 +14,39 @@ const returning = (value, status = 200) => createArchiveApi({
   }) }),
 });
 
+test("upload failure reporting is same-origin, bounded, grant-only and best effort", async () => {
+  const calls = [];
+  const api = createArchiveApi({ client: createApiClient({ fetchImpl: async (path, options) => {
+    calls.push({ path, options }); return new Response(null, { status: 204 });
+  } }) });
+  await api.reportUploadFailure(IDS.contribution, IDS.photo, UPLOAD_GRANT.grantId, { idempotencyKey: IDS.key });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].path, `/api/contributions/${IDS.contribution}/memories/${IDS.photo}/upload-failures`);
+  assert.deepEqual(JSON.parse(calls[0].options.body), { grantId: UPLOAD_GRANT.grantId });
+  assert.equal(calls[0].options.credentials, "same-origin");
+  assert.equal(calls[0].options.headers.get("Idempotency-Key"), IDS.key);
+  assert.ok(calls[0].options.signal instanceof AbortSignal);
+  const failed = createArchiveApi({ client: { request: async () => { throw new Error("private details"); } } });
+  await assert.doesNotReject(failed.reportUploadFailure(IDS.contribution, IDS.photo, UPLOAD_GRANT.grantId,
+    { idempotencyKey: IDS.key }));
+});
+
+test("a stuck upload report has its own two-second abort deadline", async (context) => {
+  let fire, observedSignal, cleared = false;
+  context.mock.method(globalThis, "setTimeout", (callback, milliseconds) => {
+    assert.equal(milliseconds, 2000); fire = callback; return 123;
+  });
+  context.mock.method(globalThis, "clearTimeout", timer => { assert.equal(timer, 123); cleared = true; });
+  const api = createArchiveApi({ client: { request: (path, { signal }) => {
+    observedSignal = signal;
+    return new Promise((resolve, reject) => signal.addEventListener("abort", () => reject(new Error("timed out")), { once: true }));
+  } } });
+  const report = api.reportUploadFailure(IDS.contribution, IDS.photo, UPLOAD_GRANT.grantId, { idempotencyKey: IDS.key });
+  assert.equal(observedSignal.aborted, false); fire();
+  await assert.doesNotReject(report);
+  assert.equal(observedSignal.aborted, true); assert.equal(cleared, true);
+});
+
 test("text normalization preserves anonymity and validates before trimming", () => {
   assert.deepEqual(normalizeTextContribution({ guestName: "  ", message: " hi " }), {
     guestName: null, message: "hi",

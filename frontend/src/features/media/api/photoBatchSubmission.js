@@ -254,7 +254,18 @@ export function createPhotoBatchSubmission({
     if (!grant || !UUID.test(grant.grantId) || !Number.isFinite(Date.parse(grant.expiresAt))) throw contractMismatch();
     entry.grant = Object.freeze({ ...grant, headers: Object.freeze({ ...grant.headers }) });
     entry.status = "uploading"; emit(onChange);
-    await bounded((signal) => api.uploadMedia(entry.grant, entry.file, { signal }), putTimeoutMs);
+    try {
+      await bounded((signal) => api.uploadMedia(entry.grant, entry.file, { signal }), putTimeoutMs);
+    } catch (failure) {
+      if (!disposed && typeof api.reportUploadFailure === "function"
+        && (["UPLOAD_FAILED", "NETWORK_ERROR", "REQUEST_TIMED_OUT"].includes(failure.code)
+          || (failure.code === "UPLOAD_GRANT_EXPIRED" && [401, 403].includes(failure.status)))) {
+        const args = [receipt.contributionId, entry.memoryId, entry.grant.grantId, { idempotencyKey: key }];
+        // Do not await this request or reuse the original operation's signal.
+        Promise.resolve().then(() => api.reportUploadFailure(...args)).catch(() => {});
+      }
+      throw failure;
+    }
     await finalize(entry, onChange);
   }
 

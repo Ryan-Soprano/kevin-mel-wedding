@@ -33,6 +33,7 @@ class PhotoHttpTest {
     @Autowired JdbcClient db;
     @Autowired FakeStorage storage;
     @Autowired MutableClock clock;
+    @Autowired com.kevinmel.archive.operations.GuestOperationsSignals signals;
     final HttpClient client = HttpClient.newHttpClient();
     byte[] image;
 
@@ -185,11 +186,76 @@ class PhotoHttpTest {
     }
 
     @Test void storageOutageIsSafeAndCannotConfirmPhoto() throws Exception {
+        long before = signalCount("GUEST_MEDIA_5XX");
         String key = UUID.randomUUID().toString(); var receipt = create(key, body(item(UUID.randomUUID(), image, "image/png")));
         String path = path(receipt, 0); var grant = grant(path, key); stage(grant, image); storage.outage = true;
         var failure = finish(path, key, grant);
         assertThat(failure.statusCode()).isEqualTo(503); assertThat(value(failure, "$.error.code")).isEqualTo("MEDIA_UNAVAILABLE");
         assertThat(value(send("GET", "/api/contributions/" + value(receipt, "$.contributionId") + "/receipt", key, null), "$.completion")).isEqualTo("PENDING");
+        assertThat(signalCount("GUEST_MEDIA_5XX")).isEqualTo(before + 1);
+    }
+
+    @Test void uploadFailureSignalRequiresTheIssuedGuestCapabilityIsDeduplicatedAndCannotChangeSavedState() throws Exception {
+        String key = UUID.randomUUID().toString();
+        var receipt = create(key, body(item(UUID.randomUUID(), image, "image/png")));
+        String path = path(receipt, 0);
+        var grant = grant(path, key);
+        String report = "{\"grantId\":\"" + value(grant, "$.grantId") + "\"}";
+        long before = signalCount("CLIENT_UPLOAD_UNCONFIRMED");
+        for (int repeat = 0; repeat < 2; repeat++) {
+            var response = send("POST", path + "/upload-failures", key, report);
+            assertThat(response.statusCode()).isEqualTo(204);
+            assertThat(response.body()).isEmpty();
+            assertThat(response.headers().firstValue("Cache-Control")).contains("no-store");
+        }
+        assertThat(signalCount("CLIENT_UPLOAD_UNCONFIRMED")).isEqualTo(before + 1);
+        assertThat(send("POST", path + "/upload-failures", UUID.randomUUID().toString(), report).statusCode()).isEqualTo(404);
+        assertThat(send("POST", path + "/upload-failures", key,
+                "{\"grantId\":\"" + UUID.randomUUID() + "\"}").statusCode()).isEqualTo(404);
+        assertThat(send("POST", path + "/upload-failures", key,
+                report.replace("}", ",\"message\":\"private arbitrary value\"}")).statusCode()).isEqualTo(400);
+        assertThat(send("GET", path + "/upload-failures", key, null).statusCode()).isIn(401, 403);
+        assertThat(signalCount("CLIENT_UPLOAD_UNCONFIRMED")).isEqualTo(before + 1);
+        stage(grant, image); assertThat(finish(path, key, grant).statusCode()).isEqualTo(200);
+        assertThat(send("POST", path + "/upload-failures", key, report).statusCode()).isEqualTo(204);
+        assertThat(signalCount("CLIENT_UPLOAD_UNCONFIRMED")).isEqualTo(before + 1);
+        assertThat(value(send("GET", "/api/contributions/" + value(receipt, "$.contributionId") + "/receipt", key, null),
+                "$.completion")).isEqualTo("COMPLETE");
+    }
+
+    @Test void signalAdmissionIsBoundedSameOriginAndIndependentFromTheGuestSaveAllowance() throws Exception {
+        String key = UUID.randomUUID().toString();
+        var receipt = create(key, body(item(UUID.randomUUID(), image, "image/png")));
+        String path = path(receipt, 0); var grant = grant(path, key);
+        String report = "{\"grantId\":\"" + value(grant, "$.grantId") + "\"}";
+        var crossOrigin = client.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + path + "/upload-failures"))
+                .header("Content-Type", "application/json").header("X-Api-Contract", "1").header("Idempotency-Key", key)
+                .header("Origin", "https://other.example").POST(HttpRequest.BodyPublishers.ofString(report)).build(),
+                HttpResponse.BodyHandlers.ofString());
+        assertThat(crossOrigin.statusCode()).isEqualTo(403);
+        assertThat(send("POST", path + "/upload-failures", key, " ".repeat(1025)).statusCode()).isEqualTo(413);
+        for (int attempt = 0; attempt < 12; attempt++) {
+            assertThat(send("POST", path + "/upload-failures", key, report).statusCode()).isEqualTo(204);
+        }
+        assertThat(send("POST", path + "/upload-failures", key, report).statusCode()).isEqualTo(429);
+        // Reporting did not consume create/grant/finalize/receipt quotas or modify the pending original.
+        stage(grant, image); assertThat(finish(path, key, grant).statusCode()).isEqualTo(200);
+        assertThat(grant(path, key).statusCode()).isEqualTo(409);
+    }
+
+    @Test void staleAndPurgingGrantCapabilitiesCannotManufactureNewSignals() throws Exception {
+        String key = UUID.randomUUID().toString();
+        var receipt = create(key, body(item(UUID.randomUUID(), image, "image/png")));
+        String path = path(receipt, 0); var grant = grant(path, key);
+        String report = "{\"grantId\":\"" + value(grant, "$.grantId") + "\"}";
+        long before = signalCount("CLIENT_UPLOAD_UNCONFIRMED");
+        clock.now = clock.now.plusSeconds(3601);
+        assertThat(send("POST", path + "/upload-failures", key, report).statusCode()).isEqualTo(404);
+        clock.now = clock.now.minusSeconds(3601);
+        db.sql("UPDATE memory SET review_status='DELETE',delete_after=CURRENT_TIMESTAMP-INTERVAL '1 day',purge_started_at=CURRENT_TIMESTAMP WHERE id=:id")
+                .param("id", UUID.fromString(value(receipt, "$.memories[0].memoryId"))).update();
+        assertThat(send("POST", path + "/upload-failures", key, report).statusCode()).isEqualTo(404);
+        assertThat(signalCount("CLIENT_UPLOAD_UNCONFIRMED")).isEqualTo(before);
     }
 
     @Test void invalidMetadataAndCrossOriginRequestsCreateNothing() throws Exception {
@@ -207,6 +273,7 @@ class PhotoHttpTest {
     }
 
     @Test void intentCommitFailureRollsBackEnvelopeMemoryAndAsset() throws Exception {
+        long before = signalCount("GUEST_API_5XX");
         db.sql("CREATE FUNCTION reject_photo_intent() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'private insert diagnostic'; END $$").update();
         db.sql("CREATE CONSTRAINT TRIGGER reject_photo_intent AFTER INSERT ON media_asset DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION reject_photo_intent()").update();
         String key = UUID.randomUUID().toString();
@@ -214,8 +281,11 @@ class PhotoHttpTest {
             var response = create(key, body(item(UUID.randomUUID(), image, "image/png")));
             assertThat(response.statusCode()).isEqualTo(503); assertThat(response.body()).doesNotContain("private insert", "originals/", key);
             assertThat(db.sql("SELECT count(*) FROM contribution WHERE idempotency_key=:key").param("key", key).query(Long.class).single()).isZero();
+            assertThat(signalCount("GUEST_API_5XX")).isEqualTo(before + 1);
         } finally { db.sql("DROP TRIGGER reject_photo_intent ON media_asset").update(); db.sql("DROP FUNCTION reject_photo_intent()").update(); }
     }
+
+    private long signalCount(String category) { return signals.snapshot("a".repeat(40)).categories().get(category).count(); }
 
     @TestConfiguration static class Fixtures {
         @Bean @Primary FakeStorage fakeStorage() { return new FakeStorage(); }

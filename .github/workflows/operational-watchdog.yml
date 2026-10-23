@@ -1,0 +1,57 @@
+name: Operational condition watchdog
+
+on:
+  schedule:
+    - cron: "2,12,22,32,42,52 * * * *"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Synthetic notification tests require confirmed recipient/budget; live checks require host proof"
+        required: true
+        default: live
+        type: choice
+        options:
+          - live
+          - synthetic-failure
+          - synthetic-recovery
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: archive-operational-watchdog
+  cancel-in-progress: false
+
+jobs:
+  watchdog:
+    if: >-
+      github.repository == 'Ryan-Soprano/kevin-mel-wedding' &&
+      vars.ARCHIVE_BACKUP_WATCHDOG_BUDGET_CONFIRMED == 'true' &&
+      vars.ARCHIVE_BACKUP_WATCHDOG_RECIPIENT_CONFIRMED == 'true' &&
+      ((github.event_name == 'workflow_dispatch' &&
+        (inputs.mode == 'synthetic-failure' || inputs.mode == 'synthetic-recovery')) ||
+       (vars.ARCHIVE_OPERATIONAL_WATCHDOG_ENABLED == 'true' &&
+        vars.ARCHIVE_OPERATIONAL_WATCHDOG_HOST_PROOF_CONFIRMED == 'true'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Check out reviewed operational watchdog
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - name: Observe content-free operational status and notify private issue
+        run: node scripts/operational-watchdog.mjs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          ARCHIVE_BACKUP_WATCHDOG_BUDGET_CONFIRMED: ${{ vars.ARCHIVE_BACKUP_WATCHDOG_BUDGET_CONFIRMED }}
+          ARCHIVE_BACKUP_WATCHDOG_RECIPIENT_CONFIRMED: ${{ vars.ARCHIVE_BACKUP_WATCHDOG_RECIPIENT_CONFIRMED }}
+          ARCHIVE_BACKUP_WATCHDOG_ISSUE: ${{ vars.ARCHIVE_BACKUP_WATCHDOG_ISSUE }}
+          ARCHIVE_OPERATIONAL_WATCHDOG_ENABLED: ${{ vars.ARCHIVE_OPERATIONAL_WATCHDOG_ENABLED }}
+          ARCHIVE_OPERATIONAL_WATCHDOG_HOST_PROOF_CONFIRMED: ${{ vars.ARCHIVE_OPERATIONAL_WATCHDOG_HOST_PROOF_CONFIRMED }}
+          ARCHIVE_OPERATIONAL_WATCHDOG_CANONICAL_HTTPS_ENABLED: ${{ vars.ARCHIVE_OPERATIONAL_WATCHDOG_CANONICAL_HTTPS_ENABLED }}
+          ARCHIVE_OPERATIONAL_WATCHDOG_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'live' }}

@@ -321,10 +321,21 @@ export function createAudioSubmission({
           return receipt;
         }
         progress("Uploading the original audio…");
-        await bounded(
-          (signal) => api.uploadMedia(grant, file, { signal }),
-          putTimeoutMs,
-        );
+        try {
+          await bounded(
+            (signal) => api.uploadMedia(grant, file, { signal }),
+            putTimeoutMs,
+          );
+        } catch (failure) {
+          if (!disposed && typeof api.reportUploadFailure === "function"
+            && (["UPLOAD_FAILED", "NETWORK_ERROR", "REQUEST_TIMED_OUT"].includes(failure.code)
+              || (failure.code === "UPLOAD_GRANT_EXPIRED" && [401, 403].includes(failure.status)))) {
+            const args = [receipt.contributionId, receipt.memories[0].memoryId,
+              grant.grantId, { idempotencyKey: key }];
+            Promise.resolve().then(() => api.reportUploadFailure(...args)).catch(() => {});
+          }
+          throw failure;
+        }
         await finalize(progress);
         return receipt;
       })()

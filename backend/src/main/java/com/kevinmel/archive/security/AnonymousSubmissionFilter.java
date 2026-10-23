@@ -49,7 +49,7 @@ public final class AnonymousSubmissionFilter extends OncePerRequestFilter {
             if (!"GET".equals(request.getMethod())) RequestOrigin.requireSameOrigin(request);
             int limit = switch (operation) {
                 case CREATE -> MAX_CONTRIBUTION_BYTES;
-                case FINALIZE -> MAX_FINALIZE_BYTES;
+                case FINALIZE, SIGNAL -> MAX_FINALIZE_BYTES;
                 case GRANT, RECEIPT -> 0;
             };
             if (request.getContentLengthLong() > limit) throw tooLarge(operation);
@@ -88,6 +88,7 @@ public final class AnonymousSubmissionFilter extends OncePerRequestFilter {
             if ("/api/contributions".equals(path)) return AnonymousThrottle.Operation.CREATE;
             if (path.matches("/api/contributions/[^/]+/memories/[^/]+/upload-grants")) return AnonymousThrottle.Operation.GRANT;
             if (path.matches("/api/contributions/[^/]+/memories/[^/]+/finalize")) return AnonymousThrottle.Operation.FINALIZE;
+            if (path.matches("/api/contributions/[^/]+/memories/[^/]+/upload-failures")) return AnonymousThrottle.Operation.SIGNAL;
         }
         if ("GET".equals(request.getMethod()) && path.matches("/api/contributions/[^/]+/receipt")) {
             return AnonymousThrottle.Operation.RECEIPT;
