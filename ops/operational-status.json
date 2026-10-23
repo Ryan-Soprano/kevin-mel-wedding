@@ -1,26 +1,26 @@
 {
   "schemaVersion": 1,
   "kind": "kevin-mel-operational-status",
-  "observedAt": "2026-10-23T04:20:29.600Z",
+  "observedAt": "2026-10-23T08:02:23.604Z",
   "application": {
-    "checkedAt": "2026-10-23T04:20:23.380Z",
+    "checkedAt": "2026-10-23T08:02:15.066Z",
     "state": "unconfirmed"
   },
   "database": {
-    "checkedAt": "2026-10-23T04:20:23.380Z",
+    "checkedAt": "2026-10-23T08:02:15.066Z",
     "state": "unconfirmed"
   },
   "guestSaves": {
-    "checkedAt": "2026-10-23T04:20:23.380Z",
+    "checkedAt": "2026-10-23T08:02:15.066Z",
     "state": "unconfirmed"
   },
   "media": {
-    "checkedAt": "2026-10-23T04:20:23.380Z",
+    "checkedAt": "2026-10-23T08:02:15.066Z",
     "state": "unconfirmed"
   },
   "capacity": {
-    "checkedAt": "2026-10-23T04:20:23.380Z",
+    "checkedAt": "2026-10-23T08:02:15.066Z",
     "state": "unconfirmed"
   },
-  "failure": "source_unavailable"
+  "failure": "observation_gap"
 }
