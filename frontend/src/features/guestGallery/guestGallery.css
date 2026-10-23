@@ -78,3 +78,16 @@
 @media (max-width: 380px) {
   .guest-gallery-thumbnails { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+.guest-gallery-photo[hidden],
+.guest-gallery-photo img[hidden] {
+  display: none;
+}
+
+.guest-gallery-image-status:empty {
+  display: none;
+}
+
+.guest-gallery-image-status {
+  margin-top: 12px;
+  text-align: center;
+}
