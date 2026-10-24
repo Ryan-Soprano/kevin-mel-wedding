@@ -134,7 +134,7 @@ class ReviewServiceTest {
 
     private ReviewService service(boolean revealed) {
         return new ReviewService(new ArchiveAuthorization(accounts,
-                new ArchiveAccessPolicy("local", revealed, false, "", new MockEnvironment())), repository, clock);
+                new ArchiveAccessPolicy("local", revealed, false, "", "", new MockEnvironment())), repository, clock);
     }
     private static ArchiveAccount account(boolean enabled, long version) {
         return new ArchiveAccount(ACCOUNT, "synthetic-review", "Synthetic Couple", "{noop}unused", "COUPLE", enabled, version);

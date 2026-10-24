@@ -19,7 +19,7 @@ class RequestPeerCaptureTest {
     private final RequestPeerCapture listener = new RequestPeerCapture();
     private final RecordingRepository repository = new RecordingRepository();
     private final LoginThrottle throttle = new LoginThrottle(repository,
-            new ArchiveAccessPolicy("local", false, false, "", new MockEnvironment()),
+            new ArchiveAccessPolicy("local", false, false, "", "", new MockEnvironment()),
             "synthetic-peer-capture-test-secret");
 
     @Test

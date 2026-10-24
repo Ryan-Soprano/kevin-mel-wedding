@@ -173,7 +173,7 @@ export function decodeSession(value) {
     || value.csrfToken.length < 16 || /[\r\n]/.test(value.csrfToken)
     || (value.authenticated
       ? typeof value.user?.displayName !== "string" || !Array.isArray(value.user.roles)
-        || value.user.roles.length !== 1 || value.user.roles[0] !== "COUPLE"
+        || value.user.roles.length !== 1 || !["COUPLE", "OPERATOR"].includes(value.user.roles[0])
       : value.user !== null)) throw contractMismatch();
   return value;
 }

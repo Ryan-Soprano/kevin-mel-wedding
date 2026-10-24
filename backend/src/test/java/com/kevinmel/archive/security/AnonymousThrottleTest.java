@@ -78,7 +78,7 @@ class AnonymousThrottleTest {
     @Test void productionRequiresAtLeastThirtyTwoSecretBytesAndDatabaseRetryAfterIsPreserved() {
         var environment = new MockEnvironment();
         environment.setActiveProfiles("production");
-        var policy = new ArchiveAccessPolicy("production", false, true, "https://archive.example", environment);
+        var policy = new ArchiveAccessPolicy("production", false, true, "https://archive.example", "", environment);
         assertThatThrownBy(() -> new AnonymousThrottle(repository, policy, "short"))
                 .isInstanceOf(IllegalArgumentException.class);
         var production = new AnonymousThrottle(repository, policy, "x".repeat(32));
@@ -95,7 +95,7 @@ class AnonymousThrottleTest {
 
     private static AnonymousThrottle throttle(AnonymousThrottleRepository target, String secret) {
         return new AnonymousThrottle(target,
-                new ArchiveAccessPolicy("local", false, false, "", new MockEnvironment()), secret);
+                new ArchiveAccessPolicy("local", false, false, "", "", new MockEnvironment()), secret);
     }
 
     private static final class RecordingRepository extends AnonymousThrottleRepository {

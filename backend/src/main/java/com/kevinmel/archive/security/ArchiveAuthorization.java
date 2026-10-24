@@ -22,8 +22,7 @@ public class ArchiveAuthorization {
                 || authentication instanceof AnonymousAuthenticationToken) throw authenticationRequired();
         if (!(authentication.getPrincipal() instanceof ArchivePrincipal principal)) throw unavailable();
         requireCurrentAccount(principal);
-        if (!policy.allows(principal) || authentication.getAuthorities().stream()
-                .noneMatch(authority -> "ROLE_COUPLE".equals(authority.getAuthority()))) throw unavailable();
+        if (!policy.allows(authentication)) throw unavailable();
     }
 
     private void requireCurrentAccount(ArchivePrincipal principal) {

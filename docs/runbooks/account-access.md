@@ -1,6 +1,6 @@
 # Private account provisioning and recovery
 
-Prepared 2026-10-05 for AUTH-01; collaboration policy clarified 2026-10-09. Preparing this runbook and console utility has not provisioned real accounts, sent invitations, changed provider settings, or deployed the application. Kevin and Melanie already know about the project and may join product discussions and synthetic usability tests now. Account creation, confidential credential handoff and access activation remain deliberate operator actions. Ryan owns infrastructure and recovery; Kevin and Melanie alone moderate and publish. Kade has development access only.
+Prepared 2026-10-05 for AUTH-01; collaboration policy clarified 2026-10-09 and Ryan's separately authorized private archive administration added 2026-10-24. Account creation, confidential credential handoff and access activation remain deliberate operator actions. Ryan owns infrastructure and recovery and may use a separate named operator account for private archive administration. Kevin and Melanie retain their own archive accounts. Kade has development access only. The code change does not provision an account, set production configuration or deploy the application.
 
 The existing `MEMORY_ARCHIVE_REVEALED` name denotes the technical couple-access gate. It no longer represents surprise secrecy or a requirement to wait until after the wedding. Agree on the access target and timing separately from the October 31 archive handoff/collection-close milestone.
 
@@ -8,11 +8,15 @@ The existing `MEMORY_ARCHIVE_REVEALED` name denotes the technical couple-access 
 
 | Role | Provisioning boundary | Application authority |
 |---|---|---|
-| `COUPLE` | Reveal must be explicitly enabled. Production identities are separate `kevin` / `Kevin` and `melanie` / `Melanie` accounts. Synthetic accounts are allowed locally or in staging. | Couple archive access; moderation/publication belong exclusively to the couple. |
-| `OPERATOR` | Infrastructure operator identity, kept separate from couple accounts. | No couple login, moderation, or publication authority. Infrastructure credentials are managed separately. |
+| `COUPLE` | Reveal must be explicitly enabled. Production identities are separate `kevin` / `Kevin` and `melanie` / `Melanie` accounts. Synthetic accounts are allowed locally or in staging. | Full private archive access while the couple reveal gate is open. |
+| `OPERATOR` | Separate account; disabled on creation. The server's `MEMORY_ARCHIVE_OPERATOR_ADMIN_USERNAME` must name that exact account for private archive access. Default empty grants none. | Only the configured enabled operator may sign in and use the full private inbox, media, review/publication, organization, authoring and export APIs independently of couple reveal. All other operators remain denied. Infrastructure credentials remain separate. |
 | `DEVELOPER` | Local/staging only; production creation, recovery, and activation are rejected. | No couple login, moderation, or publication authority. |
 
 There is no public signup, password-reset, account-enablement, or role-management endpoint. The account utility cannot change a role or delete an account. Do not relabel Ryan or Kade as `COUPLE` to bypass authorization. The production usernames enforce separate identities; the utility cannot verify a person's identity on its own.
+
+For Ryan's explicitly authorized access, use a separate `OPERATOR` account such as `ryan-admin` and configure the same exact lowercase username in the running server. `archive.operator-admin-username` / `MEMORY_ARCHIVE_OPERATOR_ADMIN_USERNAME` defaults to empty; it is neither a wildcard nor a grant to all operators. An invalid/noncanonical setting refuses startup. `DEVELOPER` remains denied even when its username matches. This setting does not open the couple gate or provide account-management/provider endpoints. Sessions report the real `OPERATOR` role, not `COUPLE`; CSRF, same-origin, current-account and credential-version checks apply equally. Unsetting or changing the configured name removes that operator's private access on subsequent requests after the application restarts with the new configuration.
+
+Ryan's access uses the existing `create ryan-admin Ryan OPERATOR` and separate `enable ryan-admin` console operations, each with the verified target, `--expect-environment production` and its exact interactive confirmation. Follow the build/launch instructions below rather than copying a provider connection into command arguments. Supply the unique password only at the hidden console prompt; never put it in chat, source, flags, environment variables, files or redirected input. Account creation alone remains disabled, and enablement alone grants no archive access unless the running server names the same account. This document and the code change perform none of those live steps.
 
 New accounts are **disabled**. Enabling is a separate confirmed command. Password reset preserves the current enabled flag. Reset, enable, and disable each increment `credentials_version` and update `updated_at` in the same transaction; the web application rejects sessions with stale versions. Disable remains available before reveal and for accounts that violate current access policy.
 
@@ -23,6 +27,7 @@ The utility reads the built `application.properties` plus process environment/JV
 - `MEMORY_ARCHIVE_DB_URL`, `MEMORY_ARCHIVE_DB_USERNAME`, `MEMORY_ARCHIVE_DB_PASSWORD`: target PostgreSQL connection. Existing defaults are for local Compose only.
 - `MEMORY_ARCHIVE_ENVIRONMENT`: `local`, `staging`, or `production`; default `local`.
 - `MEMORY_ARCHIVE_REVEALED`: exact `true` or `false`; default `false`.
+- `MEMORY_ARCHIVE_OPERATOR_ADMIN_USERNAME`: empty by default; optionally the exact separately provisioned `OPERATOR` username, planned as `ryan-admin`. This is server configuration, never a Vite/browser flag. It grants private archive actions independently of couple reveal, without granting infrastructure/account-management endpoints.
 - `MEMORY_ARCHIVE_PUBLIC_ORIGIN`: the production HTTPS browser origin, without a path.
 - `MEMORY_ARCHIVE_LOGIN_THROTTLE_SECRET`: a stable secret of at least 32 random bytes, required in production. Login bucket keys use HMAC so raw usernames and peer addresses are not stored in the throttle table. Local synthetic exercises use a development-only fallback. Keep this secret out of Git and logs; rotating it resets the identity of throttle buckets.
 
@@ -32,7 +37,7 @@ The utility does not load Spring profile files. Set its environment and reveal v
 
 The utility opens no HTTP listener, starts no Spring application/component scan, and initializes no R2 client. It does not apply Flyway migrations. Apply the application's reviewed migrations through the normal startup/release process first; `archive_account` from V4 must exist.
 
-Application and utility processes read their own configuration at startup. Setting the reveal environment variable in the utility terminal does not change an already-running application. Keep the production access gate closed until the agreed access activation and separately authorized onboarding.
+Application and utility processes read their own configuration at startup. Setting reveal or the operator admin name in a utility terminal does not change an already-running application. Keep the couple gate closed until its agreed activation. Provision and enable Ryan's separate operator through the existing confirmed console commands, with a private password; the server must independently opt in to that exact username. No schema migration or new role is required.
 
 ## Build and launch locally
 
@@ -140,7 +145,7 @@ Run the backend checks, including `SessionHttpTest` and `RequestPeerCaptureTest`
 - Compile the backend and run the existing test suite. Confirm utility `--help` works and a noninteractive mutation exits `2` before database access.
 - With `AccountAdministrationStore` and a disposable migrated database, create a synthetic couple account with reveal enabled. Verify it is disabled, the stored hash matches through the application's `PasswordEncoder`, and an attempt to create the same username makes no change.
 - Enable, reset, disable, and re-enable. Verify each operation advances the version once, updates its timestamp, preserves identity/role, and that reset leaves a disabled account disabled. Check a nonexistent account and rejected input make no changes.
-- Verify reveal closed rejects COUPLE create/reset/enable but allows disable; production rejects DEVELOPER create/reset/enable and any COUPLE username other than `kevin`/`melanie`; OPERATOR/DEVELOPER never receive couple authority. Production couple display names must be exactly Kevin/Melanie.
+- Verify reveal closed rejects COUPLE create/reset/enable but allows disable; production rejects DEVELOPER create/reset/enable and any COUPLE username other than `kevin`/`melanie`. With the operator setting empty, OPERATOR remains denied. With it set, only the exact enabled named OPERATOR receives private archive access; other operators and all developers remain denied. Production couple display names must be exactly Kevin/Melanie.
 - Verify short, mismatched, malformed-Unicode, and over-72-byte passwords are rejected. Inspect only synthetic fixtures; never print the entered password or hash.
 - With a synthetic web login, verify password reset and disable/re-enable invalidate the earlier session and CSRF token; check the new password works and the old password fails.
 

@@ -129,6 +129,26 @@ class ReviewHttpSecurityTest {
             verifyNoInteractions(repository);
         }
     }
+    @Nested @TestPropertySource(properties = {"archive.revealed=false", "archive.operator-admin-username=ryan-admin"})
+    class NamedOperatorAdmin {
+        @Test void namedOperatorCanReviewBeforeRevealWithItsOwnAuditedAccount() throws Exception {
+            var operator = new ArchiveAccount(ACCOUNT, "ryan-admin", "Synthetic Operator", "{noop}unused", "OPERATOR", true, 1);
+            when(accounts.findById(ACCOUNT)).thenReturn(Optional.of(operator));
+            mvc.perform(request(session(operator)).with(csrf().asHeader())).andExpect(status().isOk())
+                    .andExpect(jsonPath("$.reviewStatus").value("KEEP"));
+            verify(repository).auditReview(any(), any(), eq(ACCOUNT), eq(NOW));
+        }
+        @Test void namedOperatorStillRequiresCsrfAndSameOriginForPrivateMutation() throws Exception {
+            var operator = new ArchiveAccount(ACCOUNT, "ryan-admin", "Synthetic Operator", "{noop}unused", "OPERATOR", true, 1);
+            when(accounts.findById(ACCOUNT)).thenReturn(Optional.of(operator));
+            mvc.perform(request(session(operator))).andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.error.code").value("CSRF_INVALID"));
+            mvc.perform(request(session(operator)).header("Origin", "https://other.invalid").with(csrf().asHeader()))
+                    .andExpect(status().isForbidden()).andExpect(jsonPath("$.error.code").value("ORIGIN_INVALID"));
+            verifyNoInteractions(repository);
+        }
+    }
+
     private static MockHttpServletRequestBuilder request(MockHttpSession session) {
         var request = patch("/api/memories/" + MEMORY + "/review").header("X-Api-Contract", "1").header("If-Match", "\"1\"")
                 .contentType(MediaType.APPLICATION_JSON).content("{\"reviewStatus\":\"KEEP\"}");

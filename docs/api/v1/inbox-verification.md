@@ -4,7 +4,7 @@ Implemented on 2026-10-09 for the private inbox's note/photo slice. This work ad
 
 ## Implemented contract
 
-Both routes require `X-Api-Contract: 1`, an authenticated current couple identity and the open reveal gate:
+Both routes require `X-Api-Contract: 1` and current authorized private archive access: a revealed couple identity, or the separately configured exact named operator admin under the [October 24 account boundary](../../runbooks/account-access.md#account-boundaries):
 
 - `GET /api/memories?reviewStatus=PENDING&limit=20&cursor=…` returns `{"items":[<detail>],"nextCursor":null}`. The default filter is PENDING; KEEP and ARCHIVED are also supported. Limit defaults to 20 and accepts 1–100.
 - `GET /api/memories/{memoryId}` returns the same full detail shape, with an ETag such as `"1"` matching its persisted revision.
@@ -15,7 +15,7 @@ DELETE is not a supported filter in this slice and returns safe 400 VALIDATION_F
 
 ## Eligibility, access and pagination
 
-Every service invocation reloads account authorization before querying private data, in addition to the HTTP security filters. Missing/stale/disabled credentials return 401 AUTH_REQUIRED. Operator/developer roles, a generic Spring principal with a COUPLE authority, and access before reveal return 403 ARCHIVE_UNAVAILABLE. UUID knowledge and guest receipt/upload capabilities confer no private access. Production's existing Kevin/Melanie identity restriction is preserved.
+Every service invocation reloads account authorization before querying private data, in addition to the HTTP security filters. Missing/stale/disabled credentials return 401 AUTH_REQUIRED. The operator setting defaults empty; only its exact enabled OPERATOR may access the private archive independently of reveal. Other operators, developers, foreign principals and unrevealed couples return 403 ARCHIVE_UNAVAILABLE. UUID knowledge and guest receipt/upload capabilities confer no private access. Production's existing Kevin/Melanie identity restriction is preserved. Historical verification below predates the opt-in operator amendment.
 
 The SQL query selects only the current wedding event's COUPLE_ONLY notes or photos in PENDING, KEEP or ARCHIVED. Photos require committed UPLOADED state, JPEG/PNG/WebP detection, 1–10,000,000 bytes, matching expected size/hash/MIME, and the server's exact original-object key. These checks match existing AUTH-02 playback eligibility.
 
