@@ -798,6 +798,103 @@ class SessionHttpTest {
         }
     }
 
+    @Nested
+    @TestPropertySource(properties = {"archive.revealed=false", "archive.operator-admin-username=ryan-admin"})
+    class NamedOperatorAdmin {
+        @Test void namedOperatorCanLoginBeforeRevealAndSessionReportsItsActualRole() throws Exception {
+            var operator = operator("ryan-admin", "OPERATOR", true, 1);
+            store(operator);
+            var result = login(anonymous(), operator.username(), PASSWORD).andExpect(status().isOk())
+                    .andExpect(jsonPath("$.authenticated").value(true))
+                    .andExpect(jsonPath("$.user.roles[0]").value("OPERATOR")).andReturn();
+            var authenticated = state(result);
+            mvc.perform(get("/api/session").session(authenticated.session()).header("X-Api-Contract", "1"))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.user.roles.length()").value(1))
+                    .andExpect(jsonPath("$.user.roles[0]").value("OPERATOR"));
+            error(login(anonymous(), USERNAME, PASSWORD), 403, "ARCHIVE_UNAVAILABLE");
+        }
+
+        @Test void onlyTheConfiguredOperatorCanLoginOrUseAnExistingPrivateSession() throws Exception {
+            for (ArchiveAccount blocked : List.of(operator("other-operator", "OPERATOR", true, 1),
+                    operator("ryan-admin-extra", "OPERATOR", true, 1), operator("ryan-admin", "DEVELOPER", true, 1),
+                    operator("ryan-admin", "COUPLE", true, 1))) {
+                store(blocked);
+                error(login(anonymous(), blocked.username(), PASSWORD), 403, "ARCHIVE_UNAVAILABLE");
+                var session = identitySession(blocked);
+                for (ArchiveRoute route : privateRoutes()) {
+                    error(mvc.perform(privateRequest(route, session)), 403, "ARCHIVE_UNAVAILABLE");
+                }
+            }
+            verifyNoInteractions(media, storage);
+        }
+
+        @Test void namedOperatorCanReadPrivatePlaybackThroughTheRealServiceBeforeReveal() throws Exception {
+            var operator = operator("ryan-admin", "OPERATOR", true, 1);
+            store(operator);
+            when(media.findPlayable(MEMORY_ID)).thenReturn(Optional.of(playable()));
+            when(storage.authorizeRead(ORIGINAL_KEY, "image/png", 47L, NOW.plusSeconds(300)))
+                    .thenReturn(new ObjectStorage.ReadGrant("https://playback.example.test/operator-fixture", NOW.plusSeconds(300)));
+            var authenticated = state(login(anonymous(), operator.username(), PASSWORD).andExpect(status().isOk()).andReturn());
+            mvc.perform(get("/api/memories/" + MEMORY_ID + "/playback").session(authenticated.session())
+                    .header("X-Api-Contract", "1")).andExpect(status().isOk())
+                    .andExpect(header().string("Cache-Control", "no-store"));
+            verify(media).findPlayable(MEMORY_ID);
+            verify(storage).authorizeRead(ORIGINAL_KEY, "image/png", 47L, NOW.plusSeconds(300));
+        }
+
+        @Test void operatorOptInDoesNotAcceptAnonymousForeignOrMismatchedAuthority() throws Exception {
+            error(mvc.perform(get("/api/memories")), 401, "AUTH_REQUIRED");
+            var generic = User.withUsername("ryan-admin").password("unused").roles("OPERATOR").build();
+            var foreign = new MockHttpSession();
+            var context = SecurityContextHolder.createEmptyContext();
+            context.setAuthentication(UsernamePasswordAuthenticationToken.authenticated(generic, null, generic.getAuthorities()));
+            foreign.setAttribute(HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY, context);
+            error(mvc.perform(get("/api/memories").session(foreign)), 403, "ARCHIVE_UNAVAILABLE");
+            var operator = operator("ryan-admin", "OPERATOR", true, 1);
+            store(operator);
+            var principal = new ArchivePrincipal(operator);
+            context = SecurityContextHolder.createEmptyContext();
+            context.setAuthentication(UsernamePasswordAuthenticationToken.authenticated(principal, null,
+                    List.of(new SimpleGrantedAuthority("ROLE_COUPLE"))));
+            var mismatched = new MockHttpSession();
+            mismatched.setAttribute(HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY, context);
+            error(mvc.perform(get("/api/memories").session(mismatched)), 403, "ARCHIVE_UNAVAILABLE");
+            verifyNoInteractions(media, storage);
+        }
+
+        @Test void operatorDisableRecoveryRenameRoleChangeAndRemovalRevokeExistingSessions() throws Exception {
+            var operator = operator("ryan-admin", "OPERATOR", true, 1);
+            for (Optional<ArchiveAccount> replacement : List.of(Optional.<ArchiveAccount>empty(),
+                    Optional.of(operator("ryan-admin", "OPERATOR", false, 1)),
+                    Optional.of(operator("ryan-admin", "OPERATOR", true, 2)),
+                    Optional.of(operator("renamed-operator", "OPERATOR", true, 1)),
+                    Optional.of(operator("ryan-admin", "DEVELOPER", true, 1)))) {
+                store(operator);
+                var session = identitySession(operator);
+                when(accounts.findById(ACCOUNT_ID)).thenReturn(replacement);
+                error(mvc.perform(get("/api/memories").session(session.session())), 401, "AUTH_REQUIRED");
+                assertThat(session.session().isInvalid()).isTrue();
+            }
+            verifyNoInteractions(media, storage);
+        }
+
+        @Test void namedOperatorStillCannotUseAccountManagementOrDirectObjectRoutes() throws Exception {
+            var operator = operator("ryan-admin", "OPERATOR", true, 1);
+            store(operator);
+            var session = identitySession(operator);
+            for (String path : List.of("/api/accounts", "/api/accounts/recovery", "/api/auth/providers")) {
+                error(mvc.perform(contract(mutation(post(path), session, session.token(), ORIGIN), "1")
+                        .contentType(MediaType.APPLICATION_JSON).content("{}")), 403, "ARCHIVE_UNAVAILABLE");
+            }
+            error(mvc.perform(get("/originals/" + ASSET_ID).session(session.session())), 403, "ARCHIVE_UNAVAILABLE");
+            verifyNoInteractions(media, storage);
+        }
+
+        private ArchiveAccount operator(String username, String role, boolean enabled, long version) {
+            return new ArchiveAccount(ACCOUNT_ID, username, "Synthetic Operator", couple.passwordHash(), role, enabled, version);
+        }
+    }
+
     private void store(ArchiveAccount account) {
         when(accounts.findByUsername(account.username())).thenReturn(Optional.of(account));
         when(accounts.findById(account.id())).thenReturn(Optional.of(account));

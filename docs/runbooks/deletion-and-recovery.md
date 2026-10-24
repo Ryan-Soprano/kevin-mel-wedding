@@ -6,7 +6,7 @@ Kevin and Melanie choose review states through the authenticated inbox. Keep rem
 
 Until the deadline, the couple can find the item under **Recently deleted** and restore it. New photo/audio playback permissions are unavailable while deleted. At the exact deadline the item is unavailable to list/detail/review, even while storage cleanup is retrying. Previously issued playback permissions can last until their own five-minute expiry, and downloaded copies cannot be recalled.
 
-Ryan operates retention maintenance that enforces expired couple decisions. Maintenance supplies no new keep/archive/delete/publication choices, and operator/developer application roles receive no review endpoints. The offline console starts no HTTP server and requires a matching environment and typed confirmation.
+Ryan operates retention maintenance that enforces expired authorized review decisions. Maintenance supplies no new keep/archive/delete/publication choices. Separately, his explicitly configured named `OPERATOR` account may use the same private review endpoints under the [October 24 account boundary](account-access.md#account-boundaries); other operators and all developers remain denied. The offline console starts no HTTP server and requires a matching environment and typed confirmation.
 
 ## Maintenance readiness
 

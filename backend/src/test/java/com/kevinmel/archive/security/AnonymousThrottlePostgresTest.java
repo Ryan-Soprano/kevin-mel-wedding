@@ -206,7 +206,7 @@ class AnonymousThrottlePostgresTest {
     private AnonymousThrottle throttle() { return new AnonymousThrottle(repository, policy(), SECRET); }
 
     private ArchiveAccessPolicy policy() {
-        return new ArchiveAccessPolicy("local", false, false, "", new MockEnvironment());
+        return new ArchiveAccessPolicy("local", false, false, "", "", new MockEnvironment());
     }
 
     private MockHttpServletRequest captured(String peer) {

@@ -46,8 +46,9 @@ public class SessionService {
         var authentication = SecurityContextHolder.getContext().getAuthentication();
         SessionUser user = null;
         if (authentication != null && authentication.getPrincipal() instanceof ArchivePrincipal principal) {
-            if (!policy.allows(principal)) throw unavailable();
-            user = new SessionUser(principal.getDisplayName(), List.of("COUPLE"));
+            if (!policy.allows(authentication)) throw unavailable();
+            user = new SessionUser(principal.getDisplayName(), principal.getAuthorities().stream()
+                    .map(authority -> authority.getAuthority().substring("ROLE_".length())).toList());
         }
         var token = (CsrfToken) request.getAttribute(CsrfToken.class.getName());
         return new SessionResponse(user != null, user, token.getToken());
@@ -65,7 +66,7 @@ public class SessionService {
         var input = UsernamePasswordAuthenticationToken.unauthenticated(username, suppliedPassword);
         try {
             var authenticated = authenticationManager.authenticate(input);
-            if (!(authenticated.getPrincipal() instanceof ArchivePrincipal principal) || !policy.allows(principal)) {
+            if (!policy.allows(authenticated)) {
                 throw unavailable();
             }
             sessionStrategy.onAuthentication(authenticated, request, response);

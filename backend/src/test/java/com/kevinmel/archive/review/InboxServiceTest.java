@@ -115,8 +115,23 @@ class InboxServiceTest {
         verifyNoInteractions(repository);
     }
 
+    @Test void namedOperatorAdminCanReadBeforeRevealAndIsRevokedBeforeTheNextQuery() {
+        var operator = new ArchiveAccount(ACCOUNT, "ryan-admin", "Synthetic Operator", "{noop}unused-fixture",
+                "OPERATOR", true, 1);
+        when(accounts.findById(ACCOUNT)).thenReturn(Optional.of(operator));
+        authenticate(identity(operator));
+        service = new InboxService(new ArchiveAuthorization(accounts,
+                new ArchiveAccessPolicy("local", false, false, "", "ryan-admin", new MockEnvironment())), repository);
+        when(repository.list(any())).thenReturn(List.of(memory(1)));
+        assertThat(service.list("PENDING", "20", null).items()).containsExactly(memory(1));
+        when(accounts.findById(ACCOUNT)).thenReturn(Optional.of(new ArchiveAccount(ACCOUNT, operator.username(),
+                operator.displayName(), operator.passwordHash(), "OPERATOR", false, 2)));
+        rejects(() -> service.detail(memory(1).memoryId()), 401, "AUTH_REQUIRED");
+        verify(repository, never()).detail(any());
+    }
+
     private InboxService service(boolean revealed) {
-        var policy = new ArchiveAccessPolicy("local", revealed, false, "", new MockEnvironment());
+        var policy = new ArchiveAccessPolicy("local", revealed, false, "", "", new MockEnvironment());
         return new InboxService(new ArchiveAuthorization(accounts, policy), repository);
     }
     private static ArchiveAccount account(String role, boolean enabled, long version) {

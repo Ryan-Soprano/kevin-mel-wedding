@@ -8,11 +8,13 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.core.env.Environment;
 import org.springframework.core.env.Profiles;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
+import org.springframework.security.core.Authentication;
 
 import com.kevinmel.archive.web.ApiException;
 import com.kevinmel.archive.web.RequestOrigin;
 
-/** Couples own archive access; infrastructure and development roles do not. */
+/** Couple reveal access plus an explicitly configured, separate operator admin. */
 @Component
 public class ArchiveAccessPolicy {
     private static final String PRODUCTION_PROFILE = "production";
@@ -21,12 +23,14 @@ public class ArchiveAccessPolicy {
     private final boolean revealed;
     private final boolean secureCookie;
     private final String publicOrigin;
+    private final String operatorAdminUsername;
 
     public ArchiveAccessPolicy(
             @Value("${archive.environment:local}") String environment,
             @Value("${archive.revealed:false}") boolean revealed,
             @Value("${server.servlet.session.cookie.secure:false}") boolean secureCookie,
             @Value("${archive.public-origin:}") String publicOrigin,
+            @Value("${archive.operator-admin-username:}") String operatorAdminUsername,
             Environment springEnvironment) {
         if (!Set.of("local", "staging", PRODUCTION_PROFILE).contains(environment)) {
             throw new IllegalArgumentException("Use a documented archive environment.");
@@ -38,6 +42,10 @@ public class ArchiveAccessPolicy {
         this.revealed = revealed;
         this.secureCookie = secureCookie;
         this.publicOrigin = publicOrigin;
+        if (!operatorAdminUsername.isEmpty() && !operatorAdminUsername.matches("[a-z0-9][a-z0-9._-]{2,99}")) {
+            throw new IllegalArgumentException("Operator admin username must be empty or an exact lowercase account username.");
+        }
+        this.operatorAdminUsername = operatorAdminUsername;
         requirePublicOrigin(publicOrigin);
         if (production && (!secureCookie || publicOrigin.isEmpty())) {
             throw new IllegalArgumentException("Production requires secure cookies and an explicit HTTPS public origin.");
@@ -57,15 +65,30 @@ public class ArchiveAccessPolicy {
     }
 
     public boolean allows(ArchivePrincipal principal) {
-        return revealed && principal.getAuthorities().stream()
-                .anyMatch(authority -> "ROLE_COUPLE".equals(authority.getAuthority()))
-                && (!production || Set.of("kevin", "melanie").contains(principal.getUsername()));
+        return principal.isEnabled() && principal.getAuthorities().stream().anyMatch(authority ->
+                "ROLE_COUPLE".equals(authority.getAuthority()) && allowsRole(principal.getUsername(), "COUPLE")
+                || "ROLE_OPERATOR".equals(authority.getAuthority()) && allowsRole(principal.getUsername(), "OPERATOR"));
+    }
+
+    public boolean allows(Authentication authentication) {
+        return authentication != null && authentication.isAuthenticated()
+                && !(authentication instanceof AnonymousAuthenticationToken)
+                && authentication.getPrincipal() instanceof ArchivePrincipal principal && allows(principal)
+                && authentication.getAuthorities().stream().anyMatch(authority -> principal.getAuthorities().stream()
+                        .anyMatch(current -> current.getAuthority().equals(authority.getAuthority())));
     }
 
     /** Fresh background authority uses the current account, without retaining a principal. */
     public boolean allows(ArchiveAccount account) {
-        return revealed && "COUPLE".equals(account.role())
-                && (!production || Set.of("kevin", "melanie").contains(account.username()));
+        return account.enabled() && allowsRole(account.username(), account.role());
+    }
+
+    private boolean allowsRole(String username, String role) {
+        if ("OPERATOR".equals(role)) {
+            return !operatorAdminUsername.isEmpty() && operatorAdminUsername.equals(username);
+        }
+        return revealed && "COUPLE".equals(role)
+                && (!production || Set.of("kevin", "melanie").contains(username));
     }
 
     public boolean secureCookie() { return secureCookie; }

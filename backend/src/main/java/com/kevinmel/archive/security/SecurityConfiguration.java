@@ -10,6 +10,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.core.env.Environment;
 import org.springframework.core.env.Profiles;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.authorization.AuthorizationDecision;
 import org.springframework.security.crypto.factory.PasswordEncoderFactories;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
@@ -89,7 +90,8 @@ public class SecurityConfiguration {
                 .requestMatchers(HttpMethod.DELETE, SESSION_ENDPOINT).permitAll()
                 .requestMatchers(HttpMethod.GET, "/", "/index.html", "/assets/**", "/favicon.ico").permitAll()
                 .requestMatchers(HttpMethod.GET, "/shared/*").permitAll()
-                .requestMatchers("/api/memories", "/api/memories/**", "/api/albums", "/api/albums/**", "/api/timeline", "/api/timeline/**", "/api/library", "/api/library/**", "/api/tags", "/api/tags/**", "/api/exports", "/api/exports/**").hasRole("COUPLE")
+                .requestMatchers("/api/memories", "/api/memories/**", "/api/albums", "/api/albums/**", "/api/timeline", "/api/timeline/**", "/api/library", "/api/library/**", "/api/tags", "/api/tags/**", "/api/exports", "/api/exports/**")
+                    .access((authentication, request) -> new AuthorizationDecision(policy.allows(authentication.get())))
                 .anyRequest().denyAll();
         })
             .securityContext(context -> context.requireExplicitSave(true).securityContextRepository(contexts))
