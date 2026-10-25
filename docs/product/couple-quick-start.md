@@ -1,16 +1,16 @@
 # Kevin and Melanie's archive: quick start
 
-Prepared October 11, 2026. This guide explains the private archive as it works today, so you can try it together and help shape what comes next.
+Updated October 25, 2026. This guide explains your private archive and first sign-in.
 
-Your guest memories and the memories you add yourselves share one private archive. You alone decide which submissions to keep, archive or delete, and what may eventually be published. Ryan owns and runs the infrastructure, handles account recovery and maintains backups. Kade helps with development. Neither has a couple moderation or publication role.
+Your guest memories and the memories you add yourselves share one private archive. You decide which submissions to keep, archive or delete, and what to share. Ryan runs the infrastructure, handles account recovery, maintains backups and has a separate administrator account. Kade helps with development.
 
 ## Getting access
 
-For the current hands-on review, Ryan starts the [disposable local walkthrough](../runbooks/local-couple-review.md) on his computer. It contains made-up notes, albums, events and tags. Use the test sign-ins printed by that session; they are fixture accounts, not your real accounts. Open its printed address with `/?view=inbox`, enter **Username** and **Password**, then choose **Sign in**. Your changes last only until that review session is cleaned up.
+Open the [private inbox](https://kevinandmel.com/?view=inbox). Kevin's username is `kevin`; Melanie's is `melanie`. Ryan supplies each temporary password privately. Enter your own username and temporary password, then choose **Sign in**.
 
-The local review supports written memories and organization. Photo selection can be explored, but successful media saving, playback and original downloads are unavailable because storage is off. Audio is unavailable. This review does not provide a shareable hosted link.
+On your first sign-in, choose a different password and repeat it. Use at least 15 characters; a passphrase works well. Complete this step before opening your memories. After it succeeds, use your chosen password for future sign-ins; the temporary password stops working.
 
-Real access is a later, separate onboarding step: Ryan will agree the target and timing with you, supply each of you a distinct account through a confidential handoff, and verify each person's sign-in. The current live coming-soon page is separate from the full archive. Hosting, successful provider-backed media use and phone acceptance still need their release checks.
+Keep passwords private and use your separate accounts. If the connection drops during the password change, check access again; if asked to sign in, try the new password you chose. Contact Ryan if you cannot get in, and avoid repeated attempts while a retry delay is displayed.
 
 ## Review guest memories
 
@@ -73,6 +73,6 @@ Switching away from the private page clears private presentation, unfinished dra
 
 Choose **Sign out** when finished and wait for confirmation. If offered **Retry signing out**, use it to confirm the server session ended. **Check access again** can recover a failed access check. If login is temporarily limited, wait for the displayed retry time instead of repeatedly trying.
 
-For a forgotten password, unavailable access or a suspected account compromise, contact Ryan directly. There is no self-service password-reset or password-change page. Ryan verifies your identity and handles recovery; keep passwords, private download links and account details out of feedback notes and screenshots. Password recovery ends earlier sessions but cannot erase downloaded files.
+For a forgotten password, unavailable access or a suspected account compromise, contact Ryan directly. Ryan verifies your identity and handles recovery; keep passwords, private download links and account details out of feedback notes and screenshots. Password recovery ends earlier sessions but cannot erase downloaded files.
 
 During the local review, tell Ryan what you tried, what you expected, the visible result and the device/browser. Use made-up contributions and the [tester results template](qa02-tester-guide.md). Ryan signs off cleanup using the [local walkthrough](../runbooks/local-couple-review.md). Your feedback informs the next improvements; actual onboarding, phone/provider tests and wedding release acceptance remain on the [release checklist](wedding-release-checklist.md).

@@ -174,8 +174,13 @@ export function decodeSession(value) {
     || (value.authenticated
       ? typeof value.user?.displayName !== "string" || !Array.isArray(value.user.roles)
         || value.user.roles.length !== 1 || !["COUPLE", "OPERATOR"].includes(value.user.roles[0])
-      : value.user !== null)) throw contractMismatch();
-  return value;
+      : value.user !== null)
+    || (value.passwordChangeRequired !== undefined && typeof value.passwordChangeRequired !== "boolean")
+    || (value.passwordChangeRequired === true
+      && (!value.authenticated || value.user.roles[0] !== "COUPLE"))) throw contractMismatch();
+  // Older servers did not send this flag. An explicit pending response always
+  // takes precedence over authenticated archive presentation.
+  return { ...value, passwordChangeRequired: value.passwordChangeRequired ?? false };
 }
 
 export function decodeMemory(value) {

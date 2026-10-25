@@ -93,6 +93,37 @@ class OperationsReadinessPostgresTest {
         assertThat(new OperationsReadiness(observations, gates(79, 79)).inspect().status()).isEqualTo(OperationsReadiness.Status.ACTION_REQUIRED);
     }
 
+    @Test void v15PendingPasswordAccountsRemainPrivateAndDoNotAlterArchiveReadiness() {
+        db.sql("""
+                INSERT INTO archive_account(username,display_name,password_hash,role,enabled,password_change_required)
+                VALUES('synthetic-couple',:private,:private,'COUPLE',true,true)
+                """).param("private", PRIVATE).update();
+        var result = new OperationsReadiness(observations, gates(100, 100)).inspect();
+        assertThat(result.schema()).isEqualTo(OperationsReadiness.Schema.REVIEWED);
+        assertThat(result.status()).isEqualTo(OperationsReadiness.Status.OBSERVED_CHECKS_PASS);
+        var output = new ByteArrayOutputStream();
+        ReadinessAdministration.print(result, new PrintStream(output, true, StandardCharsets.UTF_8));
+        assertThat(output.toString(StandardCharsets.UTF_8))
+                .doesNotContain(PRIVATE, "synthetic-couple", "password_change_required", "password_hash");
+        assertThat(db.sql("SELECT password_change_required FROM archive_account WHERE username='synthetic-couple'")
+                .query(Boolean.class).single()).isTrue();
+    }
+
+    @Test void v15AccountFlagRequiresExactBooleanTypeAndNonNullability() {
+        db.sql("ALTER TABLE archive_account ALTER COLUMN password_change_required DROP NOT NULL").update();
+        assertUnreviewed();
+        db.sql("ALTER TABLE archive_account ALTER COLUMN password_change_required SET NOT NULL").update();
+        db.sql("ALTER TABLE archive_account ALTER COLUMN password_change_required DROP DEFAULT").update();
+        db.sql("ALTER TABLE archive_account ALTER COLUMN password_change_required TYPE TEXT USING password_change_required::text")
+                .update();
+        assertUnreviewed();
+        db.sql("ALTER TABLE archive_account ALTER COLUMN password_change_required TYPE BOOLEAN USING password_change_required::boolean")
+                .update();
+        db.sql("ALTER TABLE archive_account ALTER COLUMN password_change_required SET DEFAULT FALSE").update();
+        assertThat(new OperationsReadiness(observations, gates(100, 100)).inspect().schema())
+                .isEqualTo(OperationsReadiness.Schema.REVIEWED);
+    }
+
     @Test void readOnlyTransactionMechanicallyRejectsWritesAndBoundsSlowQueries() throws Exception {
         try (var connection = observations.getConnection()) {
             OperationsReadiness.readOnly(connection);

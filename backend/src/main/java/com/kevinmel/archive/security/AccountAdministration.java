@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.Arrays;
 import java.util.Properties;
+import java.security.SecureRandom;
 
 import org.springframework.boot.logging.LogLevel;
 import org.springframework.boot.logging.LoggingSystem;
@@ -76,6 +77,8 @@ public final class AccountAdministration {
             console.printf("Account command: %s%n", confirmation);
             if (command.action().equals(CREATE_COMMAND)) {
                 console.printf("Role: %s. New accounts are disabled until a separate enable command.%n", command.role());
+            } else if (command.action().equals("create-temporary")) {
+                console.printf("Role: COUPLE. This account will be enabled and must change its temporary password before archive access.%n");
             }
             String answer = console.readLine("Type '%s' to continue: ", confirmation);
             if (!confirmation.equals(answer)) {
@@ -98,10 +101,33 @@ public final class AccountAdministration {
     private static void applyCommand(Console console, AccountAdministrationStore store, Command command) {
         switch (command.action()) {
             case CREATE_COMMAND, "reset-password" -> writePassword(console, store, command);
+            case "create-temporary" -> createTemporary(console, store, command.username(), command.displayName());
             case "enable" -> store.setEnabled(command.username(), true);
             case "disable" -> store.setEnabled(command.username(), false);
             default -> throw new RejectedOperation("Unsupported account command.");
         }
+    }
+
+    static void createTemporary(Console console, AccountAdministrationStore store, String username, String displayName) {
+        char[] password = temporaryPassword(new SecureRandom());
+        try {
+            store.createTemporary(username, displayName, password);
+            // The transaction has committed. Never send this through stdout, stderr, logging, or a file.
+            console.writer().printf("Temporary password for %s: ", username);
+            console.writer().println(password);
+            console.writer().flush();
+            if (console.writer().checkError()) throw new RejectedOperation(
+                    "The account was created, but console delivery was not confirmed. Do not retry creation; use console recovery.");
+        } finally {
+            Arrays.fill(password, '\0');
+        }
+    }
+
+    static char[] temporaryPassword(SecureRandom random) {
+        String alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+        char[] value = new char[32];
+        for (int i = 0; i < value.length; i++) value[i] = alphabet.charAt(random.nextInt(alphabet.length()));
+        return value;
     }
 
     private static void writePassword(Console console, AccountAdministrationStore store, Command command) {
@@ -143,13 +169,18 @@ public final class AccountAdministration {
                 }
                 yield new Command(expectedEnvironment, action, username, args[4], Role.parse(args[5]));
             }
+            case "create-temporary" -> {
+                if (args.length != 5) throw new RejectedOperation(
+                        "create-temporary requires only username and display name; a temporary password is generated internally.");
+                yield new Command(expectedEnvironment, action, username, args[4], Role.COUPLE);
+            }
             case "reset-password", "enable", "disable" -> {
                 if (args.length != 4) {
                     throw new RejectedOperation("This command requires only the username; passwords are read only from the console.");
                 }
                 yield new Command(expectedEnvironment, action, username, null, null);
             }
-            default -> throw new RejectedOperation("Supported commands: create, reset-password, enable, disable.");
+            default -> throw new RejectedOperation("Supported commands: create, create-temporary, reset-password, enable, disable.");
         };
     }
 
@@ -170,10 +201,13 @@ public final class AccountAdministration {
         System.out.println("""
                 Console-only account administration (no HTTP endpoints):
                   --expect-environment <local|staging|production> create <username> <display-name> <COUPLE|OPERATOR|DEVELOPER>
+                  --expect-environment <local|staging|production> create-temporary <username> <display-name>
                   --expect-environment <local|staging|production> reset-password <username>
                   --expect-environment <local|staging|production> enable <username>
                   --expect-environment <local|staging|production> disable <username>
                 Passwords are accepted only through hidden console prompts. New accounts are disabled.
+                create-temporary generates a COUPLE password, displays it only after commit on the real console,
+                and enables the account with archive access blocked until the first password change.
                 Use the account-access runbook to configure the target and reveal gate.
                 """);
     }

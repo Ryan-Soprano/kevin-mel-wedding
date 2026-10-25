@@ -200,6 +200,12 @@ export function useInboxController(createController) {
     void controller.current?.logout();
   }
 
+  function changePassword(credentials) {
+    beforeAction();
+    updatePages([null]);
+    return controller.current?.changePassword(credentials);
+  }
+
   function retryAccess() {
     if (snapshot.logoutUnconfirmed) {
       logout();
@@ -248,7 +254,7 @@ export function useInboxController(createController) {
     heading, audioPlayback: setAudioPlayback, deleteButton, cancelDelete, reviewFeedback,
     view: {
       snapshot, actions, reviewLocked, setDialogState, setCreationState, navigationNotice,
-      logout, retryAccess, pages, filter, nextPage, previousPage,
+      logout, changePassword, retryAccess, pages, filter, nextPage, previousPage,
       loginForm: { username, password, setUsername, setPassword, onSubmit: login },
       reviewControls: { confirmingDelete, change: changeReview, beginDelete, cancel: cancelConfirmation },
     },

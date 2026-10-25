@@ -28,14 +28,17 @@ public class SessionService {
     private final SessionAuthenticationStrategy sessionStrategy;
     private final ArchiveAccessPolicy policy;
     private final LoginThrottle throttle;
+    private final AccountPasswordService passwords;
 
     public SessionService(AuthenticationManager authenticationManager, SecurityContextRepository contexts,
-            SessionAuthenticationStrategy sessionStrategy, ArchiveAccessPolicy policy, LoginThrottle throttle) {
+            SessionAuthenticationStrategy sessionStrategy, ArchiveAccessPolicy policy, LoginThrottle throttle,
+            AccountPasswordService passwords) {
         this.authenticationManager = authenticationManager;
         this.contexts = contexts;
         this.sessionStrategy = sessionStrategy;
         this.policy = policy;
         this.throttle = throttle;
+        this.passwords = passwords;
     }
 
     public static void requireContract(String version) {
@@ -46,12 +49,13 @@ public class SessionService {
         var authentication = SecurityContextHolder.getContext().getAuthentication();
         SessionUser user = null;
         if (authentication != null && authentication.getPrincipal() instanceof ArchivePrincipal principal) {
-            if (!policy.allows(authentication)) throw unavailable();
+            if (!policy.allowsSession(authentication)) throw unavailable();
             user = new SessionUser(principal.getDisplayName(), principal.getAuthorities().stream()
                     .map(authority -> authority.getAuthority().substring("ROLE_".length())).toList());
         }
         var token = (CsrfToken) request.getAttribute(CsrfToken.class.getName());
-        return new SessionResponse(user != null, user, token.getToken());
+        boolean required = user != null && ((ArchivePrincipal) authentication.getPrincipal()).isPasswordChangeRequired();
+        return new SessionResponse(user != null, user, token.getToken(), required);
     }
 
     public SessionResponse login(Map<String, Object> body, HttpServletRequest request, HttpServletResponse response) {
@@ -66,7 +70,7 @@ public class SessionService {
         var input = UsernamePasswordAuthenticationToken.unauthenticated(username, suppliedPassword);
         try {
             var authenticated = authenticationManager.authenticate(input);
-            if (!policy.allows(authenticated)) {
+            if (!policy.allowsSession(authenticated)) {
                 throw unavailable();
             }
             sessionStrategy.onAuthentication(authenticated, request, response);
@@ -82,6 +86,32 @@ public class SessionService {
         } finally {
             input.eraseCredentials();
         }
+    }
+
+    public SessionResponse changePassword(Map<String, Object> body, HttpServletRequest request, HttpServletResponse response) {
+        policy.requireSameOrigin(request);
+        var authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !(authentication.getPrincipal() instanceof ArchivePrincipal principal)
+                || !policy.allowsSession(authentication)) {
+            throw new ApiException(401, "AUTH_REQUIRED", "Please sign in before changing your password.");
+        }
+        if (body == null || !body.keySet().equals(Set.of("currentPassword", "newPassword"))
+                || !(body.get("currentPassword") instanceof String currentPassword)
+                || !(body.get("newPassword") instanceof String newPassword)) {
+            throw new ApiException(400, "VALIDATION_FAILED", "Supply your current and new passwords.");
+        }
+        AccountPasswordService.validateNewPassword(newPassword);
+        throttle.reserve(principal.getUsername(), request, response);
+        ArchiveAccount updated = passwords.change(principal, currentPassword, newPassword);
+        var newPrincipal = new ArchivePrincipal(updated);
+        var authenticated = UsernamePasswordAuthenticationToken.authenticated(newPrincipal, null, newPrincipal.getAuthorities());
+        authenticated.eraseCredentials();
+        sessionStrategy.onAuthentication(authenticated, request, response);
+        var context = SecurityContextHolder.createEmptyContext();
+        context.setAuthentication(authenticated);
+        SecurityContextHolder.setContext(context);
+        contexts.saveContext(context, request, response);
+        return current(request);
     }
 
     private static String normalizedUsername(String suppliedUsername, String suppliedPassword) {
@@ -113,6 +143,6 @@ public class SessionService {
         return new ApiException(403, "ARCHIVE_UNAVAILABLE", "Archive access is unavailable.");
     }
 
-    public record SessionResponse(boolean authenticated, SessionUser user, String csrfToken) {}
+    public record SessionResponse(boolean authenticated, SessionUser user, String csrfToken, boolean passwordChangeRequired) {}
     public record SessionUser(String displayName, List<String> roles) {}
 }

@@ -18,6 +18,7 @@ public final class ArchivePrincipal extends User {
     private final UUID accountId;
     private final String displayName;
     private final long credentialsVersion;
+    private final boolean passwordChangeRequired;
 
     public ArchivePrincipal(ArchiveAccount account) {
         super(
@@ -31,6 +32,7 @@ public final class ArchivePrincipal extends User {
         this.accountId = account.id();
         this.displayName = account.displayName();
         this.credentialsVersion = account.credentialsVersion();
+        this.passwordChangeRequired = account.passwordChangeRequired();
     }
 
     public UUID getAccountId() {
@@ -44,4 +46,6 @@ public final class ArchivePrincipal extends User {
     public long getCredentialsVersion() {
         return credentialsVersion;
     }
+
+    public boolean isPasswordChangeRequired() { return passwordChangeRequired; }
 }

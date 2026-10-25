@@ -40,7 +40,7 @@ public final class RecoveryAdministration {
         if (isHelpRequest(args)) {
             System.out.println(
                     """
-                            Offline note/photo/audio/album/timeline/tag archive-data export and restore (reviewed V8 through V14 migrations required):
+                            Offline note/photo/audio/album/timeline/tag archive-data export and restore (reviewed V8 through V15 migrations required; accounts excluded):
                               --expect-environment <local|staging|production> export <new-private-directory>
                               --expect-environment <local|staging|production> restore <private-backup-directory>
                             An interactive console and exact confirmation are required. Stop source/target traffic,

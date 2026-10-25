@@ -77,7 +77,7 @@ import tools.jackson.databind.ObjectMapper;
 @WebMvcTest(controllers = {HealthController.class, SessionController.class, PlaybackController.class}, properties = {
         "archive.environment=local", "archive.revealed=true"})
 @Import({SecurityConfiguration.class, ArchiveAuthenticationConfiguration.class,
-        ArchiveUserDetailsService.class, SessionService.class, ArchiveAccessPolicy.class,
+        ArchiveUserDetailsService.class, SessionService.class, AccountPasswordService.class, ArchiveAccessPolicy.class,
         LoginThrottle.class, SecurityErrorWriter.class, ArchiveAuthorization.class, PlaybackService.class,
         SessionHttpTest.ServletLifecycle.class})
 class SessionHttpTest {
@@ -228,7 +228,8 @@ class SessionHttpTest {
         Map<String, Object> document = JsonPath.read(result.getResponse().getContentAsString(), "$");
         Map<String, Object> user = JsonPath.read(result.getResponse().getContentAsString(), "$.user");
         List<String> roles = JsonPath.read(result.getResponse().getContentAsString(), "$.user.roles");
-        assertThat(document.keySet()).containsExactlyInAnyOrder("authenticated", "user", "csrfToken");
+        assertThat(document.keySet()).containsExactlyInAnyOrder("authenticated", "user", "csrfToken", "passwordChangeRequired");
+        assertThat(document.get("passwordChangeRequired")).isEqualTo(false);
         assertThat(user.keySet()).containsExactlyInAnyOrder("displayName", "roles");
         assertThat(roles).containsExactly("COUPLE");
         assertThat(result.getResponse().getContentAsString())
@@ -1040,4 +1041,87 @@ class SessionHttpTest {
 
     private record SessionState(MockHttpSession session, String token, String rawToken) {}
     private record ArchiveRoute(String path, boolean review) {}
+
+    @Test
+    void temporaryLoginReturnsIdentityButBlocksEveryArchiveFamilyAndServiceBoundary() throws Exception {
+        pendingAccount();
+        var pending = state(login(anonymous(), USERNAME, PASSWORD).andExpect(status().isOk())
+                .andExpect(jsonPath("$.authenticated").value(true))
+                .andExpect(jsonPath("$.passwordChangeRequired").value(true))
+                .andExpect(jsonPath("$.user.roles[0]").value("COUPLE")).andReturn());
+        mvc.perform(get("/api/session").session(pending.session()).header("X-Api-Contract", "1"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.passwordChangeRequired").value(true));
+        for (String path : List.of("/api/memories", "/api/memories/" + MEMORY_ID + "/playback",
+                "/api/albums", "/api/timeline", "/api/library", "/api/tags", "/api/exports")) {
+            error(mvc.perform(get(path).session(pending.session())), 403, "PASSWORD_CHANGE_REQUIRED");
+        }
+        var principal = new ArchivePrincipal(couple);
+        directGuardDenies(UsernamePasswordAuthenticationToken.authenticated(principal, null, principal.getAuthorities()),
+                403, "PASSWORD_CHANGE_REQUIRED");
+    }
+
+    @Test
+    void passwordChangeRotatesIdentityAndCsrfAndInvalidatesAnotherSessionIncludingChildRoute() throws Exception {
+        pendingAccount();
+        var oldOtherSession = existingSession(couple);
+        var pending = state(login(anonymous(), USERNAME, PASSWORD).andExpect(status().isOk()).andReturn());
+        String oldId = pending.session().getId();
+        when(accounts.replacePassword(any(UUID.class), org.mockito.ArgumentMatchers.eq(1L), anyString()))
+                .thenAnswer(invocation -> {
+                    couple = new ArchiveAccount(ACCOUNT_ID, USERNAME, "Synthetic Couple", invocation.getArgument(2),
+                            "COUPLE", true, 2, false);
+                    store(couple);
+                    return true;
+                });
+        var changed = state(changePassword(pending, PASSWORD, "new-synthetic-passphrase-42")
+                .andExpect(status().isOk()).andExpect(jsonPath("$.passwordChangeRequired").value(false))
+                .andExpect(jsonPath("$.authenticated").value(true)).andReturn());
+        assertThat(changed.session().getId()).isNotEqualTo(oldId);
+        assertThat(changed.rawToken()).isNotEqualTo(pending.rawToken());
+        assertThat(encoder.matches("new-synthetic-passphrase-42", couple.passwordHash())).isTrue();
+        mvc.perform(get("/api/memories").session(changed.session())).andExpect(status().isNotFound());
+        error(mvc.perform(post("/api/session/password").session(oldOtherSession)
+                .header("X-Api-Contract", "1").contentType(MediaType.APPLICATION_JSON)
+                .content("{}")), 401, "AUTH_REQUIRED");
+        assertThat(oldOtherSession.isInvalid()).isTrue();
+        error(mvc.perform(contract(mutation(post("/api/session/password"), changed, pending.token(), ORIGIN), "1")
+                .contentType(MediaType.APPLICATION_JSON).content("{}")), 403, "CSRF_INVALID");
+    }
+
+    @Test
+    void passwordEndpointRequiresContractOriginCsrfAndThrottlesWrongCurrentPassword() throws Exception {
+        pendingAccount();
+        var pending = state(login(anonymous(), USERNAME, PASSWORD).andExpect(status().isOk()).andReturn());
+        error(changePassword(pending, "wrong-synthetic-current", "new-synthetic-passphrase"), 401, "INVALID_CREDENTIALS");
+        error(changePassword(pending, PASSWORD, PASSWORD), 400, "VALIDATION_FAILED");
+        for (String invalid : List.of("short", "😀".repeat(14), "😀".repeat(19), "valid-length-xx\0")) {
+            error(changePassword(pending, PASSWORD, invalid), 400, "VALIDATION_FAILED");
+        }
+        error(mvc.perform(contract(mutation(post("/api/session/password"), pending, pending.token(), ORIGIN), "1")
+                .contentType(MediaType.APPLICATION_JSON).content("{\"currentPassword\":\"" + PASSWORD
+                        + "\",\"newPassword\":\"valid-length-xx\\ud800\"}")), 400, "VALIDATION_FAILED");
+        String body = mapper.writeValueAsString(Map.of("currentPassword", PASSWORD, "newPassword", "new-synthetic-passphrase"));
+        error(mvc.perform(mutation(post("/api/session/password"), pending, pending.token(), ORIGIN)
+                .contentType(MediaType.APPLICATION_JSON).content(body)), 400, "UNSUPPORTED_CONTRACT");
+        error(mvc.perform(contract(mutation(post("/api/session/password"), pending, null, ORIGIN), "1")
+                .contentType(MediaType.APPLICATION_JSON).content(body)), 403, "CSRF_INVALID");
+        error(mvc.perform(contract(mutation(post("/api/session/password"), pending, pending.token(), "https://other.example"), "1")
+                .contentType(MediaType.APPLICATION_JSON).content(body)), 403, "ORIGIN_INVALID");
+        when(throttles.reserve(anyList())).thenReturn(false);
+        error(changePassword(pending, PASSWORD, "new-synthetic-passphrase"), 429, "RATE_LIMITED");
+        verify(accounts, never()).replacePassword(any(UUID.class), org.mockito.ArgumentMatchers.anyLong(), anyString());
+    }
+
+    private void pendingAccount() {
+        couple = new ArchiveAccount(ACCOUNT_ID, USERNAME, "Synthetic Couple", encoder.encode(PASSWORD),
+                "COUPLE", true, 1, true);
+        store(couple);
+        when(accounts.findByIdForUpdate(ACCOUNT_ID)).thenReturn(Optional.of(couple));
+    }
+
+    private ResultActions changePassword(SessionState state, String current, String replacement) throws Exception {
+        return mvc.perform(contract(mutation(post("/api/session/password"), state, state.token(), ORIGIN), "1")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(mapper.writeValueAsString(Map.of("currentPassword", current, "newPassword", replacement))));
+    }
 }

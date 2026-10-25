@@ -11,7 +11,7 @@ MSG-01 implements durable text POST and key-bound text receipt GET, and the wedd
 
 MED-01 implements PHOTO intents (one to five), capability-bound grants/finalization, and generic receipt GET. The active guest/private forms use the MED-02 batch coordinator; the retired single-photo form and its unused coordinator have been removed. Storage is opt-in and requires a private R2 bucket configured by Ryan. Desktop PNG operator comparison/restart/replay and scripted real-R2 JPEG/WebP upload, recovery and grant checks are verified; physical-phone, additional operator comparison and bucket-settings acceptance are pending. See [text verification](text-verification.md), [photo verification](photo-verification.md), and the [R2 runbook](../../runbooks/private-photo-storage.md).
 
-AUTH-01 implements GET/POST/DELETE `/api/session` with Spring Security server-side sessions, PostgreSQL accounts, bcrypt password hashes, CSRF/session rotation, durable login throttling, credential-version revocation, and reveal/role gates. Provisioning and recovery use a separate console utility. See [AUTH-01 verification](auth-verification.md) and the [account-access runbook](../../runbooks/account-access.md).
+AUTH-01 implements GET/POST/DELETE `/api/session` and authenticated POST `/api/session/password` with Spring Security server-side sessions, PostgreSQL accounts, bcrypt password hashes, CSRF/session rotation, durable credential throttling, credential-version revocation, and reveal/role gates. Temporary couple accounts must choose a new password before using the archive. Provisioning and forgotten-password recovery use a separate console utility. See [AUTH-01 verification](auth-verification.md) and the [account-access runbook](../../runbooks/account-access.md).
 
 AUTH-02 implements couple-authorized playback issuance, now extended to verified AUDIO by AUD-03. Every couple issuance rechecks current couple/reveal authority, authenticated private-object size/MIME and a single-object GET expiry of at most 300 seconds. The inbox supports notes, verified photos and verified audio, with conditional review and independent-ledger-backed retention. The [sharing contract](sharing.md) defines explicit audience choices and separate guest reads. Production onboarding and hosted acceptance remain release work. See [authorization verification](authorization-verification.md) and the [audio runbook](../../runbooks/voice-memories.md).
 
@@ -66,6 +66,7 @@ AUTH-01 implements session routes. AUTH-02/AUD-03 provide verified PHOTO/AUDIO p
 | POST `/api/contributions/{contributionId}/memories/{memoryId}/finalize` | 200 | Verify original and confirm durable item |
 | GET `/api/session` | 200 | Current session and CSRF token, including anonymous |
 | POST `/api/session` | 200 | Couple login; rotate session/CSRF token |
+| POST `/api/session/password` | 200 | Change the signed-in account's password and rotate session/CSRF token |
 | DELETE `/api/session` | 204 | Invalidate session and clear cookie; no body |
 | GET `/api/memories` | 200 | Couple-only paginated note/photo/audio inbox, including recoverable DELETE filter |
 | GET `/api/memories/{memoryId}` | 200 | Couple-only note/photo/audio detail, revision, and ETag |
@@ -233,16 +234,16 @@ The mock simulates verification; it never inspects real bytes or proves codec su
 
 ## Session and CSRF
 
-AUTH-01 implements this session contract on the server; the private login screen remains a later UI task.
+The private inbox implements this session contract and routes accounts with a temporary password to the required password-change screen before loading archive content.
 
 ANONYMOUS_SESSION / COUPLE_SESSION examples:
 
 ```json
-{"authenticated":false,"user":null,"csrfToken":"opaque-anonymous-csrf-token"}
+{"authenticated":false,"user":null,"csrfToken":"opaque-anonymous-csrf-token","passwordChangeRequired":false}
 ```
 
 ```json
-{"authenticated":true,"user":{"displayName":"Example Couple","roles":["COUPLE"]},"csrfToken":"opaque-rotated-csrf-token"}
+{"authenticated":true,"user":{"displayName":"Example Couple","roles":["COUPLE"]},"csrfToken":"opaque-rotated-csrf-token","passwordChangeRequired":false}
 ```
 
 Login body: `{"username":"…","password":"…"}`; never persist credentials. Login,
@@ -259,11 +260,15 @@ accepted for a valid login envelope.
 
 The session cookie is `MEMORY_ARCHIVE_SESSION`, `HttpOnly`, `SameSite=Lax`, and limited to cookie-based tracking with a 30-minute idle timeout. The production profile adds `Secure`. Production startup requires the production environment/profile to agree, an explicit HTTPS `archive.public-origin`, and an operator-supplied login-throttle secret of at least 32 UTF-8 bytes. Same-origin checks apply to login/logout, and the guest contribution routes retain their independent JSON/origin/retry-capability protections.
 
-Login accepts exactly string `username` and `password` fields. Unknown/disabled accounts and wrong passwords return the same 401 INVALID_CREDENTIALS; valid credentials without archive authority return 403 ARCHIVE_UNAVAILABLE. Enabled COUPLE identities require reveal, and production restricts them to `kevin` and `melanie`. The server-only `MEMORY_ARCHIVE_OPERATOR_ADMIN_USERNAME` setting defaults empty. When explicitly set, only that exact enabled OPERATOR account also receives full private archive access, independently of couple reveal; all other operators and all developers remain denied. Session `user.roles` contains the account's actual single `COUPLE` or `OPERATOR` role. No new role, schema migration, account-management API or anonymous authority is introduced. See the [account boundary and private provisioning procedure](../../runbooks/account-access.md#account-boundaries).
+Login accepts exactly string `username` and `password` fields. Unknown/disabled accounts and wrong passwords return the same 401 INVALID_CREDENTIALS; valid credentials without archive authority return 403 ARCHIVE_UNAVAILABLE. Enabled COUPLE identities require reveal, and production restricts them to `kevin` and `melanie`. The server-only `MEMORY_ARCHIVE_OPERATOR_ADMIN_USERNAME` setting defaults empty. When explicitly set, only that exact enabled OPERATOR account also receives full private archive access, independently of couple reveal; all other operators and all developers remain denied. Session `user.roles` contains the account's actual single `COUPLE` or `OPERATOR` role. This does not introduce a new role, public account-management API or anonymous authority. See the [account boundary and private provisioning procedure](../../runbooks/account-access.md#account-boundaries).
 
 Credential attempts, whether successful or unsuccessful, are capped at five per normalized username and thirty per direct peer address in fifteen minutes. PostgreSQL stores keyed digests and counters, which survive process restart and session rotation; old buckets are cleaned up after one day. A rejected reservation returns 429 RATE_LIMITED with `Retry-After: 900`. Malformed login bodies/credentials are rejected before credential verification. Caller-supplied forwarding headers do not determine the peer identity.
 
-Account recovery and every enable/disable command increment the stored credential version. An existing session with a stale version, a disabled/missing account, or changed identity/role is invalidated before private access. Signup, password reset, account enablement, and role changes have no public endpoints; use the [console-only runbook](../../runbooks/account-access.md). Application sessions are held by the server process and require a new login after process restart.
+An authenticated temporary-password session reports `passwordChangeRequired: true`. It can read its session, change its own password, or sign out; archive reads, playback, writes and background export authority remain denied until the password changes. This restriction is enforced by the server and survives refreshing the page. The couple reveal gate and enabled-account policy still apply to sign-in.
+
+`POST /api/session/password` accepts exactly `{"currentPassword":"…","newPassword":"…"}` with contract version 1, the current CSRF token and same-origin authority. The new password must contain at least 15 Unicode characters, fit within 72 UTF-8 bytes, be valid Unicode, and differ from the current password. Never trim or persist either value. A successful transaction replaces the hash, clears the required-change flag, increments the credential version and rotates the current session and CSRF token; older sessions and the old password stop working. Credential attempts share the durable throttle. After an uncertain network result, reconcile the session before another attempt; if it has expired, sign in deliberately with the new password. Do not automatically replay a password change.
+
+Account recovery and every enable/disable command also increment the stored credential version. An existing session with a stale version, a disabled/missing account, or changed identity/role is invalidated before private access. Signup, forgotten-password reset, account enablement, and role changes have no public endpoints; use the [console-only runbook](../../runbooks/account-access.md). Application sessions are held by the server process and require a new login after process restart. Flyway V15 adds the required-change flag with a false default, preserving existing accounts.
 
 The isolated preview uses deterministic synthetic tokens, not production secrets.
 Every successful mock login/logout issues a fresh token; tokens from earlier sessions

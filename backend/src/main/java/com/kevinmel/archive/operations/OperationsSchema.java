@@ -40,7 +40,8 @@ final class OperationsSchema {
             "V11__add_private_albums.sql",
             "V12__add_private_timeline.sql",
             "V13__add_private_library_tags.sql",
-            "V14__add_memory_sharing.sql"
+            "V14__add_memory_sharing.sql",
+            "V15__require_first_login_password_change.sql"
     );
     private static final Map<String, String> COLUMNS = Map.ofEntries(
             Map.entry(
@@ -89,7 +90,7 @@ final class OperationsSchema {
             ),
             Map.entry(
                     "archive_account",
-                    "id:uuid username:varchar display_name:varchar password_hash:varchar role:varchar enabled:bool credentials_version:int8 created_at:timestamptz updated_at:timestamptz"
+                    "id:uuid username:varchar display_name:varchar password_hash:varchar role:varchar enabled:bool credentials_version:int8 created_at:timestamptz updated_at:timestamptz password_change_required:bool"
             ),
             Map.entry(
                     "archive_login_throttle",

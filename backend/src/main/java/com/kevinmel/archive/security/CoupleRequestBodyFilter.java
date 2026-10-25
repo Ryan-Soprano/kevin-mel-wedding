@@ -58,7 +58,7 @@ public final class CoupleRequestBodyFilter extends OncePerRequestFilter {
     }
 
     static int bodyLimit(String method, String path) {
-        if (POST.equals(method) && "/api/session".equals(path)) {
+        if (POST.equals(method) && ("/api/session".equals(path) || "/api/session/password".equals(path))) {
             return 4_096;
         }
         if (emptySharedBody(method, path)) {

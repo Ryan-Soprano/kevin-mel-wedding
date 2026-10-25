@@ -31,7 +31,7 @@ public class SessionIdentityFilter extends OncePerRequestFilter {
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = path(request);
-        return !path.equals("/api/session") && !privatePath(path);
+        return !sessionPath(path) && !privatePath(path);
     }
 
     @Override
@@ -52,6 +52,9 @@ public class SessionIdentityFilter extends OncePerRequestFilter {
                         errors.write(request, response, 401, "AUTH_REQUIRED", "Please sign in to access the archive.");
                         return;
                     }
+                } else if (privatePath(path) && principal.isPasswordChangeRequired()) {
+                    errors.write(request, response, 403, "PASSWORD_CHANGE_REQUIRED", "Change your password before accessing the archive.");
+                    return;
                 } else if (privatePath(path) && !policy.allows(principal)) {
                     errors.write(request, response, 403, "ARCHIVE_UNAVAILABLE", "Archive access is unavailable.");
                     return;
@@ -73,6 +76,7 @@ public class SessionIdentityFilter extends OncePerRequestFilter {
         var current = accounts.findById(principal.getAccountId());
         return current.isPresent() && current.get().enabled()
                 && current.get().credentialsVersion() == principal.getCredentialsVersion()
+                && current.get().passwordChangeRequired() == principal.isPasswordChangeRequired()
                 && current.get().username().equals(principal.getUsername())
                 && principal.getAuthorities().stream().anyMatch(authority ->
                         authority.getAuthority().equals("ROLE_" + current.get().role()));
@@ -92,5 +96,8 @@ public class SessionIdentityFilter extends OncePerRequestFilter {
     private static boolean privatePath(String path) {
         return path.startsWith("/api/memories") || path.startsWith("/api/albums") || path.startsWith("/api/timeline")
                 || path.startsWith("/api/library") || path.startsWith("/api/tags") || path.startsWith("/api/exports");
+    }
+    private static boolean sessionPath(String path) {
+        return path.equals("/api/session") || path.startsWith("/api/session/");
     }
 }

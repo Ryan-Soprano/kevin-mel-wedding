@@ -10,7 +10,13 @@ public record ArchiveAccount(
     String passwordHash,
     String role,
     boolean enabled,
-    long credentialsVersion) {
+    long credentialsVersion,
+    boolean passwordChangeRequired) {
+
+    public ArchiveAccount(UUID id, String username, String displayName, String passwordHash,
+            String role, boolean enabled, long credentialsVersion) {
+        this(id, username, displayName, passwordHash, role, enabled, credentialsVersion, false);
+    }
 
     @Override
     public String toString() {

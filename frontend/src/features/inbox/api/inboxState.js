@@ -3,6 +3,8 @@ export const idlePhoto = () => Object.freeze({ phase: "idle", url: null, error: 
 export const idleReview = () => Object.freeze({ phase: "idle", targetStatus: null, error: null, canRetry: false });
 export const idleMetadata = () => Object.freeze({ phase: "idle", error: null, canRetry: false });
 export const idleShareLink = () => Object.freeze({ url: null, error: null });
+export const idlePasswordChange = () => Object.freeze({ phase: "idle" });
+export const hasArchiveAccess = session => Boolean(session?.authenticated && !session.passwordChangeRequired);
 
 export function frozenCopy(value) {
   if (Array.isArray(value)) return Object.freeze(value.map(frozenCopy));
@@ -15,5 +17,6 @@ export function frozenCopy(value) {
 export function sessionCopy(value) {
   // Only session contract fields enter presentation state, never credential echoes.
   return frozenCopy({ authenticated: value.authenticated, csrfToken: value.csrfToken,
+    passwordChangeRequired: value.passwordChangeRequired ?? false,
     user: value.user === null ? null : { displayName: value.user.displayName, roles: value.user.roles } });
 }

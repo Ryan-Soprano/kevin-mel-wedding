@@ -13,6 +13,7 @@ const PHASE_TITLES = Object.freeze({
   detail: "Your memory",
   create: "Add a memory",
   login: "Sign in to your archive",
+  "password-change": "Choose your password",
   unavailable: "Archive access unavailable",
 });
 
@@ -21,7 +22,7 @@ export function getInboxTitle(phase) {
 }
 
 export function isInboxAuthenticated(snapshot) {
-  return snapshot.session?.authenticated && AUTHENTICATED_PHASES.has(snapshot.phase);
+  return snapshot.session?.authenticated && !snapshot.session.passwordChangeRequired && AUTHENTICATED_PHASES.has(snapshot.phase);
 }
 
 export function isInboxLocked(snapshot) {

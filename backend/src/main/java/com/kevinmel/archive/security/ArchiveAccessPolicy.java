@@ -65,22 +65,31 @@ public class ArchiveAccessPolicy {
     }
 
     public boolean allows(ArchivePrincipal principal) {
+        return !principal.isPasswordChangeRequired() && allowsSession(principal);
+    }
+
+    public boolean allowsSession(ArchivePrincipal principal) {
         return principal.isEnabled() && principal.getAuthorities().stream().anyMatch(authority ->
                 "ROLE_COUPLE".equals(authority.getAuthority()) && allowsRole(principal.getUsername(), "COUPLE")
                 || "ROLE_OPERATOR".equals(authority.getAuthority()) && allowsRole(principal.getUsername(), "OPERATOR"));
     }
 
     public boolean allows(Authentication authentication) {
+        return allowsSession(authentication)
+                && !((ArchivePrincipal) authentication.getPrincipal()).isPasswordChangeRequired();
+    }
+
+    public boolean allowsSession(Authentication authentication) {
         return authentication != null && authentication.isAuthenticated()
                 && !(authentication instanceof AnonymousAuthenticationToken)
-                && authentication.getPrincipal() instanceof ArchivePrincipal principal && allows(principal)
+                && authentication.getPrincipal() instanceof ArchivePrincipal principal && allowsSession(principal)
                 && authentication.getAuthorities().stream().anyMatch(authority -> principal.getAuthorities().stream()
                         .anyMatch(current -> current.getAuthority().equals(authority.getAuthority())));
     }
 
     /** Fresh background authority uses the current account, without retaining a principal. */
     public boolean allows(ArchiveAccount account) {
-        return account.enabled() && allowsRole(account.username(), account.role());
+        return account.enabled() && !account.passwordChangeRequired() && allowsRole(account.username(), account.role());
     }
 
     private boolean allowsRole(String username, String role) {

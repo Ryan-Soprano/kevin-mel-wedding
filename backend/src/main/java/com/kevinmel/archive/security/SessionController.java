@@ -42,4 +42,12 @@ public class SessionController {
         service.logout(request, response);
         return ResponseEntity.noContent().build();
     }
+
+    @PostMapping(path = "/password", consumes = "application/json", produces = "application/json")
+    public SessionService.SessionResponse password(@RequestBody Map<String, Object> body,
+            @RequestHeader(value = "X-Api-Contract", required = false) String version,
+            HttpServletRequest request, HttpServletResponse response) {
+        SessionService.requireContract(version);
+        return service.changePassword(body, request, response);
+    }
 }
