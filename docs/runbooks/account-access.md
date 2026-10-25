@@ -12,13 +12,13 @@ The existing `MEMORY_ARCHIVE_REVEALED` name denotes the technical couple-access 
 | `OPERATOR` | Separate account; disabled on creation. The server's `MEMORY_ARCHIVE_OPERATOR_ADMIN_USERNAME` must name that exact account for private archive access. Default empty grants none. | Only the configured enabled operator may sign in and use the full private inbox, media, review/publication, organization, authoring and export APIs independently of couple reveal. All other operators remain denied. Infrastructure credentials remain separate. |
 | `DEVELOPER` | Local/staging only; production creation, recovery, and activation are rejected. | No couple login, moderation, or publication authority. |
 
-There is no public signup, password-reset, account-enablement, or role-management endpoint. The account utility cannot change a role or delete an account. Do not relabel Ryan or Kade as `COUPLE` to bypass authorization. The production usernames enforce separate identities; the utility cannot verify a person's identity on its own.
+There is no public signup, forgotten-password reset, account-enablement, or role-management endpoint. Signed-in accounts can change their own password through `/api/session/password`. The account utility cannot change a role or delete an account. Do not relabel Ryan or Kade as `COUPLE` to bypass authorization. The production usernames enforce separate identities; the utility cannot verify a person's identity on its own.
 
 For Ryan's explicitly authorized access, use a separate `OPERATOR` account such as `ryan-admin` and configure the same exact lowercase username in the running server. `archive.operator-admin-username` / `MEMORY_ARCHIVE_OPERATOR_ADMIN_USERNAME` defaults to empty; it is neither a wildcard nor a grant to all operators. An invalid/noncanonical setting refuses startup. `DEVELOPER` remains denied even when its username matches. This setting does not open the couple gate or provide account-management/provider endpoints. Sessions report the real `OPERATOR` role, not `COUPLE`; CSRF, same-origin, current-account and credential-version checks apply equally. Unsetting or changing the configured name removes that operator's private access on subsequent requests after the application restarts with the new configuration.
 
 Ryan's access uses the existing `create ryan-admin Ryan OPERATOR` and separate `enable ryan-admin` console operations, each with the verified target, `--expect-environment production` and its exact interactive confirmation. Follow the build/launch instructions below rather than copying a provider connection into command arguments. Supply the unique password only at the hidden console prompt; never put it in chat, source, flags, environment variables, files or redirected input. Account creation alone remains disabled, and enablement alone grants no archive access unless the running server names the same account. This document and the code change perform none of those live steps.
 
-New accounts are **disabled**. Enabling is a separate confirmed command. Password reset preserves the current enabled flag. Reset, enable, and disable each increment `credentials_version` and update `updated_at` in the same transaction; the web application rejects sessions with stale versions. Disable remains available before reveal and for accounts that violate current access policy.
+Ordinary `create` accounts are **disabled**; enabling remains a separate confirmed command. The explicit `create-temporary` couple-onboarding command instead creates an enabled account with `password_change_required=true`, permitting only session inspection, password change and sign-out until its owner chooses a new password. Existing accounts default to false and retain their current access. Password reset preserves the enabled flag and clears the required-change flag. Reset, password change, enable, and disable increment `credentials_version` and update `updated_at` in the same transaction; the web application rejects stale sessions. Disable remains available before reveal and for accounts that violate current access policy.
 
 ## Target configuration
 
@@ -122,8 +122,25 @@ Real-account provisioning is a separate hands-on operator action after the targe
 1. Ryan verifies the production target and its secure access path, confirms access timing with the couple, and explicitly enables the reveal/access setting for the approved application/utility configuration. Production must use HTTPS and the production session-cookie configuration before browser login.
 2. Use the reviewed utility with `--expect-environment production` to create `kevin` / `Kevin` / `COUPLE` and, separately, `melanie` / `Melanie` / `COUPLE`. Each person receives a distinct password. Keep both accounts disabled until the confidential handoff is ready.
 3. Establish the identity of the intended recipient directly. Handoff must use an agreed confidential channel; do not paste credentials into Git, Notion, tickets, logs, screenshots, shell arguments/history, or this chat. Do not send invitations or email as part of the utility.
-4. Enable each account with its own confirmed command. Have each person verify their own login through the application's couple login flow. If a temporary password was used, perform an owner-present console reset to their chosen secret before routine use; this version has no public self-service password-change page.
-5. Confirm Ryan/operator and Kade/developer identities cannot use couple login or archive actions. Record only dated nonsecret evidence of onboarding in the issue tracker.
+4. For ordinary `create`, enable each account with its own confirmed command. For the temporary-password flow below, no separate enable is needed. Have each person verify their own sign-in and complete the required password change before archive use.
+5. Confirm only the configured named operator receives Ryan's separately authorized archive access; other operators and developers remain denied. Record only dated nonsecret evidence of onboarding.
+
+### Temporary passwords and first sign-in
+
+Apply the reviewed V15 application migration before using this flow. With the production target, HTTPS origin and reveal gate verified, invoke the packaged console utility separately for each person:
+
+```text
+--expect-environment production create-temporary kevin Kevin
+--expect-environment production create-temporary melanie Melanie
+```
+
+The role is implicitly `COUPLE`. The command requires an exact console confirmation, refuses an existing username without resetting it, and generates a distinct cryptographically random temporary password internally. After creation commits, it displays that password only in the real private console. Do not run this command through captured tool output, shell redirection, a transcript, screenshots or a shared terminal. Keep the private console available for Ryan to copy the credentials into the agreed confidential handoff; never put them in chat, source, command arguments, environment variables or files. An uncertain command result requires a metadata check before any further action.
+
+Each owner opens the private inbox, signs in with their own username and temporary password, then chooses a different password and repeats it. The new password must contain at least 15 Unicode characters and fit within 72 UTF-8 bytes. The temporary session cannot read memories, issue playback, make archive changes or authorize background exports. Successful password change clears the restriction, increments the credential version and rotates the current session and CSRF token. It invalidates other sessions and the temporary password. A page refresh before completion returns to the required-change screen.
+
+For a lost response, reconcile the session before trying again. If sign-in is required, try the newly chosen password deliberately; do not automatically replay a password change. Respect throttling. Forgotten-password recovery still uses the identity-verified console procedure below.
+
+Once enabled temporary accounts exist, do not roll back to a binary that ignores the required-change flag. Fix forward, or disable those accounts before a separately reviewed compatible recovery. V15 keeps the portable archive-data package at version 7 and excludes account credentials and flags; full database recovery must retain the new column.
 
 ## Recovery and suspected compromise
 
@@ -149,4 +166,4 @@ Run the backend checks, including `SessionHttpTest` and `RequestPeerCaptureTest`
 - Verify short, mismatched, malformed-Unicode, and over-72-byte passwords are rejected. Inspect only synthetic fixtures; never print the entered password or hash.
 - With a synthetic web login, verify password reset and disable/re-enable invalidate the earlier session and CSRF token; check the new password works and the old password fails.
 
-A safe operator status query selects metadata only: `username, display_name, role, enabled, credentials_version, created_at, updated_at` from `archive_account` for the relevant username. Do not select `password_hash` in routine diagnostics.
+A safe operator status query selects metadata only: `username, display_name, role, enabled, credentials_version, password_change_required, created_at, updated_at` from `archive_account` for the relevant username. Do not select `password_hash` in routine diagnostics.

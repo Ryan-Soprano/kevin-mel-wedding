@@ -600,7 +600,7 @@ class OperatorRecoveryPostgresTest {
                     tables.get("review_audit").get(0).has("before_visibility"),
                     tables.get("review_audit").get(0).has("after_visibility")
                 }).containsExactly(false, false);
-            for (int destination = migration; destination <= 14; destination++) {
+            for (int destination = migration; destination <= 15; destination++) {
                 target = schema(Integer.toString(destination));
                 targetStorage.objects.clear();
                 targetStorage.records.clear();
@@ -1182,6 +1182,90 @@ class OperatorRecoveryPostgresTest {
         assertThat(export(bundle).ready()).isTrue();
         assertThatThrownBy(() -> restore(bundle)).isInstanceOf(RecoveryException.class);
         assertEmptyTarget();
+    }
+
+    @Test
+    void accountOnlyV15KeepsVersionSevenWithItsExactFingerprintAndNeverExportsCredentials() throws Exception {
+        source = schema("15");
+        target = schema("15");
+        var oldSchema = schema("14");
+        source.db().sql("""
+                INSERT INTO archive_account(username,display_name,password_hash,role,enabled,password_change_required)
+                VALUES('synthetic-couple','Synthetic account','synthetic-credential-not-archive-data','COUPLE',true,true)
+                """).update();
+        var text = note(source, "Synthetic V15 archive note", null);
+        var batch = photos(source, sourceStorage, "UPLOADED");
+        var current = RecoverySchema.requireReviewed(source.db());
+        var previous = RecoverySchema.requireReviewed(oldSchema.db());
+        assertThat(current.bundleVersion()).isEqualTo(7);
+        assertThat(current.fingerprint()).isNotEqualTo(previous.fingerprint());
+        assertThat(current.accepts(7, previous.fingerprint())).isTrue();
+        assertThat(previous.accepts(7, current.fingerprint())).isFalse();
+
+        Path bundle = temporary.resolve("v15-account-only-v7");
+        assertThat(export(bundle).ready()).isTrue();
+        var manifest = JSON.readTree(Files.readAllBytes(bundle.resolve("manifest.json")));
+        assertThat(manifest.get("version").intValue()).isEqualTo(7);
+        assertThat(manifest.get("schemaFingerprint").asString()).isEqualTo(current.fingerprint());
+        assertThat(Files.readString(bundle.resolve("metadata.json"))).doesNotContain(
+                "archive_account", "password_change_required", "synthetic-credential-not-archive-data");
+        var restored = restore(bundle);
+        assertThat(restored.memories()).isEqualTo(2);
+        assertThat(restored.originals()).isEqualTo(1);
+        assertThat(string(target, "SELECT text_content FROM memory WHERE id=:id", text.memory()))
+                .isEqualTo(text.message());
+        assertThat(targetStorage.objects.get("originals/" + batch.assets().getFirst()))
+                .isEqualTo(batch.bytes().getFirst());
+        assertThat(target.db().sql("SELECT COUNT(*) FROM archive_account").query(Long.class).single()).isZero();
+    }
+
+    @Test
+    void legacyV14VersionSevenRestoresIntoV15WithAudiencesAndExactOriginals() throws Exception {
+        source = schema("14");
+        target = schema("15");
+        var text = note(source, "Synthetic legacy V7 audience", null);
+        var batch = photos(source, sourceStorage, "UPLOADED");
+        source.db().sql("UPDATE memory SET review_status='KEEP',visibility='FRIENDS_FAMILY' WHERE id=:id")
+                .param("id", text.memory()).update();
+        Path bundle = temporary.resolve("legacy-v7-to-v15");
+        assertThat(export(bundle).ready()).isTrue();
+        assertThat(restore(bundle).memories()).isEqualTo(2);
+        assertThat(string(target, "SELECT visibility FROM memory WHERE id=:id", text.memory()))
+                .isEqualTo("FRIENDS_FAMILY");
+        assertThat(targetStorage.objects.get("originals/" + batch.assets().getFirst()))
+                .isEqualTo(batch.bytes().getFirst());
+        assertThat(target.db().sql("SELECT COUNT(*) FROM archive_account").query(Long.class).single()).isZero();
+        assertThat(target.db().sql("SELECT COUNT(*) FROM memory_share_link").query(Long.class).single()).isZero();
+    }
+
+    @Test
+    void v15FingerprintRejectsOlderTargetsAndChangedV15HistoryBeforeRecoveryWrites() throws Exception {
+        source = schema("15");
+        target = schema("14");
+        photos(source, sourceStorage, "UPLOADED");
+        Path bundle = temporary.resolve("v15-requires-reviewed-v15");
+        assertThat(export(bundle).ready()).isTrue();
+        assertThatThrownBy(() -> restore(bundle)).isInstanceOf(RecoveryException.class);
+        assertEmptyTarget();
+        for (String field : List.of("checksum", "success", "script")) {
+            String change = switch (field) {
+                case "checksum" -> "checksum=checksum+1";
+                case "success" -> "success=false";
+                default -> "script='unreviewed-account-migration.sql'";
+            };
+            String restoreHistory = switch (field) {
+                case "checksum" -> "checksum=checksum-1";
+                case "success" -> "success=true";
+                default -> "script='V15__require_first_login_password_change.sql'";
+            };
+            source.db().sql("UPDATE flyway_schema_history SET " + change + " WHERE version='15'").update();
+            try {
+                assertThatThrownBy(() -> RecoverySchema.requireReviewed(source.db()))
+                        .as(field).isInstanceOf(RecoveryException.class);
+            } finally {
+                source.db().sql("UPDATE flyway_schema_history SET " + restoreHistory + " WHERE version='15'").update();
+            }
+        }
     }
 
     @Test
@@ -1908,7 +1992,7 @@ class OperatorRecoveryPostgresTest {
         var db = JdbcClient.create(data);
         var manager = new JdbcTransactionManager(data);
         var contributions = new ContributionRepository(db);
-        int version = migrationTarget == null ? 6 : Integer.parseInt(migrationTarget) - 7;
+        int version = migrationTarget == null ? 7 : Math.min(Integer.parseInt(migrationTarget), 14) - 7;
         return new Fixture(data, db, contributions, new PhotoRepository(db, contributions, fixed(NOW),
                 new PhotoAdmissionPolicy(false, 7_500_000_000L, 7_500_000_000L)),
                 new RetentionRepository(db, manager, version >= 3, version >= 4, version >= 5, version >= 6),

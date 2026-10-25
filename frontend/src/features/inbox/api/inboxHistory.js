@@ -86,7 +86,7 @@ export function attachInboxHistory({ controller, eventTarget = window, historyIm
   function write(method, value) { historyImpl[method](value, ""); }
   function sync(snapshot) {
     if (disposed) return;
-    if (!snapshot.session?.authenticated || ["checking", "login", "unavailable"].includes(snapshot.phase)) {
+    if (!snapshot.session?.authenticated || snapshot.session.passwordChangeRequired || ["checking", "login", "unavailable", "password-change"].includes(snapshot.phase)) {
       if (current || routes.size || restoring) clear();
       return;
     }

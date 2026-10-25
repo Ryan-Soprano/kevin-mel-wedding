@@ -88,6 +88,8 @@ public class SecurityConfiguration {
                         "/api/contributions/*/memories/*/upload-grants", "/api/contributions/*/memories/*/finalize",
                         "/api/contributions/*/memories/*/upload-failures").permitAll()
                 .requestMatchers(HttpMethod.DELETE, SESSION_ENDPOINT).permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/session/password")
+                    .access((authentication, request) -> new AuthorizationDecision(policy.allowsSession(authentication.get())))
                 .requestMatchers(HttpMethod.GET, "/", "/index.html", "/assets/**", "/favicon.ico").permitAll()
                 .requestMatchers(HttpMethod.GET, "/shared/*").permitAll()
                 .requestMatchers("/api/memories", "/api/memories/**", "/api/albums", "/api/albums/**", "/api/timeline", "/api/timeline/**", "/api/library", "/api/library/**", "/api/tags", "/api/tags/**", "/api/exports", "/api/exports/**")

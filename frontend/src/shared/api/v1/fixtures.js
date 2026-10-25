@@ -123,9 +123,10 @@ export const MEDIA_DETAIL = {
     uploadState: "UPLOADED",
   },
 };
-export const ANONYMOUS_SESSION = { authenticated: false, user: null, csrfToken: CSRF_TOKEN };
+export const ANONYMOUS_SESSION = { authenticated: false, passwordChangeRequired: false, user: null, csrfToken: CSRF_TOKEN };
 export const COUPLE_SESSION = {
   authenticated: true,
+  passwordChangeRequired: false,
   user: { displayName: "Example Couple", roles: ["COUPLE"] },
   csrfToken: "synthetic-rotated-csrf-token-after-login",
 };

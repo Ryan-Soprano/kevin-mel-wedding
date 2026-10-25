@@ -1,6 +1,7 @@
 import { createArchiveApi } from "../../../shared/api/archiveApi.js";
 import { ApiError } from "../../../shared/api/apiClient.js";
-import { EMPTY_ITEMS, idlePhoto, idleReview, idleMetadata, idleShareLink, frozenCopy, sessionCopy } from "./inboxState.js";
+import { EMPTY_ITEMS, idlePhoto, idleReview, idleMetadata, idleShareLink, idlePasswordChange, hasArchiveAccess, frozenCopy, sessionCopy } from "./inboxState.js";
+import { passwordChangeValidation } from "../passwordChange.js";
 import { createInboxMedia, photoMessage, sha256 } from "./inboxMedia.js";
 import { createMemoryMutationActions } from "./memoryMutationActions.js";
 import { createCoupleSubmissionApi } from "./coupleSubmissionApi.js";
@@ -13,13 +14,14 @@ import { createExportActions, initialExport } from "../../export/api/exportActio
 const interrupted = () => new ApiError("The request was cancelled.", { code: "REQUEST_ABORTED" });
 const LOGIN_RATE_LIMITED = "Too many sign-in attempts.";
 const LOGIN_READY = "You can try signing in again.";
+const PASSWORD_RATE_LIMITED = "Too many password-change attempts.";
 
 /**
  * A private, in-memory presentation controller. Latest intent owns every result;
  * deadlines include body reads and decoding, even when a transport ignores abort.
  */
 export function createInboxController({
-  api = createArchiveApi(), fetchImpl = globalThis.fetch,
+  api: suppliedApi = createArchiveApi(), fetchImpl = globalThis.fetch,
   createObjectURL = blob => URL.createObjectURL(blob), revokeObjectURL = url => URL.revokeObjectURL(url),
   now = Date.now, digest = sha256, apiTimeoutMs = 30_000, photoTimeoutMs = 60_000,
   setTimeoutImpl = globalThis.setTimeout, clearTimeoutImpl = globalThis.clearTimeout,
@@ -29,11 +31,26 @@ export function createInboxController({
     reviewStatus: "PENDING", items: EMPTY_ITEMS, nextCursor: null, detail: null, requestedMemoryId: null,
     photo: idlePhoto(), review: idleReview(), shareLink: idleShareLink(), metadata: idleMetadata(), albums: initialAlbums(), albumReturnId: null,
     timeline: initialTimeline(), timelineReturnId: null, library: initialLibrary(), libraryReturn: false,
-    tags: initialTags(), tagReturnId: null, export: initialExport(), notice: null, pageResetVersion: 0, logoutUnconfirmed: false });
+    tags: initialTags(), tagReturnId: null, export: initialExport(), notice: null, pageResetVersion: 0, logoutUnconfirmed: false,
+    passwordChange: idlePasswordChange() });
+  // Retained feature facades cannot issue archive requests after a refresh
+  // changes the account's required-password state.
+  const api = new Proxy({}, { get(_target, name) {
+    const method = suppliedApi[name];
+    if (typeof method !== "function") return method;
+    return (...args) => {
+      if (!["getSession", "login", "logout", "changePassword"].includes(name) && !hasArchiveAccess(state.session)) {
+        return Promise.reject(new ApiError("Archive access needs to be checked.", state.session?.authenticated
+          ? { status: 403, code: "PASSWORD_CHANGE_REQUIRED" } : { status: 401, code: "AUTH_REQUIRED" }));
+      }
+      return method.apply(suppliedApi, args);
+    };
+  } });
   let generation = 0, operation = null, disposed = false, cancelling = false, inboxDirty = false;
   let cancellingLogout = false;
   let loginRetryAt = 0, loginRetryTimer = null;
   let suspended = false, resuming = null, rechecking = null;
+  let passwordOutcomeUnknown = false;
   let notifying = false, notifyAgain = false, batchDepth = 0;
   const listeners = new Set();
 
@@ -58,7 +75,14 @@ export function createInboxController({
   function publish(patch) {
     if (disposed) return;
     const next = { ...state, ...patch };
-    next.requestedMemoryId = next.phase === "detail" && next.session?.authenticated
+    if (next.session?.passwordChangeRequired) {
+      revokePhoto();
+      Object.assign(next, { phase: "password-change", items: EMPTY_ITEMS, nextCursor: null, detail: null,
+        photo: idlePhoto(), review: idleReview(), metadata: idleMetadata(), shareLink: idleShareLink(),
+        albums: initialAlbums(), albumReturnId: null, timeline: initialTimeline(), timelineReturnId: null,
+        library: initialLibrary(), libraryReturn: false, tags: initialTags(), tagReturnId: null, export: initialExport() });
+    }
+    next.requestedMemoryId = next.phase === "detail" && hasArchiveAccess(next.session)
       ? next.detail?.memoryId ?? next.requestedMemoryId : null;
     if (next.shareLink.url && (next.detail?.memoryId !== next.shareLink.memoryId
       || next.detail?.revision !== next.shareLink.revision || next.detail?.visibility !== "FRIENDS_FAMILY")) next.shareLink = idleShareLink();
@@ -86,7 +110,8 @@ export function createInboxController({
     if (disposed) return;
     const remaining = remainingLoginWait();
     publish({ loginRetryAfterSeconds: remaining,
-      ...(remaining === 0 && state.error === LOGIN_RATE_LIMITED ? { error: LOGIN_READY } : {}) });
+      ...(remaining === 0 && [LOGIN_RATE_LIMITED, PASSWORD_RATE_LIMITED].includes(state.error)
+        ? { error: state.error === PASSWORD_RATE_LIMITED ? "You can try changing your password again." : LOGIN_READY } : {}) });
     if (remaining > 0 && !disposed) {
       loginRetryTimer = setTimeoutImpl(updateLoginWait, Math.min(1000, Math.max(1, loginRetryAt - now())));
       loginRetryTimer?.unref?.();
@@ -108,6 +133,7 @@ export function createInboxController({
     // Abort and resource cleanup can call back synchronously. Detach ownership
     // and block replacement intents until all of this cleanup has finished.
     const previousOperation = operation, previousCheck = rechecking;
+    if (previousOperation?.purpose === "password-change" && !previousOperation.passwordConfirmed) passwordOutcomeUnknown = true;
     operation = null;
     rechecking = null;
     cancelling = true;
@@ -172,10 +198,19 @@ export function createInboxController({
     library.clear(); tags.clear(); exports.clear();
     publish({ session: null, items: EMPTY_ITEMS, nextCursor: null, detail: null, photo: idlePhoto(),
       review: idleReview(), metadata: idleMetadata(), albums: initialAlbums(), albumReturnId: null,
-      timeline: initialTimeline(), timelineReturnId: null, library: initialLibrary(), libraryReturn: false, tags: initialTags(), tagReturnId: null, export: initialExport(), notice: null, ...patch });
+      timeline: initialTimeline(), timelineReturnId: null, library: initialLibrary(), libraryReturn: false, tags: initialTags(), tagReturnId: null, export: initialExport(), passwordChange: idlePasswordChange(), notice: null, ...patch });
+  }
+
+  function requirePassword(session, patch = {}) {
+    clearPrivate({ phase: "password-change", session,
+      passwordChange: Object.freeze({ phase: passwordOutcomeUnknown ? "uncertain" : "idle" }), ...patch });
   }
 
   function authFailure(failure) {
+    if (failure?.code === "PASSWORD_CHANGE_REQUIRED" && state.session?.authenticated) {
+      requirePassword(sessionCopy({ ...state.session, passwordChangeRequired: true }));
+      return true;
+    }
     if (failure?.status === 401) {
       clearPrivate({ phase: "login", error: failure.code === "INVALID_CREDENTIALS"
         ? "That username or password was not accepted."
@@ -335,6 +370,7 @@ export function createInboxController({
     },
     suspend() {
       if (disposed || (suspended && !resuming)) return state;
+      if (operation?.purpose === "password-change") passwordOutcomeUnknown = true;
       mutations.suspend();
       const logoutUnconfirmed = state.logoutUnconfirmed || operation?.purpose === "logout" || cancellingLogout;
       suspended = true;
@@ -362,10 +398,18 @@ export function createInboxController({
       const completion = run(op, async () => {
         const session = sessionCopy(await bounded(op, signal => api.getSession({ signal })));
         if (!session.authenticated) {
-          clearPrivate({ phase: "login", error: "Sign in again to view the archive." });
+          clearPrivate({ phase: "login", error: passwordOutcomeUnknown
+            ? "Sign in with your new password if the change completed. If it was not accepted, use your temporary password."
+            : "Sign in again to view the archive." });
           suspended = false;
           return;
         }
+        if (session.passwordChangeRequired) {
+          requirePassword(session);
+          suspended = false;
+          return;
+        }
+        passwordOutcomeUnknown = false;
         publish({ session });
         if (mutations.hasReview()) await mutations.resumeReview(op);
         else if (mutations.hasHiddenMetadata()) await mutations.resumeMetadata(op);
@@ -407,6 +451,13 @@ export function createInboxController({
             const owner = cancel();
             if (disposed || generation !== owner) return state;
             clearPrivate({ phase: "login", busy: false, error: "Your session has expired. Sign in again to view the archive." });
+          } else if (session.passwordChangeRequired) {
+            const owner = cancel();
+            if (disposed || generation !== owner) return state;
+            requirePassword(session, { busy: false });
+          } else if (state.phase === "password-change") {
+            publish({ session });
+            return controller.loadSession();
           } else publish({ session });
         } catch (failure) {
           if (!current(op)) return state;
@@ -430,7 +481,11 @@ export function createInboxController({
       const op = start({ phase: "checking", session: null, items: EMPTY_ITEMS, nextCursor: null, detail: null, notice: null });
       return run(op, async () => {
         const session = sessionCopy(await bounded(op, signal => api.getSession({ signal })));
-        publish({ session, phase: session.authenticated ? "inbox" : "login", reviewStatus: "PENDING" });
+        if (session.passwordChangeRequired) { requirePassword(session); return; }
+        if (session.authenticated) passwordOutcomeUnknown = false;
+        publish({ session, phase: session.authenticated ? "inbox" : "login", reviewStatus: "PENDING",
+          error: !session.authenticated && passwordOutcomeUnknown
+            ? "Sign in with your new password if the change completed. If it was not accepted, use your temporary password." : null });
         if (session.authenticated) await page(op, "PENDING", null);
       }, failure => {
         if (!authFailure(failure)) clearPrivate({ phase: "unavailable", error: "The archive could not be reached. Try checking access again." });
@@ -446,6 +501,8 @@ export function createInboxController({
         const session = sessionCopy(await bounded(op, signal => api.login(
           { username: credentials.username, password: credentials.password }, { csrfToken: fresh.csrfToken, signal })));
         if (!session.authenticated) throw new ApiError("Sign-in was not confirmed.", { code: "CONTRACT_MISMATCH" });
+        passwordOutcomeUnknown = false;
+        if (session.passwordChangeRequired) { requirePassword(session); return; }
         publish({ session, phase: "inbox", reviewStatus: "PENDING" });
         await page(op, "PENDING", null);
       }, failure => {
@@ -458,6 +515,48 @@ export function createInboxController({
         }
       });
     },
+    changePassword(credentials) {
+      if (disposed || cancelling || suspended || state.busy || passwordOutcomeUnknown || remainingLoginWait() > 0
+        || !state.session?.authenticated || !state.session.passwordChangeRequired) return Promise.resolve(state);
+      const validation = passwordChangeValidation({ ...credentials, repeatedPassword: credentials?.newPassword });
+      if (validation) { publish({ error: validation }); return Promise.resolve(state); }
+      const secret = { currentPassword: credentials.currentPassword, newPassword: credentials.newPassword };
+      let passwordConfirmed = false;
+      const previousToken = state.session.csrfToken;
+      const op = start({ passwordChange: Object.freeze({ phase: "saving" }) }, "password-change");
+      return run(op, async () => {
+        const session = sessionCopy(await bounded(op, signal => api.changePassword(
+          secret,
+          { csrfToken: previousToken, signal }), apiTimeoutMs, true));
+        if (!session.authenticated || session.passwordChangeRequired || session.csrfToken === previousToken) {
+          throw new ApiError("Password change was not confirmed.", { code: "CONTRACT_MISMATCH", unknownOutcome: true });
+        }
+        passwordConfirmed = true;
+        op.passwordConfirmed = true;
+        passwordOutcomeUnknown = false;
+        publish({ session, phase: "inbox", passwordChange: idlePasswordChange(), reviewStatus: "PENDING" });
+        await page(op, "PENDING", null);
+      }, failure => {
+        if (passwordConfirmed) {
+          if (!authFailure(failure)) publish({ phase: "inbox", error: "Your password was changed. Your inbox could not be loaded; try loading it again." });
+        } else if (failure?.unknownOutcome || failure?.code === "PASSWORD_CHANGE_CONFLICT") {
+          passwordOutcomeUnknown = true;
+          publish({ passwordChange: Object.freeze({ phase: "uncertain" }), error: null });
+        } else if (failure?.code === "INVALID_CREDENTIALS") {
+          publish({ passwordChange: idlePasswordChange(), error: "Your temporary password was not accepted. Enter your passwords again." });
+        } else if (failure?.code === "CSRF_INVALID") {
+          publish({ passwordChange: Object.freeze({ phase: "uncertain" }), error: "Your session needs to be checked before trying again." });
+          passwordOutcomeUnknown = true;
+        } else if (failure?.status === 429) {
+          waitAfterLoginFailure(failure.retryAfterSeconds);
+          publish({ passwordChange: idlePasswordChange(), error: PASSWORD_RATE_LIMITED });
+        } else if (failure?.code === "VALIDATION_FAILED") {
+          publish({ passwordChange: idlePasswordChange(), error: "That password could not be accepted. Check the password requirements and enter your passwords again." });
+        } else if (!authFailure(failure)) {
+          publish({ passwordChange: idlePasswordChange(), error: "Your password could not be changed. Enter your passwords again when you are ready." });
+        }
+      }).finally(() => { secret.currentPassword = ""; secret.newPassword = ""; });
+    },
     logout() {
       if (disposed || cancelling) return Promise.resolve(state);
       if (mutations.locked() || albums.locked() || timeline.locked() || tags.locked() || exports.locked()) return Promise.resolve(state);
@@ -469,6 +568,7 @@ export function createInboxController({
       return run(op, async () => {
         const fresh = await bounded(op, signal => api.getSession({ signal }));
         if (fresh.authenticated) await bounded(op, signal => api.logout({ csrfToken: fresh.csrfToken, signal }));
+        passwordOutcomeUnknown = false;
         clearPrivate({ phase: "login", error: null, logoutUnconfirmed: false });
       }, () => clearPrivate({ phase: "unavailable", logoutUnconfirmed: true,
         error: "Sign-out could not be confirmed. Private content is hidden here. Retry signing out before leaving a shared device." }));

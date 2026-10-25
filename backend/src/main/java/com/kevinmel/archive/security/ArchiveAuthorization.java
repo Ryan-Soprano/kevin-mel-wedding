@@ -22,6 +22,7 @@ public class ArchiveAuthorization {
                 || authentication instanceof AnonymousAuthenticationToken) throw authenticationRequired();
         if (!(authentication.getPrincipal() instanceof ArchivePrincipal principal)) throw unavailable();
         requireCurrentAccount(principal);
+        if (principal.isPasswordChangeRequired()) throw passwordChangeRequired();
         if (!policy.allows(authentication)) throw unavailable();
     }
 
@@ -29,6 +30,7 @@ public class ArchiveAuthorization {
         var account = accounts.findById(principal.getAccountId());
         if (account.isEmpty() || !account.get().enabled()
                 || account.get().credentialsVersion() != principal.getCredentialsVersion()
+                || account.get().passwordChangeRequired() != principal.isPasswordChangeRequired()
                 || !account.get().username().equals(principal.getUsername())
                 || principal.getAuthorities().stream().noneMatch(authority ->
                         authority.getAuthority().equals("ROLE_" + account.get().role()))) {
@@ -42,5 +44,9 @@ public class ArchiveAuthorization {
 
     private static ApiException unavailable() {
         return new ApiException(403, "ARCHIVE_UNAVAILABLE", "Archive access is unavailable.");
+    }
+
+    static ApiException passwordChangeRequired() {
+        return new ApiException(403, "PASSWORD_CHANGE_REQUIRED", "Change your password before accessing the archive.");
     }
 }

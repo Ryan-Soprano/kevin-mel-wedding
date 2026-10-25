@@ -12,7 +12,7 @@ test("inbox facade preserves its named export and ordered public methods", () =>
     linkTimelineMemory unlinkTimelineMemory showTimelineSelector openTimelineMemory timelinePage reloadTimelineMutation retryTimelineMutation
     loadAlbums openAlbum beginAlbumCreation createAlbum renameAlbum deleteAlbum addAlbumMember removeAlbumMember moveAlbumMember
     showAlbumSelector openAlbumMemory albumPage reloadAlbumMutation retryAlbumMutation getSnapshot subscribe beginCreation
-    getCreationApi creationComplete suspend resume recheckSession loadSession login logout loadInbox openMemory backToInbox
+    getCreationApi creationComplete suspend resume recheckSession loadSession login changePassword logout loadInbox openMemory backToInbox
     retryPhoto retryMedia createShareLink reviewMemory retryReview reloadReview refreshReviewSession saveMetadata retryMetadata reloadMetadata dispose`.split(/\s+/);
   const controller = inbox.createInboxController({ api: {} });
   try {
@@ -30,7 +30,7 @@ test("inbox lifecycle retains its public snapshot shape and stable snapshots aft
     const initial = controller.getSnapshot();
     assert.deepEqual(Object.keys(initial), `phase session busy error loginRetryAfterSeconds reviewStatus items nextCursor detail requestedMemoryId photo review shareLink
       metadata albums albumReturnId timeline timelineReturnId library libraryReturn tags tagReturnId export notice
-      pageResetVersion logoutUnconfirmed`.split(/\s+/));
+      pageResetVersion logoutUnconfirmed passwordChange`.split(/\s+/));
     assert.deepEqual(initial.photo, { phase: "idle", url: null, error: null });
     assert.deepEqual(initial.review, { phase: "idle", targetStatus: null, error: null, canRetry: false });
     assert.deepEqual(initial.metadata, { phase: "idle", error: null, canRetry: false });

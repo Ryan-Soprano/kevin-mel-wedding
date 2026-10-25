@@ -14,6 +14,18 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.User;
 
 class ArchiveAccessPolicyTest {
+    @Test void pendingCredentialsCanManageSessionButNeverGrantForegroundOrBackgroundArchiveAuthority() {
+        var pending = new ArchiveAccount(UUID.randomUUID(), "kevin", "Kevin", "{noop}unused", "COUPLE", true, 1, true);
+        var principal = new ArchivePrincipal(pending);
+        var authentication = UsernamePasswordAuthenticationToken.authenticated(principal, null, principal.getAuthorities());
+        var revealed = policy(true, "ryan-admin");
+        assertThat(revealed.allowsSession(authentication)).isTrue();
+        assertThat(revealed.allows(authentication)).isFalse();
+        assertThat(revealed.allows(pending)).isFalse();
+        assertThat(policy(false, "ryan-admin").allowsSession(authentication)).isFalse();
+        assertThat(new ArchiveAccount(pending.id(), pending.username(), pending.displayName(), pending.passwordHash(),
+                pending.role(), true, 1).passwordChangeRequired()).isFalse();
+    }
     @Test void operatorAccessIsOffByDefaultAndRequiresTheExactNamedOperator() {
         for (boolean reveal : List.of(false, true)) {
             var closed = policy(reveal, "");

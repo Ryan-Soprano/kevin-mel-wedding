@@ -109,7 +109,8 @@ final class RecoverySchema {
             "V11__add_private_albums.sql",
             "V12__add_private_timeline.sql",
             "V13__add_private_library_tags.sql",
-            "V14__add_memory_sharing.sql");
+            "V14__add_memory_sharing.sql",
+            "V15__require_first_login_password_change.sql");
 
     static Reviewed requireReviewed(JdbcClient db) {
         try {
@@ -132,16 +133,18 @@ final class RecoverySchema {
                 digest.update((byte) 0);
                 digest.update(canonical.getBytes(StandardCharsets.UTF_8));
                 digest.update((byte) 0);
-                if (i >= 7) {
+                if (i >= 7 && i <= 13) {
                     fingerprints.put(i - 6, HexFormat.of().formatHex(((MessageDigest) digest.clone()).digest()));
                 }
             }
-            int bundleVersion = history.size() - 7;
+            // V15 changes account credentials only. Accounts never enter a portable
+            // archive, so retain the V14 data format and its legacy import fingerprint.
+            int bundleVersion = Math.min(history.size(), 14) - 7;
             requireColumns(db, tables(bundleVersion));
             if (bundleVersion >= 7) {
                 requireColumns(db, List.of(table("memory_share_link", "memory_id:u token_digest:s issued_at:t")));
             }
-            return new Reviewed(bundleVersion, fingerprints.get(bundleVersion), Map.copyOf(fingerprints));
+            return new Reviewed(bundleVersion, HexFormat.of().formatHex(digest.digest()), Map.copyOf(fingerprints));
         } catch (RecoveryException failure) {
             throw failure;
         } catch (Exception _) {
@@ -427,7 +430,9 @@ final class RecoverySchema {
             String fingerprint,
             Map<Integer, String> fingerprints) {
         boolean accepts(int version, String suppliedFingerprint) {
-            return version >= 1 && version <= bundleVersion && suppliedFingerprint.equals(fingerprints.get(version));
+            return version >= 1 && version <= bundleVersion
+                    && (suppliedFingerprint.equals(fingerprints.get(version))
+                            || (version == bundleVersion && suppliedFingerprint.equals(fingerprint)));
         }
     }
 

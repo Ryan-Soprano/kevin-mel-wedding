@@ -76,6 +76,16 @@ public final class AccountAdministrationStore {
 
     /** Creates a disabled account. Activation is always a separate, confirmed command. */
     public void create(String username, String displayName, Role role, char[] password) {
+        create(username, displayName, role, password, false, false);
+    }
+
+    /** Explicit temporary couple provisioning; the archive stays blocked until a password change. */
+    public void createTemporary(String username, String displayName, char[] password) {
+        create(username, displayName, Role.COUPLE, password, true, true);
+    }
+
+    private void create(String username, String displayName, Role role, char[] password,
+            boolean enabled, boolean passwordChangeRequired) {
         validateUsername(username);
         validateDisplayName(displayName);
         requireAllowedAccess(username, role);
@@ -86,14 +96,16 @@ public final class AccountAdministrationStore {
         String passwordHash = encodePassword(password);
         transactions.executeWithoutResult(status -> {
             int inserted = jdbc.sql("""
-                    INSERT INTO archive_account (username, display_name, password_hash, role, enabled)
-                    VALUES (:username, :displayName, :passwordHash, :role, FALSE)
+                    INSERT INTO archive_account (username, display_name, password_hash, role, enabled, password_change_required)
+                    VALUES (:username, :displayName, :passwordHash, :role, :enabled, :required)
                     ON CONFLICT (username) DO NOTHING
                     """)
                 .param(USERNAME_COLUMN, username)
                 .param("displayName", displayName)
                 .param("passwordHash", passwordHash)
                 .param("role", role.name())
+                .param("enabled", enabled)
+                .param("required", passwordChangeRequired)
                 .update();
             if (inserted != 1) {
                 throw new RejectedOperation("Account already exists; use reset-password to recover it.");
@@ -111,6 +123,7 @@ public final class AccountAdministrationStore {
             jdbc.sql("""
                     UPDATE archive_account
                     SET password_hash = :passwordHash,
+                        password_change_required = FALSE,
                         credentials_version = credentials_version + 1,
                         updated_at = CURRENT_TIMESTAMP
                     WHERE id = :id

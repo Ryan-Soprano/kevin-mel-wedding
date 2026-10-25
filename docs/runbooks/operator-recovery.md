@@ -36,6 +36,8 @@ Metadata includes contribution/memory/asset IDs, names, notes, captions, origina
 
 Accounts/password hashes, sessions, throttle buckets, application settings, provider credentials and temporary staging bytes are excluded. Restore requires separate reviewed account/configuration recovery with reveal closed. Preserve review actor UUIDs as historical references; importing audit data does not create accounts or grant authority. A full PostgreSQL backup remains required for database disaster recovery and the measured wedding freshness target; this archive package supplements that backup.
 
+V15 adds only the account's required-password-change flag. Exact reviewed V15 databases continue exporting archive-data package **version 7**, with an exact V15 migration fingerprint; account credentials and the flag remain excluded. V15 accepts the reviewed prior V14 version-7 fingerprint and legacy version-1 through version-6 packages. V14 does not accept a package carrying the new V15 fingerprint. Full database recovery must preserve the account flag. Once enabled temporary accounts exist, an older binary that ignores the flag is not a safe rollback target; fix forward or disable those accounts before a separately reviewed recovery.
+
 ## Consistency and unfinished uploads
 
 Stop source collection and private traffic, scheduled retention and finalization before export. An upload pause alone does not stop notes, existing grants or finalization. Stop the application, wait at least five minutes for every issued PUT permission to expire, and verify no other writer or maintenance process is running. The exporter rejects unexpired grant metadata. Its repeatable-read database snapshot cannot enforce quiescence on a separately running application or object store.
