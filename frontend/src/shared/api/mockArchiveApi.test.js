@@ -435,7 +435,8 @@ test("audience changes update memory and receipt together while preserving origi
   }
 });
 
-test("deleted text and photos remain recoverable before expiry and disappear at the exact deadline", async () => {
+test("deleted text and photos remain recoverable before expiry and disappear at the exact deadline", async (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: REVIEW_TIME });
   let now = REVIEW_TIME;
   const api = createMockArchiveApi({ now: () => now });
   const receipt = await api.createMediaContribution(PHOTO_REQUEST, options);
@@ -473,7 +474,8 @@ test("deleted text and photos remain recoverable before expiry and disappear at 
   await assert.rejects(api.getMemory(secondPhotoId), { code: "NOT_FOUND", status: 404 });
 });
 
-test("DELETE prevents photo playback throughout recovery, and restoring to inbox enables it again", async () => {
+test("DELETE prevents photo playback throughout recovery, and restoring to inbox enables it again", async (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: REVIEW_TIME });
   let now = REVIEW_TIME;
   const api = createMockArchiveApi({ now: () => now });
   const receipt = await api.createMediaContribution(PHOTO_REQUEST, options);

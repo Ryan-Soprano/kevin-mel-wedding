@@ -1,6 +1,6 @@
 # Private account provisioning and recovery
 
-Prepared 2026-10-05 for AUTH-01; collaboration policy clarified 2026-10-09 and Ryan's separately authorized private archive administration added 2026-10-24. Account creation, confidential credential handoff and access activation remain deliberate operator actions. Ryan owns infrastructure and recovery and may use a separate named operator account for private archive administration. Kevin and Melanie retain their own archive accounts. Kade has development access only. The code change does not provision an account, set production configuration or deploy the application.
+Prepared 2026-10-05 for AUTH-01; collaboration policy clarified 2026-10-09, Ryan's separately authorized private archive administration added 2026-10-24, and the couple's chosen admin usernames added 2026-10-25. Account creation, confidential credential handoff and access activation remain deliberate operator actions. Ryan owns infrastructure and recovery and may use a separate named operator account for private archive administration. Kevin and Melanie retain their own archive accounts. Kade has development access only. The code change does not provision an account, set production configuration or deploy the application.
 
 The existing `MEMORY_ARCHIVE_REVEALED` name denotes the technical couple-access gate. It no longer represents surprise secrecy or a requirement to wait until after the wedding. Agree on the access target and timing separately from the October 31 archive handoff/collection-close milestone.
 
@@ -8,7 +8,7 @@ The existing `MEMORY_ARCHIVE_REVEALED` name denotes the technical couple-access 
 
 | Role | Provisioning boundary | Application authority |
 |---|---|---|
-| `COUPLE` | Reveal must be explicitly enabled. Production identities are separate `kevin` / `Kevin` and `melanie` / `Melanie` accounts. Synthetic accounts are allowed locally or in staging. | Full private archive access while the couple reveal gate is open. |
+| `COUPLE` | Reveal must be explicitly enabled. Production identities are separate `kevin-admin` / `Kevin` and `melanie-admin` / `Melanie` accounts. Synthetic accounts are allowed locally or in staging. | Full private archive access while the couple reveal gate is open. |
 | `OPERATOR` | Separate account; disabled on creation. The server's `MEMORY_ARCHIVE_OPERATOR_ADMIN_USERNAME` must name that exact account for private archive access. Default empty grants none. | Only the configured enabled operator may sign in and use the full private inbox, media, review/publication, organization, authoring and export APIs independently of couple reveal. All other operators remain denied. Infrastructure credentials remain separate. |
 | `DEVELOPER` | Local/staging only; production creation, recovery, and activation are rejected. | No couple login, moderation, or publication authority. |
 
@@ -120,7 +120,7 @@ With an actual Docker TTY, create accepted exact confirmation and two hidden pas
 Real-account provisioning is a separate hands-on operator action after the target and access timing have been agreed and explicitly authorized. No real accounts have been provisioned by this implementation. Couple participation in design or synthetic testing does not itself activate production accounts.
 
 1. Ryan verifies the production target and its secure access path, confirms access timing with the couple, and explicitly enables the reveal/access setting for the approved application/utility configuration. Production must use HTTPS and the production session-cookie configuration before browser login.
-2. Use the reviewed utility with `--expect-environment production` to create `kevin` / `Kevin` / `COUPLE` and, separately, `melanie` / `Melanie` / `COUPLE`. Each person receives a distinct password. Keep both accounts disabled until the confidential handoff is ready.
+2. Use the reviewed utility with `--expect-environment production` to create `kevin-admin` / `Kevin` / `COUPLE` and, separately, `melanie-admin` / `Melanie` / `COUPLE`. Each person receives a distinct password. Keep both accounts disabled until the confidential handoff is ready.
 3. Establish the identity of the intended recipient directly. Handoff must use an agreed confidential channel; do not paste credentials into Git, Notion, tickets, logs, screenshots, shell arguments/history, or this chat. Do not send invitations or email as part of the utility.
 4. For ordinary `create`, enable each account with its own confirmed command. For the temporary-password flow below, no separate enable is needed. Have each person verify their own sign-in and complete the required password change before archive use.
 5. Confirm only the configured named operator receives Ryan's separately authorized archive access; other operators and developers remain denied. Record only dated nonsecret evidence of onboarding.
@@ -130,8 +130,8 @@ Real-account provisioning is a separate hands-on operator action after the targe
 Apply the reviewed V15 application migration before using this flow. With the production target, HTTPS origin and reveal gate verified, invoke the packaged console utility separately for each person:
 
 ```text
---expect-environment production create-temporary kevin Kevin
---expect-environment production create-temporary melanie Melanie
+--expect-environment production create-temporary kevin-admin Kevin
+--expect-environment production create-temporary melanie-admin Melanie
 ```
 
 The role is implicitly `COUPLE`. The command requires an exact console confirmation, refuses an existing username without resetting it, and generates a distinct cryptographically random temporary password internally. After creation commits, it displays that password only in the real private console. Do not run this command through captured tool output, shell redirection, a transcript, screenshots or a shared terminal. Keep the private console available for Ryan to copy the credentials into the agreed confidential handoff; never put them in chat, source, command arguments, environment variables or files. An uncertain command result requires a metadata check before any further action.
@@ -162,7 +162,7 @@ Run the backend checks, including `SessionHttpTest` and `RequestPeerCaptureTest`
 - Compile the backend and run the existing test suite. Confirm utility `--help` works and a noninteractive mutation exits `2` before database access.
 - With `AccountAdministrationStore` and a disposable migrated database, create a synthetic couple account with reveal enabled. Verify it is disabled, the stored hash matches through the application's `PasswordEncoder`, and an attempt to create the same username makes no change.
 - Enable, reset, disable, and re-enable. Verify each operation advances the version once, updates its timestamp, preserves identity/role, and that reset leaves a disabled account disabled. Check a nonexistent account and rejected input make no changes.
-- Verify reveal closed rejects COUPLE create/reset/enable but allows disable; production rejects DEVELOPER create/reset/enable and any COUPLE username other than `kevin`/`melanie`. With the operator setting empty, OPERATOR remains denied. With it set, only the exact enabled named OPERATOR receives private archive access; other operators and all developers remain denied. Production couple display names must be exactly Kevin/Melanie.
+- Verify reveal closed rejects COUPLE create/reset/enable but allows disable; production rejects DEVELOPER create/reset/enable and any COUPLE username other than `kevin-admin`/`melanie-admin`. With the operator setting empty, OPERATOR remains denied. With it set, only the exact enabled named OPERATOR receives private archive access; other operators and all developers remain denied. Production couple display names must be exactly Kevin/Melanie.
 - Verify short, mismatched, malformed-Unicode, and over-72-byte passwords are rejected. Inspect only synthetic fixtures; never print the entered password or hash.
 - With a synthetic web login, verify password reset and disable/re-enable invalidate the earlier session and CSRF token; check the new password works and the old password fails.
 

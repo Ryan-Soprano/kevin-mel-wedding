@@ -97,7 +97,7 @@ public class ArchiveAccessPolicy {
             return !operatorAdminUsername.isEmpty() && operatorAdminUsername.equals(username);
         }
         return revealed && "COUPLE".equals(role)
-                && (!production || Set.of("kevin", "melanie").contains(username));
+                && (!production || Set.of("kevin-admin", "melanie-admin").contains(username));
     }
 
     public boolean secureCookie() { return secureCookie; }

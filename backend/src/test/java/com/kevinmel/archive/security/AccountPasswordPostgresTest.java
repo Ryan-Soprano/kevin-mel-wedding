@@ -37,6 +37,33 @@ class AccountPasswordPostgresTest {
     @Autowired PasswordEncoder encoder;
     @Autowired PlatformTransactionManager transactions;
 
+    @Test void productionTemporaryAccountsUseTheExactSeparateAdminUsernamesAndDisplayNames() {
+        var admin = new AccountAdministrationStore(jdbc, encoder, transactions,
+                AccountAdministrationStore.EnvironmentMode.PRODUCTION, true);
+        for (String rejected : List.of("kevin", "melanie", "other-admin")) {
+            assertThatThrownBy(() -> admin.createTemporary(rejected, "Kevin",
+                    "synthetic-temporary-secret".toCharArray()))
+                    .isInstanceOf(AccountAdministrationStore.RejectedOperation.class);
+            assertThat(accounts.findByUsername(rejected)).isEmpty();
+        }
+        for (String username : List.of("kevin-admin", "melanie-admin")) {
+            String displayName = username.equals("kevin-admin") ? "Kevin" : "Melanie";
+            try {
+                assertThatThrownBy(() -> admin.createTemporary(username,
+                        displayName.equals("Kevin") ? "Melanie" : "Kevin",
+                        "synthetic-temporary-secret".toCharArray()))
+                        .isInstanceOf(AccountAdministrationStore.RejectedOperation.class);
+                assertThat(accounts.findByUsername(username)).isEmpty();
+                admin.createTemporary(username, displayName, "synthetic-temporary-secret".toCharArray());
+                var created = accounts.findByUsername(username).orElseThrow();
+                assertThat(created.displayName()).isEqualTo(displayName);
+                assertThat(created.role()).isEqualTo("COUPLE");
+                assertThat(created.enabled()).isTrue();
+                assertThat(created.passwordChangeRequired()).isTrue();
+            } finally { delete(username); }
+        }
+    }
+
     @Test void temporaryProvisioningAndRecoveryAreExplicitAndDuplicateCreationNeverReplacesCredentials() {
         String username = "synthetic-" + UUID.randomUUID();
         var admin = administrator();

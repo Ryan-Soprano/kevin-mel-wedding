@@ -15,7 +15,7 @@ import org.springframework.security.core.userdetails.User;
 
 class ArchiveAccessPolicyTest {
     @Test void pendingCredentialsCanManageSessionButNeverGrantForegroundOrBackgroundArchiveAuthority() {
-        var pending = new ArchiveAccount(UUID.randomUUID(), "kevin", "Kevin", "{noop}unused", "COUPLE", true, 1, true);
+        var pending = new ArchiveAccount(UUID.randomUUID(), "kevin-admin", "Kevin", "{noop}unused", "COUPLE", true, 1, true);
         var principal = new ArchivePrincipal(pending);
         var authentication = UsernamePasswordAuthenticationToken.authenticated(principal, null, principal.getAuthorities());
         var revealed = policy(true, "ryan-admin");
@@ -45,11 +45,13 @@ class ArchiveAccessPolicyTest {
         for (String configured : List.of("", "ryan-admin")) {
             for (boolean reveal : List.of(false, true)) {
                 var policy = policy(reveal, configured);
-                assertAccess(policy, account("kevin", "COUPLE", true), reveal);
-                assertAccess(policy, account("melanie", "COUPLE", true), reveal);
+                assertAccess(policy, account("kevin-admin", "COUPLE", true), reveal);
+                assertAccess(policy, account("melanie-admin", "COUPLE", true), reveal);
+                assertAccess(policy, account("kevin", "COUPLE", true), false);
+                assertAccess(policy, account("melanie", "COUPLE", true), false);
                 assertAccess(policy, account("someone-else", "COUPLE", true), false);
-                assertAccess(policy, account("kevin", "OPERATOR", true), false);
-                assertAccess(policy, account("kevin", "DEVELOPER", true), false);
+                assertAccess(policy, account("kevin-admin", "OPERATOR", true), false);
+                assertAccess(policy, account("kevin-admin", "DEVELOPER", true), false);
             }
         }
     }
