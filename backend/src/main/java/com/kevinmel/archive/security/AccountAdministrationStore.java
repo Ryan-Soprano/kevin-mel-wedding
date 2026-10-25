@@ -90,7 +90,7 @@ public final class AccountAdministrationStore {
         validateDisplayName(displayName);
         requireAllowedAccess(username, role);
         if (environment == EnvironmentMode.PRODUCTION && role == Role.COUPLE
-                && !displayName.equals(username.equals("kevin") ? "Kevin" : "Melanie")) {
+                && !displayName.equals(username.equals("kevin-admin") ? "Kevin" : "Melanie")) {
             throw new RejectedOperation("Production couple display names must be Kevin or Melanie.");
         }
         String passwordHash = encodePassword(password);
@@ -183,8 +183,8 @@ public final class AccountAdministrationStore {
                 throw new RejectedOperation("Couple account creation, recovery, and activation require the reveal gate.");
             }
             if (environment == EnvironmentMode.PRODUCTION
-                    && !username.equals("kevin") && !username.equals("melanie")) {
-                throw new RejectedOperation("Production COUPLE usernames must be kevin or melanie, with separate accounts.");
+                    && !username.equals("kevin-admin") && !username.equals("melanie-admin")) {
+                throw new RejectedOperation("Production COUPLE usernames must be kevin-admin or melanie-admin, with separate accounts.");
             }
         }
     }
