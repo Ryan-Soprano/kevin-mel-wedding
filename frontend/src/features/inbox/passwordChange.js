@@ -5,7 +5,7 @@ export function passwordChangeValidation({ currentPassword, newPassword, repeate
     || [...newPassword].some(char => char.length === 1 && char.charCodeAt(0) >= 0xd800 && char.charCodeAt(0) <= 0xdfff)) {
     return "Choose a password using valid text characters.";
   }
-  if ([...newPassword].length < 15) return "Use at least 15 characters for your new password.";
+  if ([...newPassword].length < 8) return "Use at least 8 characters for your new password.";
   if (new TextEncoder().encode(newPassword).byteLength > 72) {
     return "Your new password is too long. Use no more than 72 UTF-8 bytes; some characters use more than one byte.";
   }

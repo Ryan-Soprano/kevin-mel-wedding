@@ -201,8 +201,8 @@ public final class AccountAdministrationStore {
     }
 
     private String encodePassword(char[] password) {
-        if (password == null || Character.codePointCount(password, 0, password.length) < 15) {
-            throw new RejectedOperation("Use a unique password or passphrase of at least 15 characters.");
+        if (password == null || Character.codePointCount(password, 0, password.length) < 8) {
+            throw new RejectedOperation("Use a unique password or passphrase of at least 8 characters.");
         }
         if (password.length > 72) {
             throw new RejectedOperation("Password must fit within 72 UTF-8 bytes for the configured encoder.");

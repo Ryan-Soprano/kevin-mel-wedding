@@ -67,8 +67,11 @@ class AccountPasswordPostgresTest {
     @Test void temporaryProvisioningAndRecoveryAreExplicitAndDuplicateCreationNeverReplacesCredentials() {
         String username = "synthetic-" + UUID.randomUUID();
         var admin = administrator();
-        char[] temporary = "synthetic-temporary-secret".toCharArray();
+        char[] temporary = "temp-888".toCharArray();
         try {
+            assertThatThrownBy(() -> admin.createTemporary(username, "Synthetic Couple", "short77".toCharArray()))
+                    .isInstanceOf(AccountAdministrationStore.RejectedOperation.class);
+            assertThat(accounts.findByUsername(username)).isEmpty();
             admin.createTemporary(username, "Synthetic Couple", temporary);
             var created = accounts.findByUsername(username).orElseThrow();
             assertThat(created.enabled()).isTrue();
@@ -78,12 +81,12 @@ class AccountPasswordPostgresTest {
             assertThatThrownBy(() -> admin.createTemporary(username, "Synthetic Couple",
                     "different-synthetic-secret".toCharArray())).isInstanceOf(AccountAdministrationStore.RejectedOperation.class);
             assertThat(accounts.findById(created.id()).orElseThrow()).isEqualTo(created);
-            admin.resetPassword(username, "synthetic-recovery-secret".toCharArray());
+            admin.resetPassword(username, "reset888".toCharArray());
             var recovered = accounts.findById(created.id()).orElseThrow();
             assertThat(recovered.passwordChangeRequired()).isFalse();
             assertThat(recovered.enabled()).isTrue();
             assertThat(recovered.credentialsVersion()).isEqualTo(1);
-            assertThat(encoder.matches("synthetic-recovery-secret", recovered.passwordHash())).isTrue();
+            assertThat(encoder.matches("reset888", recovered.passwordHash())).isTrue();
         } finally {
             java.util.Arrays.fill(temporary, '\0');
             delete(username);
@@ -99,8 +102,8 @@ class AccountPasswordPostgresTest {
         var start = new CountDownLatch(1);
         try (var pool = Executors.newFixedThreadPool(2)) {
             List<Callable<Boolean>> attempts = List.of(
-                    () -> changeAfter(start, principal, current, "first-synthetic-new-secret"),
-                    () -> changeAfter(start, principal, current, "second-synthetic-new-secret"));
+                    () -> changeAfter(start, principal, current, "first888"),
+                    () -> changeAfter(start, principal, current, "other888"));
             var futures = attempts.stream().map(pool::submit).toList();
             start.countDown();
             long successes = 0;
@@ -110,8 +113,8 @@ class AccountPasswordPostgresTest {
             assertThat(after.credentialsVersion()).isEqualTo(1);
             assertThat(after.passwordChangeRequired()).isFalse();
             assertThat(encoder.matches(current, after.passwordHash())).isFalse();
-            assertThat(encoder.matches("first-synthetic-new-secret", after.passwordHash())
-                    ^ encoder.matches("second-synthetic-new-secret", after.passwordHash())).isTrue();
+            assertThat(encoder.matches("first888", after.passwordHash())
+                    ^ encoder.matches("other888", after.passwordHash())).isTrue();
             assertThatThrownBy(() -> passwords.change(principal, current, "third-synthetic-new-secret"))
                     .isInstanceOfSatisfying(ApiException.class, error -> assertThat(error.code()).isEqualTo("PASSWORD_CHANGE_CONFLICT"));
             assertThat(accounts.findById(before.id()).orElseThrow()).isEqualTo(after);

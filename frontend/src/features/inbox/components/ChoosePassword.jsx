@@ -31,7 +31,7 @@ export default function ChoosePassword({ busy, retryAfter = 0, recovery, onChang
         </div>
       ) : (
         <form ref={form} className="inbox-password-form" onSubmit={submit} aria-label="Set your private password">
-          <p id="password-policy">Use at least 15 characters and no more than 72 UTF-8 bytes. A few memorable words work well. Your password must differ from your temporary password.</p>
+          <p id="password-policy">Use at least 8 characters and no more than 72 UTF-8 bytes. A few memorable words work well. Your password must differ from your temporary password.</p>
           <div>
             <label htmlFor="current-temporary-password">Current temporary password</label>
             <input id="current-temporary-password" name="currentPassword" type="password" autoComplete="current-password" required disabled={disabled} aria-describedby="password-policy" />

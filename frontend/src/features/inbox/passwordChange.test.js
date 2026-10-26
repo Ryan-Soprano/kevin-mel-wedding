@@ -6,14 +6,17 @@ const valid = { currentPassword: "synthetic temporary password", newPassword: "a
 test("password policy counts Unicode code points and enforces UTF-8 bytes without trimming", () => {
   assert.equal(passwordChangeValidation(valid), null);
   const check = newPassword => passwordChangeValidation({ ...valid, newPassword, repeatedPassword: newPassword });
-  assert.match(check("a".repeat(14)), /15 characters/);
-  assert.equal(check("😀".repeat(15)), null);
+  assert.match(check("a".repeat(7)), /8 characters/);
+  assert.equal(check("a".repeat(8)), null);
+  assert.match(check("😀".repeat(7)), /8 characters/);
+  assert.equal(check("😀".repeat(8)), null);
+  assert.equal(check("😀".repeat(18)), null);
   assert.match(check("😀".repeat(19)), /72 UTF-8 bytes/);
   assert.equal(check("a".repeat(72)), null); assert.match(check("a".repeat(73)), /72 UTF-8 bytes/);
-  assert.equal(check(" leading and trailing "), null);
+  assert.equal(check(" 123456 "), null);
   assert.match(check(valid.currentPassword), /different/);
   assert.match(passwordChangeValidation({ ...valid, repeatedPassword: "different" }), /do not match/);
-  for (const invalid of ["a".repeat(15) + "\0", "a".repeat(15) + "\ud800", "a".repeat(15) + "\udc00"]) assert.match(check(invalid), /valid text/);
+  for (const invalid of ["a".repeat(8) + "\0", "a".repeat(8) + "\ud800", "a".repeat(8) + "\udc00"]) assert.match(check(invalid), /valid text/);
   assert.match(passwordChangeValidation({ ...valid, currentPassword: "" }), /current temporary/);
 });
 

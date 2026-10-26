@@ -1073,12 +1073,12 @@ class SessionHttpTest {
                     store(couple);
                     return true;
                 });
-        var changed = state(changePassword(pending, PASSWORD, "new-synthetic-passphrase-42")
+        var changed = state(changePassword(pending, PASSWORD, "change88")
                 .andExpect(status().isOk()).andExpect(jsonPath("$.passwordChangeRequired").value(false))
                 .andExpect(jsonPath("$.authenticated").value(true)).andReturn());
         assertThat(changed.session().getId()).isNotEqualTo(oldId);
         assertThat(changed.rawToken()).isNotEqualTo(pending.rawToken());
-        assertThat(encoder.matches("new-synthetic-passphrase-42", couple.passwordHash())).isTrue();
+        assertThat(encoder.matches("change88", couple.passwordHash())).isTrue();
         mvc.perform(get("/api/memories").session(changed.session())).andExpect(status().isNotFound());
         error(mvc.perform(post("/api/session/password").session(oldOtherSession)
                 .header("X-Api-Contract", "1").contentType(MediaType.APPLICATION_JSON)
@@ -1094,7 +1094,7 @@ class SessionHttpTest {
         var pending = state(login(anonymous(), USERNAME, PASSWORD).andExpect(status().isOk()).andReturn());
         error(changePassword(pending, "wrong-synthetic-current", "new-synthetic-passphrase"), 401, "INVALID_CREDENTIALS");
         error(changePassword(pending, PASSWORD, PASSWORD), 400, "VALIDATION_FAILED");
-        for (String invalid : List.of("short", "😀".repeat(14), "😀".repeat(19), "valid-length-xx\0")) {
+        for (String invalid : List.of("1234567", "😀".repeat(7), "😀".repeat(19), "valid-length-xx\0")) {
             error(changePassword(pending, PASSWORD, invalid), 400, "VALIDATION_FAILED");
         }
         error(mvc.perform(contract(mutation(post("/api/session/password"), pending, pending.token(), ORIGIN), "1")

@@ -44,9 +44,9 @@ public class AccountPasswordService {
     static void validateNewPassword(String password) {
         if (password == null || password.length() > 72 || password.indexOf('\0') >= 0
                 || !StandardCharsets.UTF_8.newEncoder().canEncode(password)
-                || password.codePointCount(0, password.length()) < 15
+                || password.codePointCount(0, password.length()) < 8
                 || password.getBytes(StandardCharsets.UTF_8).length > 72) {
-            throw new ApiException(400, "VALIDATION_FAILED", "Use at least 15 characters and at most 72 UTF-8 bytes for your new password.");
+            throw new ApiException(400, "VALIDATION_FAILED", "Use at least 8 characters and at most 72 UTF-8 bytes for your new password.");
         }
     }
 
