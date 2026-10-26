@@ -149,7 +149,14 @@ export function useInboxController(createController) {
       }
       if (!next.session?.authenticated || next.session.passwordChangeRequired) resetPages();
       else if (next.phase === "inbox" && !next.busy && !next.error) rememberPages(pagesRef.current, next.nextCursor);
-      else if (next.phase === "detail" && next.detailNavigation?.inboxPages) updatePages(next.detailNavigation.inboxPages);
+      else if (next.phase === "detail" && next.detailNavigation?.inboxPages) {
+        updatePages(next.detailNavigation.inboxPages);
+        // History can restore a detail without the card's click handler. Keep
+        // its card as the return destination even after the parent page resets.
+        if (next.detail && !inboxLocation.current) inboxLocation.current = {
+          memoryId: next.detail.memoryId, scrollY: 0, pages: next.detailNavigation.inboxPages,
+        };
+      }
       if (next.phase !== "detail" || !next.detail) setDeleteConfirmation(null);
       setNavigationNotice(null);
       navigation.sync(next);
