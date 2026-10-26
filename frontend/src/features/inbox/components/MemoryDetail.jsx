@@ -6,19 +6,28 @@ import MemoryMedia from "./MemoryMedia.jsx";
 import MemoryReview from "./MemoryReview.jsx";
 import { ArchiveActions, ArchiveScreen } from "./ArchiveLayout.jsx";
 
-function ContributionNavigation({ navigation, disabled, actions }) {
-  if (!navigation) return null;
+function ContributionArrow({ previous, disabled, onClick }) {
+  const label = previous ? "Previous contribution" : "Next contribution";
   return (
-    <nav className="inbox-contribution-navigation" aria-label="Browse inbox contributions">
-      <button type="button" className="button-secondary" disabled={disabled || !navigation.canPrevious}
-        onClick={actions.previousMemory}>
-        <span aria-hidden="true">← </span>Previous contribution
+    <div className="inbox-contribution-rail">
+      <button type="button" className="button-secondary inbox-contribution-arrow" aria-label={label} title={label}
+        disabled={disabled} onClick={onClick}>
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d={previous ? "m15 5-7 7 7 7" : "m9 5 7 7-7 7"} />
+        </svg>
       </button>
-      <button type="button" className="button-secondary" disabled={disabled || !navigation.canNext}
-        onClick={actions.nextMemory}>
-        Next contribution<span aria-hidden="true"> →</span>
-      </button>
-    </nav>
+    </div>
+  );
+}
+
+function ContributionNavigation({ navigation, disabled, actions, children }) {
+  return (
+    <div className={`inbox-contribution-viewer${navigation ? " has-navigation" : ""}`}
+      role={navigation ? "group" : undefined} aria-label={navigation ? "Browse inbox contributions" : undefined}>
+      {navigation && <ContributionArrow previous disabled={disabled || !navigation.canPrevious} onClick={actions.previousMemory} />}
+      {children}
+      {navigation && <ContributionArrow disabled={disabled || !navigation.canNext} onClick={actions.nextMemory} />}
+    </div>
   );
 }
 
@@ -62,19 +71,18 @@ function MemoryContents({ state, locked, actions, audioPlayback, reviewControls,
 export default function MemoryDetail({ state, locked, actions, audioPlayback, reviewControls, deleteButton, cancelDelete, reviewFeedback }) {
   return (
     <ArchiveScreen className="inbox-detail" label="Memory detail" busy={state.busy}>
-      <div className="inbox-detail-toolbar">
-        <ArchiveActions>
-          <button type="button" className="button-secondary" disabled={locked} onClick={actions.navigation.back}>{getDetailBackLabel(state)}</button>
-        </ArchiveActions>
-        <ContributionNavigation navigation={state.detailNavigation}
-          disabled={state.busy || locked || reviewControls.confirmingDelete} actions={actions.navigation} />
-      </div>
-      <article className="inbox-detail-body">
-        {state.busy && !state.detail && <output>Loading memory…</output>}
-        {!state.busy && !state.detail && state.error && <p>This memory could not be loaded. Return to the inbox and try opening it again.</p>}
-        <MemoryContents state={state} locked={locked} actions={actions} audioPlayback={audioPlayback} reviewControls={reviewControls}
-          deleteButton={deleteButton} cancelDelete={cancelDelete} reviewFeedback={reviewFeedback} />
-      </article>
+      <ArchiveActions>
+        <button type="button" className="button-secondary" disabled={locked} onClick={actions.navigation.back}>{getDetailBackLabel(state)}</button>
+      </ArchiveActions>
+      <ContributionNavigation navigation={state.detailNavigation}
+        disabled={state.busy || locked || reviewControls.confirmingDelete} actions={actions.navigation}>
+        <article className="inbox-detail-body">
+          {state.busy && !state.detail && <output>Loading memory…</output>}
+          {!state.busy && !state.detail && state.error && <p>This memory could not be loaded. Return to the inbox and try opening it again.</p>}
+          <MemoryContents state={state} locked={locked} actions={actions} audioPlayback={audioPlayback} reviewControls={reviewControls}
+            deleteButton={deleteButton} cancelDelete={cancelDelete} reviewFeedback={reviewFeedback} />
+        </article>
+      </ContributionNavigation>
     </ArchiveScreen>
   );
 }

@@ -200,14 +200,19 @@
 .private-inbox .inbox-page-buttons > button { min-width: 48px; padding: 10px; font-variant-numeric: tabular-nums; }
 .private-inbox .inbox-page-buttons > [aria-current="page"] { color: var(--color-surface); background: var(--color-primary); border-color: var(--color-primary); opacity: 1; }
 .inbox-page-gap { color: var(--color-muted); padding: 0 3px; }
-.inbox-detail-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
-.inbox-contribution-navigation { display: flex; gap: 12px; flex-wrap: wrap; }
+.inbox-contribution-viewer { min-width: 0; }
+.inbox-contribution-viewer.has-navigation { display: grid; grid-template-columns: 48px minmax(0, 1fr) 48px; gap: 12px; align-items: stretch; }
+.inbox-contribution-rail { min-width: 0; }
+.private-inbox .archive-screen .inbox-contribution-arrow { position: sticky; top: calc(50vh - 24px); top: calc(50dvh - 24px); display: grid; place-items: center; width: 48px; height: 48px; min-height: 48px; padding: 0; border-radius: 50%; background: var(--color-surface); box-shadow: 0 3px 12px rgb(41 37 36 / 6%); }
+.inbox-contribution-arrow svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.private-inbox .inbox-contribution-arrow:hover:not(:disabled) { color: var(--color-surface); background: var(--color-primary); }
 
 @media (max-width: 600px) {
   .inbox-numbered-pagination > .inbox-page-selection { order: -1; flex-basis: 100%; }
   .inbox-numbered-pagination > button { flex: 1; }
-  .inbox-contribution-navigation { width: 100%; }
-  .inbox-contribution-navigation > button { flex: 1; }
+  .inbox-contribution-viewer.has-navigation { grid-template-columns: 44px minmax(0, 1fr) 44px; gap: 4px; margin-inline: -12px; }
+  .private-inbox .archive-screen .inbox-contribution-arrow { width: 44px; height: 44px; min-height: 44px; top: calc(50vh - 22px); top: calc(50dvh - 22px); }
+  .inbox-contribution-viewer.has-navigation > .inbox-detail-body { padding: 16px; }
 }
 
 .inbox-list {
