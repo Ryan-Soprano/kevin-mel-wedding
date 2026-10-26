@@ -10,10 +10,11 @@ import { initialLibrary } from "../../library/api/libraryActions.js";
 import { initialTags } from "../../library/api/tagActions.js";
 import { initialExport } from "../../export/api/exportActions.js";
 import { useInboxActions } from "./useInboxActions.js";
+import { rememberInboxPages } from "../inboxPagination.js";
 
 const INITIAL = {
   phase: "checking", session: null, busy: true, error: null,
-  reviewStatus: "PENDING", items: [], nextCursor: null, detail: null, requestedMemoryId: null,
+  reviewStatus: "PENDING", items: [], nextCursor: null, detail: null, requestedMemoryId: null, detailNavigation: null,
   photo: { phase: "idle", url: null, error: null },
   review: { phase: "idle", targetStatus: null, error: null, canRetry: false },
   metadata: { phase: "idle", error: null, canRetry: false },
@@ -29,21 +30,23 @@ export function useInboxController(createController) {
   const controller = useRef(null);
   const navigationOwner = useRef(null);
   const inboxFocus = useRef(null);
+  const inboxLocation = useRef(null);
+  const inboxReturn = useRef(null);
   const cancelInboxFocus = useCallback(() => { inboxFocus.current = null; }, []);
   const beforeAction = useCallback(() => {
     cancelInboxFocus();
+    inboxReturn.current = null;
     navigationOwner.current?.cancelRestore();
   }, [cancelInboxFocus]);
-  const requestInbox = useCallback((status, cursor = null) => {
+  const requestInbox = useCallback((status, cursor = null, options) => {
     beforeAction();
     const owner = controller.current;
     if (!owner) return;
     inboxFocus.current = owner;
-    return owner.loadInbox(status, cursor);
+    return owner.loadInbox(status, cursor, options);
   }, [beforeAction]);
   const intentionalDialog = useRef(false);
   const setDialogState = useCallback(value => { intentionalDialog.current = value; }, []);
-  const actions = useInboxActions(controller, beforeAction, requestInbox);
   const audioPlayback = useRef(null);
   const setAudioPlayback = useCallback((element, expectedUrl) => {
     if (audioPlayback.current !== element) stopAudioPlayback(audioPlayback.current);
@@ -74,7 +77,35 @@ export function useInboxController(createController) {
   const [password, setPassword] = useState("");
   const [pages, setPages] = useState([null]);
   const pagesRef = useRef([null]);
-  const updatePages = useCallback(next => { pagesRef.current = next; setPages(next); }, []);
+  const [pageCursors, setPageCursors] = useState([null]);
+  const pageCursorsRef = useRef([null]);
+  const rememberPages = useCallback((selected, nextCursor) => {
+    const next = rememberInboxPages(pageCursorsRef.current, selected, nextCursor);
+    pageCursorsRef.current = next;
+    setPageCursors(next);
+  }, []);
+  const updatePages = useCallback(next => {
+    pagesRef.current = next;
+    setPages(next);
+    rememberPages(next);
+  }, [rememberPages]);
+  const resetPages = useCallback((preserveReturn = false) => {
+    pagesRef.current = [null];
+    pageCursorsRef.current = [null];
+    setPages(pagesRef.current);
+    setPageCursors(pageCursorsRef.current);
+    inboxLocation.current = null;
+    if (!preserveReturn) inboxReturn.current = null;
+  }, []);
+  const restoreInboxLocation = useCallback(() => {
+    const current = controller.current?.getSnapshot();
+    const source = inboxLocation.current;
+    if (!source || current?.phase !== "detail" || !current.detailNavigation) return;
+    const navigation = current.detailNavigation;
+    updatePages(navigation.inboxPages);
+    inboxReturn.current = { owner: controller.current, memoryId: current.detail?.memoryId ?? source.memoryId, source };
+  }, [updatePages]);
+  const actions = useInboxActions(controller, beforeAction, requestInbox, restoreInboxLocation);
   const creationRef = useRef(null);
   const [creationState, setCreationFlow] = useState(null);
   const [navigationNotice, setNavigationNotice] = useState(null);
@@ -95,7 +126,15 @@ export function useInboxController(createController) {
       isCreationBlocked: () => Boolean(creationRef.current?.busy || creationRef.current?.pending),
       hasCreationDraft: () => Boolean(creationRef.current?.hasDraft && !creationRef.current?.complete),
       onBlocked: () => setNavigationNotice("Finish or confirm the current save before leaving this screen."),
-      onNavigate: cancelInboxFocus,
+      onNavigate: route => {
+        cancelInboxFocus();
+        inboxReturn.current = null;
+        const snapshot = current.getSnapshot();
+        const source = inboxLocation.current;
+        if (route?.phase === "inbox" && snapshot.phase === "detail" && source) {
+          inboxReturn.current = { owner: current, memoryId: snapshot.detail?.memoryId ?? source.memoryId, source };
+        }
+      },
     });
     navigationOwner.current = navigation;
     let pageVersion = current.getSnapshot().pageResetVersion;
@@ -106,8 +145,11 @@ export function useInboxController(createController) {
       }
       if (next.pageResetVersion !== pageVersion) {
         pageVersion = next.pageResetVersion;
-        updatePages([null]);
+        resetPages(next.phase === "inbox" && inboxReturn.current?.owner === current);
       }
+      if (!next.session?.authenticated || next.session.passwordChangeRequired) resetPages();
+      else if (next.phase === "inbox" && !next.busy && !next.error) rememberPages(pagesRef.current, next.nextCursor);
+      else if (next.phase === "detail" && next.detailNavigation?.inboxPages) updatePages(next.detailNavigation.inboxPages);
       if (next.phase !== "detail" || !next.detail) setDeleteConfirmation(null);
       setNavigationNotice(null);
       navigation.sync(next);
@@ -126,7 +168,7 @@ export function useInboxController(createController) {
         setUsername("");
         setPassword("");
         setDeleteConfirmation(null);
-        updatePages([null]);
+        resetPages();
       },
     });
     if (document.visibilityState === "hidden") current.suspend();
@@ -141,13 +183,30 @@ export function useInboxController(createController) {
       unsubscribe();
       current.dispose();
     };
-  }, [cancelInboxFocus, clearPlayback, pausePlayback, updatePages]);
+  }, [cancelInboxFocus, clearPlayback, pausePlayback, rememberPages, resetPages, updatePages]);
 
   useEffect(() => {
-    heading.current?.focus();
+    if (!inboxReturn.current) heading.current?.focus();
   }, [snapshot.phase, snapshot.detail?.memoryId, snapshot.albums?.view, snapshot.albums?.album?.albumId,
     snapshot.timeline?.view, snapshot.timeline?.event?.eventId, snapshot.library?.view,
     snapshot.tags?.view, snapshot.tags?.tag?.tagId]);
+
+  useEffect(() => {
+    const destination = inboxReturn.current;
+    if (!destination || snapshot.busy) return;
+    if (controller.current !== destination.owner || snapshot !== destination.owner.getSnapshot()) return;
+    inboxReturn.current = null;
+    if (snapshot.phase !== "inbox" || !snapshot.session?.authenticated || snapshot.error) return;
+    const card = document.getElementById(`inbox-memory-${destination.memoryId}`);
+    window.scrollTo({ top: destination.source.scrollY, behavior: "auto" });
+    if (card) {
+      const bounds = card.getBoundingClientRect();
+      if (destination.memoryId !== destination.source.memoryId || bounds.top < 0 || bounds.bottom > window.innerHeight) {
+        card.scrollIntoView({ block: "center", behavior: "auto" });
+      }
+      card.querySelector("button")?.focus({ preventScroll: true });
+    }
+  }, [snapshot]);
 
   useEffect(() => {
     const owner = inboxFocus.current;
@@ -187,7 +246,7 @@ export function useInboxController(createController) {
     const credentials = { username, password };
     beforeAction();
     setPassword("");
-    updatePages([null]);
+    resetPages();
     void controller.current?.login(credentials);
   }
 
@@ -196,13 +255,13 @@ export function useInboxController(createController) {
     beforeAction();
     setPassword("");
     setUsername("");
-    updatePages([null]);
+    resetPages();
     void controller.current?.logout();
   }
 
   function changePassword(credentials) {
     beforeAction();
-    updatePages([null]);
+    resetPages();
     return controller.current?.changePassword(credentials);
   }
 
@@ -212,7 +271,7 @@ export function useInboxController(createController) {
       return;
     }
     beforeAction();
-    updatePages([null]);
+    resetPages();
     void controller.current?.loadSession();
   }
 
@@ -222,16 +281,25 @@ export function useInboxController(createController) {
   }
 
   function nextPage() {
-    if (snapshot.busy || reviewLocked || snapshot.error || !snapshot.nextCursor) return;
-    updatePages([...pagesRef.current, snapshot.nextCursor]);
-    void requestInbox(snapshot.reviewStatus, snapshot.nextCursor);
+    goToPage(pages.length + 1);
   }
 
   function previousPage() {
-    if (snapshot.busy || reviewLocked || snapshot.error || pages.length < 2) return;
-    const previous = pages.slice(0, -1);
-    updatePages(previous);
-    void requestInbox(snapshot.reviewStatus, previous.at(-1));
+    goToPage(pages.length - 1);
+  }
+
+  function goToPage(number) {
+    if (snapshot.busy || reviewLocked || !Number.isInteger(number) || number < 1
+      || number > pageCursorsRef.current.length || (number === pages.length && !snapshot.error)) return;
+    const selected = pageCursorsRef.current.slice(0, number);
+    inboxLocation.current = null;
+    updatePages(selected);
+    void requestInbox(snapshot.reviewStatus, selected.at(-1), { preservePageHistory: true });
+  }
+
+  function openMemory(id) {
+    inboxLocation.current = { memoryId: id, scrollY: window.scrollY, pages: [...pagesRef.current] };
+    return actions.navigation.openMemory(id, { inboxCursors: pagesRef.current });
   }
 
   function changeReview(status, visibility) {
@@ -254,7 +322,7 @@ export function useInboxController(createController) {
     heading, audioPlayback: setAudioPlayback, deleteButton, cancelDelete, reviewFeedback,
     view: {
       snapshot, actions, reviewLocked, setDialogState, setCreationState, navigationNotice,
-      logout, changePassword, retryAccess, pages, filter, nextPage, previousPage,
+      logout, changePassword, retryAccess, pages, pageCursors, filter, nextPage, previousPage, goToPage, openMemory,
       loginForm: { username, password, setUsername, setPassword, onSubmit: login },
       reviewControls: { confirmingDelete, change: changeReview, beginDelete, cancel: cancelConfirmation },
     },

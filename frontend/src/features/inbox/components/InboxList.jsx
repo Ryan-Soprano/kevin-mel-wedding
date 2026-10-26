@@ -1,6 +1,7 @@
 import { memoryTime } from "../memoryDisplay.js";
 import { getMemoryCardTitle, getMemoryExcerpt, getMemoryOpenLabel, getMemorySourceLabel, MEMORY_TYPE_LABELS, REVIEW_STATUS_LABELS, VISIBILITY_LABELS } from "../inboxDisplay.js";
-import { ArchiveEmpty, ArchivePagination, ArchiveScreen } from "./ArchiveLayout.jsx";
+import { ArchiveEmpty, ArchiveScreen } from "./ArchiveLayout.jsx";
+import { inboxPageNumbers } from "../inboxPagination.js";
 
 function MemoryIcon({ type }) {
   return (
@@ -14,7 +15,7 @@ function MemoryIcon({ type }) {
 
 function InboxCard({ memory, onOpen }) {
   return (
-    <li className="inbox-card">
+    <li className="inbox-card" id={`inbox-memory-${memory.memoryId}`}>
       <div className="inbox-card-top">
         <span className="inbox-memory-kind"><MemoryIcon type={memory.memoryType} />{MEMORY_TYPE_LABELS[memory.memoryType]}</span>
         <span className="inbox-visibility">{VISIBILITY_LABELS[memory.visibility] ?? VISIBILITY_LABELS.COUPLE_ONLY}</span>
@@ -28,7 +29,7 @@ function InboxCard({ memory, onOpen }) {
   );
 }
 
-function InboxItems({ state, cursor, actions }) {
+function InboxItems({ state, cursor, actions, onOpen }) {
   if (state.busy) return <output className="inbox-loading"><span className="inbox-loading-dot" aria-hidden="true" />Loading your memories…</output>;
   if (state.error) return <button type="button" onClick={() => actions.reloadInbox(state.reviewStatus, cursor)}>Try again</button>;
   if (state.items.length === 0) return <ArchiveEmpty icon="inbox" title={`No ${REVIEW_STATUS_LABELS[state.reviewStatus].toLowerCase()} memories right now.`}><p>Your memories will be waiting here when they arrive.</p></ArchiveEmpty>;
@@ -38,23 +39,34 @@ function InboxItems({ state, cursor, actions }) {
     <>
       <p className="inbox-page-count">{state.items.length} {countLabel} on this page · times shown in Eastern time</p>
       <ul className="inbox-list">
-        {state.items.map(memory => <InboxCard key={memory.memoryId} memory={memory} onOpen={actions.openMemory} />)}
+        {state.items.map(memory => <InboxCard key={memory.memoryId} memory={memory} onOpen={onOpen ?? actions.openMemory} />)}
       </ul>
     </>
   );
 }
 
-function InboxPagination({ state, pageCount, onNext, onPrevious }) {
+function InboxPagination({ state, pageCount, pageCursors, onPage, onNext, onPrevious }) {
   let pageLabel = `Page ${pageCount}`;
   if (state.error) pageLabel = `Page ${pageCount} could not be loaded`;
   return (
-    <ArchivePagination page={pageCount} pageLabel={pageLabel} label="Inbox pages"
-      disabled={state.busy || Boolean(state.error)} canPrevious={pageCount > 1} canNext={Boolean(state.nextCursor)}
-      onPrevious={onPrevious} onNext={onNext} />
+    <nav className="inbox-numbered-pagination" aria-label="Inbox pages">
+      <button className="button-secondary" type="button" disabled={state.busy || pageCount < 2} onClick={onPrevious}>Previous page</button>
+      <div className="inbox-page-selection">
+        <span className="inbox-page-count" aria-live="polite">{pageLabel}</span>
+        <div className="inbox-page-buttons">
+          {inboxPageNumbers(pageCursors.length, pageCount).map(page => typeof page === "string"
+            ? <span key={page} className="inbox-page-gap" aria-hidden="true">…</span>
+            : <button key={page} type="button" className="button-secondary" aria-label={`Page ${page}`}
+              aria-current={page === pageCount ? "page" : undefined} disabled={state.busy || (page === pageCount && !state.error)}
+              onClick={() => onPage?.(page)}>{page}</button>)}
+        </div>
+      </div>
+      <button className="button-secondary" type="button" disabled={state.busy || pageCount >= pageCursors.length} onClick={onNext}>Next page</button>
+    </nav>
   );
 }
 
-export default function InboxList({ state, pages, actions, onFilter, onNext, onPrevious }) {
+export default function InboxList({ state, pages, pageCursors = pages, actions, onFilter, onNext, onPrevious, onPage, onOpen }) {
   return (
     <ArchiveScreen className="inbox-memories" label="Private memories" busy={state.busy}>
       <nav className="inbox-tools" aria-label="Your archive">
@@ -73,8 +85,9 @@ export default function InboxList({ state, pages, actions, onFilter, onNext, onP
             disabled={state.busy} onClick={() => onFilter(status)}>{label}</button>
         ))}
       </nav>
-      <InboxItems state={state} cursor={pages.at(-1)} actions={actions.navigation} />
-      <InboxPagination state={state} pageCount={pages.length} onNext={onNext} onPrevious={onPrevious} />
+      <InboxItems state={state} cursor={pages.at(-1)} actions={actions.navigation} onOpen={onOpen} />
+      <InboxPagination state={state} pageCount={pages.length} pageCursors={pageCursors}
+        onPage={onPage} onNext={onNext} onPrevious={onPrevious} />
     </ArchiveScreen>
   );
 }

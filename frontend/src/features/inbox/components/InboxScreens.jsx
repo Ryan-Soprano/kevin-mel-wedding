@@ -30,8 +30,8 @@ function AccessScreen({ view }) {
 }
 
 function MemoryListScreen({ view }) {
-  return <InboxList state={view.snapshot} pages={view.pages} actions={view.actions}
-    onFilter={view.filter} onNext={view.nextPage} onPrevious={view.previousPage} />;
+  return <InboxList state={view.snapshot} pages={view.pages} pageCursors={view.pageCursors} actions={view.actions}
+    onFilter={view.filter} onNext={view.nextPage} onPrevious={view.previousPage} onPage={view.goToPage} onOpen={view.openMemory} />;
 }
 
 function CreateScreen({ view, audioEnabled }) {

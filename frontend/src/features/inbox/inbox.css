@@ -194,6 +194,22 @@
 
 .inbox-page-count { margin: 0; color: var(--color-muted); font-size: 0.85rem; }
 
+.inbox-numbered-pagination { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; padding-top: 24px; border-top: 1px solid var(--inbox-border); }
+.inbox-page-selection { display: grid; justify-items: center; gap: 10px; flex: 1; min-width: 0; text-align: center; }
+.inbox-page-buttons { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 6px; }
+.private-inbox .inbox-page-buttons > button { min-width: 48px; padding: 10px; font-variant-numeric: tabular-nums; }
+.private-inbox .inbox-page-buttons > [aria-current="page"] { color: var(--color-surface); background: var(--color-primary); border-color: var(--color-primary); opacity: 1; }
+.inbox-page-gap { color: var(--color-muted); padding: 0 3px; }
+.inbox-detail-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
+.inbox-contribution-navigation { display: flex; gap: 12px; flex-wrap: wrap; }
+
+@media (max-width: 600px) {
+  .inbox-numbered-pagination > .inbox-page-selection { order: -1; flex-basis: 100%; }
+  .inbox-numbered-pagination > button { flex: 1; }
+  .inbox-contribution-navigation { width: 100%; }
+  .inbox-contribution-navigation > button { flex: 1; }
+}
+
 .inbox-list {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

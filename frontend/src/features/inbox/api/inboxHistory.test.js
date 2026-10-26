@@ -13,7 +13,7 @@ function fixture(api) {
   const empty = clone(source.getSnapshot()); source.dispose();
   const actualController = api ? createInboxController({ api }) : null;
   let state = actualController?.getSnapshot() ?? { ...empty, phase: "inbox", session: clone(COUPLE_SESSION) }, recording, serial = 0;
-  const events = new EventTarget(), entries = [], calls = [], movements = [];
+  const events = new EventTarget(), entries = [], calls = [], movements = [], navigationTargets = [];
   let position = -1, blocked = 0, navigations = 0, pages = [null], creationBlocked = false, draft = false, discard = false;
   const emitPop = value => {
     const event = new Event("popstate"); Object.defineProperty(event, "state", { value: clone(value) }); events.dispatchEvent(event);
@@ -55,10 +55,10 @@ function fixture(api) {
   recording = attachInboxHistory({ controller, eventTarget: events, historyImpl: history,
     getInboxPages: () => pages, setInboxPages: value => { pages = value; }, randomId: () => "opaque-" + ++serial,
     isCreationBlocked: () => creationBlocked, hasCreationDraft: () => draft, confirmDiscard: () => discard,
-    onBlocked: () => { blocked++; }, onNavigate: () => { navigations++; } });
+    onBlocked: () => { blocked++; }, onNavigate: route => { navigations++; navigationTargets.push(clone(route)); } });
   const unsubscribe = actualController?.subscribe(next => { state = next; recording.sync(next); });
   recording.sync(state);
-  return { controller, recording, history, events, entries, calls, movements, empty, set,
+  return { controller, recording, history, events, entries, calls, movements, navigationTargets, empty, set,
     setPages: value => { pages = value; }, getPages: () => pages, blocked: () => blocked, navigations: () => navigations,
     creation: (busy, hasDraft, confirm = false) => { creationBlocked = busy; draft = hasDraft; discard = confirm; },
     pop: emitPop,
@@ -215,14 +215,49 @@ test("history contains only opaque ownership while Back and Forward reread the o
     const detailEntry = f.history.state;
     f.history.go(-1); await turn();
     assert.deepEqual(f.calls, [["inbox", "ARCHIVED", "private-cursor"]]);
+    assert.deepEqual(f.navigationTargets.at(-1), { phase: "inbox", reviewStatus: "ARCHIVED", pages: [null, "private-cursor"] });
     assert.deepEqual(f.getPages(), [null, "private-cursor"]);
     f.history.go(1); await turn();
     assert.deepEqual(f.calls.slice(-2), [["inbox", "ARCHIVED", "private-cursor"], ["memory", IDS.text,
-      { albumId: null, eventId: null, tagId: null, libraryReturn: false }]]);
+      { albumId: null, eventId: null, tagId: null, libraryReturn: false, inboxCursors: [null, "private-cursor"] }]]);
     assert.deepEqual(f.history.state, detailEntry);
     for (const entry of f.entries) assert.deepEqual(Object.keys(entry), ["owner", "key", "index"]);
     assert.doesNotMatch(JSON.stringify(f.entries), /private-|blob:|22222222|csrf|memoryId|reviewStatus/);
   } finally { f.recording.dispose(); }
+});
+
+test("Back and Forward retain adjacent navigation after crossing into another inbox page", async () => {
+  const firstPage = [clone(MEMORY_DETAIL), { ...MEMORY_DETAIL, memoryId: IDS.photo }];
+  const secondPage = [{ ...MEMORY_DETAIL, memoryId: IDS.key }];
+  const f = fixture({
+    getSession: async () => clone(COUPLE_SESSION),
+    listMemories: async ({ cursor }) => ({ items: cursor ? clone(secondPage) : clone(firstPage), nextCursor: cursor ? null : "page-two" }),
+    getMemory: async id => ({ ...MEMORY_DETAIL, memoryId: id }),
+    listMemoryTags: async () => ({ items: [], nextCursor: null }),
+  });
+  try {
+    await f.controller.loadSession();
+    await f.controller.openMemory(IDS.photo, { inboxCursors: [null] });
+    await f.controller.nextMemory();
+    let state = f.controller.getSnapshot();
+    assert.equal(state.detail.memoryId, IDS.key);
+    // Mirror the hook synchronizing its selected cursor stack before history sync.
+    f.setPages(state.detailNavigation.inboxPages);
+    f.recording.sync(state);
+    const lastEntry = f.history.state;
+
+    f.history.go(-1); await turn();
+    assert.equal(f.controller.getSnapshot().detail.memoryId, IDS.photo);
+    f.history.go(1); await turn();
+    state = f.controller.getSnapshot();
+    assert.equal(state.detail.memoryId, IDS.key);
+    assert.deepEqual(state.detailNavigation.inboxPages, [null, "page-two"]);
+    assert.equal(state.detailNavigation.canPrevious, true);
+    assert.deepEqual(f.history.state, lastEntry);
+    await f.controller.previousMemory();
+    assert.equal(f.controller.getSnapshot().detail.memoryId, IDS.photo, "the preceding cursor page remains reachable");
+    assert.doesNotMatch(JSON.stringify(f.entries), /page-two|memoryId|22222222/);
+  } finally { f.dispose(); }
 });
 
 test("preview changes and fresh revisions update one destination instead of growing history", () => {

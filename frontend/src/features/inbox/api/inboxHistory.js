@@ -150,7 +150,8 @@ export function attachInboxHistory({ controller, eventTarget = window, historyIm
       case "detail": {
         await restore(route.parent, active);
         if (!active()) return;
-        await controller.openMemory(route.id, { ...route.context });
+        await controller.openMemory(route.id, { ...route.context,
+          ...(route.parent.phase === "inbox" ? { inboxCursors: pagesOf(route.parent.pages) } : {}) });
         if (!active() || !controller.getSnapshot().detail) return;
         const tagPages = route.tags.pages;
         if (route.tags.view === "attach") await controller.chooseMemoryTag(route.tags.q, cursorOf(tagPages), [...tagPages]);
@@ -190,9 +191,9 @@ export function attachInboxHistory({ controller, eventTarget = window, historyIm
       if (blocked) onBlocked();
       return;
     }
-    onNavigate();
-    if (!known(target)) { clear(); return; }
-    const saved = routes.get(target.key);
+    const saved = known(target) ? routes.get(target.key) : null;
+    onNavigate(saved?.route ?? null);
+    if (!saved) { clear(); return; }
     current = { owner, key: target.key, index: target.index };
     const token = ++generation;
     restoring = token;
