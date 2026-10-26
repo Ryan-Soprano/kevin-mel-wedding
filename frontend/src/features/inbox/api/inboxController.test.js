@@ -88,6 +88,239 @@ test("session initialization distinguishes anonymous access and freezes authenti
   assert.deepEqual(f.calls.map(call => call[0]), ["session", "list"]);
 });
 
+test("adjacent contributions follow inbox order across cursor pages and Back restores the current page", async () => {
+  const records = [IDS.text, IDS.photo, IDS.secondPhoto].map(memoryId => ({ ...copy(MEMORY_DETAIL), memoryId }));
+  const pages = { first: { items: records.slice(0, 2), nextCursor: "second-page" },
+    "second-page": { items: records.slice(1), nextCursor: null } };
+  const lists = [];
+  const f = await entered(fixture({ api: {
+    listMemories: async options => { lists.push(options); return copy(pages[options.cursor ?? "first"]); },
+    getMemory: async id => copy(records.find(record => record.memoryId === id)),
+  } }));
+  await f.controller.openMemory(IDS.text);
+  assert.equal(f.controller.getSnapshot().detailNavigation.canPrevious, false);
+  await f.controller.previousMemory();
+  assert.equal(f.controller.getSnapshot().detail.memoryId, IDS.text);
+  await f.controller.nextMemory();
+  assert.equal(f.controller.getSnapshot().detail.memoryId, IDS.photo);
+  assert.equal(lists.length, 1, "cached adjacent memories need no inbox read");
+  await f.controller.nextMemory();
+  let state = f.controller.getSnapshot();
+  assert.equal(state.detail.memoryId, IDS.secondPhoto);
+  assert.deepEqual(state.detailNavigation.ids, records.map(record => record.memoryId), "overlapping pages do not repeat a contribution");
+  assert.deepEqual(state.detailNavigation.pageCursors, [null, "second-page"]);
+  assert.equal(state.detailNavigation.pageIndex, 1);
+  assert.equal(state.detailNavigation.currentPageCursor, "second-page");
+  assert.equal(state.detailNavigation.canNext, false);
+  assert.equal(Object.isFrozen(state.detailNavigation.pages[1].items), true);
+  await f.controller.nextMemory();
+  assert.equal(f.controller.getSnapshot(), state, "the last contribution does not wrap");
+  await f.controller.previousMemory();
+  assert.equal(f.controller.getSnapshot().detail.memoryId, IDS.photo);
+  await f.controller.nextMemory();
+  await f.controller.backToInbox();
+  state = f.controller.getSnapshot();
+  assert.deepEqual(state.items, pages["second-page"].items);
+  assert.equal(state.nextCursor, null);
+  assert.equal(state.detailNavigation, null);
+  assert.equal(lists.length, 2);
+  f.controller.dispose();
+});
+
+test("opening the first contribution on a later inbox page can load the preceding page and restore its last card on Back", async () => {
+  const records = [IDS.text, IDS.photo, IDS.secondPhoto].map(memoryId => ({ ...copy(MEMORY_DETAIL), memoryId }));
+  const pages = { first: { items: records.slice(0, 2), nextCursor: "second-page" },
+    "second-page": { items: records.slice(2), nextCursor: null } };
+  const reads = [];
+  const f = await entered(fixture({ api: {
+    listMemories: async options => { reads.push(options.cursor ?? null); return copy(pages[options.cursor ?? "first"]); },
+    getMemory: async id => copy(records.find(record => record.memoryId === id)),
+  } }));
+  await f.controller.loadInbox("PENDING", "second-page");
+  const cursors = [null, "second-page"];
+  await f.controller.openMemory(IDS.secondPhoto, { inboxCursors: cursors });
+  cursors[0] = "caller-must-not-alter-owned-history";
+  let navigation = f.controller.getSnapshot().detailNavigation;
+  assert.equal(navigation.index, 0);
+  assert.equal(navigation.canPrevious, true);
+  assert.deepEqual(navigation.inboxPages, [null, "second-page"]);
+  await f.controller.previousMemory();
+  let state = f.controller.getSnapshot();
+  navigation = state.detailNavigation;
+  assert.equal(state.detail.memoryId, IDS.photo);
+  assert.deepEqual(navigation.inboxPages, [null]);
+  assert.deepEqual(navigation.pageCursors, [null, "second-page"]);
+  assert.equal(navigation.canNext, true);
+  assert.equal(navigation.canPrevious, true);
+  assert.deepEqual(reads, [null, "second-page", null], "Previous lazily reads the preceding cursor page");
+  await f.controller.backToInbox();
+  state = f.controller.getSnapshot();
+  assert.deepEqual(state.items, pages.first.items);
+  assert.equal(state.nextCursor, "second-page");
+  assert.equal(state.detailNavigation, null);
+  f.controller.dispose();
+});
+
+test("a failed preceding page or preceding detail leaves the current photo and cursor prefix unchanged", async () => {
+  for (const failureAt of ["page", "detail"]) {
+    let fail = false;
+    const prior = { ...copy(MEMORY_DETAIL), memoryId: IDS.secondPhoto };
+    const f = await entered(fixture({ api: {
+      listMemories: async options => {
+        if (options.cursor) return { items: [copy(photo)], nextCursor: null };
+        if (fail && failureAt === "page") throw new ApiError("private preceding-page failure", { status: 503 });
+        return { items: [copy(MEMORY_DETAIL), prior], nextCursor: "second-page" };
+      },
+      getMemory: async id => {
+        if (fail && failureAt === "detail" && id === IDS.secondPhoto) throw new ApiError("private preceding-detail failure", { status: 404 });
+        return copy(id === IDS.photo ? photo : prior);
+      },
+    } }));
+    await f.controller.loadInbox("PENDING", "second-page");
+    await f.controller.openMemory(IDS.photo, { inboxCursors: [null, "second-page"] });
+    const before = f.controller.getSnapshot();
+    fail = true;
+    await f.controller.previousMemory();
+    const failed = f.controller.getSnapshot();
+    assert.equal(failed.detail, before.detail);
+    assert.equal(failed.photo, before.photo);
+    assert.equal(failed.detailNavigation, before.detailNavigation);
+    assert.deepEqual(failed.detailNavigation.inboxPages, [null, "second-page"]);
+    assert.equal(failed.busy, false);
+    assert.deepEqual(f.revoked, []);
+    fail = false;
+    await f.controller.previousMemory();
+    assert.equal(f.controller.getSnapshot().detail.memoryId, IDS.secondPhoto);
+    assert.deepEqual(f.controller.getSnapshot().detailNavigation.inboxPages, [null]);
+    assert.deepEqual(f.revoked, ["blob:original-1"]);
+    f.controller.dispose();
+  }
+});
+
+test("a failed next page or next detail retains the current verified photo and navigation for deliberate retry", async () => {
+  for (const failureAt of ["page", "detail"]) {
+    let fail = true;
+    const f = await entered(fixture({ api: {
+      listMemories: async options => {
+        if (!options.cursor) return { items: [copy(photo)], nextCursor: "next-page" };
+        if (fail && failureAt === "page") throw new ApiError("private provider diagnostic", { status: 503 });
+        return { items: [copy(MEMORY_DETAIL)], nextCursor: null };
+      },
+      getMemory: async id => {
+        if (fail && failureAt === "detail" && id === IDS.text) throw new ApiError("private missing-memory diagnostic", { status: 404 });
+        return copy(id === IDS.photo ? photo : MEMORY_DETAIL);
+      },
+    } }));
+    await f.controller.openMemory(IDS.photo);
+    const before = f.controller.getSnapshot();
+    await f.controller.nextMemory();
+    const failed = f.controller.getSnapshot();
+    assert.equal(failed.detail, before.detail);
+    assert.equal(failed.detailNavigation, before.detailNavigation);
+    assert.equal(failed.photo, before.photo);
+    assert.equal(failed.busy, false);
+    assert.match(failed.error, /current memory is still here/);
+    assert.doesNotMatch(failed.error, /private .* diagnostic/);
+    assert.deepEqual(f.revoked, []);
+    fail = false;
+    await f.controller.nextMemory();
+    assert.equal(f.controller.getSnapshot().detail.memoryId, IDS.text);
+    assert.equal(f.controller.getSnapshot().detailNavigation.index, 1);
+    assert.deepEqual(f.revoked, ["blob:original-1"]);
+    f.controller.dispose();
+  }
+});
+
+test("repeated next-page cursors fail safely instead of looping or advancing the visible memory", async () => {
+  let reads = 0;
+  const f = await entered(fixture({ api: { listMemories: async () => {
+    reads++;
+    return { items: [copy(MEMORY_DETAIL)], nextCursor: "repeated-cursor" };
+  } } }));
+  await f.controller.openMemory(IDS.text);
+  const navigation = f.controller.getSnapshot().detailNavigation;
+  await f.controller.nextMemory();
+  assert.equal(reads, 2);
+  assert.equal(f.controller.getSnapshot().detail.memoryId, IDS.text);
+  assert.equal(f.controller.getSnapshot().detailNavigation, navigation);
+  assert.match(f.controller.getSnapshot().error, /try again/);
+  f.controller.dispose();
+});
+
+test("adjacent navigation cannot interrupt a pending review and survives a confirmed review clearing the inbox cache", async () => {
+  const held = deferred();
+  const f = await entered(fixture({ api: { reviewMemory: async () => held.promise } }));
+  await f.controller.openMemory(IDS.text);
+  const navigation = f.controller.getSnapshot().detailNavigation;
+  const saving = f.controller.reviewMemory("KEEP");
+  await turn();
+  const before = f.calls.length;
+  await f.controller.nextMemory();
+  await f.controller.previousMemory();
+  assert.equal(f.calls.length, before);
+  assert.equal(f.controller.getSnapshot().detailNavigation, navigation);
+  held.resolve({ ...MEMORY_DETAIL, reviewStatus: "KEEP", revision: 2 });
+  await saving;
+  assert.deepEqual(f.controller.getSnapshot().items, []);
+  await f.controller.nextMemory();
+  assert.equal(f.controller.getSnapshot().detail.memoryId, IDS.photo);
+  assert.equal(f.controller.getSnapshot().detailNavigation.index, 1);
+  f.controller.dispose();
+});
+
+test("suspension cancels adjacent reads, clears all navigation, and rejects a late destination", async () => {
+  const held = deferred();
+  const f = await entered(fixture());
+  await f.controller.openMemory(IDS.text);
+  f.api.getMemory = async () => held.promise;
+  const moving = f.controller.nextMemory();
+  await turn();
+  const before = f.calls.length;
+  await f.controller.nextMemory();
+  assert.equal(f.calls.length, before, "busy navigation cannot launch another adjacent read");
+  f.controller.suspend();
+  assert.equal(f.controller.getSnapshot().detailNavigation, null);
+  assert.equal(f.controller.getSnapshot().detail, null);
+  held.resolve(copy(photo));
+  await moving;
+  assert.equal(f.controller.getSnapshot().phase, "checking");
+  assert.equal(f.controller.getSnapshot().detailNavigation, null);
+  assert.deepEqual(f.created, []);
+  f.controller.dispose();
+});
+
+test("auth loss during a page boundary clears the current contribution and all retained navigation", async () => {
+  for (const status of [401, 403]) {
+    const f = await entered(fixture({ api: { listMemories: async options => {
+      if (options.cursor) throw authError(status);
+      return { items: [copy(photo)], nextCursor: "another-page" };
+    } } }));
+    await f.controller.openMemory(IDS.photo);
+    await f.controller.nextMemory();
+    const state = f.controller.getSnapshot();
+    assert.equal(state.session, null);
+    assert.equal(state.detailNavigation, null);
+    assert.equal(state.detail, null);
+    assert.equal(state.photo.url, null);
+    assert.deepEqual(f.revoked, ["blob:original-1"]);
+    f.controller.dispose();
+  }
+});
+
+test("non-inbox detail origins omit adjacent inbox controls and numbered page returns can preserve cursor history", async () => {
+  const f = await entered(fixture());
+  await f.controller.openMemory(IDS.text, { libraryReturn: true });
+  assert.equal(f.controller.getSnapshot().detailNavigation, null);
+  const before = f.calls.length;
+  await f.controller.nextMemory();
+  assert.equal(f.calls.length, before);
+  await f.controller.loadInbox("PENDING", "page-two");
+  const version = f.controller.getSnapshot().pageResetVersion;
+  await f.controller.loadInbox("PENDING", null, { preservePageHistory: true });
+  assert.equal(f.controller.getSnapshot().pageResetVersion, version);
+  f.controller.dispose();
+});
+
 test("each login gets fresh CSRF and uses the rotated authenticated session without retaining credentials", async () => {
   const observed = [], attempts = [];
   let count = 0;

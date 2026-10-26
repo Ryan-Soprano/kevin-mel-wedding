@@ -146,7 +146,7 @@ test("extracted private inbox views preserve loading precedence, memory attribut
     const render = (Component, props) => renderToStaticMarkup(createElement(Component, props));
     const noop = () => {};
     const actions = {
-      navigation: { create: noop, export: noop, openMemory: noop, reloadInbox: noop, back: noop },
+      navigation: { create: noop, export: noop, openMemory: noop, reloadInbox: noop, back: noop, previousMemory: noop, nextMemory: noop },
       albums: { list: noop }, timeline: { list: noop }, library: { list: noop }, tags: { list: noop },
       metadata: { save: noop, reload: noop, retry: noop }, media: { retry: noop },
       memoryTags: { attached: noop, choose: noop, change: noop, page: noop, reload: noop, retry: noop },
@@ -198,6 +198,16 @@ test("extracted private inbox views preserve loading precedence, memory attribut
     assert.match(failedPage, /Try again/);
     assert.match(failedPage, /Page 2 could not be loaded/);
     assert.doesNotMatch(failedPage, /Open memory/);
+    const numbered = render(InboxList, { ...listProps, pages: [null, "two"], pageCursors: [null, "two", "three", "four"], onPage: noop });
+    assert.match(numbered, /aria-label="Page 2" aria-current="page" disabled="">2<\/button>/);
+    for (const page of [1, 3, 4]) assert.match(numbered, new RegExp(`aria-label="Page ${page}">${page}<`));
+    assert.match(numbered, />Previous page<\/button>/);
+    assert.match(numbered, />Next page<\/button>/);
+    assert.match(list, new RegExp(`id="inbox-memory-${guest.memoryId}"`), "return navigation can focus the exact source card");
+    const failedNumbered = render(InboxList, { ...listProps, pages: [null, "two"], pageCursors: [null, "two", "three"], onPage: noop,
+      state: { ...state, error: "Temporary" } });
+    assert.match(failedNumbered, /aria-label="Page 2" aria-current="page">2<\/button>/, "failed current pages remain retryable");
+    assert.match(failedNumbered, /aria-label="Page 1">1<\/button>/, "a failed page does not trap the reader away from loaded pages");
     const empty = render(InboxList, { ...listProps, state: { ...state, items: [] } });
     assert.match(empty, /No pending memories right now/);
     const couple = render(InboxList, { ...listProps, state: { ...state, items: [{ ...MEDIA_DETAIL, source: "COUPLE", title: "Our <photo>" }] } });
@@ -216,6 +226,17 @@ test("extracted private inbox views preserve loading precedence, memory attribut
     assert.match(detail, />Share with Friends &amp; Family</);
     assert.match(detail, />Share with Public</);
     assert.match(detail, />Delete</);
+    assert.doesNotMatch(detail, /Browse inbox contributions/);
+    const browsingState = { ...state, detailNavigation: { canPrevious: false, canNext: true } };
+    const browsing = render(MemoryDetail, { ...detailProps, state: browsingState });
+    assert.match(browsing, /aria-label="Browse inbox contributions"/);
+    assert.match(browsing, /disabled=""><span aria-hidden="true">← <\/span>Previous contribution/);
+    assert.match(browsing, /<button type="button" class="button-secondary">Next contribution/);
+    for (const patch of [{ state: { ...browsingState, busy: true } }, { locked: true },
+      { reviewControls: { ...reviewControls, confirmingDelete: true } }]) {
+      const blockedNavigation = render(MemoryDetail, { ...detailProps, state: browsingState, ...patch });
+      assert.match(blockedNavigation, /disabled="">Next contribution/);
+    }
     const photoState = { ...state, detail: MEDIA_DETAIL, photo: { phase: "ready", url: "blob:verified-original", error: null } };
     const photo = render(MemoryDetail, { ...detailProps, state: photoState });
     assert.match(photo, /<img[^>]*src="blob:verified-original"[^>]*alt="A happy moment"/);

@@ -23,7 +23,7 @@ test("screen adapters preserve access precedence, creation guards and editor res
     const base = { phase: "inbox", session: { authenticated: true }, busy: false,
       albums: initialAlbums(), timeline: initialTimeline(), library: initialLibrary(), tags: initialTags(), export: initialExport() };
     const view = { snapshot: base, actions, reviewLocked: true, setDialogState: noop, setCreationState: noop,
-      pages: [null], filter: noop, nextPage: noop, previousPage: noop, retryAccess: noop, logout: noop,
+      pages: [null], pageCursors: [null, "next"], filter: noop, nextPage: noop, previousPage: noop, goToPage: noop, openMemory: noop, retryAccess: noop, logout: noop,
       loginForm: { username: "", password: "", setUsername: noop, setPassword: noop, onSubmit: noop }, reviewControls: {} };
     const render = snapshot => renderToStaticMarkup(createElement(InboxScreen, { view: { ...view, snapshot } }));
     for (const phase of ["inbox", "detail", "create", "albums", "timeline", "library", "tags", "export"]) {
@@ -119,6 +119,7 @@ test("screen adapters preserve access precedence, creation guards and editor res
     assert.equal(create.props.action, actions.creation.action);
     const list = leaf(base);
     assert.equal(list.props.onFilter, view.filter); assert.equal(list.props.onNext, view.nextPage); assert.equal(list.props.onPrevious, view.previousPage);
+    assert.equal(list.props.pageCursors, view.pageCursors); assert.equal(list.props.onPage, view.goToPage); assert.equal(list.props.onOpen, view.openMemory);
     const audioPlayback = {}, deleteButton = {}, cancelDelete = {}, reviewFeedback = {};
     const detail = leaf({ ...base, phase: "detail" }, { audioPlayback, deleteButton, cancelDelete, reviewFeedback });
     assert.equal(detail.props.audioPlayback, audioPlayback); assert.equal(detail.props.deleteButton, deleteButton);

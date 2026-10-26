@@ -1,10 +1,10 @@
 import { useMemo } from "react";
 
 /** Stable adapters read the current owner only when an action is invoked. */
-export function useInboxActions(controller, beforeAction, requestInbox) {
+export function useInboxActions(controller, beforeAction, requestInbox, restoreInboxLocation) {
   return useMemo(() => {
     const call = (method, ...args) => { beforeAction(); return controller.current?.[method](...args); };
-    const backToInbox = () => call("backToInbox");
+    const backToInbox = () => { beforeAction(); restoreInboxLocation?.(); return controller.current?.backToInbox(); };
     const inbox = () => call("loadInbox", "PENDING");
     const tags = {
       inbox,
@@ -27,7 +27,9 @@ export function useInboxActions(controller, beforeAction, requestInbox) {
         back: backToInbox,
         create: () => call("beginCreation"),
         export: () => call("loadExport"),
-        openMemory: id => call("openMemory", id),
+        openMemory: (id, options) => call("openMemory", id, options),
+        previousMemory: () => call("previousMemory"),
+        nextMemory: () => call("nextMemory"),
         reloadInbox: requestInbox,
       },
       creation: {
@@ -110,5 +112,5 @@ export function useInboxActions(controller, beforeAction, requestInbox) {
         started: () => call("exportDownloadStarted"),
       },
     };
-  }, [controller, beforeAction, requestInbox]);
+  }, [controller, beforeAction, requestInbox, restoreInboxLocation]);
 }

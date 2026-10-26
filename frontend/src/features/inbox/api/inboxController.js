@@ -16,6 +16,19 @@ const LOGIN_RATE_LIMITED = "Too many sign-in attempts.";
 const LOGIN_READY = "You can try signing in again.";
 const PASSWORD_RATE_LIMITED = "Too many password-change attempts.";
 
+const navigationIds = pages => [...new Set(pages.flatMap(page => page.items.map(item => item.memoryId)))];
+
+function detailNavigation(pages, index, reviewStatus, previousPageCursors = EMPTY_ITEMS) {
+  const ids = navigationIds(pages);
+  const pageIndex = pages.findIndex(page => page.items.some(item => item.memoryId === ids[index]));
+  const nextCursor = pages.at(-1).nextCursor;
+  return Object.freeze({ ids: Object.freeze(ids), index, reviewStatus, nextCursor, pages: Object.freeze(pages),
+    pageCursors: Object.freeze(pages.map(page => page.cursor)), pageIndex, currentPageCursor: pages[pageIndex].cursor,
+    previousPageCursors: Object.freeze(previousPageCursors),
+    inboxPages: Object.freeze([...previousPageCursors, ...pages.slice(0, pageIndex + 1).map(page => page.cursor)]),
+    canPrevious: index > 0 || previousPageCursors.length > 0, canNext: index + 1 < ids.length || nextCursor !== null });
+}
+
 /**
  * A private, in-memory presentation controller. Latest intent owns every result;
  * deadlines include body reads and decoding, even when a transport ignores abort.
@@ -28,7 +41,7 @@ export function createInboxController({
   albumNameFingerprint, timelineFieldsFingerprint, tagNameFingerprint,
 } = {}) {
   let state = Object.freeze({ phase: "checking", session: null, busy: false, error: null, loginRetryAfterSeconds: 0,
-    reviewStatus: "PENDING", items: EMPTY_ITEMS, nextCursor: null, detail: null, requestedMemoryId: null,
+    reviewStatus: "PENDING", items: EMPTY_ITEMS, nextCursor: null, detail: null, requestedMemoryId: null, detailNavigation: null,
     photo: idlePhoto(), review: idleReview(), shareLink: idleShareLink(), metadata: idleMetadata(), albums: initialAlbums(), albumReturnId: null,
     timeline: initialTimeline(), timelineReturnId: null, library: initialLibrary(), libraryReturn: false,
     tags: initialTags(), tagReturnId: null, export: initialExport(), notice: null, pageResetVersion: 0, logoutUnconfirmed: false,
@@ -47,6 +60,7 @@ export function createInboxController({
     };
   } });
   let generation = 0, operation = null, disposed = false, cancelling = false, inboxDirty = false;
+  let inboxCursor = null;
   let cancellingLogout = false;
   let loginRetryAt = 0, loginRetryTimer = null;
   let suspended = false, resuming = null, rechecking = null;
@@ -84,6 +98,8 @@ export function createInboxController({
     }
     next.requestedMemoryId = next.phase === "detail" && hasArchiveAccess(next.session)
       ? next.detail?.memoryId ?? next.requestedMemoryId : null;
+    if (next.phase !== "detail" || !hasArchiveAccess(next.session)
+      || next.albumReturnId || next.timelineReturnId || next.libraryReturn || next.tagReturnId) next.detailNavigation = null;
     if (next.shareLink.url && (next.detail?.memoryId !== next.shareLink.memoryId
       || next.detail?.revision !== next.shareLink.revision || next.detail?.visibility !== "FRIENDS_FAMILY")) next.shareLink = idleShareLink();
     if (Object.keys(next).every(key => next[key] === state[key])) return;
@@ -142,7 +158,7 @@ export function createInboxController({
     try {
       previousOperation?.controller.abort(interrupted());
       previousCheck?.op.controller.abort(interrupted());
-      revokePhoto();
+      if (purpose !== "memory-page") revokePhoto();
       exports.revokeDownload();
     } finally { cancelling = false; cancellingLogout = false; }
     return owner;
@@ -193,6 +209,7 @@ export function createInboxController({
     revokePhoto();
     mutations.clear();
     inboxDirty = false;
+    inboxCursor = null;
     albums.clear();
     timeline.clear();
     library.clear(); tags.clear(); exports.clear();
@@ -242,11 +259,89 @@ export function createInboxController({
     const result = await bounded(op, signal => api.listMemories({ reviewStatus,
       ...(cursor !== null ? { cursor } : {}), signal }));
     assertCurrent(op);
+    inboxCursor = cursor;
     publish({ phase: "inbox", reviewStatus, items: frozenCopy(result.items), nextCursor: result.nextCursor, detail: null });
     inboxDirty = false;
   }
 
   function unavailableReview() { mutations.unavailableReview(); }
+
+  function memoryNavigation(id, inboxCursors) {
+    const previous = state.detailNavigation;
+    const pages = state.phase === "inbox" ? [Object.freeze({ cursor: inboxCursor, items: state.items, nextCursor: state.nextCursor })] : previous?.pages;
+    const ids = state.phase === "inbox" ? [...new Set(state.items.map(item => item.memoryId))] : previous?.ids;
+    const index = ids?.indexOf(id) ?? -1;
+    if (index < 0) return null;
+    const preceding = state.phase === "inbox"
+      ? (Array.isArray(inboxCursors) && inboxCursors.at(-1) === inboxCursor ? inboxCursors.slice(0, -1) : [])
+      : previous.previousPageCursors;
+    return detailNavigation(pages, index, previous?.reviewStatus ?? state.reviewStatus, preceding);
+  }
+
+  async function readAdjacentPage(op, navigation, direction) {
+    const pages = [...navigation.pages], preceding = [...navigation.previousPageCursors], seen = new Set(pages.map(page => page.cursor));
+    const currentId = navigation.ids[navigation.index];
+    let index = navigation.index;
+    while (direction === 1 ? pages.at(-1).nextCursor !== null : preceding.length > 0) {
+      const cursor = direction === 1 ? pages.at(-1).nextCursor : preceding.pop();
+      if (seen.has(cursor)) throw new ApiError("The page could not be confirmed.", { code: "CONTRACT_MISMATCH" });
+      seen.add(cursor);
+      const result = await bounded(op, signal => api.listMemories({ reviewStatus: navigation.reviewStatus,
+        ...(cursor !== null ? { cursor } : {}), signal }));
+      const page = frozenCopy({ cursor, items: result.items, nextCursor: result.nextCursor });
+      if (direction === 1) pages.push(page);
+      else pages.unshift(page);
+      const ids = navigationIds(pages);
+      index = ids.indexOf(currentId);
+      const destination = index + direction;
+      if (destination >= 0 && destination < ids.length) {
+        const next = detailNavigation(pages, destination, navigation.reviewStatus, preceding);
+        await readMemory(op, next.ids[destination], next);
+        return;
+      }
+    }
+    assertCurrent(op);
+    publish({ detailNavigation: detailNavigation(pages, index, navigation.reviewStatus, preceding) });
+  }
+
+  async function readMemory(op, id, navigation) {
+    const detail = frozenCopy(await bounded(op, signal => api.getMemory(id, { signal })));
+    if (navigation) {
+      if (detail.memoryId !== id) throw new ApiError("The contribution could not be confirmed.", { code: "CONTRACT_MISMATCH" });
+      revokePhoto();
+      assertCurrent(op);
+      tags.clearMemoryPresentation();
+      assertCurrent(op);
+    }
+    publish({ detail, ...(navigation ? { detailNavigation: navigation, requestedMemoryId: id,
+      photo: idlePhoto(), shareLink: idleShareLink(), notice: null } : {}) });
+    assertCurrent(op);
+    if (detail.reviewStatus !== "DELETE") await refreshMemoryTags(op, detail);
+    if (!current(op) || op.controller.signal.aborted || !state.detail) return;
+    if (["PHOTO", "AUDIO"].includes(detail.memoryType) && detail.reviewStatus !== "DELETE") await photo(op, detail);
+  }
+
+  function adjacentMemory(direction) {
+    const navigation = state.detailNavigation;
+    if (disposed || cancelling || suspended || state.busy || !hasArchiveAccess(state.session) || state.phase !== "detail"
+      || !navigation || mutations.locked() || albums.locked() || timeline.locked() || tags.locked() || exports.locked()) return Promise.resolve(state);
+    const index = navigation.index + direction;
+    const knownDestination = index >= 0 && index < navigation.ids.length;
+    if (!knownDestination && !(direction === 1 ? navigation.canNext : navigation.canPrevious)) return Promise.resolve(state);
+
+    // Discover the next cursor page without removing the currently open media.
+    // Only a confirmed destination starts the usual detail/media replacement.
+    const op = start({ phase: "detail", detail: state.detail, photo: state.photo, shareLink: state.shareLink }, "memory-page");
+    return run(op, async () => {
+      if (knownDestination) {
+        await readMemory(op, navigation.ids[index], detailNavigation(navigation.pages, index, navigation.reviewStatus, navigation.previousPageCursors));
+        return;
+      }
+      await readAdjacentPage(op, navigation, direction);
+    }, failure => {
+      if (!authFailure(failure)) publish({ error: "That contribution could not be loaded. Your current memory is still here; try again." });
+    });
+  }
 
   async function refreshMemoryTags(op, memory) {
     try { await tags.readMemoryTags(op, memory.memoryId); }
@@ -377,6 +472,7 @@ export function createInboxController({
       resuming = null;
       cancel();
       inboxDirty = true;
+      inboxCursor = null;
       publish({ phase: "checking", session: null, items: EMPTY_ITEMS, nextCursor: null,
         detail: null, photo: idlePhoto(), notice: null, busy: false, error: null, logoutUnconfirmed,
         // Build mutation state after synchronous abort callbacks have run.
@@ -573,21 +669,22 @@ export function createInboxController({
       }, () => clearPrivate({ phase: "unavailable", logoutUnconfirmed: true,
         error: "Sign-out could not be confirmed. Private content is hidden here. Retry signing out before leaving a shared device." }));
     },
-    loadInbox(reviewStatus = "PENDING", cursor = null) {
+    loadInbox(reviewStatus = "PENDING", cursor = null, { preservePageHistory = false } = {}) {
       if (!state.session?.authenticated || disposed || cancelling || mutations.locked() || albums.locked() || timeline.locked() || tags.locked() || exports.locked()) return Promise.resolve(state);
       const albumNavigation = albums.clearNavigation();
       const timelineNavigation = timeline.clearNavigation();
       const libraryNavigation = library.clearNavigation(), tagNavigation = tags.clearNavigation();
       const changed = reviewStatus !== state.reviewStatus;
       const op = start({ phase: "inbox", reviewStatus, detail: null, notice: null, albums: initialAlbums(), timeline: initialTimeline(), library: initialLibrary(), tags: initialTags(), ...albumNavigation, ...timelineNavigation, ...libraryNavigation, ...tagNavigation,
-        ...(cursor === null ? { pageResetVersion: state.pageResetVersion + 1 } : {}),
+        ...(cursor === null && !preservePageHistory ? { pageResetVersion: state.pageResetVersion + 1 } : {}),
         ...(changed ? { items: EMPTY_ITEMS, nextCursor: null } : {}) });
       return run(op, () => page(op, reviewStatus, cursor), failure => {
         if (!authFailure(failure)) publish({ error: "Your inbox could not be loaded. Try loading it again." });
       });
     },
-    openMemory(id, { albumId = null, eventId = null, libraryReturn = false, tagId = null } = {}) {
+    openMemory(id, { albumId = null, eventId = null, libraryReturn = false, tagId = null, inboxCursors } = {}) {
       if (!state.session?.authenticated || disposed || cancelling || mutations.locked() || albums.locked() || timeline.locked() || tags.locked() || exports.locked()) return Promise.resolve(state);
+      const navigation = albumId || eventId || libraryReturn || tagId ? null : memoryNavigation(id, inboxCursors);
       // Publish the requested memory and its return context as one destination.
       const op = batchPublication(() => {
         albums.memoryContext(albumId);
@@ -597,31 +694,29 @@ export function createInboxController({
         if (!eventId) publish({ timeline: initialTimeline(), ...timeline.clearNavigation() });
         if (!libraryReturn) publish({ library: initialLibrary(), ...library.clearNavigation() });
         if (!tagId) publish(tags.clearNavigation());
-        return start({ phase: "detail", detail: null, requestedMemoryId: id, notice: null });
+        return start({ phase: "detail", detail: null, requestedMemoryId: id, detailNavigation: navigation, notice: null });
       });
-      return run(op, async () => {
-        const detail = frozenCopy(await bounded(op, signal => api.getMemory(id, { signal })));
-        publish({ detail });
-        assertCurrent(op);
-        if (detail.reviewStatus !== "DELETE") await refreshMemoryTags(op, detail);
-        if (!current(op) || op.controller.signal.aborted || !state.detail) return;
-        if (["PHOTO", "AUDIO"].includes(detail.memoryType) && detail.reviewStatus !== "DELETE") await photo(op, detail);
-      }, failure => {
+      return run(op, () => readMemory(op, id), failure => {
         if (authFailure(failure)) return;
         if (failure?.status === 404) unavailableReview();
         else publish({ error: "This memory could not be loaded. Return to the inbox and try again." });
       });
     },
+    previousMemory() { return adjacentMemory(-1); },
+    nextMemory() { return adjacentMemory(1); },
     backToInbox() {
       if (disposed || cancelling || !state.session?.authenticated || mutations.locked() || albums.locked() || timeline.locked() || tags.locked() || exports.locked()) return state;
       if (albums.hasReturn()) return albums.returnToAlbum();
       if (timeline.hasReturn()) return timeline.returnToEvent();
       if (tags.hasReturn()) return tags.returnToTag();
       if (library.hasReturn()) return library.returnToLibrary();
+      const sourcePage = state.detailNavigation?.pages[state.detailNavigation.pageIndex];
       if (inboxDirty) return controller.loadInbox(state.reviewStatus);
       const owner = cancel();
       if (disposed || generation !== owner) return state;
-      publish({ phase: "inbox", busy: false, error: null, detail: null, photo: idlePhoto(), notice: null });
+      if (sourcePage) inboxCursor = sourcePage.cursor;
+      publish({ phase: "inbox", busy: false, error: null, detail: null, photo: idlePhoto(), notice: null,
+        ...(sourcePage ? { items: sourcePage.items, nextCursor: sourcePage.nextCursor } : {}) });
       return state;
     },
     retryPhoto() {
@@ -649,11 +744,12 @@ export function createInboxController({
       cancel();
       mutations.dispose();
       inboxDirty = false;
+      inboxCursor = null;
       albums.clear();
       timeline.clear();
       library.clear(); tags.clear(); exports.clear();
       state = Object.freeze({ ...state, session: null, items: EMPTY_ITEMS, nextCursor: null,
-        detail: null, requestedMemoryId: null, photo: idlePhoto(), review: idleReview(), shareLink: idleShareLink(), metadata: idleMetadata(), albums: initialAlbums(), albumReturnId: null,
+        detail: null, requestedMemoryId: null, detailNavigation: null, photo: idlePhoto(), review: idleReview(), shareLink: idleShareLink(), metadata: idleMetadata(), albums: initialAlbums(), albumReturnId: null,
         timeline: initialTimeline(), timelineReturnId: null, library: initialLibrary(), libraryReturn: false, tags: initialTags(), tagReturnId: null, export: initialExport(), notice: null, busy: false, error: null, loginRetryAfterSeconds: 0 });
       suspended = true;
       resuming = null;
