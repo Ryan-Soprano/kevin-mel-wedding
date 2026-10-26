@@ -134,7 +134,7 @@ public final class AccountAdministration {
         char[] password = null;
         char[] repeated = null;
         try {
-            password = console.readPassword("New password (at least 15 characters, at most 72 UTF-8 bytes): ");
+            password = console.readPassword("New password (at least 8 characters, at most 72 UTF-8 bytes): ");
             repeated = console.readPassword("Repeat new password: ");
             if (password == null || repeated == null || !Arrays.equals(password, repeated)) {
                 throw new RejectedOperation("Passwords did not match. No account was changed.");

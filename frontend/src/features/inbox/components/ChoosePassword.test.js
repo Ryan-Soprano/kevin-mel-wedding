@@ -25,7 +25,7 @@ test("pending-password screen precedes every archive route and exposes only pass
       assert.match(html, /Current temporary password/); assert.match(html, /Repeat new password/);
       assert.equal((html.match(/type="password"/g) ?? []).length, 3);
       assert.equal((html.match(/autoComplete="new-password"/g) ?? []).length, 2);
-      assert.match(html, /autoComplete="current-password"/); assert.match(html, /15 characters/);
+      assert.match(html, /autoComplete="current-password"/); assert.match(html, /8 characters/);
       assert.match(html, /72 UTF-8 bytes/); assert.match(html, /Sign out/);
       assert.doesNotMatch(html, /Private archive sentinel|Add a memory|Back to inbox|value="/);
     }

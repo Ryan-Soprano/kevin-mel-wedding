@@ -8,7 +8,7 @@ Your guest memories and the memories you add yourselves share one private archiv
 
 Open the [private inbox](https://kevinandmel.com/?view=inbox). Kevin's username is `kevin-admin`; Melanie's is `melanie-admin`. Ryan supplies each temporary password privately. Enter your own username and temporary password, then choose **Sign in**.
 
-On your first sign-in, choose a different password and repeat it. Use at least 15 characters; a passphrase works well. Complete this step before opening your memories. After it succeeds, use your chosen password for future sign-ins; the temporary password stops working.
+On your first sign-in, choose a different password and repeat it. Use at least 8 characters; a passphrase works well. Complete this step before opening your memories. After it succeeds, use your chosen password for future sign-ins; the temporary password stops working.
 
 Keep passwords private and use your separate accounts. If the connection drops during the password change, check access again; if asked to sign in, try the new password you chose. Contact Ryan if you cannot get in, and avoid repeated attempts while a retry delay is displayed.
 

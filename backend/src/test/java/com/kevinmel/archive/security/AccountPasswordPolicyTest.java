@@ -9,10 +9,10 @@ import com.kevinmel.archive.web.ApiException;
 
 class AccountPasswordPolicyTest {
     @Test void unicodePolicyCountsCodePointsAndRejectsEncoderTruncationAndMalformedUnicode() {
-        for (String valid : new String[] {"a".repeat(15), "a".repeat(72), "😀".repeat(15), "é".repeat(36)}) {
+        for (String valid : new String[] {"a".repeat(8), "a".repeat(72), "😀".repeat(8), "😀".repeat(18), "é".repeat(36)}) {
             assertThatCode(() -> AccountPasswordService.validateNewPassword(valid)).doesNotThrowAnyException();
         }
-        for (String invalid : new String[] {"a".repeat(14), "a".repeat(73), "😀".repeat(14), "😀".repeat(19),
+        for (String invalid : new String[] {"a".repeat(7), "a".repeat(73), "😀".repeat(7), "😀".repeat(19),
                 "é".repeat(37), "valid-synthetic-\ud800", "valid-synthetic-\udc00", "valid-synthetic-\0"}) {
             assertThatThrownBy(() -> AccountPasswordService.validateNewPassword(invalid)).isInstanceOf(ApiException.class);
         }
