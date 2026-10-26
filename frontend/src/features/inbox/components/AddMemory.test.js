@@ -230,12 +230,12 @@ test("extracted private inbox views preserve loading precedence, memory attribut
     const browsingState = { ...state, detailNavigation: { canPrevious: false, canNext: true } };
     const browsing = render(MemoryDetail, { ...detailProps, state: browsingState });
     assert.match(browsing, /aria-label="Browse inbox contributions"/);
-    assert.match(browsing, /disabled=""><span aria-hidden="true">← <\/span>Previous contribution/);
-    assert.match(browsing, /<button type="button" class="button-secondary">Next contribution/);
+    assert.match(browsing, /aria-label="Previous contribution" title="Previous contribution" disabled=""/);
+    assert.match(browsing, /aria-label="Next contribution" title="Next contribution"><svg/);
     for (const patch of [{ state: { ...browsingState, busy: true } }, { locked: true },
       { reviewControls: { ...reviewControls, confirmingDelete: true } }]) {
       const blockedNavigation = render(MemoryDetail, { ...detailProps, state: browsingState, ...patch });
-      assert.match(blockedNavigation, /disabled="">Next contribution/);
+      assert.match(blockedNavigation, /aria-label="Next contribution" title="Next contribution" disabled=""/);
     }
     const photoState = { ...state, detail: MEDIA_DETAIL, photo: { phase: "ready", url: "blob:verified-original", error: null } };
     const photo = render(MemoryDetail, { ...detailProps, state: photoState });
