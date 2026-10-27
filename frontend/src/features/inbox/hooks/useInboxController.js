@@ -14,7 +14,7 @@ import { rememberInboxPages } from "../inboxPagination.js";
 
 const INITIAL = {
   phase: "checking", session: null, busy: true, error: null,
-  reviewStatus: "PENDING", items: [], nextCursor: null, detail: null, requestedMemoryId: null, detailNavigation: null,
+  reviewStatus: "PENDING", items: [], nextCursor: null, totalCount: null, detail: null, requestedMemoryId: null, detailNavigation: null,
   photo: { phase: "idle", url: null, error: null },
   review: { phase: "idle", targetStatus: null, error: null, canRetry: false },
   metadata: { phase: "idle", error: null, canRetry: false },

@@ -241,6 +241,7 @@ export function createMockArchiveApi({ scenario = "success", delayMs = 0, now = 
         return reply({
           items: filtered.slice(offset, offset + limit),
           nextCursor: offset + limit < filtered.length ? "offset:" + (offset + limit) : null,
+          totalCount: filtered.length,
         });
       }
       const detailPath = url.pathname.match(/^\/api\/memories\/([^/]+)(?:\/(review|playback|metadata))?$/);

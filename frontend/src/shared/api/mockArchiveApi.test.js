@@ -280,7 +280,7 @@ test("invalid login and empty inbox have deterministic fixtures", async () => {
   await assert.rejects(signIn(api), { code: "INVALID_CREDENTIALS", status: 401 });
   api.setScenario("empty");
   await signIn(api);
-  assert.deepEqual(await api.listMemories(), { items: [], nextCursor: null });
+  assert.deepEqual(await api.listMemories(), { items: [], nextCursor: null, totalCount: 0 });
 });
 
 test("cursor pages, stale-review conflicts, private KEEP, and recoverable DELETE", async () => {
@@ -291,10 +291,14 @@ test("cursor pages, stale-review conflicts, private KEEP, and recoverable DELETE
   assert.equal(page.items.length, 1);
   assert.ok(page.nextCursor);
   const next = await api.listMemories({ limit: 1, cursor: page.nextCursor });
+  assert.equal(page.totalCount, 2);
+  assert.equal(next.totalCount, 2, "the total spans every cursor page");
   assert.notEqual(next.items[0].memoryId, page.items[0].memoryId);
   assert.equal(next.nextCursor, null);
   const csrf = { csrfToken: session.csrfToken };
   const kept = await api.reviewMemory(IDS.text, { reviewStatus: "KEEP", revision: 1 }, csrf);
+  assert.equal((await api.listMemories({ reviewStatus: "KEEP" })).totalCount, 1);
+  assert.equal((await api.listMemories()).totalCount, 1, "totals follow the selected review category");
   assert.equal(kept.visibility, "COUPLE_ONLY");
   await assert.rejects(api.reviewMemory(IDS.text, { reviewStatus: "ARCHIVED", revision: 1 }, csrf), { code: "REVIEW_CONFLICT", status: 412 });
   const deleted = await api.reviewMemory(IDS.text, { reviewStatus: "DELETE", revision: kept.revision }, csrf);
@@ -460,7 +464,7 @@ test("deleted text and photos remain recoverable before expiry and disappear at 
 
   now += 1;
   assert.deepEqual(await api.listMemories({ reviewStatus: "DELETE", limit: 1 }), {
-    items: [laterPhoto], nextCursor: null,
+    items: [laterPhoto], nextCursor: null, totalCount: 1,
   });
   for (const memory of [deletedText, deletedPhoto]) {
     await assert.rejects(api.getMemory(memory.memoryId), { code: "NOT_FOUND", status: 404 });
@@ -470,7 +474,7 @@ test("deleted text and photos remain recoverable before expiry and disappear at 
     await assert.rejects(api.getPlayback(memory.memoryId), { code: "NOT_FOUND", status: 404 });
   }
   now = Date.parse(laterPhoto.deleteAfter);
-  assert.deepEqual(await api.listMemories({ reviewStatus: "DELETE" }), { items: [], nextCursor: null });
+  assert.deepEqual(await api.listMemories({ reviewStatus: "DELETE" }), { items: [], nextCursor: null, totalCount: 0 });
   await assert.rejects(api.getMemory(secondPhotoId), { code: "NOT_FOUND", status: 404 });
 });
 

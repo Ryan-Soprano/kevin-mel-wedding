@@ -29,18 +29,31 @@ function InboxCard({ memory, onOpen }) {
   );
 }
 
+function InboxCount({ state }) {
+  const pageLabel = state.items.length === 1 ? "memory" : "memories";
+  const totalLabel = state.totalCount === 1 ? "memory" : "memories";
+  const hasTotal = Number.isSafeInteger(state.totalCount) && state.totalCount >= 0;
+  return <p className="inbox-page-count">
+    {hasTotal ? <><strong>{state.totalCount.toLocaleString("en-US")} {REVIEW_STATUS_LABELS[state.reviewStatus].toLowerCase()} {totalLabel} total</strong> · {state.items.length} on this page</>
+      : <>{state.items.length} {pageLabel} on this page</>} · times shown in Eastern time
+  </p>;
+}
+
 function InboxItems({ state, cursor, actions, onOpen }) {
   if (state.busy) return <output className="inbox-loading"><span className="inbox-loading-dot" aria-hidden="true" />Loading your memories…</output>;
   if (state.error) return <button type="button" onClick={() => actions.reloadInbox(state.reviewStatus, cursor)}>Try again</button>;
-  if (state.items.length === 0) return <ArchiveEmpty icon="inbox" title={`No ${REVIEW_STATUS_LABELS[state.reviewStatus].toLowerCase()} memories right now.`}><p>Your memories will be waiting here when they arrive.</p></ArchiveEmpty>;
-  let countLabel = "memories";
-  if (state.items.length === 1) countLabel = "memory";
+  const emptyTitle = state.totalCount > 0 ? "No memories on this page."
+    : `No ${REVIEW_STATUS_LABELS[state.reviewStatus].toLowerCase()} memories right now.`;
   return (
     <>
-      <p className="inbox-page-count">{state.items.length} {countLabel} on this page · times shown in Eastern time</p>
-      <ul className="inbox-list">
+      <InboxCount state={state} />
+      {state.items.length === 0
+        ? <ArchiveEmpty icon="inbox" title={emptyTitle}><p>{state.totalCount > 0
+          ? "Choose an earlier page or reload this category to see its memories."
+          : "Your memories will be waiting here when they arrive."}</p></ArchiveEmpty>
+        : <ul className="inbox-list">
         {state.items.map(memory => <InboxCard key={memory.memoryId} memory={memory} onOpen={onOpen ?? actions.openMemory} />)}
-      </ul>
+        </ul>}
     </>
   );
 }

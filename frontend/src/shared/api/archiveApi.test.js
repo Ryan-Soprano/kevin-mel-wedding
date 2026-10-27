@@ -437,6 +437,13 @@ test("inbox rejects response counts, filters, duplicate identities and unusable 
   }
   const boundary = { items: [MEMORY_DETAIL], nextCursor: "x".repeat(256) };
   assert.deepEqual(await returning(boundary).listMemories({ limit: 1 }), boundary);
+  const counted = { ...boundary, totalCount: 47 };
+  assert.deepEqual(await returning(counted).listMemories({ limit: 1 }), counted);
+  for (const totalCount of [null, -1, 0, 1.5, "47", Number.MAX_SAFE_INTEGER + 1]) {
+    await assert.rejects(returning({ ...boundary, totalCount }).listMemories(), { code: "CONTRACT_MISMATCH" });
+  }
+  assert.deepEqual(await returning({ items: [], nextCursor: null, totalCount: 0 }).listMemories(),
+    { items: [], nextCursor: null, totalCount: 0 });
 });
 
 test("shared receipt, memory and permission timestamps require real canonical UTC instants", async () => {

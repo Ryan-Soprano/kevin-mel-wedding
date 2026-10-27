@@ -26,7 +26,8 @@ public class InboxService {
             String cursor) {
         authorization.requireCoupleAccess();
         InboxQuery query = InboxQuery.from(reviewStatus, limit, cursor);
-        List<MemoryDetail> found = repository.list(query);
+        var result = repository.listPage(query);
+        List<MemoryDetail> found = result.items();
         List<MemoryDetail> items = List.copyOf(found.subList(0, Math.min(found.size(), query.limit())));
         String nextCursor = found.size() > query.limit()
                 ? new InboxCursor(
@@ -34,7 +35,7 @@ public class InboxService {
                         items.getLast().createdAt(),
                         items.getLast().memoryId()).encode()
                 : null;
-        return new InboxPage(items, nextCursor);
+        return new InboxPage(items, nextCursor, result.totalCount());
     }
 
     public MemoryDetail detail(UUID memoryId) {
@@ -52,7 +53,8 @@ public class InboxService {
 
     public record InboxPage(
             List<MemoryDetail> items,
-            String nextCursor) {
+            String nextCursor,
+            long totalCount) {
         public InboxPage {
             items = List.copyOf(items);
         }
