@@ -80,6 +80,7 @@ test("session initialization distinguishes anonymous access and freezes authenti
   assert.equal(state.busy, false);
   assert.equal(state.items.length, 2);
   assert.equal(state.nextCursor, "next-page");
+  assert.equal(state.totalCount, null, "an older response without a count does not invent one from the current page");
   assert.equal(Object.isFrozen(state), true);
   assert.equal(Object.isFrozen(state.items[1].media), true);
   assert.equal(Object.isFrozen(state.session.user.roles), true);
@@ -90,14 +91,15 @@ test("session initialization distinguishes anonymous access and freezes authenti
 
 test("adjacent contributions follow inbox order across cursor pages and Back restores the current page", async () => {
   const records = [IDS.text, IDS.photo, IDS.secondPhoto].map(memoryId => ({ ...copy(MEMORY_DETAIL), memoryId }));
-  const pages = { first: { items: records.slice(0, 2), nextCursor: "second-page" },
-    "second-page": { items: records.slice(1), nextCursor: null } };
+  const pages = { first: { items: records.slice(0, 2), nextCursor: "second-page", totalCount: 3 },
+    "second-page": { items: records.slice(1), nextCursor: null, totalCount: 4 } };
   const lists = [];
   const f = await entered(fixture({ api: {
     listMemories: async options => { lists.push(options); return copy(pages[options.cursor ?? "first"]); },
     getMemory: async id => copy(records.find(record => record.memoryId === id)),
   } }));
   await f.controller.openMemory(IDS.text);
+  assert.equal(f.controller.getSnapshot().totalCount, 3);
   assert.equal(f.controller.getSnapshot().detailNavigation.canPrevious, false);
   await f.controller.previousMemory();
   assert.equal(f.controller.getSnapshot().detail.memoryId, IDS.text);
@@ -107,6 +109,7 @@ test("adjacent contributions follow inbox order across cursor pages and Back res
   await f.controller.nextMemory();
   let state = f.controller.getSnapshot();
   assert.equal(state.detail.memoryId, IDS.secondPhoto);
+  assert.equal(state.totalCount, 4, "the discovered page supplies its filtered total independently of page size");
   assert.deepEqual(state.detailNavigation.ids, records.map(record => record.memoryId), "overlapping pages do not repeat a contribution");
   assert.deepEqual(state.detailNavigation.pageCursors, [null, "second-page"]);
   assert.equal(state.detailNavigation.pageIndex, 1);
@@ -117,13 +120,39 @@ test("adjacent contributions follow inbox order across cursor pages and Back res
   assert.equal(f.controller.getSnapshot(), state, "the last contribution does not wrap");
   await f.controller.previousMemory();
   assert.equal(f.controller.getSnapshot().detail.memoryId, IDS.photo);
+  assert.equal(f.controller.getSnapshot().totalCount, 3, "returning to a cached page restores its own observed total");
   await f.controller.nextMemory();
   await f.controller.backToInbox();
   state = f.controller.getSnapshot();
   assert.deepEqual(state.items, pages["second-page"].items);
   assert.equal(state.nextCursor, null);
+  assert.equal(state.totalCount, 4);
   assert.equal(state.detailNavigation, null);
   assert.equal(lists.length, 2);
+  f.controller.dispose();
+  assert.equal(f.controller.getSnapshot().totalCount, null);
+});
+
+test("inbox totals are cleared during filter changes and privacy hiding, including late page responses", async () => {
+  const held = deferred();
+  const f = await entered(fixture({ api: { listMemories: async options => options.reviewStatus === "PENDING"
+    ? { items: [copy(MEMORY_DETAIL)], nextCursor: "later-page", totalCount: 47 }
+    : held.promise } }));
+  assert.equal(f.controller.getSnapshot().totalCount, 47);
+  const changing = f.controller.loadInbox("KEEP");
+  await turn();
+  assert.equal(f.controller.getSnapshot().busy, true);
+  assert.equal(f.controller.getSnapshot().totalCount, null, "the pending total never labels the kept category");
+  f.controller.suspend();
+  held.resolve({ items: [], nextCursor: null, totalCount: 0 });
+  await changing;
+  assert.equal(f.controller.getSnapshot().totalCount, null, "a late private count cannot return after hiding");
+  await f.controller.resume();
+  assert.equal(f.controller.getSnapshot().totalCount, 0, "a freshly authorized empty category has a known zero total");
+  await f.controller.loadInbox("PENDING");
+  assert.equal(f.controller.getSnapshot().totalCount, 47);
+  await f.controller.logout();
+  assert.equal(f.controller.getSnapshot().totalCount, null);
   f.controller.dispose();
 });
 
@@ -293,12 +322,13 @@ test("auth loss during a page boundary clears the current contribution and all r
   for (const status of [401, 403]) {
     const f = await entered(fixture({ api: { listMemories: async options => {
       if (options.cursor) throw authError(status);
-      return { items: [copy(photo)], nextCursor: "another-page" };
+      return { items: [copy(photo)], nextCursor: "another-page", totalCount: 5 };
     } } }));
     await f.controller.openMemory(IDS.photo);
     await f.controller.nextMemory();
     const state = f.controller.getSnapshot();
     assert.equal(state.session, null);
+    assert.equal(state.totalCount, null);
     assert.equal(state.detailNavigation, null);
     assert.equal(state.detail, null);
     assert.equal(state.photo.url, null);

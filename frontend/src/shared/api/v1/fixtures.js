@@ -130,8 +130,8 @@ export const COUPLE_SESSION = {
   user: { displayName: "Example Couple", roles: ["COUPLE"] },
   csrfToken: "synthetic-rotated-csrf-token-after-login",
 };
-export const INBOX_PAGE = { items: [MEMORY_DETAIL], nextCursor: null };
-export const EMPTY_INBOX = { items: [], nextCursor: null };
+export const INBOX_PAGE = { items: [MEMORY_DETAIL], nextCursor: null, totalCount: 1 };
+export const EMPTY_INBOX = { items: [], nextCursor: null, totalCount: 0 };
 export const UPLOAD_GRANT = {
   grantId: IDS.grant,
   method: "PUT",

@@ -49,7 +49,7 @@ class InboxHttpSecurityTest {
     @BeforeEach void fixtures() {
         couple = account("COUPLE", true, 1);
         when(accounts.findById(ACCOUNT)).thenReturn(Optional.of(couple));
-        when(repository.list(any())).thenReturn(List.of());
+        when(repository.listPage(any())).thenReturn(new InboxRepository.InboxRows(List.of(), 0));
         when(repository.detail(any())).thenReturn(Optional.empty());
     }
 
@@ -65,10 +65,11 @@ class InboxHttpSecurityTest {
 
     @Test void authorizedListUsesRealServiceAndReturnsDecoderCompatiblePrivateText() throws Exception {
         var detail = text();
-        when(repository.list(any())).thenReturn(List.of(detail));
+        when(repository.listPage(any())).thenReturn(new InboxRepository.InboxRows(List.of(detail), 1));
         var result = mvc.perform(get("/api/memories").session(session(couple)).header("X-Api-Contract", "1"))
                 .andExpect(status().isOk()).andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                 .andExpect(header().string("Cache-Control", "no-store")).andExpect(jsonPath("$.nextCursor").value(nullValue()))
+                .andExpect(jsonPath("$.totalCount").value(1))
                 .andExpect(jsonPath("$.items[0].memoryId").value(MEMORY.toString()))
                 .andExpect(jsonPath("$.items[0].guestName").value(nullValue()))
                 .andExpect(jsonPath("$.items[0].textContent").value("<script>synthetic markup</script>"))
@@ -77,7 +78,7 @@ class InboxHttpSecurityTest {
                 .andExpect(jsonPath("$.items[0].media").value(nullValue())).andReturn();
         assertThat(result.getResponse().getContentAsString()).doesNotContain(
                 "objectKey", "uploadUrl", "idempotencyKey", "csrfToken", "passwordHash");
-        verify(repository).list(new InboxQuery("PENDING", 20, null));
+        verify(repository).listPage(new InboxQuery("PENDING", 20, null));
         // Filter and service both reload authority; the service does not trust HTTP alone.
         verify(accounts, atLeast(2)).findById(ACCOUNT);
     }
@@ -151,7 +152,7 @@ class InboxHttpSecurityTest {
     }
 
     @Test void databaseOutageNeverSerializesPrivateDiagnostics() throws Exception {
-        when(repository.list(any())).thenThrow(new DataAccessResourceFailureException("private SQL original-key synthetic-password"));
+        when(repository.listPage(any())).thenThrow(new DataAccessResourceFailureException("private SQL original-key synthetic-password"));
         var result = mvc.perform(get("/api/memories").session(session(couple)).header("X-Api-Contract", "1"))
                 .andExpect(status().isServiceUnavailable()).andExpect(jsonPath("$.error.code").value("SERVICE_UNAVAILABLE"))
                 .andExpect(header().string("Cache-Control", "no-store")).andReturn();

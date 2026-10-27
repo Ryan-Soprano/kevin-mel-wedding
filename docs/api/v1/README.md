@@ -289,8 +289,15 @@ then memoryId descending. Production cursor binds filter/last sort tuple; malfor
 or mismatched cursor: 400 INVALID_CURSOR. Do not parse the mock's offset cursor.
 Paging is not a snapshot; refresh after reviews/filter changes.
 
-Response: `{"items":[<detail>],"nextCursor":null}`; null means last page; empty is
-valid. MEMORY_DETAIL / MEDIA_DETAIL / INBOX_PAGE / EMPTY_INBOX define full examples:
+Response: `{"items":[<detail>],"nextCursor":null,"totalCount":47}`; null means last page; empty is
+valid. `totalCount` is the number of eligible memories in the selected review
+status across all pages, independent of the cursor. It excludes the same
+unfinished, unavailable, expired and purging items as the returned list. Each
+response reads its page and count from one database snapshot; later requests
+can reflect new submissions or review changes. The inbox displays this total
+alongside the number on the current page. Older responses without the additive
+field retain the page-only label rather than estimating a total.
+MEMORY_DETAIL / MEDIA_DETAIL / INBOX_PAGE / EMPTY_INBOX define full examples:
 
 - memoryId, contributionId, nullable guestName, memoryType.
 - textContent nonblank for TEXT/null for media; nullable caption (null for TEXT).

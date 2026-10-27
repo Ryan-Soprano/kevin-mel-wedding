@@ -40,22 +40,37 @@ class InboxServiceTest {
 
     @Test void pagesUseLastReturnedPositionRatherThanTheExtraRowAndAreImmutable() {
         var first = memory(50); var second = memory(40); var extra = memory(30);
-        when(repository.list(any())).thenReturn(List.of(first, second, extra));
+        when(repository.listPage(any())).thenReturn(new InboxRepository.InboxRows(List.of(first, second, extra), 3));
         var page = service.list(null, "2", null);
         assertThat(page.items()).containsExactly(first, second);
+        assertThat(page.totalCount()).isEqualTo(3);
         assertThat(InboxCursor.decode(page.nextCursor(), "PENDING")).isEqualTo(new InboxCursor("PENDING", TIME, second.memoryId()));
-        verify(repository).list(new InboxQuery("PENDING", 2, null));
+        verify(repository).listPage(new InboxQuery("PENDING", 2, null));
         assertThatThrownBy(() -> page.items().clear()).isInstanceOf(UnsupportedOperationException.class);
         assertThat(page.toString()).doesNotContain("private guest", "private note", page.nextCursor());
     }
 
     @Test void lastAndEmptyPagesHaveNoCursor() {
-        when(repository.list(any())).thenReturn(List.of(memory(1))).thenReturn(List.of());
+        when(repository.listPage(any())).thenReturn(new InboxRepository.InboxRows(List.of(memory(1)), 1))
+                .thenReturn(new InboxRepository.InboxRows(List.of(), 0));
         assertThat(service.list("KEEP", "2", null).nextCursor()).isNull();
         var empty = service.list("ARCHIVED", "20", null);
         assertThat(empty.items()).isEmpty();
         assertThat(empty.nextCursor()).isNull();
+        assertThat(empty.totalCount()).isZero();
         verify(accounts, times(2)).findById(ACCOUNT);
+    }
+
+    @Test void laterAndEmptyCursorPagesKeepTheFullSelectedCategoryTotal() {
+        var cursor = new InboxCursor("PENDING", TIME, memory(2).memoryId());
+        when(repository.listPage(any())).thenReturn(new InboxRepository.InboxRows(List.of(memory(1)), 7))
+                .thenReturn(new InboxRepository.InboxRows(List.of(), 7));
+        var later = service.list("PENDING", "2", cursor.encode());
+        assertThat(later.items()).containsExactly(memory(1));
+        assertThat(later.nextCursor()).isNull();
+        assertThat(later.totalCount()).isEqualTo(7);
+        assertThat(service.list("PENDING", "2", cursor.encode()).totalCount()).isEqualTo(7);
+        verify(repository, times(2)).listPage(new InboxQuery("PENDING", 2, cursor));
     }
 
     @Test void detailIsPrivateAndMissingMemoryIsSafe() {
@@ -68,7 +83,7 @@ class InboxServiceTest {
     }
 
     @Test void everyQueryRechecksAccountEnablementRatherThanTrustingPriorAccess() {
-        when(repository.list(any())).thenReturn(List.of());
+        when(repository.listPage(any())).thenReturn(new InboxRepository.InboxRows(List.of(), 0));
         service.list("PENDING", "20", null);
         when(accounts.findById(ACCOUNT)).thenReturn(Optional.of(account("COUPLE", false, 1)));
         rejects(() -> service.detail(memory(1).memoryId()), 401, "AUTH_REQUIRED");
@@ -122,7 +137,7 @@ class InboxServiceTest {
         authenticate(identity(operator));
         service = new InboxService(new ArchiveAuthorization(accounts,
                 new ArchiveAccessPolicy("local", false, false, "", "ryan-admin", new MockEnvironment())), repository);
-        when(repository.list(any())).thenReturn(List.of(memory(1)));
+        when(repository.listPage(any())).thenReturn(new InboxRepository.InboxRows(List.of(memory(1)), 1));
         assertThat(service.list("PENDING", "20", null).items()).containsExactly(memory(1));
         when(accounts.findById(ACCOUNT)).thenReturn(Optional.of(new ArchiveAccount(ACCOUNT, operator.username(),
                 operator.displayName(), operator.passwordHash(), "OPERATOR", false, 2)));

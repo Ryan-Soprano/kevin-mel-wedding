@@ -91,6 +91,7 @@ class InboxPostgresHttpTest {
         var listed = get("/api/memories");
         assertThat(listed.statusCode()).isEqualTo(200);
         assertThat(ids(listed)).containsExactly(photo.toString(), note.toString());
+        assertThat(JsonPath.<Number>read(listed.body(), "$.totalCount").longValue()).isEqualTo(2);
         assertThat(listed.headers().firstValue("Cache-Control")).contains("no-store");
         assertThat(listed.body()).doesNotContain("objectKey", "originals/", "uploadUrl", "idempotencyKey", "csrfToken", PASSWORD);
 
@@ -253,6 +254,7 @@ class InboxPostgresHttpTest {
         var page = get("/api/memories?limit=2");
         assertThat(page.statusCode()).isEqualTo(200);
         assertThat(ids(page)).containsExactly(third.toString(), second.toString());
+        assertThat(JsonPath.<Number>read(page.body(), "$.totalCount").longValue()).isEqualTo(3);
         String cursor = JsonPath.read(page.body(), "$.nextCursor");
         assertThat(cursor).isNotEmpty();
         memory(4, "kevin-mel-wedding", "PENDING", "TEXT", TIME.plusSeconds(1), null);
@@ -260,7 +262,11 @@ class InboxPostgresHttpTest {
         var next = get("/api/memories?limit=2&cursor=" + cursor);
         assertThat(next.statusCode()).isEqualTo(200);
         assertThat(ids(next)).containsExactly(first.toString());
+        assertThat(JsonPath.<Number>read(next.body(), "$.totalCount").longValue()).isEqualTo(4);
         assertThat((Object) JsonPath.read(next.body(), "$.nextCursor")).isNull();
+        var afterLast = get("/api/memories?limit=2&cursor=" + new InboxCursor("PENDING", TIME, first).encode());
+        assertThat(ids(afterLast)).isEmpty();
+        assertThat(JsonPath.<Number>read(afterLast.body(), "$.totalCount").longValue()).isEqualTo(4);
         var mismatch = get("/api/memories?reviewStatus=KEEP&cursor=" + cursor);
         assertThat(mismatch.statusCode()).isEqualTo(400);
         assertThat((String) JsonPath.read(mismatch.body(), "$.error.code")).isEqualTo("INVALID_CURSOR");
@@ -270,25 +276,42 @@ class InboxPostgresHttpTest {
     @Test void eventTypeDeletionUploadAndIntegrityBoundariesApplyToListAndDetail() throws Exception {
         UUID note = memory(1, "kevin-mel-wedding", "PENDING", "TEXT", TIME, null);
         UUID photo = photo(2, "PENDING", "UPLOADED", false);
+        UUID recoverable = memory(11, "kevin-mel-wedding", "DELETE", "TEXT", TIME, null);
+        UUID purging = memory(12, "kevin-mel-wedding", "DELETE", "TEXT", TIME, null);
+        UUID purged = memory(13, "kevin-mel-wedding", "DELETE", "TEXT", TIME, null);
+        db.sql("UPDATE memory SET delete_after = CURRENT_TIMESTAMP + INTERVAL '1 day' WHERE id IN (:first,:second,:third)")
+                .param("first", recoverable).param("second", purging).param("third", purged).update();
+        db.sql("UPDATE memory SET purge_started_at = CURRENT_TIMESTAMP WHERE id IN (:first,:second)")
+                .param("first", purging).param("second", purged).update();
+        db.sql("UPDATE memory SET purged_at = CURRENT_TIMESTAMP, text_content = NULL WHERE id = :id")
+                .param("id", purged).update();
         var hidden = List.of(
                 photo(3, "PENDING", "PENDING", false),
                 photo(4, "PENDING", "FAILED", false),
                 memory(5, "other-synthetic-event", "PENDING", "TEXT", TIME, null),
                 memory(6, "kevin-mel-wedding", "DELETE", "TEXT", TIME, null),
                 memory(7, "kevin-mel-wedding", "PENDING", "AUDIO", TIME, null),
-                photo(8, "PENDING", "UPLOADED", true));
+                photo(8, "PENDING", "UPLOADED", true), purging, purged);
         UUID kept = memory(9, "kevin-mel-wedding", "KEEP", "TEXT", TIME, null);
         UUID archived = photo(10, "ARCHIVED", "UPLOADED", false);
         login();
-        assertThat(ids(get("/api/memories"))).containsExactly(photo.toString(), note.toString());
+        var pending = get("/api/memories");
+        assertThat(ids(pending)).containsExactly(photo.toString(), note.toString());
+        assertThat(JsonPath.<Number>read(pending.body(), "$.totalCount").longValue()).isEqualTo(2);
         for (UUID id : hidden) {
             var response = get("/api/memories/" + id);
             assertThat(response.statusCode()).isEqualTo(404);
             assertThat(response.body()).doesNotContain(id.toString(), "synthetic markup", "originals/");
         }
-        assertThat(ids(get("/api/memories?reviewStatus=KEEP"))).containsExactly(kept.toString());
-        assertThat(ids(get("/api/memories?reviewStatus=ARCHIVED"))).containsExactly(archived.toString());
-        assertThat(ids(get("/api/memories?reviewStatus=DELETE"))).isEmpty();
+        var keptPage = get("/api/memories?reviewStatus=KEEP");
+        assertThat(ids(keptPage)).containsExactly(kept.toString());
+        assertThat(JsonPath.<Number>read(keptPage.body(), "$.totalCount").longValue()).isEqualTo(1);
+        var archivedPage = get("/api/memories?reviewStatus=ARCHIVED");
+        assertThat(ids(archivedPage)).containsExactly(archived.toString());
+        assertThat(JsonPath.<Number>read(archivedPage.body(), "$.totalCount").longValue()).isEqualTo(1);
+        var deletedPage = get("/api/memories?reviewStatus=DELETE");
+        assertThat(ids(deletedPage)).containsExactly(recoverable.toString());
+        assertThat(JsonPath.<Number>read(deletedPage.body(), "$.totalCount").longValue()).isEqualTo(1);
     }
 
     @Test void credentialVersionAndDisablementRevokeActualSessions() throws Exception {

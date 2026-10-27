@@ -221,6 +221,7 @@ export function decodeInbox(value, { limit = 100, reviewStatus } = {}) {
   if (
     !Array.isArray(value?.items) ||
     value.items.length > limit ||
+    (value.totalCount !== undefined && (!Number.isSafeInteger(value.totalCount) || value.totalCount < value.items.length)) ||
     !(value.nextCursor === null || (
       typeof value.nextCursor === "string" &&
       value.nextCursor.length > 0 &&

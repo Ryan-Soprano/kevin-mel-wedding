@@ -41,7 +41,7 @@ export function createInboxController({
   albumNameFingerprint, timelineFieldsFingerprint, tagNameFingerprint,
 } = {}) {
   let state = Object.freeze({ phase: "checking", session: null, busy: false, error: null, loginRetryAfterSeconds: 0,
-    reviewStatus: "PENDING", items: EMPTY_ITEMS, nextCursor: null, detail: null, requestedMemoryId: null, detailNavigation: null,
+    reviewStatus: "PENDING", items: EMPTY_ITEMS, nextCursor: null, totalCount: null, detail: null, requestedMemoryId: null, detailNavigation: null,
     photo: idlePhoto(), review: idleReview(), shareLink: idleShareLink(), metadata: idleMetadata(), albums: initialAlbums(), albumReturnId: null,
     timeline: initialTimeline(), timelineReturnId: null, library: initialLibrary(), libraryReturn: false,
     tags: initialTags(), tagReturnId: null, export: initialExport(), notice: null, pageResetVersion: 0, logoutUnconfirmed: false,
@@ -100,6 +100,8 @@ export function createInboxController({
       ? next.detail?.memoryId ?? next.requestedMemoryId : null;
     if (next.phase !== "detail" || !hasArchiveAccess(next.session)
       || next.albumReturnId || next.timelineReturnId || next.libraryReturn || next.tagReturnId) next.detailNavigation = null;
+    if (!hasArchiveAccess(next.session) || !["inbox", "detail"].includes(next.phase)
+      || (next.pageResetVersion !== state.pageResetVersion && patch.totalCount === undefined)) next.totalCount = null;
     if (next.shareLink.url && (next.detail?.memoryId !== next.shareLink.memoryId
       || next.detail?.revision !== next.shareLink.revision || next.detail?.visibility !== "FRIENDS_FAMILY")) next.shareLink = idleShareLink();
     if (Object.keys(next).every(key => next[key] === state[key])) return;
@@ -260,7 +262,7 @@ export function createInboxController({
       ...(cursor !== null ? { cursor } : {}), signal }));
     assertCurrent(op);
     inboxCursor = cursor;
-    publish({ phase: "inbox", reviewStatus, items: frozenCopy(result.items), nextCursor: result.nextCursor, detail: null });
+    publish({ phase: "inbox", reviewStatus, items: frozenCopy(result.items), nextCursor: result.nextCursor, totalCount: result.totalCount ?? null, detail: null });
     inboxDirty = false;
   }
 
@@ -268,7 +270,7 @@ export function createInboxController({
 
   function memoryNavigation(id, inboxCursors) {
     const previous = state.detailNavigation;
-    const pages = state.phase === "inbox" ? [Object.freeze({ cursor: inboxCursor, items: state.items, nextCursor: state.nextCursor })] : previous?.pages;
+    const pages = state.phase === "inbox" ? [Object.freeze({ cursor: inboxCursor, items: state.items, nextCursor: state.nextCursor, totalCount: state.totalCount })] : previous?.pages;
     const ids = state.phase === "inbox" ? [...new Set(state.items.map(item => item.memoryId))] : previous?.ids;
     const index = ids?.indexOf(id) ?? -1;
     if (index < 0) return null;
@@ -288,7 +290,7 @@ export function createInboxController({
       seen.add(cursor);
       const result = await bounded(op, signal => api.listMemories({ reviewStatus: navigation.reviewStatus,
         ...(cursor !== null ? { cursor } : {}), signal }));
-      const page = frozenCopy({ cursor, items: result.items, nextCursor: result.nextCursor });
+      const page = frozenCopy({ cursor, items: result.items, nextCursor: result.nextCursor, totalCount: result.totalCount ?? null });
       if (direction === 1) pages.push(page);
       else pages.unshift(page);
       const ids = navigationIds(pages);
@@ -313,7 +315,7 @@ export function createInboxController({
       tags.clearMemoryPresentation();
       assertCurrent(op);
     }
-    publish({ detail, ...(navigation ? { detailNavigation: navigation, requestedMemoryId: id,
+    publish({ detail, ...(navigation ? { detailNavigation: navigation, requestedMemoryId: id, totalCount: navigation.pages[navigation.pageIndex].totalCount ?? null,
       photo: idlePhoto(), shareLink: idleShareLink(), notice: null } : {}) });
     assertCurrent(op);
     if (detail.reviewStatus !== "DELETE") await refreshMemoryTags(op, detail);
@@ -677,7 +679,7 @@ export function createInboxController({
       const changed = reviewStatus !== state.reviewStatus;
       const op = start({ phase: "inbox", reviewStatus, detail: null, notice: null, albums: initialAlbums(), timeline: initialTimeline(), library: initialLibrary(), tags: initialTags(), ...albumNavigation, ...timelineNavigation, ...libraryNavigation, ...tagNavigation,
         ...(cursor === null && !preservePageHistory ? { pageResetVersion: state.pageResetVersion + 1 } : {}),
-        ...(changed ? { items: EMPTY_ITEMS, nextCursor: null } : {}) });
+        ...(changed ? { items: EMPTY_ITEMS, nextCursor: null, totalCount: null } : {}) });
       return run(op, () => page(op, reviewStatus, cursor), failure => {
         if (!authFailure(failure)) publish({ error: "Your inbox could not be loaded. Try loading it again." });
       });
@@ -716,7 +718,7 @@ export function createInboxController({
       if (disposed || generation !== owner) return state;
       if (sourcePage) inboxCursor = sourcePage.cursor;
       publish({ phase: "inbox", busy: false, error: null, detail: null, photo: idlePhoto(), notice: null,
-        ...(sourcePage ? { items: sourcePage.items, nextCursor: sourcePage.nextCursor } : {}) });
+        ...(sourcePage ? { items: sourcePage.items, nextCursor: sourcePage.nextCursor, totalCount: sourcePage.totalCount ?? null } : {}) });
       return state;
     },
     retryPhoto() {
@@ -748,7 +750,7 @@ export function createInboxController({
       albums.clear();
       timeline.clear();
       library.clear(); tags.clear(); exports.clear();
-      state = Object.freeze({ ...state, session: null, items: EMPTY_ITEMS, nextCursor: null,
+      state = Object.freeze({ ...state, session: null, items: EMPTY_ITEMS, nextCursor: null, totalCount: null,
         detail: null, requestedMemoryId: null, detailNavigation: null, photo: idlePhoto(), review: idleReview(), shareLink: idleShareLink(), metadata: idleMetadata(), albums: initialAlbums(), albumReturnId: null,
         timeline: initialTimeline(), timelineReturnId: null, library: initialLibrary(), libraryReturn: false, tags: initialTags(), tagReturnId: null, export: initialExport(), notice: null, busy: false, error: null, loginRetryAfterSeconds: 0 });
       suspended = true;

@@ -12,6 +12,7 @@ import java.util.UUID;
 
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.kevinmel.archive.web.ApiException;
@@ -66,6 +67,24 @@ public class InboxRepository {
 
     @Transactional(readOnly = true)
     public List<MemoryDetail> list(InboxQuery query) {
+        return list(query, clock.instant());
+    }
+
+    /** Count and cursor page use the same eligible rows and database snapshot. */
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    public InboxRows listPage(InboxQuery query) {
+        Instant at = clock.instant();
+        List<MemoryDetail> items = list(query, at);
+        long totalCount = db.sql("SELECT COUNT(*) FROM memory m " + MEMORY_JOINS
+                + " WHERE " + AVAILABLE + " AND m.review_status = :status")
+                .param("status", query.reviewStatus())
+                .param("now", timestamp(at))
+                .query(Long.class)
+                .single();
+        return new InboxRows(items, totalCount);
+    }
+
+    private List<MemoryDetail> list(InboxQuery query, Instant at) {
         String sql = SELECT + " AND m.review_status = :status";
         if (query.cursor() != null) {
             sql += " AND (m.created_at, m.id) < (:createdAt, :memoryId)";
@@ -74,7 +93,7 @@ public class InboxRepository {
         var statement = db.sql(sql)
                 .param("status", query.reviewStatus())
                 .param("fetchLimit", query.limit() + 1)
-                .param("now", timestamp(clock.instant()));
+                .param("now", timestamp(at));
         if (query.cursor() != null) {
             statement = statement
                     .param("createdAt", timestamp(query.cursor().createdAt()))
@@ -82,6 +101,17 @@ public class InboxRepository {
         }
         return statement.query(InboxRepository::map)
                 .list();
+    }
+
+    public record InboxRows(List<MemoryDetail> items, long totalCount) {
+        public InboxRows {
+            items = List.copyOf(items);
+        }
+
+        @Override
+        public String toString() {
+            return "InboxRows[itemCount=" + items.size() + ", totalCount=" + totalCount + "]";
+        }
     }
 
     @Transactional(readOnly = true)

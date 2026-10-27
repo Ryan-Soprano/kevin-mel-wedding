@@ -187,6 +187,17 @@ test("extracted private inbox views preserve loading precedence, memory attribut
     const guest = { ...MEMORY_DETAIL, guestName: "A <guest>", textContent: "x".repeat(200) };
     const list = render(InboxList, { ...listProps, state: { ...state, items: [guest] } });
     assert.match(list, /1 memory on this page · times shown in Eastern time/);
+    const counted = render(InboxList, { ...listProps, state: { ...state, totalCount: 47 } });
+    assert.match(counted, /47 pending memories total<\/strong> · 1 on this page/);
+    const singularTotal = render(InboxList, { ...listProps, state: { ...state, reviewStatus: "KEEP", totalCount: 1 } });
+    assert.match(singularTotal, /1 kept memory total<\/strong> · 1 on this page/);
+    const emptyTotal = render(InboxList, { ...listProps, state: { ...state, items: [], totalCount: 0 } });
+    assert.match(emptyTotal, /0 pending memories total<\/strong> · 0 on this page/);
+    assert.match(emptyTotal, /No pending memories right now/);
+    const emptyLaterPage = render(InboxList, { ...listProps, state: { ...state, items: [], totalCount: 47 } });
+    assert.match(emptyLaterPage, /47 pending memories total/);
+    assert.match(emptyLaterPage, /No memories on this page/);
+    assert.doesNotMatch(emptyLaterPage, /No pending memories right now/);
     assert.match(list, /<h2>A &lt;guest&gt;<\/h2>/);
     assert.match(list, /aria-label="Open note from A &lt;guest&gt;"/);
     assert.match(list, new RegExp(`class="inbox-excerpt">${"x".repeat(180)}<`));
